@@ -321,12 +321,30 @@
                             <tr><td colspan="6" class="text-center">Loading reports...</td></tr>
                         </tbody>
                     </table>
+                    
+                    <!-- Pagination controls -->
+                    <div class="text-center">
+                        <nav aria-label="Page navigation">
+                            <ul class="pagination" id="paginationControls">
+                            </ul>
+                        </nav>
+                        <div style="margin-top: 10px;">
+                            <label style="margin-right: 10px;">Show:</label>
+                            <select id="pageSize" class="form-control" style="width: auto; display: inline-block;">
+                                <option value="25">25</option>
+                                <option value="50" selected>50</option>
+                                <option value="100">100</option>
+                                <option value="200">200</option>
+                            </select>
+                            <span style="margin-left: 10px;" id="recordInfo"></span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
         
         <div class="footer">
-            <p>Bug Reports from Property-Based Testing | <a href="https://github.com/yourusername/agentic-pbt-site">View on GitHub</a></p>
+            <p>Agentic Property-Based Testing | <a href="https://github.com/mmaaz-git/agentic-pbt-site">View on GitHub</a></p>
         </div>
     </div>
     
@@ -345,6 +363,8 @@
     <script>
         let allReports = [];
         let filteredReports = [];
+        let currentPage = 1;
+        let recordsPerPage = 50;
         
         // Configure marked for better markdown rendering
         marked.setOptions({
@@ -383,6 +403,13 @@
                 document.getElementById('minScoreFilter').addEventListener('input', applyFilters);
                 document.getElementById('maxScoreFilter').addEventListener('input', applyFilters);
                 document.getElementById('statusFilter').addEventListener('change', applyFilters);
+                
+                // Page size change handler
+                document.getElementById('pageSize').addEventListener('change', function() {
+                    recordsPerPage = parseInt(this.value);
+                    currentPage = 1; // Reset to first page
+                    displayReports();
+                });
             })
             .catch(error => {
                 document.getElementById('reportTableBody').innerHTML = 
@@ -395,10 +422,25 @@
             
             if (filteredReports.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="text-center">No reports match your filters</td></tr>';
+                document.getElementById('paginationControls').innerHTML = '';
+                document.getElementById('recordInfo').textContent = '';
                 return;
             }
             
-            tbody.innerHTML = filteredReports.map((report, index) => {
+            // Calculate pagination
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            const endIndex = Math.min(startIndex + recordsPerPage, filteredReports.length);
+            const paginatedReports = filteredReports.slice(startIndex, endIndex);
+            
+            // Update record info
+            document.getElementById('recordInfo').textContent = 
+                `Showing ${startIndex + 1}-${endIndex} of ${filteredReports.length} reports`;
+            
+            // Render table
+            tbody.innerHTML = paginatedReports.map((report, index) => {
+                // Get the actual index in the full filtered array
+                const actualIndex = startIndex + index;
+                
                 // Format score display
                 let scoreDisplay = '';
                 if (report.score && report.score.total_score !== null) {
@@ -429,12 +471,81 @@
                             <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); viewReport('${report.file_path}')">View</button>
                         </td>
                         <td>
-                            ${report.score ? `<button class="btn btn-info btn-sm" onclick="event.stopPropagation(); viewReview(${index})">View</button>` : '<span style="color: #999;">-</span>'}
+                            ${report.score ? `<button class="btn btn-info btn-sm" onclick="event.stopPropagation(); viewReview(${actualIndex})">View</button>` : '<span style="color: #999;">-</span>'}
                         </td>
                         <td>${statusDisplay}</td>
                     </tr>
                 `;
             }).join('');
+            
+            // Render pagination controls
+            renderPagination();
+        }
+        
+        function renderPagination() {
+            const totalPages = Math.ceil(filteredReports.length / recordsPerPage);
+            const paginationControls = document.getElementById('paginationControls');
+            
+            if (totalPages <= 1) {
+                paginationControls.innerHTML = '';
+                return;
+            }
+            
+            let html = '';
+            
+            // Previous button
+            html += `<li class="${currentPage === 1 ? 'disabled' : ''}">
+                <a href="#" onclick="changePage(${currentPage - 1}); return false;" aria-label="Previous">
+                    <span aria-hidden="true">&laquo;</span>
+                </a>
+            </li>`;
+            
+            // Page numbers
+            const maxPagesToShow = 10;
+            let startPage = Math.max(1, currentPage - Math.floor(maxPagesToShow / 2));
+            let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+            
+            if (endPage - startPage < maxPagesToShow - 1) {
+                startPage = Math.max(1, endPage - maxPagesToShow + 1);
+            }
+            
+            if (startPage > 1) {
+                html += '<li><a href="#" onclick="changePage(1); return false;">1</a></li>';
+                if (startPage > 2) {
+                    html += '<li class="disabled"><span>...</span></li>';
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                html += `<li class="${i === currentPage ? 'active' : ''}">
+                    <a href="#" onclick="changePage(${i}); return false;">${i}</a>
+                </li>`;
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += '<li class="disabled"><span>...</span></li>';
+                }
+                html += `<li><a href="#" onclick="changePage(${totalPages}); return false;">${totalPages}</a></li>`;
+            }
+            
+            // Next button
+            html += `<li class="${currentPage === totalPages ? 'disabled' : ''}">
+                <a href="#" onclick="changePage(${currentPage + 1}); return false;" aria-label="Next">
+                    <span aria-hidden="true">&raquo;</span>
+                </a>
+            </li>`;
+            
+            paginationControls.innerHTML = html;
+        }
+        
+        function changePage(page) {
+            const totalPages = Math.ceil(filteredReports.length / recordsPerPage);
+            if (page < 1 || page > totalPages) return;
+            currentPage = page;
+            displayReports();
+            // Scroll to top of table
+            document.querySelector('.bug-report-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
         
         function viewReport(filePath) {
@@ -491,6 +602,7 @@
         });
         
         function applyFilters() {
+            currentPage = 1; // Reset to first page when filtering
             const searchTerm = document.getElementById('searchInput').value.toLowerCase();
             const packageFilter = document.getElementById('packageFilter').value;
             const minScore = document.getElementById('minScoreFilter').value;
