@@ -1,6 +1,6 @@
 # Contributing Bug Status Updates
 
-Help us track which bugs have been reported and validated by maintainers!
+If you are a maintainer of a Python package we tested, you can help us confirm whether the bugs are real or not!
 
 ## How to Update Bug Status
 
@@ -27,11 +27,7 @@ Add an entry to `status.json` under the package name:
 }
 ```
 
-## Guidelines
-
-1. **Include the GitHub link** - Add the issue or PR URL as evidence
-2. **Be accurate** - Only mark as "valid" if maintainer explicitly confirmed it's a bug
-3. **Keep it simple** - Just status and URL, nothing else needed
+If there is an issue/PR link, add it as evidence; if you're the maintainer, it's not needed, but it would be nice to, e.g., a PR link of the fix.
 
 ## Examples
 
