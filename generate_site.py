@@ -48,17 +48,17 @@ def parse_bug_report(file_path):
 
 def main():
     """Parse all bug reports and generate JSON data"""
-    results_dir = Path('results')
+    results_dir = Path('reports')
     all_reports = []
 
     # Load bug statuses and validate entries
     bug_statuses = {}
     invalid_entries = []
-    if Path('bug_status.json').exists():
-        with open('bug_status.json', 'r', encoding='utf-8') as f:
+    if Path('status.json').exists():
+        with open('status.json', 'r', encoding='utf-8') as f:
             bug_statuses = json.load(f)
         
-        # Validate that all entries in bug_status.json correspond to actual files
+        # Validate that all entries in status.json correspond to actual files
         for package, files in bug_statuses.items():
             package_dir = results_dir / package / 'bug_reports'
             for filename in files:
@@ -69,14 +69,16 @@ def main():
     # Load scores from CSV
     scores = {}
     scores_loaded = 0
-    if Path('score_results_final.csv').exists():
-        with open('score_results_final.csv', 'r', encoding='utf-8') as f:
+    if Path('scores.csv').exists():
+        with open('scores.csv', 'r', encoding='utf-8') as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Extract filename from the path in CSV
                 filepath = row['file']
                 # Remove 'clean/' prefix if present
                 filepath = filepath.replace('clean/', '')
+                # Update results to reports if needed
+                filepath = filepath.replace('results/', 'reports/')
                 scores[filepath] = {
                     'total_score': int(row['score']) if row['score'] else None,
                     'obviousness': int(row['obviousness']) if row['obviousness'] else None,
@@ -146,22 +148,22 @@ def main():
         'stats': stats
     }
 
-    with open('bug_reports_data.json', 'w', encoding='utf-8') as f:
+    with open('data.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2)
 
     print(f"Parsed {len(all_reports)} bug reports from {stats['packages']} packages")
     print(f"Loaded {scores_loaded} scores from CSV")
     print(f"Matched {matched_scores} scores to bug reports")
-    print(f"Data saved to bug_reports_data.json")
+    print(f"Data saved to data.json")
     
-    # Check for invalid entries in bug_status.json
+    # Check for invalid entries in status.json
     if invalid_entries:
-        print("\n❌ ERROR: Invalid entries found in bug_status.json!")
-        print("The following files do not exist in the results directory:")
+        print("\n❌ ERROR: Invalid entries found in status.json!")
+        print("The following files do not exist in the reports directory:")
         for entry in invalid_entries:
             print(f"  - {entry}")
-        print("\nPlease fix bug_status.json to only reference existing bug report files.")
-        print("Check the results/ directory for the correct filenames.")
+        print("\nPlease fix status.json to only reference existing bug report files.")
+        print("Check the reports/ directory for the correct filenames.")
         exit(1)  # Exit with error code to fail CI
 
     # Print summary

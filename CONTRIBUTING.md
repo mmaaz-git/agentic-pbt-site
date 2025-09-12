@@ -5,7 +5,7 @@ Help us track which bugs have been reported and validated by maintainers!
 ## How to Update Bug Status
 
 1. **Fork this repository**
-2. **Edit `bug_status.json`** to add or update bug statuses
+2. **Edit `status.json`** to add or update bug statuses
 3. **Submit a Pull Request** with your changes
 
 ## Status Categories
@@ -16,7 +16,7 @@ Help us track which bugs have been reported and validated by maintainers!
 
 ## Format
 
-Add an entry to `bug_status.json` under the package name:
+Add an entry to `status.json` under the package name:
 
 ```json
 "package_name": {
