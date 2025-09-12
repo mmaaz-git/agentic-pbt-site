@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agentic Property-Based Testing: Finding Bugs Across the Python Ecosystem</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-python.min.js"></script>
+    <style>
+        body {
+            font-family: "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-weight: 300;
+            margin-top: 30px;
+        }
+        
+        .container {
+            max-width: 1000px;
+        }
+        
+        h1 {
+            font-size: 36px;
+            font-weight: 300;
+            margin-bottom: 20px;
+        }
+        
+        h2 {
+            font-size: 28px;
+            font-weight: 300;
+            margin-top: 40px;
+            margin-bottom: 20px;
+        }
+        
+        h3 {
+            font-size: 20px;
+            font-weight: 300;
+            margin-top: 30px;
+            margin-bottom: 15px;
+        }
+        
+        .filter-section {
+            margin: 30px 0;
+            padding: 20px;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .filter-row {
+            margin-bottom: 15px;
+        }
+        
+        .bug-report-section {
+            margin-top: 40px;
+        }
+        
+        .report-table {
+            margin-top: 20px;
+        }
+        
+        .report-table th {
+            background-color: #f5f5f5;
+            font-weight: 400;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+        
+        .report-table td {
+            vertical-align: middle;
+        }
+        
+        .report-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        
+        .report-row:hover {
+            background-color: #f0f0f0 !important;
+        }
+        
+        .severity-high {
+            color: #d9534f;
+            font-weight: 600;
+        }
+        
+        .severity-medium {
+            color: #f0ad4e;
+            font-weight: 600;
+        }
+        
+        .severity-low {
+            color: #5bc0de;
+            font-weight: 600;
+        }
+        
+        .package-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            background-color: #f0f0f0;
+            border-radius: 3px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        
+        .btn-view {
+            padding: 2px 10px;
+            font-size: 12px;
+        }
+        
+        .footer {
+            margin-top: 60px;
+            padding: 40px 0;
+            border-top: 1px solid #e5e5e5;
+            text-align: center;
+            color: #999;
+        }
+        
+        /* Modal styles for report viewing */
+        .report-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.6);
+        }
+        
+        .report-content {
+            background-color: #fff;
+            margin: 2% auto;
+            padding: 30px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+            position: relative;
+        }
+        
+        .close-btn {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #aaa;
+            z-index: 1001;
+        }
+        
+        .close-btn:hover {
+            color: #000;
+        }
+        
+        .report-content h1 {
+            font-size: 24px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .report-content h2 {
+            font-size: 20px;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .report-content pre {
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            overflow-x: auto;
+        }
+        
+        .report-content code {
+            background-color: #f5f5f5;
+            padding: 2px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        .report-content pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        
+        .report-content strong {
+            font-weight: 600;
+        }
+        
+        .report-content p {
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .loading-spinner {
+            text-align: center;
+            padding: 40px;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .score-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .score-na {
+            background: #e0e0e0;
+            color: #666;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .status-valid {
+            background: #d4f8d4;
+            color: #0a6b0a;
+        }
+        
+        .status-invalid {
+            background: #ffd4d4;
+            color: #8b0000;
+        }
+        
+        .status-unknown {
+            background: #f0f0f0;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-md-12 text-center">
+                <h1>Agentic Property-Based Testing: Finding Bugs Across the Python Ecosystem</h1>
+                <p class="lead">Use this website to browse the bug reports from the paper.</p>
+                <div style="margin: 20px 0;">
+                    <a href="#" class="btn btn-primary btn-lg" style="margin: 0 10px;">
+                        <i class="fa fa-file-text"></i> Paper
+                    </a>
+                    <a href="https://github.com/mmaaz-git/hypothesis-llm-paper" class="btn btn-success btn-lg" style="margin: 0 10px;">
+                        <i class="fa fa-github"></i> Code
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-12">
+                <div class="filter-section">
+                    <div class="row filter-row">
+                        <div class="col-md-2">
+                            <label>Search:</label>
+                            <input type="text" class="form-control" id="searchInput" placeholder="Search...">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Package:</label>
+                            <select class="form-control" id="packageFilter">
+                                <option value="">All</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label>Min Score:</label>
+                            <input type="number" class="form-control" id="minScoreFilter" min="0" max="15" placeholder="0">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Max Score:</label>
+                            <input type="number" class="form-control" id="maxScoreFilter" min="0" max="15" placeholder="15">
+                        </div>
+                        <div class="col-md-2">
+                            <label>Status:</label>
+                            <select class="form-control" id="statusFilter">
+                                <option value="">All</option>
+                                <option value="unknown">Unknown</option>
+                                <option value="valid">Valid</option>
+                                <option value="invalid">Invalid</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label>&nbsp;</label>
+                            <button class="btn btn-default btn-block" onclick="clearFilters()">Clear</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bug-report-section">
+                    <table class="table table-striped report-table">
+                        <thead>
+                            <tr>
+                                <th>Package</th>
+                                <th>Title</th>
+                                <th>Score</th>
+                                <th>Report</th>
+                                <th>Review</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="reportTableBody">
+                            <tr><td colspan="6" class="text-center">Loading reports...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Bug Reports from Property-Based Testing | <a href="https://github.com/yourusername/agentic-pbt-site">View on GitHub</a></p>
+        </div>
+    </div>
+    
+    <!-- Modal for displaying reports -->
+    <div id="reportModal" class="report-modal">
+        <div class="report-content">
+            <span class="close-btn" onclick="closeModal()">&times;</span>
+            <div id="modalContent">
+                <div class="loading-spinner">Loading report...</div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://code.jquery.com/jquery-2.1.4.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script>
+        let allReports = [];
+        let filteredReports = [];
+        
+        // Configure marked for better markdown rendering
+        marked.setOptions({
+            highlight: function(code, lang) {
+                if (lang && Prism.languages[lang]) {
+                    return Prism.highlight(code, Prism.languages[lang], lang);
+                }
+                return code;
+            },
+            breaks: true,
+            gfm: true
+        });
+        
+        // Load data
+        fetch('bug_reports_data.json')
+            .then(response => response.json())
+            .then(data => {
+                allReports = data.reports;
+                filteredReports = [...allReports];
+                
+                // Populate package filter
+                const packageFilter = document.getElementById('packageFilter');
+                const packages = [...new Set(allReports.map(r => r.package))].sort();
+                packages.forEach(pkg => {
+                    const option = document.createElement('option');
+                    option.value = pkg;
+                    option.textContent = pkg;
+                    packageFilter.appendChild(option);
+                });
+                
+                displayReports();
+                
+                // Set up event listeners
+                document.getElementById('searchInput').addEventListener('input', applyFilters);
+                document.getElementById('packageFilter').addEventListener('change', applyFilters);
+                document.getElementById('minScoreFilter').addEventListener('input', applyFilters);
+                document.getElementById('maxScoreFilter').addEventListener('input', applyFilters);
+                document.getElementById('statusFilter').addEventListener('change', applyFilters);
+            })
+            .catch(error => {
+                document.getElementById('reportTableBody').innerHTML = 
+                    '<tr><td colspan="6" class="text-center text-danger">Error loading reports</td></tr>';
+                console.error('Error:', error);
+            });
+        
+        function displayReports() {
+            const tbody = document.getElementById('reportTableBody');
+            
+            if (filteredReports.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No reports match your filters</td></tr>';
+                return;
+            }
+            
+            tbody.innerHTML = filteredReports.map((report, index) => {
+                // Format score display
+                let scoreDisplay = '';
+                if (report.score && report.score.total_score !== null) {
+                    scoreDisplay = `<span class="score-badge">${report.score.total_score}/15</span>`;
+                } else {
+                    scoreDisplay = `<span class="score-badge score-na">N/A</span>`;
+                }
+                
+                // Format status display
+                let statusDisplay = '';
+                const status = report.bug_status ? report.bug_status.status : 'unknown';
+                const statusUrl = report.bug_status ? report.bug_status.url : '';
+                
+                if (statusUrl) {
+                    statusDisplay = `<a href="${statusUrl}" target="_blank" onclick="event.stopPropagation();" style="text-decoration: none;">
+                        <span class="status-badge status-${status}" style="cursor: pointer;">${status}</span>
+                    </a>`;
+                } else {
+                    statusDisplay = `<span class="status-badge status-${status}">${status}</span>`;
+                }
+                
+                return `
+                    <tr class="report-row" onclick="viewReport('${report.file_path}')">
+                        <td><span class="package-badge">${escapeHtml(report.package)}</span></td>
+                        <td>${escapeHtml(report.title)}</td>
+                        <td>${scoreDisplay}</td>
+                        <td>
+                            <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); viewReport('${report.file_path}')">View</button>
+                        </td>
+                        <td>
+                            ${report.score ? `<button class="btn btn-info btn-sm" onclick="event.stopPropagation(); viewReview(${index})">View</button>` : '<span style="color: #999;">-</span>'}
+                        </td>
+                        <td>${statusDisplay}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        
+        function viewReport(filePath) {
+            const modal = document.getElementById('reportModal');
+            const modalContent = document.getElementById('modalContent');
+            
+            modal.style.display = 'block';
+            modalContent.innerHTML = '<div class="loading-spinner">Loading report...</div>';
+            
+            // Fetch the markdown file
+            fetch(filePath)
+                .then(response => response.text())
+                .then(markdown => {
+                    // Render the markdown
+                    const html = marked.parse(markdown);
+                    
+                    // Add filename at the top
+                    const filename = filePath.split('/').pop();
+                    modalContent.innerHTML = `
+                        <div style="color: #666; font-size: 14px; margin-bottom: 15px; font-family: monospace;">
+                            ${filename}
+                        </div>
+                        ${html}
+                    `;
+                    
+                    // Re-highlight code blocks
+                    modalContent.querySelectorAll('pre code').forEach((block) => {
+                        Prism.highlightElement(block);
+                    });
+                })
+                .catch(error => {
+                    modalContent.innerHTML = '<div class="alert alert-danger">Error loading report: ' + error.message + '</div>';
+                    console.error('Error loading report:', error);
+                });
+        }
+        
+        function closeModal() {
+            document.getElementById('reportModal').style.display = 'none';
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('reportModal');
+            if (event.target == modal) {
+                modal.style.display = 'none';
+            }
+        }
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+        
+        function applyFilters() {
+            const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+            const packageFilter = document.getElementById('packageFilter').value;
+            const minScore = document.getElementById('minScoreFilter').value;
+            const maxScore = document.getElementById('maxScoreFilter').value;
+            const statusFilter = document.getElementById('statusFilter').value;
+            
+            filteredReports = allReports.filter(report => {
+                const matchesSearch = !searchTerm || 
+                    report.title.toLowerCase().includes(searchTerm) ||
+                    report.package.toLowerCase().includes(searchTerm) ||
+                    (report.target && report.target.toLowerCase().includes(searchTerm));
+                
+                const matchesPackage = !packageFilter || report.package === packageFilter;
+                
+                // Score filtering with min/max
+                let matchesScore = true;
+                if ((minScore !== '' || maxScore !== '') && report.score && report.score.total_score !== null) {
+                    const score = report.score.total_score;
+                    const min = minScore !== '' ? parseInt(minScore) : 0;
+                    const max = maxScore !== '' ? parseInt(maxScore) : 15;
+                    matchesScore = score >= min && score <= max;
+                } else if ((minScore !== '' || maxScore !== '') && (!report.score || report.score.total_score === null)) {
+                    matchesScore = false;
+                }
+                
+                // Status filtering
+                const matchesStatus = !statusFilter || 
+                    (report.bug_status && report.bug_status.status === statusFilter);
+                
+                return matchesSearch && matchesPackage && matchesScore && matchesStatus;
+            });
+            
+            displayReports();
+        }
+        
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('packageFilter').value = '';
+            document.getElementById('minScoreFilter').value = '';
+            document.getElementById('maxScoreFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            applyFilters();
+        }
+        
+        function viewReview(reportIndex) {
+            const report = filteredReports[reportIndex];
+            if (!report || !report.score) return;
+            
+            const modal = document.getElementById('reportModal');
+            const modalContent = document.getElementById('modalContent');
+            
+            modal.style.display = 'block';
+            
+            // Render the response as markdown if available
+            let analysisHtml = '<p>No detailed review available.</p>';
+            if (report.score.response) {
+                // Convert the response to markdown
+                analysisHtml = marked.parse(report.score.response);
+            }
+            
+            // Format the review content
+            const reviewHtml = `
+                <div style="color: #666; font-size: 14px; margin-bottom: 15px; font-family: monospace;">
+                    ${report.file_name} - Review
+                </div>
+                <h2>Score Summary</h2>
+                <table class="table table-bordered">
+                    <tr>
+                        <th style="width: 70%;">Criterion</th>
+                        <th style="width: 30%;">Score</th>
+                    </tr>
+                    <tr>
+                        <td>Obviousness</td>
+                        <td><strong>${report.score.obviousness || 'N/A'}/5</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Input Reasonableness</td>
+                        <td><strong>${report.score.input_reasonableness || 'N/A'}/5</strong></td>
+                    </tr>
+                    <tr>
+                        <td>Maintainer Defensibility</td>
+                        <td><strong>${report.score.maintainer_defensibility || 'N/A'}/5</strong></td>
+                    </tr>
+                    <tr style="background-color: #f5f5f5;">
+                        <th>Total Score</th>
+                        <th>${report.score.total_score || 'N/A'}/15</th>
+                    </tr>
+                </table>
+                <h2>Detailed Analysis</h2>
+                <div class="review-content">
+                    ${analysisHtml}
+                </div>
+            `;
+            
+            modalContent.innerHTML = reviewHtml;
+            
+            // Re-highlight any code blocks in the review
+            modalContent.querySelectorAll('pre code').forEach((block) => {
+                Prism.highlightElement(block);
+            });
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
