@@ -10,9 +10,11 @@ If you are a maintainer of a Python package we tested, you can help us confirm w
 
 ## Status Categories
 
-- **`unknown`** - Not yet reported to maintainers or awaiting response
+- **`unreported`** - Not yet reported to maintainers
+- **`reported`** - Reported to maintainers, awaiting response
 - **`valid`** - Maintainer confirmed this is a real bug
-- **`invalid`** - Maintainer said this is not a bug / working as intended
+- **`invalid`** - Maintainer said this is not a bug / working as intended / wontfix
+- **`fixed`** - Fix has been merged
 
 ## Format
 
@@ -21,13 +23,13 @@ Add an entry to `status.json` under the package name:
 ```json
 "package_name": {
   "bug_report_file.md": {
-    "status": "valid",
+    "status": "reported",
     "url": "https://github.com/org/repo/pull/123"
   }
 }
 ```
 
-If there is an issue/PR link, add it as evidence; if you're the maintainer, it's not needed, but it would be nice to, e.g., a PR link of the fix.
+If there is an issue/PR link, please add it as evidence.
 
 ## Examples
 
