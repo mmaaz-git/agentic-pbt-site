@@ -1,4 +1,4 @@
-name: Build Site Data
+name: Build and Deploy Site
 
 on:
   push:
@@ -6,22 +6,31 @@ on:
   pull_request:
     branches: [ main ]
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v3
-    
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
-    
+
     - name: Generate site data
       run: |
         python3 generate_site.py
-    
+
     - name: Verify generated files
       run: |
         echo "Checking generated files..."
@@ -30,26 +39,41 @@ jobs:
           exit 1
         fi
         echo "✅ data.json exists"
-        
+
         # Check that data.json is valid JSON
         python3 -c "import json; json.load(open('data.json'))" || (echo "ERROR: data.json is not valid JSON!" && exit 1)
         echo "✅ data.json is valid JSON"
-        
+
         # Show stats
         echo ""
         echo "📊 Site Statistics:"
         python3 -c "import json; data = json.load(open('data.json')); print(f\"  Total bug reports: {data['stats']['total_reports']}\"); print(f\"  Total packages: {data['stats']['packages']}\")"
-    
+
     - name: Check for invalid bug status entries
       run: |
         echo "Validating status.json entries..."
         # The generate_site.py script will exit with code 1 if there are invalid entries
         # This ensures PRs that add invalid bug status entries will fail CI
         echo "✅ All status.json entries are valid"
-    
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
+
+    - name: Setup Pages
+      uses: actions/configure-pages@v4
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    - name: Upload artifact
+      uses: actions/upload-pages-artifact@v3
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
       with:
-        name: site-data
-        path: data.json
+        path: '.'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
