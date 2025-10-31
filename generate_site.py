@@ -69,14 +69,16 @@ def parse_sonnet_bug_report(file_path, call_mappings, package_name, bug_report_t
         summary = re.sub(r'\n+', ' ', summary)
 
         # Get call_id and category from bug_report_to_info mapping
-        verify_info = bug_report_to_info.get(file_path.name, {})
+        # Drop report if it's not in the mapping (no verification was done)
+        if file_path.name not in bug_report_to_info:
+            return None
+
+        verify_info = bug_report_to_info[file_path.name]
         call_id = verify_info.get('call_id')
-        category = verify_info.get('category', 'Unknown')
+        category = verify_info.get('category')
 
         # Get analysis file path
-        analysis_path = None
-        if call_id:
-            analysis_path = f"sonnet-4.5/results_verify/{package_name}/verifications/analysis_{call_id}.txt"
+        analysis_path = f"sonnet-4.5/results_verify/{package_name}/verifications/analysis_{call_id}.txt"
 
         # For BUG category, get severity from enhanced report
         severity = None
@@ -275,11 +277,37 @@ def generate_sonnet_data():
                     verify_call_mappings.append(json.loads(line))
 
         # Build mapping from bug_report filename to call_id and category
+        # Read category from decision files, not call_mappings
         bug_report_to_info = {}
+        verifications_dir = package_dir / 'verifications'
+
         for mapping in verify_call_mappings:
             bug_report_name = mapping['bug_report']
             call_id = mapping['call_id']
-            category = mapping.get('verification_category', 'Unknown')
+
+            # Check if analysis file exists
+            analysis_file = verifications_dir / f'analysis_{call_id}.txt'
+            if not analysis_file.exists():
+                continue
+
+            # Check if decision file exists and read category from it
+            decision_file = verifications_dir / f'decision_{call_id}.txt'
+            if not decision_file.exists():
+                continue
+
+            try:
+                with open(decision_file, 'r', encoding='utf-8') as f:
+                    category = f.read().strip()
+                    if not category:
+                        continue
+                    # Strip XML tags if present (e.g., <category>BUG</category>)
+                    category = re.sub(r'</?category>', '', category).strip()
+                    if not category:
+                        continue
+            except Exception as e:
+                print(f"Error reading decision file {decision_file}: {e}")
+                continue
+
             bug_report_to_info[bug_report_name] = {
                 'call_id': call_id,
                 'category': category
