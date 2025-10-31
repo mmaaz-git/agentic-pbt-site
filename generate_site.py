@@ -152,11 +152,9 @@ def generate_opus_data():
             for row in reader:
                 # Extract filename from the path in CSV
                 filepath = row['file']
-                # Remove 'clean/' prefix if present
-                filepath = filepath.replace('clean/', '')
-                # Update results to opus-4.1 if needed
-                filepath = filepath.replace('results/', 'opus-4.1/')
-                filepath = filepath.replace('reports/', 'opus-4.1/')
+                # Replace clean/results with opus-4.1
+                if filepath.startswith('clean/results/'):
+                    filepath = 'opus-4.1/' + filepath[14:]  # Remove 'clean/results/' and add 'opus-4.1/'
                 scores[filepath] = {
                     'total_score': int(row['score']) if row['score'] else None,
                     'obviousness': int(row['obviousness']) if row['obviousness'] else None,
