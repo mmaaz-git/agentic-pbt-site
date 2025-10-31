@@ -1,0 +1,37 @@
+## Reproduction Analysis
+
+I successfully reproduced the behavior described in the bug report. Here are my findings:
+
+### Technical Behavior Confirmed
+
+1. **The behavior is exactly as described**: When creating a MultiListener from other MultiListener instances, the `__post_init__` method does indeed clear the listeners list of the nested MultiListener objects.
+
+2. **Code location verified**: Line 116 in `/home/npc/pbt/agentic-pbt/envs/anyio_env/lib/python3.13/site-packages/anyio/streams/stapled.py` contains:
+   ```python
+   del listener.listeners[:]  # type: ignore[attr-defined]
+   ```
+   This line destructively clears the listeners list of any nested MultiListener.
+
+3. **Reproduction results**:
+   - Before combining: multi1 had 2 listeners, multi2 had 2 listeners
+   - After combining: combined had 4 listeners, multi1 had 0 listeners, multi2 had 0 listeners
+   - The nested MultiListeners become empty after being passed to the new MultiListener
+
+4. **Hypothesis test passed**: The behavior is consistent across different numbers of listeners (tested with 1-5 listeners per MultiListener).
+
+### Behavior Analysis
+
+The code does exactly what the bug report claims:
+- It flattens nested MultiListeners by extracting their listeners
+- It then deletes all listeners from the nested MultiListeners using `del listener.listeners[:]`
+- This makes the original nested MultiListener objects unusable
+
+### Documentation vs Implementation
+
+The docstring says: "Any MultiListeners in the given collection of listeners will have their listeners **moved** into this one."
+
+The use of the word "moved" does suggest transfer of ownership, which could imply the original container becomes empty. However, this is subtle and could be interpreted multiple ways:
+- "Moved" could mean the listeners are transferred (current behavior)
+- "Moved" could also be interpreted as just reorganized/relocated without destroying the source
+
+The documentation doesn't explicitly warn that the passed MultiListener objects will be mutated and become unusable.

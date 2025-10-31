@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is explicitly documented as converting "snake_case string to PascalCase" with a parameter named "snake", clearly indicating it expects snake_case input. The bug report tests idempotence by passing the OUTPUT of to_pascal (which is PascalCase, not snake_case) back into the function, which violates the documented input contract. The function never claims to be idempotent or to handle non-snake_case input correctly. Testing 'AA' (no underscores, not snake_case) is outside the function's documented scope.
+
+**Why it might not be INVALID:**
+While the parameter is named "snake", the function doesn't validate its input or raise errors for non-snake_case strings. It accepts any string and attempts to process it. Additionally, in practical use with Pydantic's alias_generator, the same function might be accidentally applied twice during serialization/deserialization, making idempotence a reasonable expectation even if not explicitly documented.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The non-idempotence only occurs with edge cases like 'A_A' which produces consecutive uppercase letters - an unusual pattern in real-world snake_case identifiers. Most snake_case variables (like 'user_name', 'get_data') convert to PascalCase that remains stable when reapplied. The issue is technically correct but practically irrelevant for the function's intended use case of converting Python field names to API field names.
+
+**Why it might not be WONTFIX:**
+Idempotence is a valuable property for transformation functions, and the lack of it could cause real issues in production systems where transformations might be inadvertently applied multiple times. The fix would be relatively straightforward (check if already in PascalCase format), and having predictable, idempotent behavior would make the function more robust.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current documentation doesn't explicitly state that the function only works correctly with snake_case input or that it's not idempotent. Adding a note like "This function expects snake_case input and is not idempotent" would clarify the expected behavior and prevent misuse. The function works as implemented, but users might have wrong expectations without clearer documentation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already states it converts "snake_case string to PascalCase" and names the parameter "snake", which should be sufficient indication that snake_case input is expected. The documentation doesn't need to enumerate everything the function doesn't do (like being idempotent), as that would be excessive.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for the function to be idempotent - a feature it currently doesn't have. This would require enhancing the function to detect when a string is already in PascalCase and handle it appropriately. This is new functionality beyond the current "convert snake_case to PascalCase" specification.
+
+**Why it might not be FEATURE_REQUEST:**
+Idempotence is often considered a basic property of well-designed transformation functions, not an additional feature. The user isn't asking for new functionality but pointing out that the existing functionality violates a common mathematical property that many would expect.
+
+## BUG Considerations
+**Why it might be BUG:**
+Transformation functions are generally expected to be idempotent unless there's a specific reason not to be. When used as an alias_generator in Pydantic, the function could be applied multiple times in edge cases (serialization/deserialization chains), leading to inconsistent field names. The fact that to_pascal('A_A') produces 'AA' but to_pascal('AA') produces 'Aa' represents genuinely inconsistent behavior.
+
+**Why it might not be BUG:**
+The function is documented to convert "snake_case string to PascalCase" - it makes no claims about handling other input formats or being idempotent. The parameter is literally named "snake", indicating the expected input format. Using the function outside its documented scope (passing PascalCase or uppercase strings) and expecting specific behavior is user error, not a bug.
+
+## Overall Consideration
+
+This bug report presents a technically accurate observation: the to_pascal function is not idempotent for certain inputs like 'A_A'. However, several factors suggest this should be closed as INVALID:
+
+First, the function's documentation and parameter naming clearly indicate it's designed to convert snake_case to PascalCase. The parameter is named "snake", not "string" or "text", which is a strong signal about expected input. Testing the function with its own output (PascalCase) is using it outside its documented scope. It's like complaining that a "fahrenheit_to_celsius" function doesn't work correctly when you pass Celsius values to it.
+
+Second, the specific test case 'A_A' is an edge case that's unlikely in practice. Real snake_case identifiers typically use lowercase letters with underscores (like 'user_name', 'get_data'), not uppercase letters separated by underscores. The function works correctly and idempotently for typical snake_case inputs that become standard PascalCase.
+
+Third, while idempotence is a nice property for transformation functions, it's not universally required or expected, especially for format conversion functions with specific input requirements. The function fulfills its documented purpose: converting snake_case to PascalCase. Expecting it to handle arbitrary strings or be closed under composition is adding requirements that were never specified or implied by the documentation. The bug report is essentially asking the function to do something it was never designed to do.

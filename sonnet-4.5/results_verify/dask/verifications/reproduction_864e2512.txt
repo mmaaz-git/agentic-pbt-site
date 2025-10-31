@@ -1,0 +1,49 @@
+REPRODUCTION REPORT FOR DASK RESET_INDEX BUG
+==============================================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+## Bug Confirmation
+The bug is REAL and reproducible. When reset_index(drop=True) is called on a Dask DataFrame with multiple partitions, each partition independently resets its index starting from 0, resulting in duplicate index values.
+
+## Test Results
+
+### Property-Based Test
+- The provided Hypothesis test FAILS as expected
+- The test correctly identifies that Dask produces different index values than pandas
+
+### Simple Reproduction
+With data=[(0, 0.0), (0, 0.0)] and npartitions=2:
+- Pandas produces index: [0, 1] (correct sequential index)
+- Dask produces index: [0, 0] (duplicate values - BUG)
+
+### Extended Testing
+I tested various scenarios to understand the bug's scope:
+
+1. Single partition (npartitions=1):
+   - Works correctly, produces [0, 1]
+   - Bug only appears with multiple partitions
+
+2. Two partitions (npartitions=2):
+   - Produces [0, 0] instead of [0, 1]
+   - Each partition resets independently
+
+3. Larger dataset with 3 partitions (6 rows):
+   - Pandas: [0, 1, 2, 3, 4, 5]
+   - Dask: [0, 1, 0, 1, 0, 1]
+   - Pattern shows each partition restarts at 0
+
+4. reset_index with drop=False:
+   - Also affected - produces [0, 0] instead of [0, 1]
+   - The old index values are correctly preserved in a column
+   - But the new index still has duplicates
+
+## Root Cause
+The bug occurs because each Dask partition independently calls pandas' reset_index() on its local data, without coordination to ensure globally unique index values. When there are N partitions, each starts its index from 0, leading to duplicate values across partition boundaries.
+
+## Impact
+This is a significant bug because:
+1. It violates the fundamental assumption that DataFrame indices are unique
+2. It makes the Dask behavior inconsistent with pandas
+3. It could lead to incorrect results in downstream operations that rely on unique indices
+4. The bug affects both drop=True and drop=False cases

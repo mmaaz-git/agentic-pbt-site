@@ -1,0 +1,50 @@
+BUG REPRODUCTION REPORT
+========================
+
+I successfully reproduced the bug reported in format_percentiles function.
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The hypothesis test provided by the bug reporter runs successfully and DOES find failures.
+The test asserts that all formatted strings should end with '%' and not contain 'nan' or 'inf'.
+The test fails with the assertion error: "Formatted value 'nan%' contains 'nan'"
+
+Multiple warnings are emitted during execution:
+- RuntimeWarning: divide by zero encountered in log10
+- RuntimeWarning: invalid value encountered in cast
+- RuntimeWarning: overflow encountered in scalar negative
+- RuntimeWarning: invalid value encountered in divide/multiply
+
+2. SPECIFIC FAILING INPUT REPRODUCTION:
+The specific failing input [0.625, 5e-324] produces the output ['nan%', '0%']
+This confirms exactly what the bug report claims.
+
+3. ADDITIONAL TEST CASES:
+I tested various edge cases to understand the scope:
+- [0.625, 5e-324] -> ['nan%', '0%'] ⚠️ Contains 'nan'
+- [5e-324, 0.625] -> ['nan%', 'nan%'] ⚠️ Both values become 'nan'
+- [0.0, 5e-324, 1.0] -> ['nan%', 'nan%', 'nan%'] ⚠️ All values become 'nan'
+- [1e-10, 0.5] -> ['0%', '50%'] ✓ Works correctly
+- [1e-100, 0.5] -> ['0%', '50%'] ✓ Works correctly
+
+The problem appears when 5e-324 (smallest positive float64) is included in the input.
+
+4. ROOT CAUSE ANALYSIS:
+The bug occurs in the get_precision() helper function at line 1614:
+```python
+prec = -np.floor(np.log10(np.min(diff))).astype(int)
+```
+
+When percentiles include 5e-324:
+- The difference calculation produces extremely small values (around 4.94e-322)
+- np.log10() of this value returns approximately -321.3
+- Negating and flooring gives 322
+- This extremely large precision value causes numeric overflow issues
+- The subsequent rounding operations with this precision produce NaN values
+- Final output contains 'nan%' strings
+
+5. IMPACT:
+The bug causes the function to return invalid 'nan%' strings instead of properly formatted percentages.
+This would break any downstream code that expects valid percentage strings.
+The bug manifests specifically with denormalized floating-point numbers (subnormal numbers).
+
+REPRODUCTION CONFIRMED: The bug is 100% reproducible as described in the report.

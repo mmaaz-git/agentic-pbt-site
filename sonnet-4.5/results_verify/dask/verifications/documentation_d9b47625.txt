@@ -1,0 +1,45 @@
+# Documentation Analysis
+
+## Official dask.bag.Bag.var Documentation
+
+The official documentation for `dask.bag.Bag.var` is minimal:
+- Method signature: `Bag.var(ddof=0)`
+- Parameter: `ddof` (optional) - Delta degrees of freedom, defaults to 0
+- Description: "Variance" - calculates the variance of elements in a Dask Bag
+
+The documentation does NOT specify:
+1. What happens when there are insufficient data points for the given ddof
+2. Whether the method should raise an exception, return nan, or return inf in edge cases
+3. How it should behave compared to NumPy or pandas
+4. Any limitations or warnings about minimum data requirements
+
+## Source Code Analysis
+
+From the source code in `/home/npc/miniconda/lib/python3.13/site-packages/dask/bag/chunk.py`:
+
+```python
+def var_aggregate(x, ddof):
+    squares, totals, counts = list(zip(*x))
+    x2, x, n = float(sum(squares)), float(sum(totals)), sum(counts)
+    result = (x2 / n) - (x / n) ** 2
+    return result * n / (n - ddof)  # Line 36: Division by zero when n == ddof
+```
+
+The implementation directly divides by `(n - ddof)` without any guards or checks.
+
+## Standard Statistical Library Behavior
+
+### NumPy Documentation
+NumPy's `numpy.var` documentation states that it computes variance with optional ddof parameter. When degrees of freedom results in division by zero or negative, NumPy returns nan or inf with warnings.
+
+### pandas Documentation
+pandas Series.var() uses ddof=1 by default (sample variance) and returns nan when insufficient data is available for the calculation.
+
+## Documentation Gap
+
+The dask documentation does not explicitly state:
+1. The expected behavior when n <= ddof
+2. Whether it should match NumPy/pandas behavior
+3. Any requirements for minimum number of elements
+
+Since dask is often used as a drop-in replacement for NumPy/pandas in distributed computing contexts, users would reasonably expect similar behavior to these libraries. The lack of documentation about edge case handling leaves the expected behavior undefined, but the crash with ZeroDivisionError is clearly less graceful than the behavior of comparable libraries.

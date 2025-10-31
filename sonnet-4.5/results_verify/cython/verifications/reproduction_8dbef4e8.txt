@@ -1,0 +1,36 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the reported bug with Cython.Plex Eof action values being ignored.
+
+### Test Results:
+
+1. **Property-based test with hypothesis**: FAILED
+   - Test with value=1 (and any other value) fails
+   - Eof pattern always returns None regardless of specified action value
+
+2. **Simple reproduction case**: CONFIRMED
+   - When scanning 'x' followed by EOF with lexicon [(Str('x'), 'X'), (Eof, 'EOF_TOKEN')]
+   - First token correctly returns 'X'
+   - EOF token returns None instead of expected 'EOF_TOKEN'
+
+3. **Multiple action value types tested**: ALL FAIL
+   - Tested with: integers (42), strings ('END'), booleans (True), None, lists ([]), dicts ({}), and functions
+   - ALL cases return None instead of the specified action value
+
+4. **Debug analysis**:
+   - The Eof pattern IS properly registered in the lexicon's DFA machine
+   - The machine state shows: 'eof': {'action': Return('EOF_TOKEN')}
+   - However, when EOF is encountered during scanning, the scanner never attempts to match the 'eof' symbol
+   - Instead, scan_a_token() returns (text='', action=None) and the scanner immediately produces None
+
+### Root Cause:
+The bug is in the Scanner.read() method (lines 124-126 of Scanners.py):
+```python
+if action is None:
+    self.produce(None)
+    self.eof()
+```
+
+When scan_a_token() returns no action (which happens at EOF), the code unconditionally produces None, completely ignoring any Eof pattern that may have been defined in the lexicon with an associated action value.
+
+The Eof pattern's action is never evaluated or returned, making it impossible to distinguish EOF from other conditions or to return custom EOF tokens.

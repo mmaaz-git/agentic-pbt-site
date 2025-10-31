@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+One could argue this is invalid if the documentation explicitly stated that DIA format doesn't support zero matrices in multiplication, or if there was a clear warning that empty diagonal data is not supported. However, no such documentation exists. Additionally, the fact that zero DIA matrices can be created without error suggests they should be fully functional.
+
+**Why it might not be INVALID:**
+The bug causes a crash with a valid mathematical operation (multiplying two zero matrices). The operation works correctly in all other sparse formats and in dense NumPy arrays. The documentation provides no indication that this should fail, and mathematically, the result is well-defined (should be a zero matrix).
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One might consider this WONTFIX if zero DIA matrices are an extremely rare edge case that users would never encounter in practice. The workaround is simple (convert to another format before multiplication). The fix might require changes to low-level C++ code that could be complex or risky.
+
+**Why it might not be WONTFIX:**
+This is a crash (not just incorrect output) on valid input that violates basic mathematical properties. Zero matrices are not uncommon - they naturally arise in many algorithms (e.g., initialization, masking operations). The inconsistency with other sparse formats makes this a significant usability issue. A crash is always more severe than returning wrong values.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the intended behavior is that DIA matrices with empty diagonal data are not supported for multiplication, then the documentation should clearly state this limitation. Currently, there's no warning about this edge case.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly intends to support matrix multiplication for all valid DIA matrices (as evidenced by the `_matmul_sparse` method). The crash is unintended behavior, not a documented limitation. Other sparse formats handle this correctly, suggesting it's a bug, not a design choice.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting zero matrix multiplication in DIA format is a new feature that was never implemented. The current implementation might have been designed only for matrices with at least one non-zero diagonal.
+
+**Why it might not be FEATURE_REQUEST:**
+Matrix multiplication is already implemented for DIA format - it's not a new feature. The `@` operator is documented and works for non-empty DIA matrices. This is fixing broken existing functionality, not adding new capabilities. Zero matrices are valid mathematical objects that should work with existing operations.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a crash (RuntimeError) on valid input data that has a well-defined mathematical result. All other sparse formats handle this case correctly, indicating it's an oversight in the DIA implementation. The error occurs in low-level C++ code that doesn't properly handle empty arrays. The operation violates the principle of least surprise - users expect zero matrix multiplication to work.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if there was explicit documentation stating this limitation, or if zero DIA matrices were somehow considered invalid. However, no such documentation or restriction exists.
+
+## Overall Consideration
+
+This is clearly a **BUG** for several compelling reasons:
+
+First, the operation causes a hard crash (RuntimeError) rather than returning an incorrect result or raising a meaningful error message. Crashes are always serious issues that should be fixed, especially when they occur on valid inputs. The error message "vector::_M_default_append" is a low-level C++ STL error that provides no useful information to the user and indicates an unhandled edge case in the implementation.
+
+Second, the mathematical operation is well-defined and fundamental. Multiplying any matrix by a zero matrix should yield a zero matrix - this is not ambiguous or debatable. The fact that this works correctly in NumPy and all other scipy sparse formats (CSR, CSC, COO, LIL, DOK, BSR) demonstrates that this is expected behavior. The DIA format is the only outlier, making it inconsistent with the rest of the scipy.sparse ecosystem.
+
+Third, zero matrices are not obscure edge cases but legitimate mathematical objects that arise naturally in many contexts: matrix initialization, masked operations, sparse data with no non-zero elements, and intermediate results in algorithms. The ability to create zero DIA matrices without error (using `sp.dia_array(np.zeros((n,m)))`) implies they should be fully functional. If they weren't meant to be used, their creation should be prevented or warned against.

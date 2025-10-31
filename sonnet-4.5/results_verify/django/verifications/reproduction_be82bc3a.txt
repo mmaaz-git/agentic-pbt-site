@@ -1,0 +1,55 @@
+## Bug Reproduction Results
+
+### Test Execution
+
+I successfully reproduced the reported bug using both the property-based test and the direct reproduction code.
+
+### Property-Based Test Results
+
+The hypothesis test failed as expected with the assertion:
+```
+AssertionError: BUG: Slash-only prefix '/' creates catch-all regex: ^(?P<path>.*)$
+```
+
+This confirms that when `num_slashes=1` (or any positive integer), the function creates a catch-all pattern.
+
+### Direct Reproduction Results
+
+When testing with prefix="/":
+- The resulting regex pattern is: `^(?P<path>.*)$`
+- This pattern matches ALL paths tested:
+  - 'media/file.jpg' matches: True
+  - 'admin/login' matches: True
+  - 'api/users' matches: True
+  - '' (empty string) matches: True
+
+### Additional Testing
+
+1. **Multiple slashes** ('/', '//', '///', etc.):
+   - ALL produce the same catch-all pattern: `^(?P<path>.*)$`
+   - After `lstrip('/')`, they all become an empty string ''
+
+2. **Valid prefixes for comparison**:
+   - '/media/' produces: `^media/(?P<path>.*)$` (correctly scoped)
+   - 'static/' produces: `^static/(?P<path>.*)$` (correctly scoped)
+   - '/assets/' produces: `^assets/(?P<path>.*)$` (correctly scoped)
+
+### Technical Analysis
+
+The bug occurs due to this sequence:
+1. Input: prefix = "/" (or multiple slashes)
+2. Validation: `if not prefix:` - This check passes because "/" is truthy
+3. Processing: `prefix.lstrip("/")` returns an empty string ""
+4. Pattern creation: `re.escape("")` returns ""
+5. Final pattern: `r"^%s(?P<path>.*)$" % ""` becomes `^(?P<path>.*)$`
+
+This creates a regex that matches ANY string, effectively making the static file handler intercept ALL URLs in the application.
+
+### Impact Verification
+
+The bug is real and has serious implications:
+- A developer accidentally using "/" as a prefix would have their static file handler match ALL URLs
+- This would break normal URL routing, as the static handler would capture everything
+- The bug is silent - no error is raised, making it difficult to diagnose
+
+The reported behavior matches exactly what the code does, and the impact is as severe as described.

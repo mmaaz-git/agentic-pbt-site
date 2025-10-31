@@ -1,0 +1,51 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. BUG REPORT SUMMARY
+The bug report claims that _validate_socket produces misleading error messages when given an invalid/closed file descriptor with require_connected=True or require_bound=True. It reports "the socket must be connected" or "must be bound" when the actual issue is that the file descriptor is invalid/closed.
+
+2. REPRODUCTION TESTS PERFORMED
+
+Test 1: Closed Socket with require_connected=True
+- Created a socket, got its file descriptor, closed the socket
+- Called _validate_socket(fd, socket.SOCK_STREAM, require_connected=True)
+- Result: ValueError raised with message "the socket must be connected"
+- Expected (per bug report): Error indicating fd is invalid/closed
+
+Test 2: Closed Socket with require_bound=True
+- Created a socket, got its file descriptor, closed the socket
+- Called _validate_socket(fd, socket.SOCK_STREAM, require_bound=True)
+- Result: ValueError raised with message "the socket must be bound to a local address"
+- Expected (per bug report): Error indicating fd is invalid/closed
+
+Test 3: Property-Based Test
+- Ran the hypothesis test from the bug report
+- Result: TEST FAILS - Error messages incorrectly suggest connection issue when fd is invalid
+
+3. ROOT CAUSE ANALYSIS
+When socket.socket(fileno=fd) is called with a closed file descriptor:
+- An OSError is raised with errno = 9 (EBADF - Bad File Descriptor)
+- The code checks if errno == ENOTSOCK (88), which is False
+- Since errno != ENOTSOCK and require_connected=True, it raises "must be connected"
+- Since errno != ENOTSOCK and require_bound=True, it raises "must be bound"
+
+4. TECHNICAL VERIFICATION
+The bug report is technically correct:
+- The error occurs exactly as described
+- The error message is misleading - it suggests a connection/binding issue when the real problem is an invalid file descriptor
+- The underlying OSError (EBADF) indicates the file descriptor is invalid, not that the socket lacks connection
+
+5. CODE BEHAVIOR ANALYSIS
+Lines 52-55 in _validate_socket incorrectly assume that any OSError (except ENOTSOCK) when creating a socket from a file descriptor means the socket exists but lacks the required connection/binding state. This assumption is wrong because:
+- OSError can occur for many reasons (EBADF, EPERM, etc.)
+- You cannot check connection/binding status if the socket object can't be created
+- The error message misleads developers into thinking the socket exists but has wrong state
+
+6. BUG REPORT ACCURACY
+The bug report accurately:
+- Identifies the problematic lines (52-55)
+- Provides working reproduction code
+- Correctly explains why the current behavior is wrong
+- Proposes reasonable fixes
+
+CONCLUSION: The bug is REPRODUCIBLE and the report is TECHNICALLY ACCURATE.

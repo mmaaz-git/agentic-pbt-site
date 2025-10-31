@@ -1,0 +1,56 @@
+## Bug Reproduction Results
+
+### Reproduction Status: CONFIRMED
+
+The bug report is technically accurate in its description of the problem.
+
+### Test Results
+
+1. **Exact Failing Case (M=2, alpha=2.225073858507e-311)**:
+   - Result: [0. nan]
+   - Contains NaN: True
+   - The bug reproduces exactly as reported
+
+2. **Threshold Analysis**:
+   - alpha=1e-100: Works correctly, returns [0. 1.]
+   - alpha=1e-200: Works correctly, returns [0. 1.]
+   - alpha=1e-300: Works correctly, returns [0. 1.]
+   - alpha=1e-305: Works correctly, returns [0. 1.]
+   - alpha=1e-308: FAILS with NaN, returns [0. nan]
+   - alpha=1e-310: FAILS with NaN, returns [0. nan]
+   - alpha=1e-311: FAILS with NaN, returns [0. nan]
+   - alpha=1e-312: FAILS with NaN, returns [0. nan]
+
+   The threshold appears to be around 1e-308, which corresponds to the minimum normalized double-precision float value (approximately 2.2e-308).
+
+3. **Root Cause Verification**:
+   - For alpha=1e-300: -2.0/alpha = -2e+300 (large but finite), cos(π*value) = valid number
+   - For alpha=1e-308: -2.0/alpha = -inf (overflow), cos(π*(-inf)) = NaN
+   - For alpha=1e-310: -2.0/alpha = -inf (overflow), cos(π*(-inf)) = NaN
+
+   The issue is confirmed to be division overflow when computing -2.0/alpha for very small alpha values.
+
+4. **Hypothesis Test**:
+   - The property-based test fails with the exact reported input
+   - The assertion that all values should be finite is violated
+
+5. **Edge Case Behavior**:
+   - alpha=0.0 correctly returns [1. 1.] (rectangular window)
+   - alpha=1.0 correctly returns [0. 0.] (Hann window, matching scipy's hann function)
+   - alpha=1e-320 (smaller than float64 minimum) also produces NaN in the last element
+
+6. **Error Messages**:
+   - scipy generates RuntimeWarning for "overflow encountered in divide"
+   - scipy generates RuntimeWarning for "invalid value encountered in add"
+   - These warnings confirm the overflow issue in the division operation
+
+### Technical Analysis
+
+The bug occurs at line 946 of _windows.py:
+```python
+w3 = 0.5 * (1 + xp.cos(xp.pi * (-2.0/alpha + 1 + 2.0*n3/alpha/(M-1))))
+```
+
+When alpha < ~2.2e-308 (the minimum normalized float64 value), the expression `-2.0/alpha` overflows to negative infinity, and `cos(-inf)` returns NaN. This NaN propagates through the calculation, resulting in NaN values in the output window.
+
+The issue affects the third segment of the Tukey window calculation (the right taper), which is why we see [0. nan] for M=2 - the first value is from segment 1 (correctly computed as 0), and the second value is from segment 3 (incorrectly computed as NaN).

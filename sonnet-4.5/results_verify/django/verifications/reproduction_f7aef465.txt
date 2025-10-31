@@ -1,0 +1,31 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue occurs in Django's LocMemCache backend when MAX_ENTRIES is smaller than CULL_FREQUENCY.
+
+### Test Results
+
+1. **Hypothesis Test**: The property-based test failed as expected, finding counterexamples where the cache exceeds MAX_ENTRIES. The simplest failing case was with max_entries=1 and cull_frequency=2.
+
+2. **Specific Reproduction**: Running the exact example from the bug report with MAX_ENTRIES=2 and CULL_FREQUENCY=3 produced the expected output:
+   - After adding key_0: cache size = 1
+   - After adding key_1: cache size = 2
+   - After adding key_2: cache size = 3
+   - Final: cache has 3 entries, MAX_ENTRIES is 2
+
+### Root Cause Confirmed
+
+The bug occurs in the `_cull()` method at line 97 of locmem.py:
+```python
+count = len(self._cache) // self._cull_frequency
+```
+
+When the cache has 2 items and CULL_FREQUENCY is 3:
+- count = 2 // 3 = 0 (integer division)
+- The for loop runs 0 times, so no items are removed
+- The new item is then added, violating the MAX_ENTRIES limit
+
+The bug manifests whenever `len(self._cache) < self._cull_frequency`, resulting in no culling despite the cache being at capacity.
+
+### Impact
+
+This is a real bug that causes the cache to exceed its configured maximum size, violating the documented contract that the cache should never hold more than MAX_ENTRIES items.

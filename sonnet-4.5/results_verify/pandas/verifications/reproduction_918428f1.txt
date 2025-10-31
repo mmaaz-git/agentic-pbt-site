@@ -1,0 +1,33 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. PROPERTY-BASED TEST REPRODUCTION:
+   - The Hypothesis test failed as expected with input [0]
+   - Error message: "Different hash keys should produce different hashes for numeric arrays"
+   - This confirms that when different hash_key values are provided, they do NOT produce different hashes for numeric arrays
+
+2. SIMPLE EXAMPLE REPRODUCTION:
+   - Created array [1, 2, 3] and hashed with two different keys ('0'*16 and '1'*16)
+   - Output confirmed:
+     * Hash with key '0'*16: [ 6238072747940578789 15839785061582574730  2185194620014831856]
+     * Hash with key '1'*16: [ 6238072747940578789 15839785061582574730  2185194620014831856]
+     * The hashes are identical despite different hash_key values
+
+3. SOURCE CODE EXAMINATION:
+   - Located the hash_array function in pandas/core/util/hashing.py
+   - Confirmed the function signature includes hash_key parameter (line 236)
+   - Traced execution path for numeric arrays:
+     * hash_array calls _hash_ndarray (line 279)
+     * _hash_ndarray handles numeric types at lines 301-306:
+       - bool: converted to u8
+       - datetime64/timedelta64: viewed as i8 then u8
+       - numeric types <= 8 bytes: viewed as unsigned then u8
+     * After conversion, applies bitwise operations (lines 334-338)
+     * hash_key is NEVER used in the numeric path
+
+   - hash_key is only used in two scenarios:
+     a) When categorize=True and values are categorized (lines 311-323)
+     b) When values have object dtype (lines 326-331)
+
+The bug report is accurate: the hash_key parameter is completely ignored when hashing numeric arrays, despite being a documented parameter that users would reasonably expect to affect the output.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation clearly states that the optimizer can terminate successfully when ANY of the termination conditions (ftol, xtol, gtol) are satisfied, not ALL of them. The message explicitly says "`ftol` termination condition is satisfied" which accurately describes what happened. The documentation never promises that success=True means the gradient will be near zero - it only means that one of the termination conditions was met. The optimality field is provided separately precisely so users can check the gradient norm if they care about it. The bug reporter's assumption that "at the true optimum, the gradient J^T r must be zero" is correct mathematically but not a requirement for the function to report success according to its documented behavior.
+
+**Why it might not be INVALID:**
+The behavior is mathematically nonsensical - the algorithm reports finding a solution when it hasn't even tried to optimize. A gradient norm of 2.16 is objectively not an optimum for an unconstrained least squares problem. Users reasonably expect that success=True means the algorithm found at least a local minimum, not that it gave up immediately due to numerical issues.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case involving initial values that are exactly zero or near machine epsilon (1e-80). In practice, users rarely start optimization from exactly zero, and adding tiny random noise to the initial guess completely avoids the issue. The workaround is trivial (use x0 + 1e-10 instead of x0). The issue only affects the Levenberg-Marquardt method with very specific initial conditions. Fixing this would require special case handling in a well-established algorithm implementation (MINPACK) that might introduce other issues or performance penalties.
+
+**Why it might not be WONTFIX:**
+The issue causes the optimizer to silently return incorrect results with success=True, which could lead to serious problems in production code. Users trust success=True to mean the optimization worked. The fact that the optimality field shows 2.05 while success=True creates an internal contradiction that suggests a real implementation problem. Silent failures are generally considered serious issues worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about what success=True actually means - it currently just says "whether the optimizer exited successfully" without defining "successfully." It should explicitly warn that success can be True even with large gradient norms if ftol is satisfied. The documentation should clarify that users need to check the optimality field separately if they care about gradient convergence. A warning about potential issues with zero initial values for the 'lm' method would be helpful.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already states that success occurs when "one of the convergence criteria is satisfied" and provides the optimality field for users to check gradient norms. The termination message clearly states which condition triggered. The issue isn't really about documentation clarity but about unexpected algorithm behavior with edge case inputs.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The request is essentially asking for enhanced termination logic that requires both ftol AND gtol conditions to be satisfied before reporting success, or at least a sanity check on gradient norms. This would be a new feature - adding an option like require_gradient_convergence=True or min_optimality_for_success parameter. The current behavior follows the documented design where any single criterion can trigger termination. Adding stricter convergence requirements would be an enhancement, not a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but pointing out that the existing functionality is broken for certain inputs. The algorithm is supposed to find minima, and reporting success without even attempting optimization is a bug, not a missing feature. The mathematical properties of least squares optimization are well-established, and violating them isn't a feature limitation.
+
+## BUG Considerations
+**Why it might be BUG:**
+The optimizer returns success=True while the gradient norm is 2.16, which is mathematically incorrect for an unconstrained least squares problem. The algorithm makes zero iterations and doesn't even attempt to optimize when starting from zero. The optimality field (2.05) contradicts the success status, indicating an internal consistency problem. The same problem with slightly perturbed initial values (1e-10) converges correctly, suggesting the zero-handling is broken. This is a silent failure that could cause serious issues in production systems relying on the success flag.
+
+**Why it might not be BUG:**
+The function behaves exactly as documented - it terminates when the ftol condition is satisfied and reports this accurately in the message. The documentation never guarantees that success means the gradient is small, only that a termination condition was met. The optimality field is provided specifically so users can make their own assessment of solution quality. This is an edge case with initial values at machine precision limits, and the behavior might be a deliberate design choice to prevent numerical instability. The MINPACK implementation is well-tested and widely used, suggesting this behavior might be intentional.
+
+## Overall Consideration
+
+After careful analysis, this appears to be an edge case in the Levenberg-Marquardt implementation where starting from exactly zero or near-zero values causes immediate termination via the ftol condition. The algorithm reports success=True despite never attempting optimization, leaving the gradient norm at 2.16 instead of near zero as expected for least squares problems.
+
+The key question is whether this behavior violates the documented contract of the function. The documentation states that success=True means "one of the convergence criteria is satisfied," and technically the ftol condition was triggered (even if spuriously). However, the documentation also describes this as an optimization function that "solves nonlinear least-squares problems," and returning the initial guess unchanged with a large gradient hardly constitutes "solving" the problem.
+
+The most compelling argument against this being a bug is that the documentation never explicitly promises gradient convergence for success=True, and the optimality field exists precisely to let users check this themselves. Users who care about gradient norms can and should check the optimality field. The behavior, while mathematically unsatisfying, follows the letter of the documented behavior. Given that this only occurs with very specific edge-case inputs (exactly zero or near machine epsilon) and has a trivial workaround (add small noise to x0), this leans toward WONTFIX rather than BUG. The issue is real but likely not worth the risk of modifying a well-established algorithm implementation for such a rare edge case.

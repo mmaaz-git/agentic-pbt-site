@@ -1,0 +1,37 @@
+## Documentation Findings for numpy.ctypeslib.load_library
+
+### NumPy Documentation
+The official NumPy documentation for `load_library` states:
+- **Purpose**: Cross-platform convenience function for loading libraries with proper file extensions
+- **Parameters**:
+  - `libname`: Name of library (can have 'lib' prefix, but no extension)
+  - `loader_path`: Directory where library can be found
+- **Returns**: ctypes library object
+- **Exceptions**: Raises `OSError` if:
+  - No library with expected extension found
+  - Library is defective and cannot be loaded
+
+The documentation does NOT specify:
+- How the function handles missing configuration variables
+- What happens when `sysconfig.get_config_var("EXT_SUFFIX")` returns None
+- Whether None return values from sysconfig are expected to be handled
+
+### Python sysconfig Documentation
+The Python documentation for `sysconfig.get_config_var()` explicitly states:
+- **Returns None**: "If name is not found, return None"
+- This is documented, expected behavior - not an error condition
+- The function is designed to return None gracefully instead of raising exceptions
+- This can happen when configuration variables don't exist in custom builds
+
+### Code Implementation Details
+Looking at the actual implementation (lines 143-146):
+```python
+so_ext = sysconfig.get_config_var("EXT_SUFFIX")
+if not so_ext == base_ext:
+    libname_ext.insert(0, libname + so_ext)
+```
+
+The code assumes `so_ext` will always be a string and uses string concatenation without checking for None. This is a coding assumption not documented anywhere.
+
+### Key Finding
+The documentation gap is that NumPy's load_library doesn't specify how it should behave when Python's configuration is incomplete (EXT_SUFFIX missing). The Python documentation clearly states get_config_var can return None, but NumPy's code doesn't handle this documented case.

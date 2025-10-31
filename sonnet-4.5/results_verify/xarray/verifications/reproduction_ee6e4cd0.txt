@@ -1,0 +1,53 @@
+## Bug Reproduction Results
+
+### Test Case
+Input: `start=-1.5, stop=0.0, step=1.0`
+
+### Expected Behavior (numpy.arange)
+- numpy.arange(-1.5, 0.0, 1.0) produces: `[-1.5, -0.5]`
+- Size: 2 elements
+- Step between values: 1.0
+
+### Actual Behavior (RangeIndex.arange)
+- RangeIndex.arange(-1.5, 0.0, 1.0) produces: `[-1.5, -0.75]`
+- Size: 2 elements (correct)
+- Step between values: 0.75 (incorrect)
+
+### Root Cause Analysis
+
+The bug occurs due to the following sequence:
+
+1. **Line 219**: Correctly calculates size = math.ceil((0.0 - (-1.5)) / 1.0) = 2
+   - This matches numpy's calculation
+
+2. **Lines 221-223**: Creates RangeCoordinateTransform with (start=-1.5, stop=0.0, size=2)
+   - Critically, the original step=1.0 is NOT passed to the transform
+
+3. **Line 62**: The step property recalculates: step = (0.0 - (-1.5)) / 2 = 0.75
+   - This is different from the original step=1.0
+
+4. **Line 69**: forward() generates values as: start + positions * step
+   - For positions [0, 1], this gives: [-1.5, -1.5 + 0.75] = [-1.5, -0.75]
+
+### Verification
+
+The hypothesis test correctly fails with the message:
+```
+AssertionError: Value mismatch: RangeIndex=[-1.5  -0.75], NumPy=[-1.5 -0.5]
+```
+
+### Mathematical Proof of the Bug
+
+For numpy.arange behavior:
+- Values are: start, start+step, start+2*step, ... while < stop
+- For (-1.5, 0.0, 1.0): [-1.5, -0.5] (stops here as 0.5 >= 0.0)
+
+For RangeIndex current behavior:
+- Recalculated step = (stop - start) / size = 1.5 / 2 = 0.75
+- Values are: [-1.5, -0.75]
+
+The discrepancy is clear: -0.5 ≠ -0.75
+
+### Conclusion
+
+The bug is confirmed and reproducible. RangeIndex.arange does not match numpy.arange semantics due to internally recalculating the step parameter instead of using the provided value.

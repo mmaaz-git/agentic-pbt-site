@@ -1,0 +1,42 @@
+REPRODUCTION REPORT
+===================
+
+I have successfully reproduced the bug reported for pandas.core.util.hashing.hash_array.
+
+1. HYPOTHESIS TEST RESULT:
+The hypothesis test failed exactly as described in the bug report. When testing arrays containing 0.0, replacing 0.0 with -0.0 produces different hash values, despite the arrays being equal according to numpy.
+
+Test failure output:
+- AssertionError: Equal arrays should have equal hashes: [0.] vs [-0.]
+- Falsifying example: test_hash_equal_values_have_equal_hashes(values=[0.0])
+
+2. MANUAL TEST RESULT:
+The manual reproduction code confirms the bug:
+- np.array_equal([0.0], [-0.0]) returns True (arrays are equal)
+- hash_array([0.0]) returns [0]
+- hash_array([-0.0]) returns [2720858781877447050]
+- The hashes are NOT equal despite the arrays being equal
+
+3. IEEE 754 AND NUMPY BEHAVIOR:
+I verified that according to IEEE 754 floating-point standard:
+- 0.0 == -0.0 evaluates to True
+- np.equal(0.0, -0.0) returns True
+- np.array_equal([0.0], [-0.0]) returns True
+- Python's built-in hash(0.0) == hash(-0.0) returns True
+
+4. ROOT CAUSE:
+The implementation uses the raw bit representation of floats to compute hashes:
+- Line 305-306 in hashing.py: vals.view(f"u{vals.dtype.itemsize}").astype("u8")
+- This directly uses the bit pattern, which differs for 0.0 (all zeros) vs -0.0 (sign bit set)
+- 0.0 bits: 0000000000000000000000000000000000000000000000000000000000000000
+- -0.0 bits: 1000000000000000000000000000000000000000000000000000000000000000
+
+5. IMPACT:
+This bug violates the fundamental hash invariant: if a == b, then hash(a) must equal hash(b).
+This can cause incorrect behavior in:
+- pandas groupby operations
+- deduplication
+- hash-based joins
+- index lookups
+
+The bug is fully confirmed and reproducible with pandas version 2.3.2.

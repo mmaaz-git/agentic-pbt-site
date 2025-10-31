@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report tests an internal Django function with artificially constructed exception objects that don't match what Jinja2 actually produces. The function `get_exception_info` is not part of Django's public API and is only called internally with real Jinja2 exceptions. In all real-world usage, Jinja2 provides valid, positive line numbers that are within bounds. The test case creates mock objects with invalid line numbers that would never occur in practice. Since the function was never designed or documented to handle arbitrary input, and the documentation doesn't specify that it should handle invalid line numbers gracefully, this could be considered testing outside the function's intended scope.
+
+**Why it might not be INVALID:**
+The function does crash with an IndexError when given certain inputs, and crashes are generally considered bugs. The code doesn't explicitly validate its inputs or document that it expects only valid Jinja2 exceptions. A defensive programming approach would suggest that any function that can crash should either validate inputs or document its preconditions clearly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function that's only called by Django's own code with real Jinja2 exceptions. The edge cases that cause crashes (empty source with lineno>1, negative line numbers) never occur in practice because Jinja2 always produces valid exceptions. The function has worked correctly for years in production without issues. Adding defensive checks would add complexity and overhead to handle scenarios that literally never happen. The error is in an obscure internal function that users never call directly, making it extremely low priority.
+
+**Why it might not be WONTFIX:**
+IndexError crashes are generally not acceptable, even in internal code. The fix is trivial (just a bounds check) and would make the code more robust. Even internal functions should handle edge cases gracefully, as this sets a good example and prevents future issues if the function's usage changes.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks documentation about its expected inputs and preconditions. It doesn't specify that it expects a valid Jinja2 exception with a line number within the source bounds. Adding documentation to clarify that this is an internal function expecting valid Jinja2 exceptions would make the contract clear. The current docstring is minimal and doesn't describe the input requirements or behavior for edge cases.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is internal and not part of the public API, so detailed documentation might not be necessary. The existing docstring adequately describes what the function does for its intended use case. The code works correctly for all real-world scenarios, so the documentation isn't misleading about actual behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report is essentially asking for the function to handle invalid inputs gracefully, which it currently doesn't do. This could be viewed as requesting a new feature: "robust handling of malformed exception objects." The function currently works as designed for its intended inputs (real Jinja2 exceptions), and the request is to extend it to handle additional cases that were never part of the original design.
+
+**Why it might not be FEATURE_REQUEST:**
+Fixing crashes is typically considered bug fixing, not feature development. The report isn't asking for new functionality but rather for the existing functionality to not crash. Defensive programming and input validation are generally considered part of proper implementation, not additional features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an IndexError when given certain inputs, which is a clear programming error. The code makes assumptions about array bounds without validating them. Good defensive programming practices suggest that functions should either validate inputs or handle edge cases gracefully. The fix is trivial and would prevent potential crashes. Even though the crash conditions don't occur in normal use, a crash is still technically a bug.
+
+**Why it might not be BUG:**
+This is an internal function that's only called with valid Jinja2 exceptions, which always have correct line numbers. The "bug" only manifests with artificially constructed test inputs that violate the function's implicit contract. The function has worked correctly in production for years without any reported issues. The test case is essentially providing invalid input to an internal API and complaining that it doesn't handle it gracefully. This is like passing a null pointer to an internal C function and calling it a bug when it segfaults.
+
+## Overall Consideration
+
+The bug report identifies a technical issue where `get_exception_info` can crash with an IndexError when given exception objects with invalid line numbers. However, this function is an internal Django utility that's only ever called with real Jinja2 TemplateSyntaxError objects, which always have valid line numbers within the source bounds. The test case uses artificially constructed mock objects that don't represent real-world usage.
+
+The fundamental question is whether internal functions should be expected to handle arbitrary invalid inputs gracefully. The function was clearly designed with the assumption that it would only receive valid Jinja2 exceptions, as evidenced by its usage pattern and the lack of input validation. The property-based test is essentially fuzzing an internal API with inputs outside its design parameters.
+
+While defensive programming is generally good practice, requiring every internal function to gracefully handle all possible invalid inputs would add unnecessary complexity and overhead. This is particularly true for utility functions that are only called from controlled locations with known valid inputs. The Django codebase, like most large projects, relies on internal contracts and assumptions about data validity. If we consider every violation of these implicit contracts a bug, then virtually every internal function that doesn't validate all inputs would be buggy. This would be an unreasonable standard that would lead to excessive defensive code throughout the codebase, impacting performance and maintainability for no practical benefit.

@@ -1,0 +1,35 @@
+# Bug Reproduction Report
+
+## Summary
+I successfully reproduced the bug described in the report. The FloatConvertor's `to_string()` method indeed fails to correctly round-trip very small float values.
+
+## Test Results
+
+### 1. Property-Based Test
+The property-based test using Hypothesis passed for most randomly generated cases (100 examples), but this is because Hypothesis likely didn't generate extremely small values like 1e-21 in its default strategy.
+
+### 2. Specific Test Case
+The specific test case from the bug report **FAILED** as described:
+- Input: `"0.000000000000000000001"`
+- Float value after convert(): `1e-21`
+- String value after to_string(): `"0"`
+- Expected: `"0.000000000000000000001"` or at least a string that converts back to `1e-21`
+- Actual: `"0"` (which converts to `0.0`, not `1e-21`)
+
+### 3. Edge Cases Analysis
+Testing multiple decimal values revealed:
+- Values from 0.1 down to 0.00000000000000000001 (1e-20) work correctly
+- Values at 1e-21 and smaller (0.000000000000000000001, 0.0000000000000000000001) fail
+- The failure point is exactly at values smaller than 1e-20
+
+## Root Cause Verification
+The bug occurs because:
+1. The regex pattern `[0-9]+(\.[0-9]+)?` accepts strings with unlimited decimal places
+2. The `convert()` method correctly parses these to float values
+3. The `to_string()` method uses `"%0.20f"` formatting, which only preserves 20 decimal places
+4. For values like 1e-21, the formatting produces "0.00000000000000000000"
+5. After stripping trailing zeros and dots, this becomes "0"
+6. The value "0" converts to 0.0, not the original 1e-21
+
+## Impact
+This bug breaks URL generation in Starlette routing. When a route contains a float parameter with a very small value (< 1e-20), the generated URL will contain "0" instead of the actual value, causing data loss and incorrect routing behavior.

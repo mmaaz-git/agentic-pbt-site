@@ -1,0 +1,49 @@
+BUG REPRODUCTION ANALYSIS
+
+Bug Report Summary:
+The bug report claims that `_resample_bin_and_out_divs` produces non-monotonic output divisions when `label='right'` is combined with certain division patterns, specifically with weekly resampling rules.
+
+Reproduction Results:
+
+1. SPECIFIC EXAMPLE FROM BUG REPORT - CONFIRMED:
+   Input: divisions=(2001-02-04 00:00:00, 2001-02-04 01:00:00), rule='1W', closed='right', label='right'
+   Output: outdivs=(2001-02-04 00:00:00, 2001-01-28 00:00:00)
+   Result: NON-MONOTONIC (2001-02-04 > 2001-01-28)
+
+2. ADDITIONAL TEST CASES PERFORMED:
+   - Same divisions with closed='right', label='right', rule='2W': NON-MONOTONIC
+   - Same divisions with closed='left', label='right', rule='1W': MONOTONIC
+   - Same divisions with closed='right', label='left', rule='1W': MONOTONIC
+   - Same divisions with closed='left', label='left', rule='1W': MONOTONIC
+
+3. PATTERN IDENTIFIED:
+   The bug occurs specifically when ALL of the following conditions are met:
+   - closed='right'
+   - label='right'
+   - rule is a weekly frequency ('1W', '2W', etc.)
+   - The division span is shorter than the resampling rule
+
+4. ROOT CAUSE ANALYSIS:
+   Through step-by-step debugging, the issue was traced to lines 98-101 in the original code:
+
+   When label='right', the code shifts outdivs by the rule amount (line 82):
+       outdivs = tempdivs + rule
+
+   However, when the end adjustment is needed (lines 98-101), the code appends:
+       setter(outdivs, temp.index[-1])
+
+   This appends the UNSHIFTED value from temp.index[-1], creating a non-monotonic sequence.
+   For the test case: [2001-02-04, 2001-01-28] instead of [2001-02-04, 2001-02-04]
+
+5. HYPOTHESIS TEST:
+   The provided Hypothesis-based property test is valid and would catch this bug with sufficient examples.
+   The bug is deterministic and reproducible with the specific inputs provided.
+
+6. IMPACT ASSESSMENT:
+   - The bug produces divisions where outdivs[i] > outdivs[i+1]
+   - This violates dask's fundamental requirement that divisions be monotonically increasing
+   - This would cause incorrect data partitioning and potentially corrupt results in downstream operations
+   - The bug is NOT an edge case - it affects a valid combination of parameters
+
+CONCLUSION:
+The bug report is technically accurate. The function does produce non-monotonic output divisions under the specified conditions, which violates dask's architectural requirements.

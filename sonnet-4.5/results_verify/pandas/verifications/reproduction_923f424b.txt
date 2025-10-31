@@ -1,0 +1,37 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug exactly as described in the report. All three failing test cases produce the expected incorrect outputs:
+
+1. [0.0, 5e-324] produces ['nan%', 'nan%'] ✓ REPRODUCED
+   - The function returns NaN values instead of valid percentages
+   - Runtime warnings are emitted about invalid values in multiply/divide operations
+
+2. [0.0, 1.401298464324817e-45] produces ['0%', '0%'] ✓ REPRODUCED
+   - Two different input values (0.0 and a very small positive number) produce identical outputs
+   - This violates the uniqueness property promised in the documentation
+
+3. [1e-10] produces ['0%'] ✓ REPRODUCED
+   - A non-zero value between 0 and 1 is incorrectly rounded to 0%
+   - This violates the documentation's promise to never round to 0% unless the input is exactly 0
+
+ROOT CAUSE ANALYSIS:
+The issue occurs in the get_precision() function at line 1614:
+  prec = -np.floor(np.log10(np.min(diff))).astype(int)
+
+When the minimum difference is extremely small (e.g., 5e-324), this calculation produces:
+- log10(5e-324) ≈ -322
+- prec becomes 322
+
+NumPy's round() function cannot handle precision values above ~320, causing:
+- For precision ≥ 320: Returns NaN due to numerical overflow
+- For very high precision (e.g., 43): Values round to effectively 0
+
+The property-based tests with Hypothesis also consistently fail, confirming that:
+1. The uniqueness property is violated for small values
+2. Non-zero values are incorrectly rounded to 0%
+
+Additional edge cases tested show the problem is systemic with very small percentile values:
+- [1e-15, 2e-15] produces ['0%', '0%'] (uniqueness violated)
+- Values as large as 1e-10 still round incorrectly to 0%
+
+The bug is real and affects the function's correctness for edge cases involving very small percentile values.

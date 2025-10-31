@@ -1,0 +1,33 @@
+## Bug Reproduction Report
+
+### Summary
+The reported bug has been successfully reproduced. When a DataFrame contains integer values outside the int64 range (-9223372036854775808 to 9223372036854775807), `to_json()` successfully serializes them to JSON, but `read_json()` crashes with `ValueError: Value is too small` (or "Value is too big" for large positive values).
+
+### Reproduction Steps
+
+1. **Property-Based Test**: The hypothesis test successfully identified the bug with the exact input mentioned in the report:
+   - Input: `data=[{'0': -9223372036854775809}], orient='split'`
+   - Result: `ValueError: Value is too small`
+   - The error occurs with all orient values ('split', 'records', 'index', 'columns', 'values')
+
+2. **Minimal Example**: Confirmed the specific behavior:
+   - Value -9223372036854775809 (one less than int64 min):
+     - `to_json()` succeeds, producing valid JSON
+     - `read_json()` fails with "Value is too small"
+   - Value -9223372036854775808 (exactly int64 min):
+     - Both operations succeed
+
+3. **Root Cause Analysis**:
+   - The issue lies in pandas' use of ujson (ultra-fast JSON) library
+   - `ujson_dumps` can serialize Python integers of any size
+   - `ujson_loads` cannot deserialize integers outside the int64 range
+   - This creates an asymmetry: data that can be written cannot be read back
+
+### Technical Details
+- DataFrame stores the large integer as Python object dtype (not int64)
+- Python's built-in json module handles arbitrary precision integers correctly
+- The ujson library used by pandas has a hard limit on integer size during deserialization
+- The error occurs in the ujson C extension, not in pandas Python code
+
+### Impact
+This is a data integrity issue where valid DataFrames can be serialized but not deserialized, potentially causing data loss in production systems that rely on JSON serialization for data persistence or transfer.

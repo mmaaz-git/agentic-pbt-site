@@ -1,0 +1,67 @@
+## Bug Report Triage Analysis
+
+### Considering: BUG (Valid Bug Report)
+**Arguments for:**
+1. The code demonstrates a clear inconsistency - column statistics sometimes have a 'name' field and sometimes don't
+2. Downstream code (`sorted_columns`) unconditionally accesses the 'name' field, causing crashes
+3. The bug is reproducible and affects real-world scenarios (columns with uniform values and nulls)
+4. The fix is straightforward and maintains backward compatibility
+5. The current behavior breaks the implicit contract between producer and consumer functions
+
+**Arguments against:**
+1. `_aggregate_stats` is an internal function (underscore prefix), not public API
+2. The comment suggests intentional removal of "dangerous" stats
+
+**Verdict:** STRONG case for BUG
+
+### Considering: INVALID
+**Arguments for:**
+1. The function is internal and may not have guaranteed behavior
+2. Perhaps the intent is to signal invalid statistics by omitting fields
+
+**Arguments against:**
+1. The bug causes actual crashes in downstream code
+2. The inconsistent structure violates the principle of least surprise
+3. Other parts of the codebase clearly expect 'name' to always be present
+
+**Verdict:** NOT INVALID - the crash is real and affects functionality
+
+### Considering: WONTFIX
+**Arguments for:**
+1. Edge case that only occurs with specific data patterns (min==max with nulls)
+2. Internal implementation detail not exposed to users directly
+
+**Arguments against:**
+1. The bug can occur with common data patterns (e.g., categorical columns with nulls)
+2. Causes actual crashes that users would encounter
+3. Fix is trivial (just add the 'name' field)
+4. Not fixing it leaves a landmine in the codebase
+
+**Verdict:** NOT WONTFIX - the impact is significant and fix is simple
+
+### Considering: FEATURE_REQUEST
+**Arguments for:**
+1. Could be viewed as requesting better handling of edge cases
+
+**Arguments against:**
+1. This is clearly a bug - the code crashes with KeyError
+2. Not a request for new functionality, but fixing broken existing functionality
+3. The consumer code already expects this field to exist
+
+**Verdict:** NOT FEATURE_REQUEST - this is fixing broken code, not adding features
+
+### Considering: DOCUMENTATION_FIX
+**Arguments for:**
+1. No formal documentation specifies the column statistics format
+2. Could document that 'name' field may be missing in some cases
+
+**Arguments against:**
+1. The code crashes - this isn't just a documentation issue
+2. The consumer code's expectations are clear from its implementation
+3. Documenting the bug doesn't fix the actual problem
+4. The inconsistency appears unintentional based on code structure
+
+**Verdict:** NOT DOCUMENTATION_FIX - the code needs fixing, not just documentation
+
+### Final Analysis
+This is clearly a **BUG**. The `_aggregate_stats` function produces inconsistent output that causes crashes in downstream code. The fact that it's an internal function doesn't excuse the inconsistency - internal functions should still maintain contracts with their consumers within the same codebase. The fix is simple, correct, and maintains the intended behavior of filtering out unreliable min/max statistics while preserving the required metadata structure.

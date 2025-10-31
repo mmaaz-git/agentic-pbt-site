@@ -1,0 +1,41 @@
+# Bug Reproduction Report
+
+## Successfully Reproduced
+
+The bug report is accurate and has been successfully reproduced. Both the manual test and the Hypothesis test confirmed the issue.
+
+## Manual Reproduction
+
+The manual test with input `[0.0, 1.0, 0.0]` confirmed the reported behavior:
+- Input coordinates: `[0. 1. 0.]`
+- Inferred breaks: `[-0.5  0.5  0.5 -0.5]`
+- Breaks range: `[-0.5, 0.5]`
+- **BUG CONFIRMED**: The coordinate value `1.0` is NOT in the range `[-0.5, 0.5]`
+
+## Hypothesis Testing
+
+The Hypothesis property-based test found multiple failing examples, including:
+- `[1.0, 0.0, 1.0]` - where value `0.0` is not in range `[0.5, 1.5]`
+- `[0.0, 1.0, 0.0]` - where value `1.0` is not in range `[-0.5, 0.5]`
+
+## Root Cause Analysis
+
+The function computes interval breaks using the formula:
+1. `deltas = 0.5 * np.diff(coord)` - computes half-differences between consecutive coordinates
+2. For non-monotonic data like `[0.0, 1.0, 0.0]`:
+   - `np.diff([0.0, 1.0, 0.0])` = `[1.0, -1.0]`
+   - `deltas` = `[0.5, -0.5]`
+3. The breaks are constructed as:
+   - `first = coord[0] - deltas[0] = 0.0 - 0.5 = -0.5`
+   - `middle = coord[:-1] + deltas = [0.0, 1.0] + [0.5, -0.5] = [0.5, 0.5]`
+   - `last = coord[-1] + deltas[-1] = 0.0 + (-0.5) = -0.5`
+   - Result: `[-0.5, 0.5, 0.5, -0.5]`
+
+The algorithm assumes monotonic coordinates. When coordinates are non-monotonic, the computed breaks don't properly envelope all original values. This is a fundamental algorithmic limitation, not a simple bug.
+
+## Impact
+
+This bug affects plotting functions like `pcolormesh` when:
+1. Non-monotonic coordinate data is provided
+2. The `check_monotonic` parameter is False (the default)
+3. Users receive incorrect visualizations without any warning

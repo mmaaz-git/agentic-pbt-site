@@ -1,0 +1,62 @@
+REPRODUCTION RESULTS FOR TYPE MISMATCH BUG IN DASK.DIAGNOSTICS.PROFILE._TRACKER
+
+1. Bug Location Confirmed:
+- File: /home/npc/miniconda/lib/python3.13/site-packages/dask/diagnostics/profile.py
+- Line 261: `pid = current_process()` assigns a Process object to pid
+- Line 252: `p.pid != pid` compares an integer with a Process object
+- Line 271: The Process object is passed to _update_pids()
+
+2. Type Mismatch Verification:
+Running the reproduction code confirms:
+- current_process() returns a multiprocessing.process._MainProcess object
+- current_process().pid returns an integer
+- Comparing integer != Process object always evaluates to True (they are never equal)
+
+3. Test Results:
+
+a) Simple Test Output:
+```
+Current process PID: 175591
+Type of pid_wrong: <class 'multiprocessing.process._MainProcess'>
+Type of pid_correct: <class 'int'>
+
+Buggy version (Process object): 2 processes
+  - Parent included: Yes
+  - Tracker process included: Yes (BUG - should be excluded)
+
+Correct version (integer pid): 1 processes
+  - Parent included: Yes
+  - Tracker process included: No (correctly excluded)
+
+Bug confirmed: True
+```
+
+b) Direct Comparison Test:
+```
+Buggy: 12345 != <_MainProcess name='MainProcess' parent=None started>
+Result: True
+Type: int != Process always evaluates to True
+
+Correct: 12345 != 177490
+Result: True
+Type: int != int correctly compares PIDs
+```
+
+4. Behavioral Impact:
+The type mismatch causes the filter condition `p.pid != pid` to ALWAYS evaluate to True because:
+- p.pid is an integer (the child process's PID)
+- pid is a Process object (not an integer)
+- In Python, comparing different types like int != Process always returns True
+
+This means the tracker process is never filtered out and is included in the list of processes to monitor, which is not the intended behavior based on the code structure.
+
+5. Fix Validation:
+Changing line 261 from:
+```python
+pid = current_process()
+```
+to:
+```python
+pid = current_process().pid
+```
+Would correctly compare integer PIDs and properly filter out the tracker process from monitoring itself.

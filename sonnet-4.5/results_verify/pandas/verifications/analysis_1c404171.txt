@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that get_dummies/from_dummies should round-trip for ALL DataFrames, including empty ones. However, this is an unspecified edge case. The get_dummies function creates dummy columns based on the actual values present in the data. When there's no data (empty DataFrame), there are no values to create dummy columns from. This is logically consistent behavior - you can't create indicator variables for categories that don't exist. The documentation never explicitly promises that empty DataFrames will round-trip correctly, and expecting get_dummies to somehow preserve column information when there's no data to work with is arguably unreasonable.
+
+**Why it might not be INVALID:**
+The from_dummies documentation explicitly states it "inverts the operation performed by get_dummies" without any caveats about empty DataFrames. If a function claims to invert another function, it's reasonable to expect that f^-1(f(x)) = x for all valid inputs x. An empty DataFrame with columns is a valid pandas DataFrame, so the round-trip property should hold. The fact that it works for categorical dtypes with defined categories shows this is technically possible.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Empty DataFrames are an extreme edge case that rarely occurs in practice. Most data processing pipelines would filter out or handle empty DataFrames before attempting dummy encoding. The current behavior is logically consistent - no data means no dummy columns. Changing this behavior could break existing code that relies on get_dummies returning an empty DataFrame with no columns when given empty input. The workaround is trivial: users can check for empty DataFrames before calling get_dummies or use categorical dtypes if they need to preserve structure.
+
+**Why it might not be WONTFIX:**
+Data pipelines often need to handle edge cases gracefully, and empty DataFrames can occur legitimately (e.g., after filtering). The issue could cause silent data corruption in production systems where the column structure is important for downstream processing. Since from_dummies claims to invert get_dummies, this is a violation of that contract that could affect real-world usage.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation for from_dummies states it "inverts" get_dummies but doesn't clarify that this only applies to non-empty DataFrames. The current behavior makes logical sense (can't create dummies for non-existent values), but the documentation should explicitly note this limitation. Adding a note about empty DataFrame handling would prevent confusion while keeping the current implementation unchanged.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation's use of "inverts" is mathematically precise and implies the round-trip should work for all inputs. If the functions don't actually invert each other for all valid inputs, then the implementation is wrong, not the documentation. The documentation shouldn't have to list every edge case where the inversion doesn't work.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting round-trip for empty DataFrames would be a new capability that get_dummies doesn't currently have. It would require get_dummies to somehow preserve column metadata even when there's no data, which is a feature enhancement rather than fixing broken behavior. This could be implemented as an optional parameter like `preserve_empty_structure=True` to maintain backward compatibility.
+
+**Why it might not be FEATURE_REQUEST:**
+The documentation already claims from_dummies inverts get_dummies, so this isn't asking for new functionality but rather for the existing promise to be fulfilled. The fact that it works with categorical dtypes shows this isn't a new feature but rather inconsistent behavior between dtype handling.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation explicitly states from_dummies "inverts the operation performed by get_dummies" with no exceptions mentioned. This is a clear contract that the implementation violates for empty DataFrames. The round-trip property is fundamental to inverse operations. The fact that it works correctly for categorical dtypes but not object dtypes shows inconsistent behavior that could affect production systems processing DataFrames that might be empty after filtering operations.
+
+**Why it might not be BUG:**
+The behavior is logically consistent - get_dummies creates columns based on actual values present, and with no values, there are no columns to create. This isn't a failure of the function but rather an inherent limitation when there's no data to work with. The documentation's use of "inverts" could be understood as applying to the normal use case (DataFrames with data) rather than edge cases. Many functions in pandas and other libraries don't handle empty inputs in reversible ways, and this is generally accepted.
+
+## Overall Consideration
+
+Upon careful analysis, this appears to be a case where the documentation makes a broad claim ("inverts the operation") that doesn't hold for an edge case (empty DataFrames). The behavior of get_dummies is actually logical and consistent - it creates dummy columns for values that exist, and when no values exist, no dummy columns are created. The loss of column information is a natural consequence of this design.
+
+The key insight from testing is that get_dummies DOES preserve structure for empty DataFrames when using categorical dtypes with defined categories, because in that case the possible values are known even without data. This demonstrates that the issue only affects object dtype columns where the possible values must be inferred from the actual data.
+
+While technically the documentation's claim of "inversion" is violated, this is an edge case that would rarely affect real-world usage. Most importantly, there's no clear way to fix this without fundamentally changing how get_dummies works - it would need to somehow guess what dummy columns to create when there's no data to base that decision on. The current behavior, while not perfectly invertible, is the most logical given the constraints. This makes it more of a documentation issue than a code bug, as the documentation should clarify that the inversion property only holds for non-empty DataFrames or DataFrames with categorical dtypes.

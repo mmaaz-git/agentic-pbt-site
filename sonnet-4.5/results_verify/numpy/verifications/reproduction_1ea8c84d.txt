@@ -1,0 +1,70 @@
+Bug Reproduction Results
+========================
+
+Test Environment:
+----------------
+- NumPy version: 2.3.0
+- Python: 3.13
+
+Reproduction of Reported Bug:
+-----------------------------
+
+1. **Property-based test with all zeros:**
+   - Input: alpha = [0.0, 0.0, 0.0]
+   - Expected: Should either raise ValueError OR produce output summing to 1.0
+   - Actual: Produces [0. 0. 0.] with sum = 0.0
+   - **CONFIRMED**: The function accepts all-zero alpha and violates the simplex constraint
+
+2. **Direct reproduction:**
+   - The bug report's example code runs exactly as described
+   - With alpha = [0.0, 0.0, 0.0], the function returns [0. 0. 0.]
+   - The sum is 0.0, not 1.0 as required by the Dirichlet distribution
+   - **CONFIRMED**: Mathematical constraint violation
+
+3. **Mixed zero and positive values:**
+   - Input: alpha = [0.0, 1.0, 2.0]
+   - Output: [0.0, 0.787, 0.213] with sum ≈ 1.0
+   - The function accepts single zero values mixed with positives
+   - The output still sums to 1.0 in this case
+
+4. **Negative values:**
+   - Input: alpha with any negative value
+   - Result: Correctly raises ValueError: "alpha < 0"
+   - This shows the function does validate for negative values
+
+5. **Comparison with beta distribution:**
+   - rng.beta(0.0, 1.0) correctly raises ValueError: "a <= 0"
+   - This shows inconsistency - beta rejects zero, dirichlet accepts zero
+
+Key Findings:
+------------
+
+1. The bug is **100% reproducible** as described
+2. When ALL alpha values are zero, the output violates the fundamental mathematical constraint (sum = 1)
+3. The function currently validates alpha < 0 but NOT alpha = 0
+4. This is inconsistent with:
+   - The mathematical definition (requires α_i > 0)
+   - The documentation (says "positive floats")
+   - Related functions like beta (rejects α <= 0)
+
+Mathematical Verification:
+-------------------------
+
+The Dirichlet distribution is implemented using gamma variates:
+- Sample Y_i ~ Gamma(α_i, 1) for each i
+- Return X_i = Y_i / sum(Y)
+
+When α_i = 0:
+- Gamma(0, 1) is undefined/degenerate and typically returns 0
+- If all α_i = 0, all Y_i = 0, leading to 0/0 = NaN or 0 (implementation-dependent)
+- NumPy's implementation returns all zeros, violating sum = 1
+
+Severity Assessment:
+-------------------
+
+This is a **valid bug** because:
+1. It silently produces mathematically invalid results
+2. It violates the fundamental simplex constraint (sum = 1)
+3. It accepts mathematically undefined parameters without error
+4. It could lead to incorrect statistical analyses without warning
+5. It's inconsistent with how NumPy handles the same constraint in beta distribution

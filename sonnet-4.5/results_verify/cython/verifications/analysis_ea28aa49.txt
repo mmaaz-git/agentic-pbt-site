@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The method has no formal documentation specifying that lists should be copied rather than aliased. One could argue that without explicit documentation, the behavior of creating aliases is just as valid as creating copies. The method successfully merges the values - it just happens to share the reference. In Python, shallow copying vs aliasing is often an implementation detail that users need to be aware of.
+
+**Why it might not be INVALID:**
+The inline comment on line 223 explicitly states "Change a *copy* of the list (Trac #845)", which clearly indicates the intended behavior is to work with copies, not aliases. The fact that this comment references a previous bug (Trac #845) strongly suggests that avoiding aliasing was an explicit design decision made to fix a previous issue. The code already implements this copying behavior when the key exists in self.values, showing clear intent.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered a minor edge case that only matters when users modify lists after merging. In many use cases, the lists are built once and never modified afterward, so the aliasing wouldn't cause practical problems. The issue only affects the specific case where the key doesn't already exist in self.values, which might be rare in practice. Users could work around this by ensuring keys exist before merging.
+
+**Why it might not be WONTFIX:**
+The inconsistent behavior between the two code paths (key exists vs. doesn't exist) makes this more than a trivial issue. The comment explicitly references a previous bug (Trac #845) that was fixed for this exact issue, suggesting it was important enough to fix before. List aliasing bugs can cause subtle, hard-to-debug issues in production code, especially in a build system where configuration objects are passed around and modified. The fix is simple and low-risk.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+There's no formal documentation for the merge method, so one could argue the code defines the behavior and the comment is incorrect. Perhaps the comment only applies to the case where the key already exists, and aliasing is intentional when the key doesn't exist. The documentation could be updated to clarify that merge creates aliases for new keys but copies for existing keys.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The comment clearly states the intent is to work with a copy, and this intent is already implemented for one code path. The issue is not that the documentation is wrong about what the code does, but that the code doesn't fully implement what the comment says it should do. The comment references fixing a bug (Trac #845), suggesting this was a deliberate design choice, not a documentation error.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that avoiding aliasing when keys don't exist is a new feature request, not a bug fix. The current code "works" in that it successfully merges values - it just doesn't provide the isolation that some users might want. Adding copy behavior for new keys could be seen as an enhancement to make the API more user-friendly and less error-prone.
+
+**Why it might not be FEATURE_REQUEST:**
+The comment indicates that working with copies was already the intended behavior due to a previous bug fix (Trac #845). The code already implements copying for existing keys, showing this isn't a new feature but an incomplete implementation of an existing feature. The inconsistency between the two code paths suggests this is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The inline comment explicitly states "Change a *copy* of the list" with a reference to a previous bug (Trac #845), indicating clear intent to avoid aliasing. The code implements this copying behavior when the key exists in self.values but fails to do so when the key doesn't exist, creating an inconsistency. This inconsistency can lead to subtle bugs where modifying a merged configuration unexpectedly affects the source configuration. The fix is straightforward and aligns the code with its documented intent.
+
+**Why it might not be BUG:**
+Without formal documentation or specification, one could argue this is working as implemented. The comment might only apply to the specific case where keys already exist. Python developers are generally expected to understand reference semantics and aliasing. The method does successfully merge the values, which is its primary purpose.
+
+## Overall consideration
+
+After careful analysis, this appears to be a valid BUG. The key evidence is the inline comment on line 223 that explicitly states "Change a *copy* of the list (Trac #845)". This comment, especially with its reference to a previous bug report, indicates that avoiding list aliasing was an intentional design decision made to fix a prior issue. The fact that the code already implements this copy behavior when the key exists in self.values demonstrates that the intent is clear and partially implemented.
+
+The current implementation creates an inconsistency: when merging a transitive_list value, the behavior differs depending on whether the key already exists in self. If it exists, a copy is made (lines 224-228), but if it doesn't exist, the reference is directly assigned (line 229). This inconsistency is problematic because it makes the method's behavior unpredictable and can lead to subtle bugs where modifications to merged configurations unexpectedly affect source configurations.
+
+The bug is particularly concerning in the context of a build system like Cython, where DistutilsInfo objects are used to manage build configurations that may be merged from multiple sources. Aliasing between these configuration objects could cause settings from one extension to unexpectedly leak into others, leading to difficult-to-diagnose build issues. The fix is simple (adding `value = value[:]` before line 229 when the key doesn't exist) and low-risk, making this a clear bug that should be fixed rather than documented or dismissed.

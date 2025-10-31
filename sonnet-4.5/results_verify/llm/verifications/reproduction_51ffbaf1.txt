@@ -1,0 +1,41 @@
+## Reproduction of Bug Report
+
+I successfully reproduced the bug described in the report for `llm.utils.truncate_string`.
+
+### Test Results
+
+1. **Manual test case provided in bug report**:
+   - Input: `text = "Hello, World!"`, `max_length = 1`
+   - Expected: Output length should be ≤ 1
+   - Actual: Output was `"Hello, Worl..."` with length 14
+   - **Bug confirmed**: The function violated the max_length constraint
+
+2. **Additional test cases**:
+   - `max_length=1` → returned string of length 14
+   - `max_length=2` → returned string of length 15
+   - Both cases violate the max_length constraint
+
+3. **Property-based test using Hypothesis**:
+   - The test failed as expected with minimal input
+   - Failure case: `text='0'`, `max_length=1`
+   - Result: `'...'` (length 3) > max_length of 1
+   - This confirms systematic failure for small max_length values
+
+### Root Cause Analysis
+
+The bug occurs in line 476 of `/home/npc/pbt/agentic-pbt/envs/llm_env/lib/python3.13/site-packages/llm/utils.py`:
+```python
+return text[: max_length - 3] + "..."
+```
+
+When `max_length < 3`:
+- `max_length - 3` becomes negative
+- Python interprets `text[:negative]` as slicing from start to N characters from the end
+- For example, with `max_length=1`: `text[:-2]` keeps all but last 2 chars of "Hello, World!" (getting "Hello, Worl")
+- Then "..." is appended, resulting in "Hello, Worl..." (14 chars)
+
+This directly violates the function's contract that the returned string should never exceed `max_length`.
+
+### Conclusion
+
+The bug report is accurate and reproducible. The function fails to honor its fundamental contract when `max_length < 3`.

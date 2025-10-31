@@ -1,0 +1,61 @@
+# Bug Reproduction Report
+
+## Summary
+The bug report is accurate and reproducible. The `_have_importers()` function in pyximport.py fails to correctly detect `PyImportMetaFinder` instances in `sys.meta_path`.
+
+## Reproduction Results
+
+### Source Code Analysis
+I examined the source code at `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/pyximport/pyximport.py`:
+
+1. Line 222: `class PyxImportMetaFinder(MetaPathFinder):`
+2. Line 256: `class PyImportMetaFinder(MetaPathFinder):`
+
+Both classes inherit directly from `MetaPathFinder`, making them sibling classes, not a parent-child relationship.
+
+The buggy `_have_importers()` function (lines 355-365):
+```python
+def _have_importers():
+    has_py_importer = False
+    has_pyx_importer = False
+    for importer in sys.meta_path:
+        if isinstance(importer, PyxImportMetaFinder):
+            if isinstance(importer, PyImportMetaFinder):
+                has_py_importer = True
+            else:
+                has_pyx_importer = True
+    return has_py_importer, has_pyx_importer
+```
+
+The bug is clear: The nested `isinstance` checks assume `PyImportMetaFinder` is a subclass of `PyxImportMetaFinder`, but they are actually sibling classes.
+
+### Hypothesis Test Results
+The property-based test failed exactly as described in the bug report:
+- Failing input: `add_pyx=False, add_py=True`
+- Error message: "Expected has_py=True, got False. meta_path types: ['PyImportMetaFinder']"
+
+This confirms that when only a `PyImportMetaFinder` is present, it is not detected.
+
+### Simple Reproduction Results
+Running the simple reproduction code confirmed the bug:
+```
+meta_path contains: PyImportMetaFinder
+_have_importers() returned: has_py=False, has_pyx=False
+Expected: has_py=True, has_pyx=False
+Bug: has_py=False (should be True)
+```
+
+### Fix Verification
+I tested the proposed fix, which correctly handles all four cases:
+1. No importers: has_py=False, has_pyx=False ✓
+2. Only PyxImportMetaFinder: has_py=False, has_pyx=True ✓
+3. Only PyImportMetaFinder: has_py=True, has_pyx=False ✓ (This was failing before)
+4. Both importers: has_py=True, has_pyx=True ✓
+
+## Impact
+The bug causes `_have_importers()` to incorrectly report that no `PyImportMetaFinder` is installed when one is present. This would lead to:
+1. Duplicate importers being installed when `install(pyimport=True)` is called multiple times
+2. Violation of the expected idempotence of the `install()` function
+3. Potential performance degradation and unexpected behavior from multiple import hooks
+
+The bug is real, reproducible, and has a clear fix.

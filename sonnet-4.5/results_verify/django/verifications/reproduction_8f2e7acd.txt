@@ -1,0 +1,59 @@
+## Bug Reproduction Results
+
+### Test Execution
+I successfully ran both the bug report's reproduction code and the Hypothesis property-based tests. The bug is confirmed to exist.
+
+### Reproduction Results
+
+1. **Basic Test Case** (text='hello', length=10, fill_text=''):
+   - LPAD result: 'hello' (length 5 instead of expected 10)
+   - RPAD result: 'hello' (length 5 instead of expected 10)
+   - ❌ Both functions violate the length invariant
+
+2. **Edge Case - Text Longer Than Target**:
+   - When text is longer than target length with empty padding
+   - Both LPAD and RPAD correctly truncate to target length
+   - This case works as expected
+
+3. **NULL Padding Test**:
+   - Both functions correctly return None when fill_text is None
+   - This aligns with SQL standard behavior for NULL inputs
+
+4. **Normal Padding Test**:
+   - With non-empty padding strings, functions work correctly
+   - LPAD('hi', 5, 'x') → 'xxxhi' (correct length 5)
+   - RPAD('hi', 5, 'y') → 'hiyyy' (correct length 5)
+
+### Hypothesis Test Results
+The property-based tests from the bug report failed as claimed:
+- LPAD test failed with example: text='hello', length=10
+- RPAD test failed with example: text='hello', length=10
+
+### Technical Analysis of the Bug
+
+The current implementation has a logical flaw in lines 389-395 (_sqlite_lpad) and 438-441 (_sqlite_rpad):
+
+```python
+def _sqlite_lpad(text, length, fill_text):
+    if text is None or length is None or fill_text is None:
+        return None
+    delta = length - len(text)
+    if delta <= 0:
+        return text[:length]
+    return (fill_text * length)[:delta] + text  # When fill_text="", this becomes "" + text
+```
+
+When `fill_text=""`:
+1. `(fill_text * length)` produces an empty string ""
+2. `""[:delta]` is still ""
+3. `"" + text` just returns the original text
+4. Result has wrong length when len(text) < length
+
+The same issue exists in _sqlite_rpad.
+
+### Impact Assessment
+This is a real bug that:
+1. Violates the fundamental invariant of LPAD/RPAD functions (exact length output)
+2. Deviates from standard SQL behavior (MySQL, Oracle, PostgreSQL return NULL)
+3. Could cause data integrity issues in applications expecting fixed-width strings
+4. Creates inconsistency between Django's SQLite backend and other database backends

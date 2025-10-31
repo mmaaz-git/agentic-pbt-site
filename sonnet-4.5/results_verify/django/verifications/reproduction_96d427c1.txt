@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug reported for Django's CaseInsensitiveMapping class.
+
+### Hypothesis Test Results
+
+The property-based test failed as expected with the input `d={'ß': ''}`:
+- When retrieving with the original key 'ß', it returns the value correctly
+- When retrieving with the uppercase form 'SS', it returns None instead of the value
+- The test assertion `cim.get(key.upper()) == value` failed
+
+### Manual Test Results
+
+Running the manual reproduction code confirmed the exact behavior described in the bug report:
+- `cim.get('ß')` returns 'value' (correct)
+- `cim.get('SS')` returns None (incorrect - should return 'value')
+- `cim['SS']` raises KeyError: 'ss' (incorrect - should return 'value')
+
+### Root Cause Verification
+
+The bug occurs due to Unicode case transformation asymmetry:
+- 'ß'.upper() → 'SS' (German eszett uppercases to double S)
+- 'ß'.lower() → 'ß' (remains unchanged)
+- 'SS'.lower() → 'ss' (becomes lowercase double s)
+
+The implementation uses `.lower()` for normalization:
+- When 'ß' is stored: key 'ß' is normalized to 'ß' (since 'ß'.lower() == 'ß')
+- When 'SS' is looked up: key 'SS' is normalized to 'ss' (since 'SS'.lower() == 'ss')
+- Since 'ß' != 'ss', the lookup fails
+
+Using casefold() instead would solve this:
+- 'ß'.casefold() → 'ss'
+- 'SS'.casefold() → 'ss'
+- 'ss'.casefold() → 'ss'
+
+All three would normalize to the same key, making lookups work correctly.
+
+### Conclusion
+
+The bug is confirmed and behaves exactly as described in the bug report. The CaseInsensitiveMapping fails to handle Unicode characters where uppercase/lowercase transformations are not symmetric.

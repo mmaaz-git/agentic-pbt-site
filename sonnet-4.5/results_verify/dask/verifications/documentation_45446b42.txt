@@ -1,0 +1,74 @@
+DOCUMENTATION ANALYSIS REPORT
+=============================
+
+## Documentation Sources Reviewed:
+
+1. **Class Docstring** (lines 298-348 in profile.py)
+   - States CacheProfiler is "A profiler for dask execution at the scheduler cache level"
+   - Records: Key, Task, Size metric, Cache entry time, Cache exit time
+   - Shows examples of single computation usage
+   - No mention of behavior with multiple computations or partial graphs
+
+2. **Dask Official Documentation** (https://docs.dask.org/en/stable/diagnostics-local.html)
+   - Describes callback signatures but does not specify whether 'dsk' is full or partial
+   - No explicit documentation about multi-computation scenarios
+   - No specification about task graph completeness in callbacks
+
+3. **Callback Base Class Documentation** (callbacks.py)
+   - Defines callback signatures but doesn't specify graph completeness requirements
+   - Shows that callbacks receive 'dsk' parameter but doesn't define its scope
+
+## Key Documentation Findings:
+
+### What IS documented:
+- CacheProfiler tracks cache-level metrics during execution
+- The _start method receives a dsk parameter
+- The _posttask and _finish methods receive dsk parameters
+- The class maintains internal state including self._dsk and self._cache
+
+### What is NOT documented:
+- **Whether dsk parameter in callbacks should be complete or partial**
+- **Expected behavior when profiling multiple sequential computations**
+- **The relationship between dsk parameter and self._dsk**
+- **How CacheProfiler should handle tasks from previous computations**
+- **The purpose of accumulating graphs in self._dsk via update()**
+
+## Code Analysis Reveals Design Intent:
+
+1. **self._dsk accumulation pattern** (line 370):
+   ```python
+   def _start(self, dsk):
+       self._dsk.update(dsk)
+   ```
+   This clearly shows intention to accumulate all task definitions across multiple calls
+
+2. **Visualization dependency** (line 388-394):
+   The _plot method uses self._dsk for visualization, suggesting it needs the complete graph history
+
+3. **Similar pattern in base Profiler class** (line 76-77):
+   Regular Profiler also maintains self._dsk with update() pattern
+
+## Design Inconsistency:
+
+The code shows a clear design pattern where:
+- self._dsk is meant to accumulate ALL task definitions across executions
+- dsk parameter represents the CURRENT computation's graph
+- But lines 377 and 382 incorrectly use dsk instead of self._dsk
+
+## Documentation Gap:
+
+The documentation does not explicitly state that:
+1. Callbacks may receive partial graphs in sequential computations
+2. CacheProfiler is designed to handle multiple computations with accumulated state
+3. The self._dsk member is specifically for maintaining complete task history
+
+However, the code structure with self._dsk.update() clearly indicates this is the intended design.
+
+## Conclusion:
+
+While the documentation doesn't explicitly specify the behavior for partial graphs, the code design pattern strongly suggests that:
+1. self._dsk is intentionally accumulating all tasks
+2. The dsk parameter may be partial (current computation only)
+3. The bug is a genuine implementation error, not a documentation issue
+
+The lack of explicit documentation about this behavior doesn't make the bug invalid - the code's internal design clearly shows the intended behavior that is not being followed.

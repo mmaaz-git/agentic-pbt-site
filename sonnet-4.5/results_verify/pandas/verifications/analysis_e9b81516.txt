@@ -1,0 +1,44 @@
+## Bug Report Analysis
+
+### Categorization Considerations:
+
+#### BUG (Valid Bug Report) - STRONG EVIDENCE:
+1. **Clear Contract Violation:** The function's docstring states it returns "the expected length of target[indexer]". Lengths cannot be negative by definition.
+2. **Reproducible:** The bug is consistently reproducible with the provided test cases.
+3. **Real Impact:** The function is used internally by pandas for validation in `check_setitem_lengths` and indexing operations, meaning incorrect lengths could cause validation failures or incorrect behavior.
+4. **Common Use Case:** `slice(None, None, -1)` is the standard Python idiom for reversing a sequence, not an obscure edge case.
+5. **Incorrect Logic:** The code clearly has a logic error where it handles None values for start/stop incorrectly when step is negative.
+6. **Mathematical Impossibility:** A length of -1, -2, etc. is mathematically nonsensical.
+
+#### INVALID - WEAK EVIDENCE:
+1. The function is in a private module (pandas.core.*), so technically not public API
+   - Counter: The bug still affects internal pandas operations and the function has a clear documented contract
+
+#### WONTFIX - WEAK EVIDENCE:
+1. Could argue it's an internal function not meant for direct use
+   - Counter: It still needs to work correctly for pandas' internal operations
+2. Negative step slices might be considered an edge case
+   - Counter: Reverse slicing with `[::-1]` is a common Python pattern
+
+#### DOCUMENTATION_FIX - WEAK EVIDENCE:
+1. Could update docs to say "returns length for positive steps only"
+   - Counter: This would be a workaround, not a fix. The function is used internally and needs to work correctly
+
+#### FEATURE_REQUEST - NO EVIDENCE:
+1. Not applicable - the function already claims to handle all indexers, and negative steps are valid Python slicing
+
+### Root Cause Analysis:
+The bug occurs because the code assumes positive step defaults when handling None values for start/stop (lines 303-310 in the source), then attempts to "fix" negative steps afterward (lines 313-315). This approach is fundamentally flawed because:
+- For positive steps: `None` start means 0, `None` stop means len(target)
+- For negative steps: `None` start means len(target)-1, `None` stop means "beginning" (-len(target)-1)
+
+The current code applies positive-step defaults then tries to swap them, resulting in incorrect calculations.
+
+### Severity Assessment:
+- **Medium Severity** is appropriate:
+  - Not critical (doesn't crash the system)
+  - But causes incorrect behavior in a core utility function
+  - Affects validation logic that could lead to subtle bugs
+
+### Conclusion:
+This is a legitimate BUG that should be fixed. The function returns mathematically impossible negative lengths for valid, common slicing patterns, violating its documented contract.

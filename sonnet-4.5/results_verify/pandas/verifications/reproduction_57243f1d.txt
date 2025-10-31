@@ -1,0 +1,38 @@
+# Bug Reproduction Analysis
+
+## Summary
+The bug report is confirmed and reproducible. The issue occurs when serializing large float values near the maximum representable float using `ujson_dumps()` with the default precision setting.
+
+## Reproduction Results
+
+### Hypothesis Test
+The Hypothesis test successfully identified the bug with the exact value mentioned in the report:
+- Failing value: `1.7976931345e+308`
+- Serialized form: `"1.797693135e+308"` (note the truncation to 10 significant digits)
+- Deserialized result: `inf` (overflow to infinity)
+- Expected: Should remain a finite value equal to the original
+
+### Manual Test Case
+The manual reproduction confirmed:
+1. **Standard library behavior**: `json.dumps()` correctly preserves the value:
+   - Input: `1.7976931345e+308`
+   - Serialized: `"1.7976931345e+308"` (11 significant digits)
+   - Round-trip result: `1.7976931345e+308` (exact match)
+
+2. **ujson default behavior**: `ujson_dumps()` with default precision fails:
+   - Input: `1.7976931345e+308`
+   - Serialized: `"1.797693135e+308"` (10 significant digits)
+   - Round-trip result: `inf` (overflow)
+
+3. **ujson with higher precision**: Setting `double_precision=15` fixes the issue:
+   - Input: `1.7976931345e+308`
+   - Serialized: `"1.7976931345e+308"` (proper precision)
+   - Round-trip result: `1.7976931345e+308` (exact match)
+
+## Impact
+The bug causes silent data corruption where valid finite float values become infinity after a round-trip through ujson serialization/deserialization. This violates the expected property that finite values should remain finite through JSON serialization.
+
+## Root Cause
+The default `double_precision=10` parameter truncates the mantissa to 10 significant digits. For values very close to the maximum representable float (~1.7976931348623157e+308), this loss of precision causes the deserialized value to exceed the maximum and overflow to infinity.
+
+The value `1.797693135e+308` (10 digits) when parsed becomes slightly larger than `1.7976931345e+308` (11 digits), pushing it past the float maximum.

@@ -1,0 +1,60 @@
+Bug Reproduction Analysis
+=========================
+
+## Reproduction Steps
+
+1. I successfully reproduced the reported bug by running the provided test code.
+2. The console.EmailBackend.send_messages() method indeed returns None when passed an empty list.
+3. The expected behavior (based on the base class documentation and other backends) is to return 0.
+
+## Test Results
+
+### Direct Test of console.EmailBackend
+- Input: Empty list []
+- Output: None (type: NoneType)
+- Expected: 0 (type: int)
+- Bug confirmed: YES
+
+### Testing with Non-Empty List
+- When console.EmailBackend is given a non-empty list with one message
+- Returns: 1 (correct integer type)
+- This shows the backend works correctly for non-empty lists
+
+### Hypothesis Test
+- The hypothesis test fails as expected when given an empty list
+- It correctly identifies that the return value is None instead of int
+
+### Cross-Backend Comparison
+I tested all Django email backends for consistency:
+
+1. dummy.EmailBackend: Returns 0 (int) for empty list - CORRECT
+2. locmem.EmailBackend: Returns 0 (int) for empty list - CORRECT
+3. console.EmailBackend: Returns None for empty list - BUG
+4. filebased.EmailBackend: Returns None for empty list - BUG (inherits from console)
+5. smtp.EmailBackend: Returns 0 (int) for empty list - CORRECT (verified via code inspection)
+
+## Code Analysis
+
+Looking at console.py lines 28-31:
+```python
+def send_messages(self, email_messages):
+    """Write all messages to the stream in a thread-safe way."""
+    if not email_messages:
+        return  # Returns None implicitly
+```
+
+The early return on line 31 doesn't specify a value, causing Python to return None.
+All other backends either:
+- Return 0 explicitly (smtp backend line 126)
+- Return len(list(email_messages)) which evaluates to 0 for empty lists (dummy backend)
+- Initialize msg_count=0 and return it (locmem backend)
+
+## Impact
+
+This bug affects:
+1. console.EmailBackend directly
+2. filebased.EmailBackend (inherits from console)
+
+The bug violates the documented contract in BaseEmailBackend that send_messages() should
+"return the number of email messages sent" (base.py lines 57-58). This breaks the
+Liskov Substitution Principle as code expecting an integer will fail when None is returned.

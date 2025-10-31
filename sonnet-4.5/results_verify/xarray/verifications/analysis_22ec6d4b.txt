@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify what should happen when vmin equals vmax. The function is internal (prefixed with underscore) and might not have a formal contract for edge cases. The user might be misinterpreting what the function should do in degenerate cases.
+
+**Why it might not be INVALID:**
+The function clearly intends to return values in [0, 1] range as shown by the final line `return np.minimum(np.maximum(darray, 0), 1)`. Returning NaN violates this clear intent. The function is used in production code paths for image visualization, where constant arrays are valid inputs.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function (_rescale_imshow_rgb) not meant for public use. The edge case of constant arrays might be considered too rare or unimportant. Users could work around it by adding small noise to their data or checking for constant arrays before calling plotting functions.
+
+**Why it might not be WONTFIX:**
+Constant arrays are common in real-world scenarios (solid color images, uniform backgrounds, placeholder data). The fix is simple and doesn't break existing functionality. Matplotlib's Normalize class handles this case gracefully, setting a precedent. The bug causes silent data corruption (NaN propagation) rather than clear errors.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how constant arrays should be handled. Adding documentation about this limitation would inform users to handle constant arrays specially. The current behavior might be considered "as designed" but poorly documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function produces mathematically invalid output (NaN) for valid input, which is a code bug not a documentation issue. The intent is clear from the code - return values in [0, 1]. Documenting a bug doesn't fix the underlying problem that the function fails on legitimate use cases.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Handling constant arrays gracefully could be seen as a new feature rather than fixing a bug. The current implementation might only have been designed for varying data. Adding support for edge cases like constant arrays extends the function's capabilities.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle all input arrays, not just varying ones. This isn't adding new functionality but fixing existing broken behavior. The function should work for all valid NumPy arrays, including constant ones. Other normalization functions (like matplotlib's) handle this by default.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces NaN values for valid input (constant arrays), violating its contract to return values in [0, 1]. This affects common real-world scenarios like solid color images or uniform data regions. The behavior diverges from matplotlib's standard Normalize class which handles this case gracefully by returning 0.0. The issue causes silent data corruption through NaN propagation.
+
+**Why it might not be BUG:**
+The function is internal (underscore prefix) and might not guarantee behavior for all edge cases. The documentation doesn't explicitly promise handling of degenerate cases. Some might argue that constant arrays shouldn't need rescaling for visualization purposes.
+
+## Overall Consideration
+
+After thorough analysis, this is clearly a **BUG** that should be fixed. Three key factors support this conclusion:
+
+First, the function violates its own contract. The final line `return np.minimum(np.maximum(darray, 0), 1)` shows clear intent to return values bounded to [0, 1], but NaN values bypass these bounds. The function produces mathematically invalid output for valid input arrays, which is the definition of a bug. The division by zero is not handled, leading to undefined behavior rather than graceful degradation.
+
+Second, this affects realistic and common use cases. Constant arrays occur frequently in image processing and data visualization: solid color images (all black, white, or any uniform color), uniform regions in scientific data, placeholder images before data loads, and flat backgrounds in medical or satellite imagery. These are not obscure edge cases but legitimate scenarios users will encounter. The bug report demonstrates this with simple examples that any user might create.
+
+Third, there's established precedent for proper handling. Matplotlib's Normalize class, which serves a similar purpose, explicitly handles the vmin == vmax case by returning 0.0 instead of NaN. This shows the standard practice in the ecosystem is to handle this edge case gracefully. The proposed fix in the bug report (returning 0.5 for constant arrays) is reasonable and follows this precedent of returning a valid constant value. The fix is simple, non-breaking, and improves robustness without affecting normal operation.
+
+The bug causes silent corruption through NaN propagation rather than failing loudly, making it particularly insidious. Users might not realize their visualization is broken until downstream computations fail. This makes it a legitimate bug worthy of fixing rather than documenting or dismissing.

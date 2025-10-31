@@ -1,0 +1,46 @@
+BUG REPRODUCTION RESULTS
+
+1. CONFIRMED: The bug exists as described
+The function `_convert_datetimes` with unit='d' does indeed truncate fractional day values to whole days.
+
+Test Results:
+- Input: 0.5 days → Expected: 1960-01-01 12:00:00 → Actual: 1960-01-01 00:00:00 (lost 12 hours)
+- Input: 1.5 days → Expected: 1960-01-02 12:00:00 → Actual: 1960-01-02 00:00:00 (lost 12 hours)
+- Input: 0.25 days → Lost 21600 seconds (6 hours)
+- Input: 0.75 days → Lost 64800 seconds (18 hours)
+
+2. ROOT CAUSE IDENTIFIED:
+Line 107 in sas7bdat.py uses `dtype="M8[D]"` which converts to NumPy datetime64 with day precision.
+This automatically truncates any fractional days to whole days.
+
+3. INCONSISTENCY CONFIRMED:
+The scalar function `_parse_datetime` correctly preserves fractional days:
+- _parse_datetime(1.5, "d") → 1960-01-02 12:00:00 ✓ (correct)
+- _convert_datetimes([1.5], "d") → 1960-01-02 00:00:00 ✗ (truncated)
+
+4. DATA PATH ANALYSIS:
+When reading SAS files:
+- SAS stores date columns as float64 values
+- These values can have fractional parts representing time of day
+- The function receives these as a pandas Series of float64
+- The conversion to "M8[D]" discards the fractional parts
+
+5. HYPOTHESIS TEST:
+The provided hypothesis test correctly identifies the issue:
+- Test fails for any input with fractional days
+- Test passes only for whole number days (0.0, 1.0, 2.0, etc.)
+
+6. IMPACT ASSESSMENT:
+- Data Loss: Yes - fractional parts are silently discarded
+- Silent Failure: Yes - no warning or error is raised
+- Inconsistent Behavior: Yes - differs from _parse_datetime
+- Real-world Impact: Potentially significant for SAS files that store precise timestamps as date values
+
+7. PROPOSED FIX VERIFICATION:
+The bug report's proposed fix would:
+- Convert days to seconds (multiply by 86400)
+- Create datetime64 with second precision
+- This would preserve the fractional day information
+
+TECHNICAL ACCURACY OF BUG REPORT: CORRECT
+The bug report accurately describes the problem, identifies the root cause, and provides a valid fix.

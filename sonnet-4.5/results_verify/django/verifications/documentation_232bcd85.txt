@@ -1,0 +1,65 @@
+DOCUMENTATION ANALYSIS
+======================
+
+1. FUNCTION DOCUMENTATION:
+
+   a) In-code Documentation (Docstring):
+      - Location: django/core/mail/message.py, line 57
+      - Content: "Forbid multi-line headers to prevent header injection."
+      - Clarity: EXPLICIT and UNAMBIGUOUS about the function's security purpose
+
+   b) Django Official Documentation:
+      - The function is described as preventing header injection attacks
+      - Documented behavior: Raises BadHeaderError when headers contain newlines
+      - Status: Internal/undocumented API (not for direct use by developers)
+      - Deprecation: Scheduled for removal in Django 6.1
+
+2. DOCUMENTED SECURITY GUARANTEES:
+
+   The function makes a CLEAR SECURITY PROMISE:
+   - Purpose: "prevent header injection"
+   - Implementation: "forbid multi-line headers"
+   - Expected behavior: No newlines should exist in returned headers
+
+3. RFC 2047 COMPLIANCE:
+
+   According to RFC 2047 (MIME Part Three):
+   - Encoded-words may be up to 75 characters long
+   - Multiple encoded-words can be separated by CRLF SPACE for longer content
+   - Lines containing encoded-words are limited to 76 characters
+   - Folding (line breaks) between encoded-words is ALLOWED and EXPECTED
+
+   CRITICAL FINDING: RFC 2047 explicitly allows and requires line folding for long
+   encoded headers. This is NOT a bug in Python's email.header.Header.encode() -
+   it's compliant behavior.
+
+4. CONFLICT ANALYSIS:
+
+   There is a fundamental conflict between:
+   a) RFC 2047 compliance (which REQUIRES line folding for long headers)
+   b) The security guarantee of forbid_multi_line_headers (NO newlines allowed)
+
+   The function's documentation promises to prevent ALL multi-line headers but
+   uses an encoding method that, by specification, MUST introduce newlines for
+   long encoded text.
+
+5. DOCUMENTATION COMPLETENESS:
+
+   The documentation FAILS to mention:
+   - That RFC 2047 encoding may introduce newlines
+   - Any exceptions to the "no newlines" rule
+   - That the function's security guarantee only applies to ASCII text
+   - The interaction between encoding and the security check
+
+6. USER EXPECTATIONS:
+
+   Based on the documentation, users would reasonably expect:
+   - The function prevents ALL header injection vulnerabilities
+   - No newlines will ever appear in returned values
+   - The function provides complete protection against header injection
+
+   These expectations are NOT met when non-ASCII characters trigger encoding.
+
+CONCLUSION: The documentation is clear about the function's security purpose but
+fails to acknowledge that this purpose is violated when RFC 2047 encoding is applied.
+The function name and docstring create a strong security contract that is broken.

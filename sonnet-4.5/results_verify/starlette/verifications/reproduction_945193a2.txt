@@ -1,0 +1,31 @@
+REPRODUCTION ANALYSIS
+====================
+
+I successfully reproduced the bug described in the report. The issue occurs in the `is_not_modified()` method of `starlette.staticfiles.StaticFiles`.
+
+Test Results:
+-------------
+1. Weak ETag comparison (W/"123" vs W/"123"):
+   - Expected: True (should match)
+   - Actual: False (does not match) ❌ BUG CONFIRMED
+
+2. Strong ETag comparison ("456" vs "456"):
+   - Expected: True (should match)
+   - Actual: True (correctly matches) ✓
+
+3. Multiple ETags with weak ETag (W/"789" in list containing W/"789"):
+   - Expected: True (should match)
+   - Actual: False (does not match) ❌ BUG CONFIRMED
+
+The bug occurs because the code on line 207 of staticfiles.py:
+```python
+if etag in [tag.strip(" W/") for tag in if_none_match.split(",")]:
+```
+
+This implementation has two issues:
+
+1. **Asymmetric normalization**: The code strips "W/" from the request's If-None-Match tags but NOT from the response's ETag. This causes W/"123" to be compared against "123", resulting in a mismatch.
+
+2. **Incorrect use of strip()**: The `strip(" W/")` call removes individual characters (' ', 'W', '/') from both ends, not the literal string "W/". This can cause incorrect behavior with edge cases like 'W/"abc"//WW' which becomes '"abc"' after stripping.
+
+The property-based test using Hypothesis also failed, confirming that weak ETags consistently fail to match themselves, which violates HTTP caching semantics.

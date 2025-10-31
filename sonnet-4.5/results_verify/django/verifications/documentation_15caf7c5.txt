@@ -1,0 +1,43 @@
+## Documentation Findings for LocMemCache._delete()
+
+### Official Django Documentation
+The Django documentation for the cache framework provides only high-level information about LocMemCache:
+- It's described as a "per-process and thread-safe" cache backend
+- It's the default cache if no other is specified
+- It uses an LRU (least-recently-used) culling strategy
+- It's recommended mainly for development, not production
+
+The documentation does NOT provide:
+- Any details about internal implementation methods like _delete()
+- Specifications for internal consistency requirements between data structures
+- Documentation about the _cache and _expire_info dictionaries
+- Any invariants that must be maintained
+
+### Source Code Analysis
+From reading the actual implementation in django/core/cache/backends/locmem.py:
+
+1. _delete() is an internal method (prefixed with underscore), not part of the public API
+2. The public delete() method (line 110) calls _delete() within a lock
+3. The class maintains two internal dictionaries:
+   - self._cache: OrderedDict storing the actual cached values
+   - self._expire_info: dict storing expiration times for keys
+
+4. The current _delete() implementation (lines 102-108):
+   - Attempts to delete from both dictionaries in sequence
+   - Returns False if KeyError is raised (key not found)
+   - Returns True if both deletions succeed
+
+5. Throughout the codebase, these dictionaries are kept synchronized:
+   - _set() adds to both (lines 48-50)
+   - _cull() removes from both (lines 99-100)
+   - clear() clears both (lines 117-118)
+
+### Key Observations
+1. _delete() is an INTERNAL method, not documented as part of the public API
+2. There is NO documented contract or specification about what _delete() should do when the dictionaries are out of sync
+3. The underscore prefix indicates this is a private/internal implementation detail
+4. Normal operations through the public API maintain synchronization between the dictionaries
+5. The scenario in the bug report (key in _expire_info but not in _cache) cannot occur through normal use of the public API
+
+### Documentation Verdict
+The documentation provides no specification for how _delete() should behave in the edge case described. As an internal method, its behavior in abnormal situations (that cannot occur through public API usage) is an implementation detail, not a documented contract.

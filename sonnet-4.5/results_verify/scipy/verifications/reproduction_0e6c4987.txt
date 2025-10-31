@@ -1,0 +1,50 @@
+# Bug Reproduction Analysis
+
+## Bug Report Summary
+The bug report claims that `scipy.io.arff._arffread.split_data_line` crashes with an IndexError when called with an empty string.
+
+## Reproduction Steps
+
+### 1. Direct Reproduction
+I created a simple test script to reproduce the bug:
+```python
+from scipy.io.arff._arffread import split_data_line
+result, dialect = split_data_line('')
+```
+
+Result: **CONFIRMED** - The function crashes with:
+```
+IndexError: string index out of range
+```
+
+### 2. Hypothesis Test
+I ran the provided Hypothesis test which generates various string inputs:
+```python
+@given(st.text(max_size=100))
+def test_split_data_line_handles_all_strings(line):
+    try:
+        result, dialect = split_data_line(line)
+        assert isinstance(result, list)
+    except (IndexError, ValueError) as e:
+        raise AssertionError(f"split_data_line crashed on input {line!r}: {e}")
+```
+
+Result: **CONFIRMED** - The test immediately fails on empty string input:
+```
+AssertionError: split_data_line crashed on input '': string index out of range
+Falsifying example: test_split_data_line_handles_all_strings(line='')
+```
+
+### 3. Source Code Inspection
+I examined the source code at line 476 in `/home/npc/.local/lib/python3.13/site-packages/scipy/io/arff/_arffread.py`:
+
+```python
+# Remove the line end if any
+if line[-1] == '\n':
+    line = line[:-1]
+```
+
+The code attempts to access `line[-1]` without first checking if `line` is non-empty. When `line` is an empty string, accessing `line[-1]` raises an IndexError.
+
+## Conclusion
+The bug is **CONFIRMED and REPRODUCIBLE**. The function crashes exactly as described when given an empty string as input, due to unchecked array access on line 476.

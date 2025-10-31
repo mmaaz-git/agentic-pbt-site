@@ -1,0 +1,40 @@
+DOCUMENTATION ANALYSIS
+======================
+
+OFFICIAL DOCUMENTATION REVIEW:
+
+1. dask.dataframe.read_orc:
+   - Documentation states that `index` parameter is "Column name to set as index"
+   - No mention of how indices are handled when reading files without an index column
+   - No specification of round-trip behavior
+   - No mention of what happens when multiple partitions are read without an index
+
+2. dask.dataframe.to_orc:
+   - Documentation states `write_index` parameter: "Whether or not to write the index. Defaults to True."
+   - When `write_index=False`, documentation says the index is not written
+   - No specification of what users should expect when reading back data written without index
+   - No warning about potential duplicate indices in multi-partition scenarios
+
+3. SOURCE CODE ANALYSIS:
+   - In to_orc() at line 180: When `write_index=False`, the code does `df = df.reset_index(drop=True)`
+   - This resets the index for the entire dataframe before partitioning
+   - Each partition then gets written with its local portion of the reset index
+   - No mechanism in read_orc() to reconstruct a global sequential index
+
+4. EXISTING TEST COVERAGE:
+   - Found test in test_orc.py that uses `write_index=False`
+   - The test uses `assert_eq(data, df2, check_index=False)` - explicitly NOT checking the index!
+   - This suggests the developers are aware that indices might not match
+
+KEY DOCUMENTATION GAPS:
+1. No specification of expected round-trip behavior when `write_index=False`
+2. No warning about duplicate indices in multi-partition scenarios
+3. No guidance on whether users should expect index preservation or recreation
+4. The behavior is not documented as intentional or expected
+
+COMPARISON WITH SIMILAR OPERATIONS:
+- Checked Parquet documentation: Similar lack of specification
+- This appears to be an under-documented area across Dask's file I/O operations
+
+CONCLUSION:
+The documentation does not explicitly state what the expected behavior should be when performing a round-trip with `write_index=False`. This is a significant documentation gap that leaves the behavior undefined.

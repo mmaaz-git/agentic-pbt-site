@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is working exactly as designed and documented. The documentation explicitly states "if only start is specified then it is interpreted as the stop," and the function cannot technically distinguish between an omitted parameter and an explicitly passed None due to Python's limitations. The user is misunderstanding that passing None explicitly is not the same as "only specifying start" - both cases result in stop=None internally. This is a fundamental Python limitation, not a NumPy bug.
+
+**Why it might not be INVALID:**
+The documentation claims the function behaves "like in the regular Python slice object," but Python's slice() can distinguish between slice(1) and slice(1, None) - they produce different results. Users reasonably expect that ns.slice(arr, 1, None) would behave like Python's slice(1, None), which means [1:]. The current behavior violates the principle of least surprise and doesn't match Python's slice semantics.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+While the behavior is surprising, fixing it would require a breaking API change (switching to *args) that could affect existing code. The issue only occurs when explicitly passing None, which is an edge case that users can work around by simply not passing the parameter. The cost of fixing this edge case may outweigh the benefits, especially since there's a simple workaround.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it's a fundamental semantic difference from Python's slice behavior that the documentation claims to follow. Users explicitly passing None are following standard Python conventions where None means "no limit." This inconsistency could lead to subtle bugs in user code, making it more than just a minor inconvenience.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never explicitly states that passing None is not supported or behaves differently than expected. Adding a clear note that "explicitly passing None for stop will be treated as if only start was provided" would prevent confusion. The function works consistently with its implementation; it's the documentation that fails to clarify this non-obvious behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation does say the function behaves "like in the regular Python slice object," which is demonstrably false in this case. Simply documenting the current broken behavior doesn't fix the underlying semantic inconsistency. If the function claims to follow Python slice semantics, it should actually do so, not just document where it differs.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting explicit None parameters to mean "unbounded" would be a new feature that extends the current functionality. The current design only supports the two-pattern usage (single argument or all arguments), and adding support for explicit None would be adding a third pattern. This could be implemented as a new function or an optional parameter to change behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the function to behave as users would naturally expect based on Python conventions and the documentation's claim of similarity to Python's slice. The behavior with explicit None is already implied by the documentation; it just doesn't work correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates its documented contract of behaving "like in the regular Python slice object." When the documentation explicitly compares behavior to Python's slice, users rightfully expect slice(1, None) to mean [1:], not [:1]. This is a clear semantic bug where the implementation doesn't match the documented behavior. The fact that Python's limitation prevents easy detection of explicit None doesn't excuse the incorrect behavior.
+
+**Why it might not be BUG:**
+The documentation's key statement is "if only start is specified then it is interpreted as the stop," and technically when you call the function with two arguments (start=1, stop=None), you're not "only specifying start" - you're specifying both parameters. The function cannot distinguish this case due to Python's design, making this more of a design limitation than a bug.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a **DOCUMENTATION_FIX** issue. Here's why:
+
+The core issue is that NumPy's strings.slice function claims to behave "like in the regular Python slice object" but fundamentally cannot do so due to Python's function parameter limitations. Python's slice(1) and slice(1, None) create different slice objects with different behaviors - slice(None, 1, None) and slice(1, None, None) respectively. However, a Python function defined as `def slice(a, start=None, stop=None, step=None)` cannot distinguish between being called as `slice(a, 1)` or `slice(a, 1, None)`.
+
+The implementation is internally consistent - it has a clear rule that "if stop is None, treat start as stop." This rule makes sense for the single-argument case and is explicitly documented. The problem is that the documentation doesn't clarify that this rule applies even when None is explicitly passed, creating a false expectation that the function can handle explicit None values like Python's slice object does.
+
+While this could be considered a design flaw, it's not truly a bug because the function behaves exactly as its implementation intends. The suggested fix of using *args would be a breaking API change that's disproportionate to the issue's severity. The most appropriate resolution is to update the documentation to explicitly state that passing None for the stop parameter is not supported and will be treated as if the parameter was omitted entirely, with a note that this differs from Python's slice object behavior due to language limitations.

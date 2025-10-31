@@ -1,0 +1,63 @@
+DOCUMENTATION ANALYSIS
+======================
+
+Function: llm.utils.monotonic_ulid
+Documentation Review for Clock Regression Bug
+
+FUNCTION DOCSTRING
+------------------
+The function's docstring explicitly states:
+
+"Return a ULID instance that is guaranteed to be *strictly larger* than every
+other ULID returned by this function inside the same process."
+
+Key promises:
+1. STRICT MONOTONICITY: Each ULID must be "strictly larger" than all previous ones
+2. SCOPE: Within the same process
+3. REFERENCE: Claims to work "the same way the reference JavaScript `monotonicFactory` does"
+
+DOCUMENTED BEHAVIOR
+-------------------
+The docstring describes the implementation approach:
+- Same millisecond: Increment the 80-bit randomness by one
+- Clock moves forward: Generate fresh ULID with secure randomness
+- Overflow: Raise OverflowError if >2^80 ULIDs in one millisecond
+
+CRITICAL OMISSION: The docstring does NOT mention what happens when the clock moves BACKWARD.
+
+COMPARISON WITH REFERENCE IMPLEMENTATION
+-----------------------------------------
+Research on the JavaScript monotonicFactory reveals:
+1. The JavaScript implementation DOES handle clock regression
+2. Quote from JavaScript docs: "Even if a lower timestamp is passed (or generated), it will preserve sort order"
+3. Example: ulid(100000) after ulid(150000) still produces a larger ULID
+
+The Python implementation claims to work "the same way" as JavaScript but FAILS to implement
+the clock regression handling.
+
+ULID SPECIFICATION
+------------------
+The official ULID spec (github.com/ulid/spec):
+- Does not explicitly mandate handling of clock regression
+- Focuses on monotonicity within the same millisecond
+- Leaves clock regression handling as an implementation detail
+
+DOCUMENTATION VERDICT
+---------------------
+1. The function's core promise is VIOLATED: It does not guarantee "strictly larger" ULIDs
+   when clock regression occurs.
+
+2. The claim of working "the same way" as JavaScript monotonicFactory is FALSE: The JavaScript
+   version handles clock regression, but the Python version does not.
+
+3. The docstring's omission of clock regression behavior is a documentation gap, but the
+   explicit guarantee of "strictly larger" makes the current behavior incorrect.
+
+CONCLUSION
+----------
+The documentation clearly promises monotonic behavior ("strictly larger") without exception.
+The current implementation violates this documented guarantee when clocks move backward.
+This is not just a documentation issue - it's a violation of the documented contract.
+
+Additionally, the claim to work like the JavaScript reference implementation is incorrect,
+as that implementation does handle clock regression while this one does not.

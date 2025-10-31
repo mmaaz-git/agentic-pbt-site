@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmation
+The bug is real and reproducible. The `_have_importers()` function fails to detect when `PyImportMetaFinder` is installed in `sys.meta_path`.
+
+### Class Hierarchy Analysis
+- `PyImportMetaFinder` inherits from `MetaPathFinder` (line 256)
+- `PyxImportMetaFinder` inherits from `MetaPathFinder` (line 222)
+- These are sibling classes, not parent-child relationships
+- `issubclass(PyImportMetaFinder, PyxImportMetaFinder)` returns False
+- `issubclass(PyxImportMetaFinder, PyImportMetaFinder)` returns False
+
+### Bug Location
+The bug is in the `_have_importers()` function at lines 355-365. The problematic code uses nested `isinstance` checks:
+
+```python
+if isinstance(importer, PyxImportMetaFinder):
+    if isinstance(importer, PyImportMetaFinder):
+        has_py_importer = True
+    else:
+        has_pyx_importer = True
+```
+
+This logic is incorrect because when a `PyImportMetaFinder` is in `sys.meta_path`, the outer check `isinstance(importer, PyxImportMetaFinder)` returns False (they are siblings, not parent-child), so the inner check is never reached and `has_py_importer` is never set to True.
+
+### Reproduction Results
+1. **Hypothesis test**: Fails with input `add_py=True, add_pyx=False` - confirms the bug systematically
+2. **Simple reproduction**: Returns `has_py=False, has_pyx=False` when PyImportMetaFinder is installed, should return `has_py=True, has_pyx=False`
+3. **Fixed version test**: All test cases pass with the proposed fix using `elif` instead of nested `if`
+
+### Impact
+This bug causes the `install()` function (line 434) to incorrectly believe that PyImportMetaFinder is not installed when it actually is, potentially causing it to re-install an already-installed finder.

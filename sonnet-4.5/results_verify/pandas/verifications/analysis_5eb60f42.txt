@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state what should happen when the clipboard mechanism is completely unavailable. One could argue that raising `PyperclipException` immediately when there's no clipboard is reasonable behavior since waiting wouldn't help - if there's no clipboard mechanism at all, no amount of waiting will make content appear. The functions are documented to wait for clipboard content, but if the clipboard doesn't exist, this waiting is meaningless.
+
+**Why it might not be INVALID:**
+The documentation is crystal clear that these functions should raise `PyperclipTimeoutException` when a timeout is specified and expires. The docstring explicitly states "This function raises PyperclipTimeoutException if timeout was set to a number of seconds that has elapsed" - it doesn't say "unless the clipboard is unavailable." The contract is violated when a different exception type is raised, regardless of the underlying cause.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only occurs when explicitly setting the clipboard to 'no', which is primarily used for testing or when running in environments without clipboard support. In real-world usage, users would rarely encounter this scenario. The current behavior of failing fast with a clear error message about the clipboard being unavailable might be more helpful than waiting for a timeout when the clipboard will never work.
+
+**Why it might not be WONTFIX:**
+The functions have a clear, documented contract about raising `PyperclipTimeoutException` after a timeout. This isn't a trivial issue - it's a violation of the documented API contract. Code that catches `PyperclipTimeoutException` to handle timeout scenarios will fail because the wrong exception type is raised. This breaks exception handling logic that users might have written based on the documentation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior of raising `PyperclipException` immediately when no clipboard is available could be considered reasonable. The documentation could be updated to clarify that `PyperclipException` is raised when the clipboard mechanism is unavailable, while `PyperclipTimeoutException` is raised when the clipboard is available but no content appears within the timeout period.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documented behavior makes logical sense - when a timeout is specified, the function should wait for that timeout and then raise the timeout exception. Changing the documentation to match the current buggy behavior would make the API less intuitive and consistent. The timeout parameter should control how long to wait, regardless of why the clipboard isn't returning content.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that handling unavailable clipboards gracefully by waiting for the timeout is a new feature rather than a bug fix. The current implementation never anticipated this use case, and adding support for it would be extending the functionality to handle a new scenario.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing documented behavior to work correctly. The functions already have timeout logic implemented; they just fail to reach it due to an uncaught exception. The user isn't requesting a new feature but pointing out that the existing feature doesn't work as documented.
+
+## BUG Considerations
+**Why it might be BUG:**
+The functions have explicit documentation stating they raise `PyperclipTimeoutException` when a timeout expires, but they raise `PyperclipException` instead in certain scenarios. This is a clear violation of the documented API contract. The timeout parameter becomes useless when the clipboard is unavailable, as the function fails immediately instead of waiting. This could break user code that expects to catch `PyperclipTimeoutException` for timeout handling.
+
+**Why it might not be BUG:**
+The issue only occurs in the specific case where the clipboard mechanism is explicitly set to 'no', which is not a normal production scenario. One could argue that when there's fundamentally no clipboard available, raising an exception immediately is more appropriate than pretending to wait for something that can never happen. The `PyperclipException` accurately describes the problem - the clipboard isn't available.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though one that occurs in an edge case. The functions have clear, unambiguous documentation stating that they should raise `PyperclipTimeoutException` when a timeout is specified and expires. The current behavior violates this contract by raising a different exception type (`PyperclipException`) immediately, without waiting for the timeout period.
+
+The key issue is that the documented API contract is broken. Users writing code based on the documentation would reasonably expect to catch `PyperclipTimeoutException` for timeout scenarios, but their exception handlers would fail because the wrong exception type is raised. This is particularly problematic because the functions accept a timeout parameter that becomes meaningless when the clipboard is unavailable - the timeout is ignored entirely.
+
+However, this is an edge case that primarily affects testing scenarios or unusual environments without clipboard support. In normal production use with standard clipboard mechanisms available, this bug would not manifest. The question becomes whether fixing this edge case is worth the effort, or whether the documentation should be updated to clarify the behavior when no clipboard mechanism is available. Given that the fix is relatively simple (catch the exception and treat it as empty clipboard) and maintains backward compatibility while honoring the documented contract, treating this as a bug seems appropriate.

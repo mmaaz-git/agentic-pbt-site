@@ -1,0 +1,56 @@
+REPRODUCTION OF BUG: pandas.core.arrays.sparse.SparseArray.cumsum Infinite Recursion
+
+I have successfully reproduced the bug. The issue occurs exactly as described in the bug report.
+
+## Test Results:
+
+1. **Simple Reproduction Case**:
+   - Created SparseArray([1, 2, 3]) with default fill_value=0 for integer arrays
+   - Called cumsum() method
+   - Result: RecursionError: maximum recursion depth exceeded
+   - Confirmed that _null_fill_value is False for integer arrays with fill_value=0
+
+2. **Property-Based Test**:
+   - The hypothesis test with even a simple input like [1] triggers the RecursionError
+   - Any integer SparseArray will fail because they default to fill_value=0
+
+3. **Fill Value Testing**:
+   - SparseArray with NaN fill_value: WORKS CORRECTLY
+     - _null_fill_value is True for NaN
+     - cumsum() returns correct result: [1.0, 3.0, 6.0]
+
+   - SparseArray with 0 fill_value: FAILS WITH RECURSION ERROR
+     - _null_fill_value is False for 0
+     - Triggers the infinite recursion
+
+## Root Cause Analysis:
+
+Examined the source code at pandas/core/arrays/sparse/array.py lines 1549-1550:
+```python
+if not self._null_fill_value:
+    return SparseArray(self.to_dense()).cumsum()
+```
+
+The bug occurs because:
+1. When _null_fill_value is False (e.g., fill_value=0 for integers)
+2. The code converts to dense array and creates a NEW SparseArray
+3. This new SparseArray inherits the same fill_value (0)
+4. Therefore it also has _null_fill_value=False
+5. Calling cumsum() on it enters the same code path
+6. This creates infinite recursion
+
+## Proposed Fix Verification:
+
+Tested the proposed fix logic:
+```python
+return SparseArray(self.to_dense().cumsum())
+```
+
+This correctly:
+1. Converts sparse to dense array
+2. Applies cumsum to the dense array
+3. Creates SparseArray from the cumsum result
+4. Produces correct output [1, 3, 6] for input [1, 2, 3]
+5. Also works correctly for truly sparse arrays with actual zero values
+
+The bug is real, reproducible, and the proposed fix is valid.

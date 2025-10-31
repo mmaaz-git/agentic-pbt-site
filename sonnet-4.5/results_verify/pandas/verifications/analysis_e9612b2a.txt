@@ -1,0 +1,75 @@
+TRIAGE ANALYSIS
+
+Evaluating the bug report against five possible categories:
+
+1. BUG (Valid bug that should be fixed):
+ARGUMENTS FOR:
+- Silent data corruption is a critical issue - returning 0 for -2^64 is objectively wrong
+- The behavior is inconsistent: some values raise errors, others silently corrupt
+- Valid JSON is being incorrectly parsed (stdlib json handles it correctly)
+- Data integrity violations are serious bugs in any data processing library
+- The serialized JSON is valid according to RFC 7159
+- No documentation warns users about this silent corruption behavior
+
+ARGUMENTS AGAINST:
+- ujson is known to have integer limits for performance reasons
+- Some might argue this is expected behavior for a C-based fast JSON parser
+
+2. INVALID (Incorrect report):
+ARGUMENTS FOR:
+- ujson has known limitations with large integers that users should be aware of
+
+ARGUMENTS AGAINST:
+- The bug is real and reproducible - the report is factually correct
+- Silent data corruption is never acceptable, even if there are known limits
+- The inconsistent behavior (sometimes error, sometimes corruption) makes this not just a limitation
+
+3. WONTFIX (Trivial/uninteresting):
+ARGUMENTS FOR:
+- Values at exactly -2^64 might be considered edge cases
+- ujson prioritizes speed over correctness for extreme values
+
+ARGUMENTS AGAINST:
+- Silent data corruption is NEVER trivial
+- Financial, scientific, and cryptographic applications use large integers
+- The security implications mentioned in the report are valid
+- This is not an obscure edge case - it's a power of 2 boundary
+
+4. FEATURE_REQUEST (Not currently supported):
+ARGUMENTS FOR:
+- Supporting arbitrary precision integers could be seen as a new feature
+- ujson was designed with C-style integer limits
+
+ARGUMENTS AGAINST:
+- This isn't requesting new functionality - it's fixing broken behavior
+- The function already attempts to handle these values (it serializes them)
+- Failing safely is not a feature, it's a requirement
+
+5. DOCUMENTATION_FIX (Documentation issue):
+ARGUMENTS FOR:
+- If ujson documented this limitation clearly, users could avoid it
+- The documentation could warn about silent corruption at -2^64
+
+ARGUMENTS AGAINST:
+- Documentation cannot fix silent data corruption
+- Even with documentation, the inconsistent behavior is problematic
+- The function should either work correctly or fail clearly
+
+CRITICAL ANALYSIS:
+The key issue is SILENT DATA CORRUPTION. This is fundamentally different from:
+- Raising an error (acceptable for unsupported values)
+- Having documented limitations (acceptable if consistent)
+- Performance trade-offs (acceptable with clear boundaries)
+
+Silent corruption means:
+- Users cannot detect the problem programmatically
+- Data integrity is compromised without warning
+- Testing may not catch these edge cases
+- Production systems could have corrupted data
+
+CONCLUSION:
+This is a BUG. While ujson may have acceptable limitations for performance, silently returning incorrect values crosses the line from "limitation" to "bug". The correct behavior would be to either:
+1. Handle the value correctly (like stdlib json), or
+2. Raise an error consistently (like it does for -2^63 - 1)
+
+Returning 0 for -2^64 is indefensible behavior that could cause serious data corruption in production systems.

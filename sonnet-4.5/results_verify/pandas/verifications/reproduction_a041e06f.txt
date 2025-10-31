@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis for pandas.api.types.is_re_compilable
+
+### Summary
+I have successfully reproduced the bug described in the report. The function `pandas.api.types.is_re_compilable` does indeed raise a `PatternError` when given invalid regex patterns, instead of returning `False` as expected.
+
+### Reproduction Steps and Results
+
+1. **Simple Reproduction Test**
+   - Input: `pat.is_re_compilable('.*')`
+   - Expected: `True`
+   - Actual: `True` ✓
+
+   - Input: `pat.is_re_compilable('(')`
+   - Expected: `False`
+   - Actual: Raised `PatternError: missing ), unterminated subpattern at position 0` ✗
+
+2. **Hypothesis Property-Based Testing**
+   The Hypothesis test revealed multiple failing inputs that cause `PatternError` to be raised:
+   - `'('` - missing closing parenthesis
+   - `')'` - unbalanced parenthesis
+   - `'['` - unterminated character set
+   - `'*'` - nothing to repeat
+   - `'?'` - nothing to repeat
+   - `'+'` - nothing to repeat
+
+   All these inputs cause `is_re_compilable` to raise `PatternError` instead of returning `False`.
+
+### Source Code Analysis
+The current implementation of `is_re_compilable` is:
+```python
+def is_re_compilable(obj) -> bool:
+    try:
+        re.compile(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+```
+
+The function only catches `TypeError` (which handles non-string inputs like integers), but does not catch `re.error` or its subclass `PatternError` that gets raised for invalid regex patterns in strings.
+
+### Conclusion
+The bug is confirmed. The function violates its documented contract by raising exceptions for invalid regex strings instead of returning `False`. This makes the function unreliable for its intended purpose of safely checking if a string can be compiled as a regex pattern.

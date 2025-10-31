@@ -1,0 +1,64 @@
+REPRODUCTION OF BUG REPORT
+
+1. TEST EXECUTION RESULTS:
+   All five manual reproduction tests CONFIRMED the vulnerabilities:
+
+   Test 1: Title HTML injection in swagger_ui_html - VULNERABLE
+   - Input: title = "</title><script>alert('XSS')</script><title>Fake"
+   - Result: Script tag successfully injected into HTML output
+   - HTML output contained: <title></title><script>alert('XSS')</script><title>Fake</title>
+
+   Test 2: OpenAPI URL JavaScript injection - VULNERABLE
+   - Input: openapi_url = "'; alert('XSS'); //'"
+   - Result: JavaScript code successfully injected
+   - JS output contained: url: ''; alert('XSS'); //'',
+
+   Test 3: Title HTML injection in redoc_html - VULNERABLE
+   - Input: Same malicious title as Test 1
+   - Result: Script tag successfully injected into ReDoc HTML
+
+   Test 4: OAuth2 redirect URL injection - VULNERABLE
+   - Input: oauth2_redirect_url = "'; alert('OAuth XSS'); //'"
+   - Result: JavaScript injection successful
+   - JS output: oauth2RedirectUrl: window.location.origin + ''; alert('OAuth XSS'); //'',
+
+   Test 5: CSS URL attribute injection - VULNERABLE
+   - Input: swagger_css_url = '"><script>alert("CSS")</script><link href="'
+   - Result: HTML attribute breakout and script injection successful
+   - HTML output: href=""><script>alert("CSS")</script><link href="">
+
+2. PROPERTY-BASED TESTING:
+   - The hypothesis tests ran but didn't trigger failures in the sampling
+   - This is expected as the tests need specific malicious patterns to trigger
+
+3. TECHNICAL ANALYSIS OF VULNERABILITIES:
+
+   a) HTML Context Injection:
+      - The title parameter is placed directly into <title>{title}</title> tags
+      - An attacker can close the title tag early with </title> and inject arbitrary HTML
+      - This works because the f-string interpolation doesn't escape HTML special characters
+
+   b) JavaScript Context Injection:
+      - The openapi_url is placed into JavaScript as: url: '{openapi_url}'
+      - An attacker can close the string with a single quote and inject JavaScript
+      - The '; pattern breaks out of the string literal context
+
+   c) HTML Attribute Injection:
+      - URL parameters are placed into href and src attributes without escaping
+      - Double quotes can break out of attributes and inject new HTML elements
+
+4. COMPARISON WITH BUG REPORT CLAIMS:
+   - Bug report claimed these are injection vulnerabilities - CONFIRMED
+   - Bug report showed specific exploit patterns - ALL REPRODUCED SUCCESSFULLY
+   - Bug report identified the exact vulnerable lines in the code - VERIFIED CORRECT
+   - The suggested fix uses html.escape() and json.dumps() - APPEARS TECHNICALLY SOUND
+
+5. REAL-WORLD IMPACT:
+   - These vulnerabilities would only be exploitable if:
+     a) An application passes user-controlled input to these functions
+     b) The generated HTML is served to other users (stored XSS) or the same user (reflected XSS)
+   - Most FastAPI applications likely use these with hardcoded values
+   - However, some applications might dynamically generate documentation based on user input
+
+CONCLUSION:
+The bug report is technically accurate. All claimed vulnerabilities were successfully reproduced. The code does not perform any HTML or JavaScript escaping on the input parameters, allowing injection of arbitrary HTML and JavaScript code when malicious input is provided.

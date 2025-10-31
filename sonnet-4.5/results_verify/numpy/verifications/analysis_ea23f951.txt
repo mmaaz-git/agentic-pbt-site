@@ -1,0 +1,107 @@
+TRIAGE ANALYSIS: NumPy Strings Null Character Handling
+
+CONSIDERING EACH CATEGORY:
+
+1. INVALID
+==========
+Arguments FOR marking as INVALID:
+- NumPy documentation does state that trailing nulls cannot be round-tripped
+- NumPy string arrays are fixed-width and have known limitations
+- The behavior might be intentional for C-compatibility
+
+Arguments AGAINST marking as INVALID:
+- The documentation does NOT mention leading null removal
+- The behavior is inconsistent (middle nulls preserved, leading/trailing not)
+- Silent data loss without warning is problematic
+- numpy.strings claims to provide Python string-like operations
+
+Verdict: NOT INVALID - The undocumented silent data loss is a real issue
+
+2. WONTFIX
+==========
+Arguments FOR marking as WONTFIX:
+- This might be deeply embedded in NumPy's C implementation
+- Changing this could break backward compatibility
+- Workaround exists (use object dtype or void dtype)
+- Edge case that might not affect many users
+
+Arguments AGAINST marking as WONTFIX:
+- Silent data corruption is a serious issue
+- No warning is given when data is lost
+- The inconsistent behavior (middle nulls OK, edges not) suggests a bug
+- This affects multiple string functions, not just edge cases
+
+Verdict: POSSIBLE but unlikely - Silent data loss is too serious to ignore
+
+3. FEATURE_REQUEST
+==================
+Arguments FOR marking as FEATURE_REQUEST:
+- NumPy never explicitly claimed full null character support
+- Could be seen as requesting new functionality
+- Documentation mentions limitations with trailing nulls
+
+Arguments AGAINST marking as FEATURE_REQUEST:
+- This is about data integrity, not new functionality
+- Python strings support null characters, reasonable expectation
+- The current behavior loses data silently
+
+Verdict: NOT A FEATURE_REQUEST - This is about incorrect behavior, not new features
+
+4. DOCUMENTATION_FIX
+====================
+Arguments FOR marking as DOCUMENTATION_FIX:
+- The behavior might be intentional but undocumented
+- Documentation already mentions trailing null limitations
+- Could just need clearer warnings about null character handling
+
+Arguments AGAINST marking as DOCUMENTATION_FIX:
+- Silent data loss is still a bug even if documented
+- The inconsistent behavior suggests implementation issue
+- Users would not expect different behavior for leading vs middle nulls
+
+Verdict: POSSIBLE - Could be resolved by documenting the limitation clearly
+
+5. BUG
+======
+Arguments FOR marking as BUG:
+- Silent data loss without warning
+- Inconsistent behavior (middle nulls preserved, edges not)
+- Violates principle of least surprise
+- numpy.strings functions don't match Python string behavior
+- No warning or error when data is discarded
+- Affects multiple functions (add, multiply, ljust, rjust)
+
+Arguments AGAINST marking as BUG:
+- Might be intentional C-string compatibility behavior
+- Documentation does mention some null character limitations
+- Fixed-width string arrays have inherent limitations
+
+Verdict: STRONG CASE for BUG - Silent data loss is a serious issue
+
+FINAL ANALYSIS
+==============
+This appears to be a legitimate BUG for the following reasons:
+
+1. SILENT DATA LOSS: The most critical issue is that data is lost without
+   any warning or error. Even if this behavior is intentional, users should
+   be warned when their data is being modified.
+
+2. INCONSISTENT BEHAVIOR: The fact that '\x00abc' preserves the null but
+   '\x00' doesn't suggests this is not a deliberate design choice but rather
+   an implementation quirk related to C-string handling.
+
+3. UNDOCUMENTED: While trailing null limitations are mentioned, leading null
+   removal is completely undocumented.
+
+4. VIOLATES EXPECTATIONS: numpy.strings claims to provide vectorized string
+   operations. Users reasonably expect these to behave like Python strings.
+
+5. AFFECTS MULTIPLE FUNCTIONS: This is not an isolated edge case but affects
+   core string operations like add, multiply, ljust, and rjust.
+
+Even if fixing the underlying issue is complex, the minimum acceptable
+behavior would be to raise a warning or error when null characters are
+present in input strings, rather than silently corrupting the data.
+
+RECOMMENDATION: BUG - This should be filed as a valid bug report due to
+silent data loss and undocumented behavior.

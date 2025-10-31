@@ -1,0 +1,24 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is real and behaves exactly as described:
+
+1. **Whitespace-only expressions return None**: When calling `pd.eval("   \n\t  ")` with whitespace-only strings (spaces, tabs, newlines, or any combination), the function returns `None` instead of raising a `ValueError`.
+
+2. **Empty string raises ValueError correctly**: When calling `pd.eval("")` with an actual empty string, the function correctly raises `ValueError: expr cannot be an empty string`.
+
+3. **Root cause confirmed**: Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/computation/eval.py`:
+   - Line 306: `_check_expression(expr)` is called on the original string, which passes for whitespace-only strings since they are not empty (they contain whitespace characters).
+   - Line 307: `exprs = [e.strip() for e in expr.splitlines() if e.strip() != ""]` creates a list comprehension that strips whitespace and filters out empty strings.
+   - For whitespace-only input, this results in an empty list `exprs = []`.
+   - Line 326-363: The main loop `for expr in exprs:` never executes when the list is empty.
+   - Line 322: `ret = None` is the initial value.
+   - Line 421: Since no expressions were processed, the function returns `None`.
+
+4. **Test results**: I tested multiple whitespace combinations:
+   - `'   '` (spaces only) → Returns `None`
+   - `'\t\t'` (tabs only) → Returns `None`
+   - `'\n\n'` (newlines only) → Returns `None`
+   - `' \t\n '` (mixed whitespace) → Returns `None`
+   - `'    \n\t\n   '` (complex whitespace) → Returns `None`
+
+The bug is reproducible and the behavior is exactly as described in the report.

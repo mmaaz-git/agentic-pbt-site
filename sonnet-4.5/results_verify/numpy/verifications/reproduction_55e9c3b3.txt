@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is confirmed to be accurate. The numpy.fft.hfft function crashes with a ValueError when given a single-element array, while most other FFT functions handle this case correctly.
+
+### Reproduction Results
+
+1. **Hypothesis Test**:
+   - The property-based test fails immediately on the first example
+   - Error: "ValueError: Invalid number of FFT data points (0) specified."
+   - This confirms the bug exists for any single-element float array
+
+2. **Simple Test Case**:
+   - np.fft.hfft([1.0]) raises ValueError as reported
+   - The workaround np.fft.hfft([1.0], n=2) succeeds, returning [1., 1.]
+   - This confirms the underlying algorithm can handle single-element inputs when n is explicitly specified
+
+3. **Comparison with Other FFT Functions**:
+   - fft: Works with single-element arrays ✓
+   - ifft: Works with single-element arrays ✓
+   - rfft: Works with single-element arrays ✓
+   - irfft: ALSO FAILS with the same error (ValueError: Invalid number of FFT data points (0) specified)
+   - hfft: Fails as reported ✗
+   - ihfft: Works with single-element arrays ✓
+
+### Root Cause Analysis
+Looking at the source code (line 626 in _pocketfft.py):
+```python
+if n is None:
+    n = (a.shape[axis] - 1) * 2
+```
+
+For a single-element array:
+- a.shape[axis] = 1
+- n = (1 - 1) * 2 = 0
+- This invalid n=0 is then passed to irfft, which raises the ValueError
+
+### Key Findings
+1. The bug is real and reproducible
+2. Both hfft and irfft are affected (they share similar default n calculation logic)
+3. The problem is specifically in the default parameter calculation when n is None
+4. The underlying FFT algorithm supports single-element arrays when n is properly specified
+5. The inconsistency claim is partially correct - most FFT functions work, but both hfft and irfft fail

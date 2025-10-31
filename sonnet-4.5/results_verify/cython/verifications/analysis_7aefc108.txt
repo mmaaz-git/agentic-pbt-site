@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The code technically works as implemented - it does perform template substitution correctly. One could argue that since there's no explicit documentation stating that the input dictionary won't be modified, and since the method has no docstring at all, there's no contract being violated. The behavior is consistent and predictable once known.
+
+**Why it might not be INVALID:**
+The bug is technically real - the input dictionary IS being mutated. The comparison to string.Template in the documentation creates an expectation that the behavior would be similar, and Python's string.Template does not mutate inputs. The principle of least surprise suggests that methods shouldn't have unexpected side effects, and mutating input arguments is generally considered bad practice in Python unless explicitly documented.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is internal Cython templating code that may have been working this way for years. Changing it could break existing code that depends on this behavior. The mutation only adds internal keys like '__template_name__' which users are unlikely to be using. The performance benefit of not copying the dictionary might be intentional. Since this is a utility within Cython rather than a general-purpose templating library, the maintainers might not care about this edge case.
+
+**Why it might not be WONTFIX:**
+The issue is not trivial - it's a fundamental violation of expected behavior where a method modifies its input arguments without documentation. This can cause real bugs in user code, especially when dictionaries are reused. The fix is simple (just copy the dict) and wouldn't significantly impact performance. The fact that namespace keys also leak into the user's dictionary makes this more serious than just adding '__template_name__'.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The substitute method has NO docstring at all. If the mutation is intentional behavior, it should be documented. The module documentation doesn't mention this side effect. Simply adding documentation that says "Note: This method modifies the input dictionary by adding template metadata" would make the behavior explicit and expected rather than surprising.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior appears to be a bug rather than an intended feature. The code comparison to string.Template suggests it should behave similarly, but it doesn't. The mutation seems accidental (using ns = kw instead of ns = kw.copy()) rather than intentional. Documenting a bug doesn't fix the underlying issue that the API violates common Python conventions.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that having a non-mutating version of substitute() would be a new feature. The current code works for its intended use within Cython's build system. Adding a parameter like substitute(dict, copy=True) or a new method substitute_safe() would be adding new functionality rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing functionality to work without side effects. The expected behavior (non-mutation) is the standard in Python, not a special feature. The comparison to string.Template implies this should already work without mutation. This is fixing unexpected behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The substitute method mutates its input dictionary without any documentation of this behavior. This violates the principle of least surprise and standard Python conventions. The comparison to string.Template in the docs creates an expectation of similar behavior, but string.Template doesn't mutate inputs. The fix is trivial (one line change to copy the dict). This can cause real issues in production code when dictionaries are reused. The fact that ALL namespace keys leak into the user's dict makes this a significant issue.
+
+**Why it might not be BUG:**
+The code has likely worked this way for many years without complaints. This is internal Cython utility code, not a general-purpose library. There's no explicit documentation saying it won't mutate the input. The mutation might be intentional for performance reasons within Cython's build process. Without explicit documentation promising no mutation, this might be considered undefined behavior rather than incorrect behavior.
+
+## Overall Consideration
+
+This is a nuanced case. The technical facts are clear: the method does mutate the input dictionary by adding both '__template_name__' and potentially all namespace keys. This is unexpected behavior that violates common Python conventions.
+
+The critical question is whether this rises to the level of a BUG versus other categories. The lack of any docstring means there's no explicit contract being violated. However, the module documentation comparing it to string.Template creates an implicit expectation of similar behavior. The mutation can cause real problems in user code, especially since the entire namespace can leak into the user's dictionary.
+
+Given that this is internal Cython templating code (not a general-purpose library), and considering that about 90% of bug reports from this user are incorrect, I lean toward this being either WONTFIX (if the maintainers don't care about this edge case in internal tooling) or DOCUMENTATION_FIX (if they want to keep the current behavior but make it explicit). While technically correct, the impact is likely minimal for Cython's actual use cases, and changing it could break existing code that depends on this behavior.

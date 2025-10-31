@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `build_grid_chunks` is an internal backend utility with no documentation or specification stating that the sum of chunks must equal the input size. It could be argued that this function is designed for grid alignment purposes where the first chunk needs to align to grid boundaries, and the behavior when size < chunk_size is undefined. The function has no docstring, no public API documentation, and the existing tests don't cover this edge case, suggesting it was never intended to handle size < chunk_size.
+
+**Why it might not be INVALID:**
+The function is used by `grid_rechunk` which passes its output to `align_nd_chunks`, and `align_nd_chunks` explicitly validates that the sum of chunks equals the size with the error message "This inconsistency should never occur at this stage." This suggests there IS an expectation that `build_grid_chunks` maintains the sum invariant. Mathematical correctness for a chunking function requires that chunks partition the data exactly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that occurs only when size < chunk_size, which may be considered unrealistic in practice. The error is already caught by the validation in `align_nd_chunks` before any data corruption can occur. The impact is limited to an internal backend function that users don't directly call. The error message that results ("This inconsistency should never occur") while not ideal, does prevent any actual data corruption.
+
+**Why it might not be WONTFIX:**
+The bug violates a fundamental mathematical property of chunking (partitioning data). The error message from `align_nd_chunks` explicitly states this "should never occur at this stage," indicating this IS considered a bug by the developers. The fix is trivial (one line change) and would prevent confusing error messages. Even if rare, the case of small arrays with larger chunk sizes could occur in real scenarios.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function has absolutely no documentation - no docstring, no comments, and isn't in the public API docs. One could argue that the lack of specification means the behavior is undefined, and the real issue is that the function needs documentation specifying it only works when size >= chunk_size. Adding documentation about the expected input constraints would clarify the intended behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code's behavior is objectively wrong from a mathematical perspective - returning chunks that sum to more than the input size is incorrect regardless of documentation. The validation in `align_nd_chunks` shows this is considered an error condition that "should never occur," not an expected limitation. Documentation can't fix fundamentally incorrect logic.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting size < chunk_size could be seen as a new feature request rather than a bug fix. The function may have been designed with the assumption that size >= chunk_size, and adding support for smaller sizes would be extending its capabilities. The current error handling (via `align_nd_chunks`) prevents issues, so this would be about improving the user experience.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing incorrect behavior. A chunking function should handle all valid inputs correctly, including edge cases. The mathematical property that chunks must sum to the total size isn't a feature but a fundamental requirement. The proposed fix doesn't add features but corrects existing logic.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns mathematically incorrect results where the sum of chunks exceeds the input size, violating the fundamental property of data partitioning. The error is caught later with a message saying "This inconsistency should never occur at this stage," clearly indicating this is unexpected behavior. The bug can occur in realistic scenarios (small arrays with larger backend chunk sizes). The fix is simple and correct.
+
+**Why it might not be BUG:**
+This is an undocumented internal function with no specification. The error is already caught by validation before causing data corruption. The function might have been designed with implicit assumptions about input constraints. No existing tests cover this case, suggesting it wasn't considered in the original design. The impact is limited since users don't directly call this function.
+
+## Overall Consideration
+
+After careful analysis, this bug report presents a genuine mathematical correctness issue in the `build_grid_chunks` function. When size < chunk_size, the function returns chunks whose sum exceeds the input size, which is objectively incorrect for a chunking/partitioning function. The fact that `align_nd_chunks` catches this with an error message stating "This inconsistency should never occur at this stage" strongly indicates the developers consider this an error condition.
+
+However, several factors suggest this might not warrant a BUG classification. First, this is an undocumented internal backend function with no public API specification. Second, the error is already caught by downstream validation, preventing data corruption. Third, the lack of any existing tests for this case suggests it was never part of the intended design scope. The scenario of size < chunk_size may be rare in practice for backend grid chunking operations.
+
+Given that this is an internal function with no documentation, that the error is already caught, and that fixing this would be more about preventing a confusing error message than preventing actual data corruption, this seems more appropriate as either WONTFIX (the error handling is sufficient) or DOCUMENTATION_FIX (document that size must be >= chunk_size). The mathematical incorrectness alone isn't sufficient for a BUG classification when the function is internal, undocumented, and the error is already handled.

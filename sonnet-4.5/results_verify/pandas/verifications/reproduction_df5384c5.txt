@@ -1,0 +1,42 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The issue occurs in pandas.core.arrays.sparse.SparseArray.nonzero() method.
+
+## Test Results:
+
+1. **Main failing case**: SparseArray([0, 1, 2, 2], fill_value=2)
+   - Expected nonzero positions (from to_dense().nonzero()): [1, 2, 3]
+   - Actual nonzero positions (from arr.nonzero()): [1]
+   - Result: MISMATCH - The method misses positions 2 and 3 which contain the nonzero fill_value
+
+2. **Additional test cases**:
+   - SparseArray([0, 1, 2, 0], fill_value=0): WORKS CORRECTLY
+     - Both methods return [1, 2]
+
+   - SparseArray([0, 1, 2, 1], fill_value=1): FAILS
+     - Expected: [1, 2, 3] (position 3 has fill_value=1 which is nonzero)
+     - Actual: [2] (only the explicitly stored value 2)
+
+   - SparseArray([3, 3, 3, 3], fill_value=3): FAILS
+     - Expected: [0, 1, 2, 3] (all positions have nonzero value 3)
+     - Actual: [] (empty array because no values differ from fill_value)
+
+## Root Cause Analysis:
+
+The current implementation in pandas/core/arrays/sparse/array.py is:
+
+```python
+def nonzero(self) -> tuple[npt.NDArray[np.int32]]:
+    if self.fill_value == 0:
+        return (self.sp_index.indices,)
+    else:
+        return (self.sp_index.indices[self.sp_values != 0],)
+```
+
+The bug occurs when fill_value != 0:
+- The method only checks explicitly stored values (sp_values) for being nonzero
+- It ignores that all positions NOT in sp_index.indices are filled with fill_value
+- If fill_value is nonzero, these positions should be included in the nonzero() result
+
+The bug is 100% reproducible and affects any SparseArray with a nonzero fill_value.

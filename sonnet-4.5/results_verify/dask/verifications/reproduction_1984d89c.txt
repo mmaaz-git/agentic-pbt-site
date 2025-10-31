@@ -1,0 +1,49 @@
+## Reproduction Analysis
+
+### Test Results
+I successfully reproduced all three reported bugs:
+
+1. **Bug 1 (Non-monotonic boundaries)**: CONFIRMED
+   - Input: `boundaries=[2, 0], frame_npartitions=1`
+   - Output: `[0, 2, 1]`
+   - Issue: The result is non-monotonic (2 > 1), violating the property that boundaries should be non-decreasing
+
+2. **Bug 2 (Last boundary != frame_npartitions)**: CONFIRMED
+   - Input: `boundaries=[0, 2], frame_npartitions=1`
+   - Output: `[0, 2]`
+   - Issue: Last element is 2, not 1 as expected (frame_npartitions=1)
+
+3. **Bug 3 (Lost intermediate boundary)**: CONFIRMED
+   - Input: `boundaries=[0, 5, 10], frame_npartitions=20`
+   - Output: `[0, 5, 20]`
+   - Issue: Boundary 10 is lost/replaced by 20
+
+### Hypothesis Testing
+The hypothesis test confirmed the bugs are systematic:
+- Found 26 failures in 1000 test cases
+- All failures involve non-monotonic boundaries when input boundaries are not sorted
+
+### Root Cause Analysis
+
+The current implementation has three critical flaws:
+
+1. **No sorting**: The function doesn't sort boundaries, so if they arrive unsorted (like [2, 0]), it just prepends 0, creating [0, 2, 0], then modifies the last element, resulting in [0, 2, 1].
+
+2. **Replacement instead of append**: When `boundaries[-1] < frame_npartitions`, it replaces the last element with `frame_npartitions` instead of appending it. This causes data loss (Bug 3).
+
+3. **No handling for boundaries exceeding frame_npartitions**: When the last boundary exceeds frame_npartitions (Bug 2), the function doesn't modify it, violating the expectation that boundaries should end at frame_npartitions.
+
+### What the function actually does
+Looking at the code:
+```python
+def _clean_new_division_boundaries(new_partitions_boundaries, frame_npartitions):
+    if not isinstance(new_partitions_boundaries, list):
+        new_partitions_boundaries = list(new_partitions_boundaries)
+    if new_partitions_boundaries[0] > 0:
+        new_partitions_boundaries.insert(0, 0)
+    if new_partitions_boundaries[-1] < frame_npartitions:
+        new_partitions_boundaries[-1] = frame_npartitions  # <-- REPLACES, not appends
+    return new_partitions_boundaries
+```
+
+The function modifies boundaries in-place without ensuring they remain valid for partitioning operations.

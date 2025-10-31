@@ -1,0 +1,31 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the issue described in the bug report. The behavior is actually more extensive than originally reported:
+
+### Key Findings:
+
+1. **Confirmed Bug**: The bug report is correct that `numpy.strings.add()` does not handle null characters correctly.
+
+2. **Actual Behavior**: The function strips both leading AND trailing null characters from BOTH operands:
+   - `'\x00' + 'test'` produces `'test'` instead of `'\x00test'` (leading null stripped)
+   - `'a\x00' + 'b'` produces `'ab'` instead of `'a\x00b'` (trailing null stripped)
+   - `'test' + '\x00'` produces `'test'` instead of `'test\x00'` (null in second operand stripped)
+   - `'\x00' + '\x00'` produces `''` instead of `'\x00\x00'` (both nulls stripped)
+
+3. **Important Exception**: Null characters in the MIDDLE of strings are preserved:
+   - `'a\x00b' + 'c'` correctly produces `'a\x00bc'`
+   - `'\x00a' + 'b'` correctly produces `'\x00ab'` (null is no longer leading after array conversion)
+   - `'a' + 'b\x00c'` correctly produces `'ab\x00c'`
+
+4. **Array Behavior**: When numpy arrays are created with strings containing nulls, the nulls at the edges appear to be stripped during array creation, not during concatenation:
+   - `np.array(['\x00'], dtype=str)` becomes an array containing empty string
+   - `np.array(['a\x00'], dtype=str)` becomes an array containing 'a' (trailing null stripped)
+   - `np.array(['\x00b'], dtype=str)` becomes an array containing '\x00b' (preserved as it's not purely leading)
+
+### Comparison with Python String Concatenation:
+
+Python's native string concatenation handles null characters correctly:
+- `'\x00' + 'test'` produces `'\x00test'` (as expected)
+- `'a\x00' + 'b'` produces `'a\x00b'` (as expected)
+
+This confirms that numpy.strings.add() behaves differently from standard Python string operations, causing data loss when null characters are present at string boundaries.

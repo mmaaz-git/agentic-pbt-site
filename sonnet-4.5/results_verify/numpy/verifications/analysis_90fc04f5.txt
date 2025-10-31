@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never states that get_period_alias should be idempotent. The function is documented only as providing "Alias to closest period strings BQ->Q etc." which it does correctly. The function performs exactly as documented - it maps offset strings to period aliases via a dictionary lookup. The absence of self-mappings like 'M'->'M' is not a violation of any documented contract. The bug reporter is imposing an expectation (idempotence) that was never promised or implied by the documentation.
+
+**Why it might not be INVALID:**
+The name "get_period_alias" and the description "Alias to closest period strings" suggests a normalization or canonicalization operation. For such operations, idempotence is a reasonable expectation even if not explicitly documented. If 'M' is already the canonical period string for months, it's counterintuitive that get_period_alias('M') returns None rather than 'M'.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that likely doesn't affect real-world usage. Users typically call get_period_alias once to convert offset strings to period strings, not repeatedly. The current behavior has presumably been in place for a long time without causing issues. Adding self-mappings would increase the dictionary size for minimal benefit. The function works correctly for its primary use case of converting offset strings to period aliases.
+
+**Why it might not be WONTFIX:**
+Idempotence is a fundamental property for alias/normalization functions. The fix is trivial (adding 'M': 'M' and 'Q': 'Q' to the dictionary). This could cause subtle bugs in code that assumes idempotence. The inconsistency where some period strings map to themselves (like 'D': 'D', 'B': 'B') but others don't ('M', 'Q') suggests this might be an oversight rather than intentional.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is consistent and predictable - it's a simple dictionary lookup. The documentation could be updated to clarify that the function only maps specific offset strings to their aliases and returns None for anything not in the mapping, including the aliases themselves. This would make the non-idempotent behavior explicit and expected.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't really about documentation clarity. The function name and purpose strongly suggest it should handle period strings consistently. The fact that 'D' maps to 'D' but 'M' maps to None is inconsistent behavior that documentation updates wouldn't fix. The problem is in the implementation logic, not in how it's documented.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding idempotence would be a new capability that the function doesn't currently have. The current function works as a one-way mapping, and making it idempotent would extend its functionality. This could be framed as a request to enhance the function to support repeated applications, which is a new feature rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+Idempotence for an alias/normalization function isn't a new feature - it's a basic expectation. The inconsistency in the current implementation (some values are idempotent like 'D', others aren't like 'M') suggests this is more of a bug than a missing feature. The function already partially supports idempotence, just incompletely.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits inconsistent behavior where some period strings ('D', 'B', 'Y', 'W') map to themselves while others ('M', 'Q') return None. This inconsistency strongly suggests an oversight in the implementation. For a function that converts to "closest period strings," it's illogical that 'M' (already a period string) wouldn't map to itself. The name and purpose of the function imply normalization, for which idempotence is a fundamental property.
+
+**Why it might not be BUG:**
+The documentation doesn't promise idempotence. The function is working exactly as coded - it's a simple dictionary lookup that returns None for missing keys. There's no specification that period aliases should map to themselves. The behavior is deterministic and consistent with the implementation. Without explicit documentation stating the function should be idempotent, this is expected behavior from a dictionary lookup.
+
+**Overall consideration**
+The bug report raises a mathematically valid point about idempotence, but the critical question is whether idempotence was ever an intended property of this function. The documentation is minimal and doesn't specify this requirement. The function is implemented as a straightforward dictionary lookup that returns None for unmapped values, which is standard Python behavior.
+
+Looking at the OFFSET_TO_PERIOD_FREQSTR dictionary, there's clear inconsistency: some period strings like 'D', 'B', 'W', 'Y' map to themselves, while 'M' and 'Q' don't. This inconsistency is the strongest argument for this being a bug. However, this could also be intentional - perhaps 'M' and 'Q' are not considered valid input offset strings, only output period strings.
+
+Given that the documentation never promises idempotence, the function has likely worked this way for years without issues, and the impact appears minimal (who calls get_period_alias twice?), this leans toward INVALID or WONTFIX rather than BUG. The expectation of idempotence, while mathematically elegant, is not grounded in any documented requirement or specification.

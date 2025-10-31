@@ -1,0 +1,44 @@
+BUG REPRODUCTION RESULTS
+
+1. REPRODUCIBILITY:
+The bug is 100% reproducible with the provided test case.
+
+2. TEST CASE VERIFICATION:
+Input: pd.Series([0.0]*5, index=pd.date_range('2000-01-01', periods=5, freq='h'))
+Rule: 'ME' (month-end frequency)
+Result: ValueError with message "Index is not contained within new index"
+
+3. ROOT CAUSE ANALYSIS:
+The bug occurs due to a mismatch between:
+a) What pandas.resample() produces: Index at 2000-01-31 (month-end anchor point)
+b) What pd.date_range(start='2000-01-01 00:00', end='2000-01-01 04:00', freq='ME') produces: Empty DatetimeIndex
+
+The function incorrectly assumes pd.date_range will generate the same indices as resample().
+
+4. SCOPE OF THE BUG:
+Testing shows the bug affects ALL anchor-based frequencies:
+- 'ME' (month-end): FAILS on short time spans
+- 'QE' (quarter-end): FAILS on short time spans
+- 'YE' (year-end): FAILS on short time spans
+- 'D', 'h', etc. (non-anchor frequencies): WORKS correctly
+
+5. PANDAS BEHAVIOR VERIFICATION:
+Confirmed that pandas.resample() does indeed create indices at anchor points:
+- Data from Jan 1-10 → resample('ME') → Index at Jan 31
+- Data from Jan 1-10 → resample('QE') → Index at Mar 31
+- Data from Jan 1-10 → resample('YE') → Index at Dec 31
+
+6. TECHNICAL DETAILS:
+The problematic code is in lines 47-63 of _resample_series:
+- Line 38-40: Performs pandas resample (works correctly)
+- Line 47-54: Creates new_index using pd.date_range (creates wrong index for anchor frequencies)
+- Line 56: Checks if out.index is contained in new_index (fails because new_index is empty/wrong)
+- Line 63: Would reindex if check passed
+
+7. USER IMPACT:
+This makes dask resample unusable for common business use cases like:
+- Monthly reporting on partial month data
+- Quarterly aggregations on partial quarter data
+- Annual summaries on partial year data
+
+The error message suggests using "larger partitions" but this won't help - the issue is fundamental to how the function constructs the expected index.

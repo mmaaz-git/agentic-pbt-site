@@ -1,0 +1,51 @@
+BUG REPRODUCTION RESULTS
+========================
+
+SUMMARY:
+The bug report claims that key_split fails to strip 8-character hexadecimal suffixes containing digits. However, testing shows the function DOES strip these suffixes correctly, though not for the reason stated in the bug report.
+
+TEST RESULTS:
+
+1. BASIC ASSERTIONS FROM BUG REPORT:
+   - key_split('task-abcdefab') == 'task' ✓ PASSES
+   - key_split('task-12345678') == 'task' ✓ PASSES
+
+The bug report claimed the second assertion would fail, but it actually passes.
+
+2. COMPREHENSIVE TESTING:
+   All test cases with 8-character suffixes returned the base word correctly:
+   - 'x-abcdefab' → 'x' ✓ (all letters)
+   - 'x-12345678' → 'x' ✓ (all digits)
+   - 'x-1234abcd' → 'x' ✓ (mixed)
+   - 'x-abcd1234' → 'x' ✓ (mixed)
+   - 'x-00000000' → 'x' ✓ (all zeros)
+   - 'x-ffffffff' → 'x' ✓ (all f's)
+   - 'x-deadbeef' → 'x' ✓ (classic hex)
+
+3. PROPERTY-BASED TESTING:
+   The Hypothesis test with 50 random examples PASSED completely. No failures were found.
+
+4. ROOT CAUSE ANALYSIS:
+   The function strips 8-character suffixes through TWO different mechanisms:
+
+   a) For suffixes containing digits (like '12345678'):
+      - They fail the isalpha() test
+      - The loop breaks immediately, excluding them from the result
+
+   b) For pure alphabetic hex patterns (like 'abcdefab'):
+      - They pass isalpha() but match the hex_pattern regex
+      - The condition (len==8 AND hex_match) causes the loop to break
+
+THE BUG REPORT'S ERROR:
+The reporter incorrectly diagnosed the cause. They assumed the regex pattern [a-f]+ was responsible for handling ALL 8-character hex suffixes. In reality:
+- The regex only handles pure alphabetic patterns
+- Patterns with digits are handled by the isalpha() check
+- Both mechanisms achieve the same desired outcome
+
+ACTUAL CODE BEHAVIOR:
+The code correctly strips all 8-character suffixes that could be hexadecimal, whether they contain:
+- Only letters (via hex_pattern check)
+- Only digits (via isalpha() failure)
+- Mixed letters and digits (via isalpha() failure)
+
+The implementation achieves the correct behavior, though through a different mechanism than what might be expected from reading the hex_pattern variable name.

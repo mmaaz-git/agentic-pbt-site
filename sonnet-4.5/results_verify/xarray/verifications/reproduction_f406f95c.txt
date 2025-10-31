@@ -1,0 +1,53 @@
+Bug Reproduction Report
+=======================
+
+1. **Bug Confirmation**: The bug is CONFIRMED and reproducible.
+
+2. **Reproduction Steps**:
+   ```python
+   from xarray.indexes import RangeIndex
+   index = RangeIndex.linspace(0.0, 1.0, num=1, endpoint=True, dim='x')
+   ```
+
+   Result: `ZeroDivisionError: float division by zero`
+
+   The error occurs at line 283 in range_index.py:
+   ```python
+   stop += (stop - start) / (num - 1)  # When num=1, this divides by 0
+   ```
+
+3. **Test Results**:
+   - With endpoint=True and num=1: CRASHES with ZeroDivisionError
+   - With endpoint=False and num=1: WORKS correctly (returns single point at start)
+   - The Hypothesis test confirmed this fails for ANY start/stop values when num=1 and endpoint=True
+
+4. **Expected vs Actual Behavior**:
+
+   **NumPy behavior (expected)**:
+   - np.linspace(0.0, 1.0, num=1, endpoint=True) → [0.0]
+   - np.linspace(0.0, 1.0, num=1, endpoint=False) → [0.0]
+   - Both return a single element at the start position
+
+   **RangeIndex behavior (actual)**:
+   - RangeIndex.linspace(0.0, 1.0, num=1, endpoint=True) → ZeroDivisionError
+   - RangeIndex.linspace(0.0, 1.0, num=1, endpoint=False) → Works (size=1)
+
+5. **Mathematical Analysis**:
+   The formula used in the code when endpoint=True appears to be adjusting the stop value:
+   ```
+   new_stop = stop + (stop - start) / (num - 1)
+   ```
+
+   This formula makes sense for num > 1:
+   - For num=2: stop + (stop-start)/1 = stop + (stop-start) = 2*stop - start
+   - This stretches the interval so that the last point lands exactly on the original stop
+
+   But for num=1:
+   - The formula divides by (1-1) = 0, causing the crash
+   - Mathematically, when you have only one point, it should be at start regardless of endpoint
+
+6. **Impact Assessment**:
+   - This is a valid edge case that users might encounter
+   - Creating single-point coordinates is reasonable in scientific computing
+   - The function claims to be "similar to numpy.linspace" which handles this case
+   - The crash is unhandled and gives no helpful error message to the user

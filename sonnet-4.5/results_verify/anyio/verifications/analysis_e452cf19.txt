@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that negative values should be rejected. The current behavior, while unintuitive, is technically just performing valid Python slice operations. The method is doing what the code tells it to do - using Python's negative indexing feature. Since the documentation doesn't specify constraints on the nbytes parameter, one could argue the current behavior isn't technically wrong, just undocumented.
+
+**Why it might not be INVALID:**
+The method name "receive_exactly" has clear semantics - it should receive exactly N bytes. Receiving "exactly -3 bytes" is nonsensical and has no meaningful interpretation. Additionally, asyncio's StreamReader.readexactly() explicitly rejects negative values with a ValueError, and since anyio is designed to be compatible with asyncio patterns, this behavior is clearly incorrect.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that would rarely occur in practice. Most developers would never pass a negative value to receive_exactly() because it doesn't make semantic sense. The impact is low since it only affects code with already-buggy logic. Fixing it might break existing code that accidentally relies on this undocumented behavior.
+
+**Why it might not be WONTFIX:**
+The issue causes data corruption and incorrect behavior rather than just raising an error. When a method returns the wrong amount of data, it can lead to subtle bugs that are hard to track down. The fix is trivial (adding a simple validation check), and the behavior is clearly wrong when compared to similar APIs like asyncio.StreamReader.readexactly().
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what happens with negative values, so one could argue the documentation should be updated to describe the current behavior. If the maintainers intended for negative values to work like negative slicing, then the documentation should explain this behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is clearly a bug, not an intended feature. No reasonable developer would expect receive_exactly(-3) to return 7 bytes when the buffer has 10 bytes. Documenting this behavior would be documenting a bug rather than fixing the actual problem. The comparison with asyncio.StreamReader.readexactly() strongly suggests this is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding validation for negative values could be seen as a new feature - adding input validation that didn't exist before. The current code doesn't have any parameter validation, so adding it would be enhancing the robustness of the API.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but fixing broken existing functionality. The method already exists and has a clear purpose (receiving exactly N bytes). Making it work correctly with proper input validation is a bug fix, not a new feature. The asyncio equivalent already has this validation, so it's not a new concept.
+
+## BUG Considerations
+**Why it might be BUG:**
+The method returns incorrect data when given negative input - it returns 7 bytes when asked for -3 bytes, which is semantically wrong. The behavior is inconsistent with asyncio.StreamReader.readexactly(), which raises ValueError for negative values. The method name "receive_exactly" implies receiving exactly the specified number of bytes, and returning a different amount is clearly incorrect behavior. The fix is straightforward and matches established patterns in similar APIs.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly forbid negative values or specify that a ValueError should be raised. The current behavior, while unexpected, is deterministic and follows Python's slice notation rules. Without explicit documentation stating the expected behavior, this could be considered undefined behavior rather than a bug.
+
+## Overall Consideration
+After analyzing all perspectives, this appears to be a valid bug that should be fixed. The strongest evidence comes from comparing with asyncio.StreamReader.readexactly(), which explicitly raises ValueError for negative values with the message "readexactly size can not be less than zero". Since anyio is designed as an async I/O library that provides similar interfaces to asyncio, having different behavior for the same conceptual operation is problematic.
+
+The semantic meaning of "receive_exactly(-3)" is nonsensical - you cannot receive a negative number of bytes. The current behavior of returning 7 bytes when asked for -3 bytes is clearly wrong and could lead to data corruption or subtle bugs in applications. While the documentation doesn't explicitly forbid negative values, the method name itself implies that it should receive exactly the specified number of bytes, which is impossible with negative numbers.
+
+The fix is trivial (adding a simple validation check), matches the behavior of the most similar API (asyncio), and prevents potentially confusing bugs. This is not a documentation issue because documenting buggy behavior doesn't make it correct, nor is it a feature request because it's fixing existing broken functionality rather than adding new capabilities. While it could be argued as WONTFIX due to being an edge case, the potential for data corruption and the trivial nature of the fix argue strongly for fixing it as a bug.

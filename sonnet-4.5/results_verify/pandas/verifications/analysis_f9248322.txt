@@ -1,0 +1,66 @@
+## Bug Report Triage Analysis
+
+### Consideration for Each Category:
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR classifying as BUG:**
+- The function violates its documented contract: The docstring explicitly states "Raises ValueError: Part of the Excel column name was invalid" but it returns -1 for empty strings instead
+- The behavior is objectively incorrect: Empty strings are not valid Excel column names and should not produce a valid-looking numeric result
+- The bug has real downstream impact: _range2cols() produces invalid outputs like [-1, -1] which could cause IndexErrors or incorrect data selection
+- The fix is straightforward and aligns with documented behavior
+- Excel itself would reject empty column references with errors (#REF! or #NAME?)
+- The property-based test correctly identifies a violation of expected invariants (sorted, unique column indices)
+
+**Arguments AGAINST:**
+- None substantial - this is clearly a bug
+
+#### 2. INVALID
+**Arguments FOR classifying as INVALID:**
+- Could argue that users shouldn't be passing malformed input like 'A,' or ',' in the first place
+- The function technically doesn't crash, it just returns an unexpected value
+
+**Arguments AGAINST:**
+- The documented contract explicitly says ValueError should be raised for invalid input
+- The function is not behaving as documented, which makes this a valid bug, not invalid
+- Even if users shouldn't pass malformed input, the function should handle it as documented
+
+#### 3. WONTFIX
+**Arguments FOR classifying as WONTFIX:**
+- Could be considered an obscure edge case that rarely occurs in practice
+- Users typically don't intentionally pass strings with trailing commas
+
+**Arguments AGAINST:**
+- This is not an obscure edge case - trailing commas can easily occur from user input or data processing
+- The bug produces incorrect output (-1) that could lead to subtle data corruption
+- The fix is simple and doesn't break backward compatibility for valid inputs
+- This affects a public API function (read_excel's usecols parameter)
+
+#### 4. FEATURE_REQUEST
+**Arguments FOR classifying as FEATURE_REQUEST:**
+- Could argue that handling trailing commas gracefully is a new feature
+
+**Arguments AGAINST:**
+- The docstring already specifies that invalid input should raise ValueError
+- This is not adding new functionality but fixing existing broken behavior
+- The function already has error handling, it's just not working correctly
+
+#### 5. DOCUMENTATION_FIX
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+- Could update the documentation to say the function returns -1 for empty strings
+
+**Arguments AGAINST:**
+- Returning -1 for invalid input is clearly wrong behavior
+- -1 is not a valid column index and could cause issues
+- The documentation is correct; the implementation is wrong
+- Changing documentation to match broken behavior would be accepting a bug
+
+### Final Analysis:
+
+This is unequivocally a **BUG**. The function _excel2num() has a clear contract in its docstring that it should raise ValueError for invalid column names. Empty strings (whether literally empty or containing only whitespace) are not valid Excel column names. The current behavior of returning -1:
+
+1. Violates the documented contract
+2. Produces invalid output that propagates to downstream functions
+3. Can cause silent data corruption or unexpected errors
+4. Contradicts how Excel itself handles invalid column references
+
+The bug is well-documented, reproducible, has clear impact, and has a straightforward fix that aligns with the documented behavior. This should be classified as a valid BUG that needs to be fixed.

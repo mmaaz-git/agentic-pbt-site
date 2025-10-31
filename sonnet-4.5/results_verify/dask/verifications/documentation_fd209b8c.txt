@@ -1,0 +1,66 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## Function Documentation
+
+The `sorted_columns` function has the following official documentation in the source code:
+
+```python
+def sorted_columns(statistics, columns=None):
+    """Find sorted columns given row-group statistics
+
+    This finds all columns that are sorted, along with the
+    appropriate ``divisions`` for those columns. If the (optional)
+    ``columns`` argument is used, the search will be restricted
+    to the specified column set.
+
+    Returns
+    -------
+    out: List of {'name': str, 'divisions': List[str]} dictionaries
+    """
+```
+
+## Expected Behavior Based on Documentation
+
+1. The function should find columns that are sorted across row groups
+2. It should return divisions (boundary values) for sorted columns
+3. If columns parameter is provided, it should only check those specific columns
+4. It should return a list of dictionaries with column names and their divisions
+
+## Handling of None Values
+
+The documentation does NOT explicitly specify how the function should handle None values in min/max statistics. However, based on the code and its usage:
+
+1. **Implicit expectation**: The function already has some None handling (line 427, 430) suggesting that None values are expected in real-world parquet files
+2. **Usage context**: The function is called in production code (dask-expr) to calculate divisions when reading parquet files, where missing statistics are common
+3. **Parquet standard**: Parquet files can legitimately have missing statistics when:
+   - Statistics collection was disabled
+   - The file format is older
+   - Row groups contain only null values
+   - Statistics were corrupted or incomplete
+
+## Analysis of Documentation vs Implementation
+
+The current implementation has a **partial** attempt to handle None values:
+- Line 421-424: Checks that "min" and "max" keys exist in the dictionary
+- Line 427: Sets success = False if min is None
+- Line 430: Checks if min is None in subsequent row groups
+
+However, it FAILS to:
+- Check if max is None before using it in comparisons
+- Handle the case where max is None when appending to divisions
+- Prevent None values from being added to the divisions list
+
+## Conclusion
+
+While the documentation doesn't explicitly state how None values should be handled, the function's purpose and usage context make it clear that:
+
+1. **The function should gracefully handle None values** - It's used in production to process real parquet files which commonly have missing statistics
+2. **The current behavior is incorrect** - Crashing with a TypeError is not graceful handling
+3. **The expected behavior** - When statistics contain None values, that column should be marked as "not sorted" and excluded from the results, not cause a crash
+
+This is a legitimate bug because:
+- The function already attempts to handle None values (showing awareness of the issue)
+- The function is used in production code paths where None values are expected
+- A TypeError crash is never the intended behavior for missing metadata
+- The fix is straightforward and consistent with the existing partial None handling

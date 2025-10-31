@@ -1,0 +1,38 @@
+## Documentation Findings for anyio.streams.memory
+
+### Official Documentation
+1. **create_memory_object_stream function** (from anyio/_core/_streams.py):
+   - Located at lines 16-52 in the module
+   - Docstring states: "max_buffer_size: number of items held in the buffer until send() starts blocking"
+   - The parameter type is declared as `float` with default value 0
+   - Line 25-26: Documentation explicitly says "number of items held in the buffer"
+
+2. **Validation in create_memory_object_stream** (lines 39-42):
+   - Line 39-40: `if max_buffer_size != math.inf and not isinstance(max_buffer_size, int):`
+   - This validation EXPLICITLY requires max_buffer_size to be either:
+     a) An integer value, OR
+     b) math.inf
+   - Line 40: Raises `ValueError("max_buffer_size must be either an integer or math.inf")`
+   - Line 41-42: Also checks that max_buffer_size cannot be negative
+
+3. **MemoryObjectStreamState class** (from anyio/streams/memory.py):
+   - Lines 49-50: Declares `max_buffer_size: float = field()`
+   - NO validation is performed in this class itself
+   - The class accepts any float value without checking
+
+4. **MemoryObjectStreamStatistics** (lines 24-33):
+   - Line 27: Documents max_buffer_size as "maximum number of items that can be stored"
+   - Uses the phrase "number of items" which implies an integer count
+
+5. **Buffer size check logic** (line 223 in memory.py):
+   - `if len(self._state.buffer) < self._state.max_buffer_size:`
+   - This comparison uses `<` operator between an integer (len) and a float (max_buffer_size)
+   - When max_buffer_size=10.5 and buffer has 10 items: `10 < 10.5` evaluates to True
+   - This allows one more item to be added
+
+### Key Observations:
+1. The public API (create_memory_object_stream) validates that max_buffer_size must be an integer or math.inf
+2. The internal class (MemoryObjectStreamState) does NOT validate this and accepts any float
+3. The documentation consistently refers to "number of items" which semantically implies integer values
+4. The bug only occurs when bypassing the public API and using MemoryObjectStreamState directly
+5. The type annotation shows `float` but the validation requires `int` or `math.inf`

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation explicitly states in its notes section that "the high limit may be included in the returned array of floats due to floating-point rounding." This directly acknowledges that the upper bound can be violated, making the reported behavior documented and expected. The user is complaining about behavior that NumPy has already disclosed as a known limitation. Since the documentation warns about this exact scenario, the function is working as documented.
+
+**Why it might not be INVALID:**
+The primary documentation states the function returns values from a "half-open interval [low, high)" which is a mathematical contract that should be honored. The note about floating-point rounding appears to be an excuse for implementation limitations rather than part of the intended API. Users reasonably expect that when documentation defines an interval as half-open, that contract should be maintained regardless of implementation challenges.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This issue only occurs with subnormal numbers like -5e-324, which represent extreme edge cases that virtually no real-world application would encounter. The range [-5e-324, 0.0) contains only two representable floating-point values, making it impossible to generate a meaningful uniform distribution anyway. Fixing this would require special-case handling that adds complexity for a scenario that has no practical impact. The computational cost of checking and correcting every result would slow down the function for all users to handle a case that affects essentially nobody.
+
+**Why it might not be WONTFIX:**
+Even edge cases matter for API consistency and correctness. The function makes no documented restrictions on minimum range sizes, so users have a right to expect it works correctly for all valid inputs. The fix is relatively simple (check if result >= high and adjust) and wouldn't significantly impact performance. NumPy is a foundational library where correctness should take precedence over minor performance considerations, especially since the proposed fix would only trigger in these edge cases.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation contains an internal contradiction - it promises a half-open interval but then admits this promise can be broken. Rather than fixing the code, the documentation should be updated to clearly state that the function returns values in the interval [low, high] (closed) when floating-point precision limitations apply, particularly with subnormal numbers. The main description should be updated to reflect the actual behavior rather than an idealized mathematical contract that the implementation cannot guarantee.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already mentions the floating-point rounding issue in the notes, so it's not purely a documentation problem. Changing the documented interval from [low, high) to sometimes [low, high] would be confusing and make the API specification less clear. The issue is with the implementation not meeting its specification, not with the specification being unclear or incorrect. Users rely on the half-open interval guarantee for boundary conditions in their code.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for the function to handle subnormal number ranges correctly, which it currently doesn't. This could be viewed as requesting a new feature: "Support for correct interval bounds with subnormal numbers." Since the current implementation works fine for normal floating-point ranges and only fails with extreme edge cases, adding support for these cases could be considered an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for the existing functionality to work correctly as already documented. The function already claims to support any floating-point range where low < high, so making it actually work for all such ranges is fixing a bug, not adding a feature. The API contract is already defined; the user just wants it to be honored.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates its primary documented contract of returning values from a half-open interval [low, high). In 50% of cases with the reported input, it returns exactly the value that should be excluded. This is a clear violation of the mathematical definition of the interval. The same issue affects both the legacy API and the new Generator API, indicating a fundamental implementation problem. The function accepts the input as valid (doesn't raise an error) but then produces incorrect results.
+
+**Why it might not be BUG:**
+The documentation explicitly warns that "the high limit may be included" due to floating-point rounding, which means this behavior is expected and documented. The issue only occurs with subnormal numbers that have no practical use case. NumPy is behaving exactly as its documentation says it might behave. This is a known limitation of floating-point arithmetic that affects many numerical computations, not a bug in NumPy's implementation.
+
+## Overall Consideration
+
+This bug report presents a complex triage decision that hinges on how we interpret the relationship between the primary API specification and the documented caveat about floating-point rounding. The main documentation promises a half-open interval [low, high), which is a clear mathematical contract. However, the notes section explicitly warns that this contract can be violated due to floating-point rounding, using the exact phrase "may be included."
+
+The technical investigation confirms the bug report is accurate: approximately 50% of values returned by uniform(-5e-324, 0.0) are exactly 0.0, violating the upper bound. This occurs because only two floating-point values exist in this range, and the standard implementation formula rounds up to 0.0 for random values above ~0.5. The issue affects both the legacy and new Generator APIs, indicating it's a fundamental algorithmic limitation rather than an implementation bug in one specific version.
+
+The key question is whether documented limitations excuse contract violations. While the documentation mentions that floating-point rounding can cause inclusion of the upper bound, it presents this as an unfortunate side effect rather than intended behavior. The primary API specification still claims to implement a half-open interval. From a user perspective, when a function accepts inputs without error, it should produce correct outputs according to its primary specification. The fact that this only occurs with subnormal numbers makes it an extreme edge case, but NumPy is a foundational scientific computing library where correctness at the edges matters. Given that the documentation already acknowledges this as a known issue rather than intended behavior, and the primary contract is clearly stated as [low, high), this represents a WONTFIX situation - a known limitation with subnormal numbers that has negligible practical impact and would require special-case handling that could impact performance for all users.

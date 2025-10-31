@@ -1,0 +1,73 @@
+## Documentation Analysis for CheckRegistry.run_checks
+
+### 1. Internal Documentation (Docstrings and Comments)
+
+From `django/core/checks/registry.py`:
+
+**register() method docstring (line 35-48):**
+```
+Can be used as a function or a decorator. Register given function
+`f` labeled with given `tags`. The function should receive **kwargs
+and return list of Errors and Warnings.
+```
+This explicitly states that check functions should "return list of Errors and Warnings".
+
+**run_checks() method docstring (line 79-81):**
+```
+Run all registered checks and return list of Errors and Warnings.
+```
+
+**Error message in run_checks() (line 92-93):**
+```
+"The function %r did not return a list. All functions "
+"registered with the checks registry must return a list."
+```
+
+### 2. Code Contract Analysis
+
+The documentation consistently states that check functions must return a "list":
+- The register() docstring says "return list of Errors and Warnings"
+- The error message explicitly says "must return a list"
+- The run_checks() docstring says it returns "list of Errors and Warnings"
+
+However, the actual validation code checks for `Iterable`:
+```python
+if not isinstance(new_errors, Iterable):
+```
+
+### 3. Examples from Django's Own Check Functions
+
+All Django's built-in check functions follow the documented contract correctly:
+
+**check_database_backends()** (django/core/checks/database.py):
+- Returns `[]` (empty list) or a list of issues
+- Never returns a string
+
+**check_csrf_middleware()** (django/core/checks/security/csrf.py):
+- Returns `[]` or `[W003]` (list containing a Warning object)
+- Never returns a string
+
+**check_csrf_cookie_secure()** (django/core/checks/security/csrf.py):
+- Returns `[]` or `[W016]` (list containing a Warning object)
+- Never returns a string
+
+### 4. Contract Violation
+
+The bug report correctly identifies a contract violation:
+
+1. **Documentation says**: Check functions must return a "list"
+2. **Error message says**: Functions "must return a list"
+3. **Actual validation**: Only checks for `Iterable` (which includes strings)
+4. **Result**: Strings are accepted when they should be rejected
+
+### 5. Expected Behavior
+
+Based on the documentation and Django's own usage patterns:
+- Check functions MUST return a list (not just any iterable)
+- The list should contain CheckMessage objects (or subclasses like Error, Warning, etc.)
+- Strings should NEVER be a valid return value
+- The current behavior (treating strings as iterables of characters) is clearly unintended
+
+### 6. Documentation Consistency
+
+The documentation is internally consistent in requiring a "list" return value. The implementation is what's inconsistent with the documentation. This is NOT a documentation error - it's an implementation bug where the validation is too permissive.

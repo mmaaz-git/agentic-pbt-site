@@ -1,0 +1,72 @@
+## Bug Report Triage Analysis
+
+### Evaluation for Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The code produces mathematically invalid window bounds where start[i] > end[i]
+- This violates a fundamental invariant that should hold for all window indexers
+- The invalid bounds cause incorrect results in rolling operations (produces zeros instead of errors or valid computations)
+- There's an inconsistency with DataFrame.rolling() which properly validates window >= 0
+- The semantic meaning of a "forward-looking window" with negative size is nonsensical
+- The class name "FixedForwardWindowIndexer" implies looking forward, not backward
+- Other window indexers in the same module likely maintain the start <= end invariant
+- The bug causes silent data corruption (wrong results) rather than failing loudly
+
+**Arguments AGAINST:**
+- Documentation doesn't explicitly forbid negative window sizes
+- The type hint only specifies `int`, not `NonNegativeInt`
+- No explicit validation was implemented, suggesting it might be intentional
+
+#### 2. INVALID (Incorrect Report)
+**Arguments FOR:**
+- The documentation never explicitly states that window_size must be non-negative
+- The code accepts the input without error, suggesting it might be a valid edge case
+- The type system allows any integer, not restricting to positive values
+
+**Arguments AGAINST:**
+- The produced bounds are objectively invalid (start > end violates slice semantics)
+- The results are incorrect (zeros instead of meaningful values)
+- The semantic meaning of negative forward windows is contradictory
+- DataFrame.rolling() validates this, suggesting the library intends to prevent negative windows
+
+#### 3. WONTFIX (Trivial/Uninteresting)
+**Arguments FOR:**
+- Users are unlikely to accidentally pass negative window sizes
+- The error is obvious when it occurs (all zeros in output)
+- It's an edge case that doesn't affect normal usage
+
+**Arguments AGAINST:**
+- This causes silent data corruption, not just an error
+- The fix is trivial (add one validation check)
+- Data integrity bugs should always be fixed
+- The inconsistency with DataFrame.rolling() is problematic
+
+#### 4. FEATURE_REQUEST (New Functionality)
+**Arguments FOR:**
+- Adding validation for negative values could be seen as a new feature
+- The current behavior might be considered "undefined" rather than "wrong"
+
+**Arguments AGAINST:**
+- This isn't requesting new functionality, but fixing broken existing functionality
+- Validation to prevent invalid states is a bug fix, not a feature
+- The indexer already exists; it just needs to work correctly
+
+#### 5. DOCUMENTATION_FIX (Documentation Issue)
+**Arguments FOR:**
+- The documentation could be updated to specify that negative values produce undefined behavior
+- Could document that window_size should be non-negative without changing code
+
+**Arguments AGAINST:**
+- The code behavior is objectively wrong (invalid bounds), not just poorly documented
+- Documenting broken behavior doesn't fix the underlying issue
+- Users expect window operations to work correctly or fail explicitly
+- The invariant violation is a code bug, not a documentation issue
+
+### Analysis Summary
+
+The strongest case is for **BUG**. The code produces objectively invalid window bounds that violate the fundamental invariant start[i] <= end[i]. This causes silent data corruption in rolling operations. While the documentation doesn't explicitly forbid negative window sizes, the semantic meaning of a "forward-looking" window with negative size is contradictory, and the produced results are incorrect.
+
+The fact that DataFrame.rolling() validates window >= 0 shows that the pandas library intends to prevent negative window sizes. The low-level indexer should maintain the same constraint.
+
+This is not a documentation issue because the behavior is objectively wrong (produces invalid bounds), not merely undocumented. It's not a feature request because we're not asking for new functionality, just for existing functionality to work correctly. It's not WONTFIX because data integrity bugs that cause silent corruption should always be fixed. And it's not INVALID because the produced bounds are mathematically invalid and violate fundamental invariants.

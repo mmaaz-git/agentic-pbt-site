@@ -1,0 +1,38 @@
+DOCUMENTATION FINDINGS FOR LOCMEMCACHE
+
+## Official Django Documentation
+
+From the Django documentation (https://docs.djangoproject.com/en/stable/topics/cache/):
+- LocMemCache uses a "least-recently-used (LRU) culling strategy"
+- When `MAX_ENTRIES` is reached, the cache will cull entries
+- Default MAX_ENTRIES is 300
+- Default CULL_FREQUENCY is 3, meaning "1/3 of entries are culled when max is reached"
+- A CULL_FREQUENCY of 0 means "the entire cache will be dumped when MAX_ENTRIES is reached"
+
+## Source Code Analysis
+
+From BaseCache class (base.py, lines 71-81):
+- `_max_entries` defaults to 300, can be configured via params
+- `_cull_frequency` defaults to 3, can be configured via params
+- These are stored as integer instance variables
+
+From LocMemCache class (locmem.py):
+- `_set` method (lines 45-50): Checks if cache size >= max_entries, then calls _cull()
+- `_cull` method (lines 92-100):
+  - If cull_frequency == 0, clears entire cache
+  - Otherwise, calculates count = len(cache) // cull_frequency
+  - Removes 'count' items using popitem() (FIFO order since OrderedDict is used)
+
+## Key Documentation Points
+
+1. The documentation states culling happens when MAX_ENTRIES is "reached" but doesn't specify exact behavior
+2. The documentation says "1/3 of entries are culled" for CULL_FREQUENCY=3, which implies len(cache)/3 items should be removed
+3. No explicit guarantee is stated that cache size will NEVER exceed max_entries
+4. The documentation describes this as an LRU strategy with culling based on frequency
+
+## What the Documentation Does NOT Specify
+
+- The documentation does not explicitly guarantee that the cache size will never exceed max_entries
+- It does not specify the exact culling algorithm or edge cases
+- It does not specify what happens when integer division results in 0 items to cull
+- The phrase "when MAX_ENTRIES is reached" is ambiguous - it could mean >= or >

@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+### Bug Confirmation
+The bug is confirmed to exist. When `context=None` is explicitly passed to `TemplateResponse`, an AttributeError occurs.
+
+### Actual Error vs Reported Error
+The bug report states the error occurs at line 205 with:
+- `AttributeError: 'NoneType' object has no attribute 'setdefault'`
+
+However, the actual error occurs earlier at line 198 with:
+- `AttributeError: 'NoneType' object has no attribute 'get'`
+
+The error happens at line 198: `request = kwargs.get("request", context.get("request"))`
+This is because when context=None is explicitly passed, line 197 returns None (not the default {}), and then trying to call .get() on None fails.
+
+### Test Results
+1. **context=None explicitly passed**: FAILS with AttributeError
+2. **context parameter omitted**: WORKS (uses default {})
+3. **context={} explicitly passed**: WORKS
+
+### Root Cause Analysis
+The issue stems from how Python's dict.get() method works:
+- `kwargs.get("context", {})` returns the default {} only when the key "context" is NOT in kwargs
+- When context=None is explicitly passed, "context" IS in kwargs with value None, so get() returns None (not the default)
+
+### Type Signature vs Implementation Mismatch
+The type hints clearly state:
+- `context: dict[str, Any] | None = None`
+
+This indicates that None is an acceptable value. Users would reasonably expect:
+- Passing context=None should work the same as not passing context at all
+- Both should result in an empty context dict being used
+
+The implementation doesn't handle this correctly, creating a violation of the API contract defined by the type hints.

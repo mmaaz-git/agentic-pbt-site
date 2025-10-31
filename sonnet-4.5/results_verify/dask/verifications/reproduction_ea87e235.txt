@@ -1,0 +1,62 @@
+## Bug Reproduction Results
+
+### Bug Report Claims
+The bug report claims that `ndeepmap(n, func, seq)` silently discards all elements except the first when `n <= 0` and `seq` is a list with multiple elements.
+
+### Reproduction Results
+
+#### Test 1: Basic Data Loss
+- Input: `ndeepmap(0, identity, [10, 20, 30])`
+- Expected (reasonable): Either apply function to whole list, or apply to each element, or raise error
+- Actual Result: `10` (only first element)
+- **CONFIRMED**: Elements [20, 30] are silently discarded
+
+#### Test 2: Elements Beyond First Are Ignored
+- Input 1: `ndeepmap(0, identity, [10, 20, 30])` → Result: `10`
+- Input 2: `ndeepmap(0, identity, [10, 999, 999])` → Result: `10`
+- **CONFIRMED**: Modifying elements after the first has no effect on the result
+
+#### Test 3: Function Application
+- Input: `ndeepmap(0, inc, [1, 2, 3])`
+- Result: `2` (which is inc(1))
+- **CONFIRMED**: Function is only applied to the first element, others ignored
+
+#### Test 4: Empty List Handling
+- Input: `ndeepmap(0, identity, [])`
+- Result: Raises `IndexError: list index out of range`
+- **ADDITIONAL BUG**: The function crashes on empty lists instead of handling them gracefully
+
+#### Test 5: Negative n Values
+- Input: `ndeepmap(-1, identity, [1, 2, 3])`
+- Result: `1` (only first element)
+- **CONFIRMED**: Negative n values also exhibit the same data loss behavior
+
+### Code Analysis
+The problematic code is in lines 315-316 of dask/utils.py:
+```python
+elif isinstance(seq, list):
+    return func(seq[0])
+```
+
+When n <= 0 and seq is a list, the function:
+1. Accesses only `seq[0]` (the first element)
+2. Applies the function to only that element
+3. Returns the result
+4. Never touches or processes `seq[1:]`
+
+### Existing Test Coverage
+The existing test in test_utils.py only tests:
+- `ndeepmap(0, inc, 1)` - scalar input
+- `ndeepmap(0, inc, [1])` - single-element list
+
+These tests don't reveal the bug because:
+- With a scalar, no list indexing occurs
+- With a single-element list, `seq[0]` is the entire content anyway
+
+### Technical Accuracy of Bug Report
+1. **Silent data loss**: ✓ CONFIRMED - Elements beyond the first are discarded without warning
+2. **Behavior description**: ✓ ACCURATE - The code does exactly what the report claims
+3. **Property test**: ✓ VALID - The hypothesis test correctly demonstrates the bug
+4. **Examples**: ✓ CORRECT - All examples produce the claimed results
+
+The bug report is technically accurate and the bug is reproducible exactly as described.

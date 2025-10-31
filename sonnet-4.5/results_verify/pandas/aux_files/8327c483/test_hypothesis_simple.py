@@ -1,0 +1,34 @@
+import pandas as pd
+import numpy as np
+from hypothesis import given, strategies as st, settings, assume, example
+
+@given(
+    arr=st.lists(
+        st.floats(min_value=-1000, max_value=1000, allow_nan=False, allow_infinity=False),
+        min_size=20,
+        max_size=100
+    ),
+    n_bins=st.integers(min_value=2, max_value=10)
+)
+@settings(max_examples=5, verbosity=2)
+@example(arr=[0.0]*19 + [5e-324], n_bins=2)  # The known failing case
+def test_qcut_approximately_equal_sized_bins(arr, n_bins):
+    print(f"\nTesting with arr={arr[:5]}... (len={len(arr)}), n_bins={n_bins}")
+    assume(len(set(arr)) >= n_bins)
+
+    try:
+        result = pd.qcut(arr, q=n_bins, duplicates='drop')
+        value_counts = result.value_counts()
+        print(f"Success! Value counts: {dict(value_counts)}")
+        if len(value_counts) > 1:
+            max_bin_size = value_counts.max()
+            min_bin_size = value_counts.min()
+            assert max_bin_size - min_bin_size <= 2
+    except ValueError as e:
+        print(f"Failed with ValueError: {e}")
+        raise
+    except Exception as e:
+        print(f"Failed with {type(e).__name__}: {e}")
+        raise
+
+test_qcut_approximately_equal_sized_bins()

@@ -1,0 +1,71 @@
+BUG TRIAGE ANALYSIS
+==================
+
+Evaluation for Each Category:
+-----------------------------
+
+BUG (Valid Bug Report):
+Arguments FOR:
+- The code crashes with an unhandled TypeError instead of the expected FullResultSet exception
+- The crash is inconsistent - databases with native XOR support correctly raise FullResultSet for empty nodes
+- The fix is trivial and correct - just add a check for self.children before XOR emulation
+- The error disrupts Django's normal exception flow for query handling
+- Other connectors (AND, OR) handle empty nodes correctly; XOR should too
+- The crash can occur through normal Django ORM operations during query optimization
+
+Arguments AGAINST:
+- WhereNode is not explicitly listed in Django's public API (__all__)
+- Creating empty WhereNode instances directly might be considered misuse
+
+INVALID:
+Arguments FOR:
+- WhereNode is not officially public API (not in __all__)
+- Users shouldn't be creating WhereNode instances directly
+- The bug report incorrectly claims WhereNode is "part of Django's public API"
+
+Arguments AGAINST:
+- The crash can occur through normal Django operations, not just direct instantiation
+- XOR is public API and should work consistently
+- The inconsistent behavior between databases is clearly wrong
+
+WONTFIX:
+Arguments FOR:
+- Empty WhereNode with XOR is an obscure edge case
+- It's unlikely to occur in real-world usage
+- WhereNode is internal implementation detail
+
+Arguments AGAINST:
+- The fix is trivial (one-line change)
+- The inconsistency between database backends is problematic
+- It breaks the abstraction that Django provides over different databases
+
+DOCUMENTATION_FIX:
+Arguments FOR:
+- Could document that WhereNode shouldn't be instantiated directly
+- Could clarify that empty XOR nodes are not supported
+
+Arguments AGAINST:
+- This is clearly a code bug, not a documentation issue
+- The expected behavior (FullResultSet) is already defined for empty nodes
+- The code should handle this case consistently
+
+FEATURE_REQUEST:
+Arguments FOR:
+- Supporting empty XOR nodes could be seen as a new feature
+
+Arguments AGAINST:
+- This is fixing broken existing functionality, not adding new features
+- XOR is already supposed to be supported
+- Other connectors already handle empty nodes correctly
+
+Final Assessment:
+----------------
+This is a BUG. While WhereNode may not be intended for direct public use, the crash represents a clear inconsistency in Django's ORM behavior:
+
+1. The behavior is inconsistent between databases (works with native XOR, crashes without)
+2. The expected behavior is well-defined (raise FullResultSet for empty WHERE)
+3. The fix is trivial and correct
+4. The crash can occur through normal Django ORM operations
+5. XOR is public API and should work reliably across all backends
+
+The fact that WhereNode isn't in __all__ doesn't negate the bug - the crash occurs in a code path reachable through public APIs, and Django should handle this edge case gracefully rather than crashing with an unrelated error.

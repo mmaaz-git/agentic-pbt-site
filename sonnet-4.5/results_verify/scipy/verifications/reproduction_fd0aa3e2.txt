@@ -1,0 +1,35 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is accurate. The scipy.datasets.face() function exhibits inconsistent behavior when passed truthy non-boolean values for the `gray` parameter.
+
+### Reproduction Results
+
+1. **Hypothesis Test**: FAILED as expected
+   - The property-based test correctly identified that truthy integers (e.g., 1) do not trigger grayscale conversion
+   - Error: "Truthy value 1 should trigger grayscale conversion but returned shape (768, 1024, 3)"
+   - This confirms the logic uses `is True` instead of truthiness checking
+
+2. **Simple Reproduction Code**: CONFIRMED
+   - face_logic(gray=1) returns shape (768, 1024, 3) - color image
+   - face_logic(gray=True) returns shape (768, 1024) - grayscale image
+   - The difference is due to the `is True` identity check
+
+3. **Actual scipy.datasets.face() Function**: CONFIRMED
+   - face(gray=1) returns (768, 1024, 3) - color image
+   - face(gray=True) returns (768, 1024) - grayscale image
+   - face(gray="yes") returns (768, 1024, 3) - color image
+   - face(gray=[1,2,3]) returns (768, 1024, 3) - color image
+   - face(gray=0) returns (768, 1024, 3) - color image (correctly)
+   - face(gray=False) returns (768, 1024, 3) - color image (correctly)
+
+### Key Finding
+The function accepts ANY value for the `gray` parameter without raising an error, but only `gray is True` triggers grayscale conversion. This means:
+- Truthy non-boolean values (1, "yes", [1,2,3]) are silently ignored
+- Falsy non-boolean values (0, None, "") are also silently ignored
+- Only the exact boolean `True` triggers grayscale mode
+
+This behavior is problematic because:
+1. It violates the principle of least surprise - users expect truthy values to be treated as True
+2. It silently accepts invalid input without raising an error
+3. It's inconsistent with Python conventions where truthiness checking is standard

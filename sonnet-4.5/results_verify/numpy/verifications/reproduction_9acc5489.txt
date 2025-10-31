@@ -1,0 +1,53 @@
+## Bug Reproduction Results
+
+### Test Environment
+- NumPy version: 2.3.0
+- Python version: 3.13
+
+### Test 1: Direct Access to NBitBase
+```python
+result = npt.NBitBase
+```
+**Result**: No warning emitted (0 warnings caught)
+**Expected**: 1 DeprecationWarning
+**Status**: BUG CONFIRMED
+
+### Test 2: Access via getattr()
+```python
+result = getattr(npt, "NBitBase")
+```
+**Result**: No warning emitted (0 warnings caught)
+**Expected**: 1 DeprecationWarning
+**Status**: BUG CONFIRMED
+
+### Test 3: Module Internals Check
+- `'NBitBase' in npt.__dict__`: True
+- This confirms NBitBase is directly in the module's dictionary, bypassing __getattr__
+
+### Test 4: Hypothesis Test
+The property-based test from the bug report was executed and failed as expected:
+- Assertion: "Expected deprecation warning to be emitted"
+- Result: Test failed, confirming no warning was emitted
+
+### Root Cause Analysis
+The issue is confirmed in numpy/typing/__init__.py:
+- Line 160: `from numpy._typing import ArrayLike, DTypeLike, NBitBase, NDArray`
+  - This imports NBitBase directly into the module namespace
+- Lines 173-184: Contains __getattr__ hook to emit deprecation warning
+  - This code is never reached because NBitBase is already in __dict__
+
+Python's attribute lookup order:
+1. Check instance __dict__ (finds NBitBase immediately)
+2. Check class __dict__
+3. Call __getattr__ (never reached)
+
+### Fix Validation
+A simulation of the proposed fix was tested:
+- Importing NBitBase as _NBitBase (private)
+- Removing it from direct module namespace
+- Accessing via __getattr__ only
+
+**Result**: The fix successfully emits the deprecation warning
+
+### Conclusion
+The bug is 100% reproducible and the root cause is correctly identified. The deprecation warning mechanism is implemented but bypassed due to the direct import. The proposed fix would resolve the issue.

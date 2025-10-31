@@ -1,0 +1,26 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Both the Hypothesis test and manual reproduction code confirm the issue.
+
+### Hypothesis Test Results
+The property-based test fails when run, demonstrating that complex64 arrays are not hashed using the same formula as complex128 arrays.
+
+### Manual Reproduction Results
+The manual test confirms the exact behavior described in the bug report:
+- Complex64 hash: 2743349149749119347
+- Complex128 hash: 14479766090982008170
+- Expected complex64 hash using formula: 14869104012228096028
+- Actual complex64 hash: 2743349149749119347
+
+The complex128 array correctly uses the formula `hash(real) + 23 * hash(imag)`, while complex64 does not.
+
+### Root Cause
+The issue occurs in `_hash_ndarray` at line 294 of hashing.py. The code specifically checks for `np.complex128`:
+
+```python
+if np.issubdtype(dtype, np.complex128):
+```
+
+This check only matches complex128 types, not complex64. Complex64 arrays (8 bytes total) fall through to line 305-306 where they're treated as generic 8-byte numeric values and viewed as uint64, then hashed as a single value rather than being split into real and imaginary components.
+
+The comment at line 293 states "_hash_ndarray only takes 64-bit values, so handle 128-bit by parts", suggesting the special handling was added specifically for 128-bit values. However, this creates an inconsistency where complex64 and complex128 arrays containing the same logical values produce different hashes.

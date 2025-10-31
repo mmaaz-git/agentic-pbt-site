@@ -1,0 +1,37 @@
+## Bug Reproduction Analysis
+
+### Reproduction Status: CONFIRMED
+
+I successfully reproduced the bug using both the specific test case and the hypothesis property test provided in the bug report.
+
+### Test Results:
+
+1. **Specific Test Case** (n_divs=7, freq='W', closed='left', label='left'):
+   - Input divisions: 7 timestamps from 2000-01-01 to 2000-01-31
+   - Output outdivs: Contains duplicate at positions 5 and 6 (both are 2000-01-30)
+   - Violates strict monotonicity requirement
+
+2. **Hypothesis Test**:
+   - The test correctly identifies the monotonicity violation
+   - The assertion `outdivs[i] < outdivs[i+1]` fails when duplicates are present
+
+### Root Cause Analysis:
+
+The bug occurs in lines 98-101 of resample.py. When certain conditions are met:
+1. `len(newdivs) < len(divs)` causes the setter to be `append`
+2. `outdivs[-1] < divisions[-1]` triggers line 101
+3. Line 101 executes `setter(outdivs, temp.index[-1])`
+4. However, `temp.index[-1]` equals `outdivs[-1]` (both are 2000-01-30)
+5. This appends a duplicate value to outdivs
+
+### Technical Impact:
+
+The function produces `outdivs` with duplicate consecutive values:
+- outdivs[5] = 2000-01-30 00:00:00
+- outdivs[6] = 2000-01-30 00:00:00
+
+This violates the dask requirement that divisions must be strictly monotonically increasing (no duplicates).
+
+### Verification:
+
+The bug is reproducible and the technical analysis in the bug report is accurate. The suggested fix (removing lines 98-99) would prevent the duplicate from being added, as the outdivs[-1] value is already correct when it's greater than or equal to divisions[-1].

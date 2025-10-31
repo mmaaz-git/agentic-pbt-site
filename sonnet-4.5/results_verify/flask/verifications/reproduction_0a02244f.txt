@@ -1,0 +1,44 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. The Flask environment helper functions `get_debug_flag()` and `get_load_dotenv()` do not handle environment variable values with leading/trailing whitespace correctly.
+
+### Test Results
+
+#### Manual Testing:
+When testing with environment variable values containing whitespace:
+
+For `get_debug_flag()`:
+- `FLASK_DEBUG='false'` returns False (correct)
+- `FLASK_DEBUG=' false '` returns True (BUG - should be False)
+- `FLASK_DEBUG='  '` returns True (BUG - should be False as empty after trimming)
+- `FLASK_DEBUG='\tfalse\t'` returns True (BUG - should be False)
+
+For `get_load_dotenv()`:
+- `FLASK_SKIP_DOTENV='no'` returns True (correct)
+- `FLASK_SKIP_DOTENV=' no '` returns False (BUG - should be True)
+- `FLASK_SKIP_DOTENV='  '` returns False (BUG - should be True as default)
+- `FLASK_SKIP_DOTENV='\tno\t'` returns False (BUG - should be True)
+
+#### Hypothesis Tests:
+Both hypothesis tests failed as expected, confirming the bug:
+- `test_debug_flag_should_handle_whitespace` failed for values with whitespace
+- `test_load_dotenv_should_handle_whitespace` failed for values with whitespace
+
+### Root Cause:
+The issue occurs in both functions where they call `.lower()` on the environment variable value without first calling `.strip()`:
+
+1. In `get_debug_flag()` (line 33):
+   `return bool(val and val.lower() not in {"0", "false", "no"})`
+
+2. In `get_load_dotenv()` (line 48):
+   `return val.lower() in ("0", "false", "no")`
+
+When values have whitespace like `" false "`, calling `.lower()` produces `" false "` which doesn't match the expected strings `"false"`, causing incorrect behavior.
+
+### Impact:
+This bug can cause unexpected behavior in production environments where:
+- Configuration values might accidentally have whitespace added (e.g., from environment files or CI/CD systems)
+- Users expect robust parsing of environment variables that ignores surrounding whitespace
+- The application behavior differs from user expectations about common "falsy" values
+
+The bug is valid and should be fixed as proposed in the bug report.

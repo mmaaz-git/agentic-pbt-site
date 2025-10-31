@@ -1,0 +1,42 @@
+## Documentation Analysis for dask.bytes.read_bytes
+
+### Function Documentation
+The docstring for `read_bytes` (lines 24-79 of core.py) provides the following relevant information:
+
+1. **Purpose**: "Given a path or paths, return delayed objects that read from those paths"
+
+2. **Delimiter behavior**: "This cleanly breaks data by a delimiter if given, so that block boundaries start directly after a delimiter and end on the delimiter." (lines 32-33)
+
+3. **Sample parameter**:
+   - Described as "Whether or not to return a header sample" (line 52)
+   - Returns "sample : bytes - The sample header" (lines 70-71)
+   - Can be False, an integer, or a string like "1 MiB"
+
+4. **Delimiter parameter**: "An optional delimiter, like b'\n' on which to split blocks of bytes" (lines 42-44)
+
+### Documentation Implications
+While the documentation doesn't explicitly state how the sample should behave when both sample and delimiter parameters are provided, several factors indicate the expected behavior:
+
+1. The documentation refers to the sample as a "header sample" which implies it should represent a logical header unit
+2. The documentation states that delimiters are used to "cleanly break data" with boundaries that "end on the delimiter"
+3. The combination of these two concepts logically implies that a header sample with delimiters should end at a delimiter boundary
+
+### Test Suite Evidence
+The test suite in `test_local.py` explicitly validates this behavior:
+
+```python
+def test_read_bytes_sample_delimiter():
+    with filetexts(files, mode="b"):
+        sample, values = read_bytes(".test.accounts.*", sample=80, delimiter=b"\n")
+        assert sample.endswith(b"\n")  # Line 83
+```
+
+This test (lines 80-87) repeatedly asserts that samples must end with the delimiter when both parameters are specified. This is tested with multiple configurations:
+- Multiple files with wildcards
+- Single file
+- Different sample sizes (80 bytes, 2 bytes)
+
+### Conclusion
+The expected behavior is clearly established by the test suite: when both `sample` and `delimiter` are specified, the sample should end at the first delimiter boundary. The documentation, while not explicit about this interaction, supports this interpretation through its description of clean delimiter boundaries and the concept of a "header sample."
+
+The current implementation violates this expected behavior in the specific case where the entire file fits within the initial sample read, making this a legitimate bug rather than undefined behavior.

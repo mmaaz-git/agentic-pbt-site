@@ -1,0 +1,30 @@
+I successfully reproduced the bug as described in the report:
+
+1. **Bug Reproduction**:
+   - Created a structured array with dtype `[('x', np.int32), ('y', np.float64)]`
+   - Attempted to call `np.ctypeslib.as_ctypes(arr)`
+   - Result: `NotImplementedError: Converting dtype('V12') to a ctypes type`
+   - This matches the exact error reported
+
+2. **Root Cause Verified**:
+   - The issue is on line 599 of `_ctypeslib.py`: `ctype_scalar = as_ctypes_type(ai["typestr"])`
+   - For structured arrays, `ai["typestr"]` returns `'|V12'` (void type with size)
+   - This void typestr loses all field information from the structured dtype
+   - When `as_ctypes_type` receives `'|V12'`, it cannot reconstruct the struct
+
+3. **Inconsistency Confirmed**:
+   - `np.ctypeslib.as_ctypes_type(arr.dtype)` works perfectly and returns `<class 'struct'>`
+   - `np.ctypeslib.as_ctypes_type(ai["typestr"])` fails with NotImplementedError
+   - This proves the bug is specifically in passing typestr instead of dtype
+
+4. **Fix Validation**:
+   - Implemented the proposed fix: changing line 599 to use `obj.dtype` instead of `ai["typestr"]`
+   - The fixed version successfully converts structured arrays to ctypes
+   - Round-trip conversion (to ctypes and back to numpy) preserves data correctly
+   - Regular arrays still work correctly with the fix
+
+5. **Property-Based Test**:
+   - The hypothesis test fails with the current implementation for ANY structured dtype
+   - This confirms it's a systematic issue, not an edge case
+
+The technical details in the bug report are accurate. The bug is real, reproducible, and the proposed fix works correctly.

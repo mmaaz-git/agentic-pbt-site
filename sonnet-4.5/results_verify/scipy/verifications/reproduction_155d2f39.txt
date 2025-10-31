@@ -1,0 +1,44 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. TEST CASE REPRODUCTION:
+The bug report's test case was successfully reproduced:
+- Input: signal=[1.0, 1.0], divisor=[1.1754943508222875e-38, 1.0]
+- Output: quotient=[8.50705917e+37], remainder=[0.0, -8.50705917e+37]
+- Reconstructed signal: [1.0, 0.0] (should be [1.0, 1.0])
+- The round-trip property is VIOLATED - reconstructed differs by 1.0 in the second element
+
+2. HYPOTHESIS TEST RESULTS:
+Running the property-based test with hypothesis found multiple failures
+- The test fails when divisor[0] is extremely small (around 1e-30 or smaller)
+- The framework detected at least 2 distinct failure cases
+
+3. THRESHOLD ANALYSIS:
+Testing various divisor[0] values showed:
+- divisor[0] = 0.5: Works correctly ✓
+- divisor[0] = 1e-10: Works correctly ✓
+- divisor[0] = 1e-30: FAILS ✗
+- divisor[0] = 1.17e-38: FAILS ✗
+
+The failure occurs when divisor[0] is around 1e-30 or smaller.
+
+4. ROOT CAUSE VERIFICATION:
+The issue is caused by floating-point precision loss:
+- When divisor[0] is tiny (e.g., 1e-38), lfilter normalizes by dividing by divisor[0]
+- This creates a huge normalized coefficient: 1.0/1e-38 = 1e+38
+- In floating-point arithmetic: (1e+38 + 1.0) - 1e+38 = 0.0 (not 1.0!)
+- This precision loss propagates through the calculation, violating the round-trip property
+
+5. MATHEMATICAL CORRECTNESS:
+The claimed property "signal = convolve(divisor, quotient) + remainder" is mathematically sound and should hold for exact arithmetic. However:
+- With divisor=[1e-38, 1.0], the quotient becomes [1e+38]
+- convolve([1e-38, 1.0], [1e+38]) = [1.0, 1e+38]
+- remainder = [0.0, -1e+38]
+- sum = [1.0, 1e+38 - 1e+38] = [1.0, 0.0] due to floating-point cancellation
+- This differs from the original signal [1.0, 1.0]
+
+6. COMPARISON WITH NUMPY:
+numpy.polydiv exhibits the same issue, suggesting this is a fundamental limitation of the polynomial division approach when using floating-point arithmetic with extremely small leading coefficients.
+
+CONCLUSION:
+The bug is CONFIRMED. The implementation violates its documented mathematical guarantee when divisor[0] is extremely small (around 1e-30 or less) due to catastrophic loss of precision in floating-point arithmetic.

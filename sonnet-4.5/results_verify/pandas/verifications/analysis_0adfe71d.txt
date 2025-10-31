@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly guarantee that different engines must produce identical results. The documentation describes the C engine as "faster" and the Python engine as "more feature-complete," suggesting they may have different behaviors by design. The documentation also doesn't clearly define what constitutes a "blank line" versus an empty quoted field, leaving this behavior technically undefined. Since the behavior is not specified in the documentation, this could be considered working as designed rather than a bug.
+
+**Why it might not be INVALID:**
+The engines are presented as interchangeable options for parsing CSV files, with the choice being primarily about performance vs features, not about different parsing semantics. Users have a reasonable expectation that switching engines shouldn't change the data they get. Additionally, CSV format standards clearly distinguish between blank lines (no content) and empty quoted fields (""), and the Python engine's behavior violates this standard distinction.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This issue only occurs with a specific edge case (quoted empty strings) and there's a workaround available (setting skip_blank_lines=False). The behavior has apparently existed for multiple versions without causing major problems. Fixing it might break existing code that depends on the current Python engine behavior. The issue could be considered a minor inconsistency that users can work around rather than a critical bug.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case but a fundamental parsing inconsistency that causes data loss. Empty strings are legitimate values in many datasets, and silently dropping rows is a serious data integrity issue. The fact that there's a workaround doesn't excuse the inconsistent default behavior. Previous GitHub issues (#21131) suggest the pandas team has fixed similar engine inconsistencies before, indicating they consider engine parity important.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation fails to specify how quoted empty strings should be handled with skip_blank_lines=True, and doesn't warn users about potential behavioral differences between engines. The documentation could be updated to clarify that skip_blank_lines may behave differently between engines for quoted empty fields, and users should use skip_blank_lines=False if they need consistent behavior. This would acknowledge the current behavior while properly documenting it.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior is genuinely inconsistent and problematic, not just poorly documented. Simply documenting that engines produce different results would be admitting a design flaw rather than fixing it. The CSV standard is clear about the difference between blank lines and empty fields, so this is a correctness issue, not a documentation issue. Users shouldn't need to read fine print to avoid data loss when switching engines.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that consistent handling of quoted empty strings across engines is a new feature that hasn't been implemented yet. The request could be reframed as adding a new parameter or option to control how quoted empty strings are handled, giving users explicit control over this behavior. This would treat the current behavior as incomplete rather than incorrect.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but reporting broken existing functionality. Engine equivalence for the same input is a basic expectation, not an enhancement. The C engine already handles this correctly according to CSV standards, so this is about fixing the Python engine's bug, not adding new features. The behavior with skip_blank_lines=False shows both engines can handle this correctly, so it's a bug in the Python engine's skip_blank_lines=True implementation.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case of data loss where the Python engine silently drops valid rows containing quoted empty strings. The engines produce different DataFrame shapes for identical input, violating the principle of engine equivalence. The behavior contradicts CSV standards where "" is a valid empty field, not a blank line. The fact that skip_blank_lines=False produces consistent results proves both engines can handle the data correctly, making this a bug in the Python engine's blank line detection. Previous similar issues (#21131) were treated as bugs and fixed.
+
+**Why it might not be BUG:**
+The documentation never explicitly promises identical behavior between engines, and describes them as having different characteristics (speed vs feature-completeness). The behavior could be considered undefined rather than incorrect since the documentation doesn't specify how to handle this case. The existence of a workaround and the fact this hasn't been a major issue for most users might suggest it's more of a quirk than a bug.
+
+## Overall consideration
+
+After thorough analysis, this appears to be a legitimate bug that causes data loss and violates reasonable user expectations. The Python engine's treatment of quoted empty strings ("") as blank lines is incorrect according to CSV standards and inconsistent with the C engine's correct behavior. The fact that both engines handle the data identically when skip_blank_lines=False demonstrates this is a bug in the Python engine's blank line detection logic, not a fundamental incompatibility.
+
+The severity of this bug is significant because it causes silent data loss - entire rows disappear when using the Python engine with default settings. This violates the principle of least surprise and can lead to serious data integrity issues. Users choosing between engines expect performance trade-offs, not different parsing semantics that change their data. The documentation's lack of warning about this behavior makes it even more problematic.
+
+While the documentation could be clearer about engine behavior, this is fundamentally a correctness issue, not a documentation problem. The previous resolution of similar engine inconsistencies (like issue #21131) establishes precedent that pandas maintainers consider engine parity important enough to fix. Given that this bug causes data loss, violates CSV standards, and has a clear correct behavior (matching the C engine), this should be classified as a BUG rather than dismissed or reclassified.

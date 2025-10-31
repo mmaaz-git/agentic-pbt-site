@@ -1,0 +1,45 @@
+TRIAGE ANALYSIS
+===============
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The current behavior could be considered "working as designed" if Django intentionally treats None as a blank value regardless of the null setting. The documentation does state that blank is validation-related, and one could argue that None represents "no data" which is blank from a validation perspective. Additionally, Django has worked this way for many years, and many applications may depend on this behavior.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies an inconsistency between what the documentation implies and what actually happens. The documentation clearly states that null is database-related and blank is validation-related, creating a reasonable expectation that null=True would allow None values to pass validation. The fact that data can be saved to the database but then fails validation when retrieved is clearly problematic and not just a misunderstanding.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior has existed in Django for a very long time, and changing it could break backward compatibility for thousands of existing Django applications. Many developers may have worked around this behavior or even depend on it. The combination of null=True, blank=False is relatively uncommon, and developers can work around it by using blank=True or custom validation. The Django team might consider this too risky to change.
+
+**Why it might not be WONTFIX:**
+The current behavior creates data integrity issues where valid database states fail validation, which is a fundamental problem in an ORM. The inconsistency makes it impossible to use null=True, blank=False in a meaningful way, essentially making this combination unusable. This is not a trivial edge case but a core functionality issue that affects data validation consistency.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how None values are handled with different null/blank combinations. If Django intends for None to always be treated as blank regardless of null settings, then the documentation should clearly state this. Adding a warning about this behavior to the documentation would help developers understand and avoid this combination.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already establishes clear conceptual boundaries: null is for database, blank is for forms/validation. Simply documenting the current broken behavior doesn't fix the fundamental inconsistency. The issue isn't that the documentation is wrong; it's that the implementation doesn't match the documented conceptual model.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting null=True, blank=False with None values is a new feature that Django never intended to support. The current behavior might be considered the baseline, and any change to allow None through validation when blank=False would be adding new functionality. This could be framed as a request to enhance Django's validation system to better handle this edge case.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather for the existing functionality to work as the documentation suggests it should. The separation between null (database) and blank (validation) is already documented as a feature of Django, and this is simply asking for that separation to be properly implemented. Fixing broken behavior is not the same as adding a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation creates a logical inconsistency where data that can be successfully saved to the database fails validation when retrieved. This violates the principle of round-trip consistency. The documentation clearly separates null (database) and blank (validation) concerns, but the implementation conflates them. When null=True explicitly allows None at the database level, the validation layer should respect this. The behavior prevents valid use cases and makes the null=True, blank=False combination effectively unusable.
+
+**Why it might not be BUG:**
+Django might intentionally treat None as a blank value for validation purposes, regardless of database settings. This could be a deliberate design decision to ensure form validation consistency. The behavior has existed for years without being fixed, suggesting it might be intentional. Many Django applications have been built with this behavior, indicating it's at least predictable if not ideal.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a DOCUMENTATION_FIX rather than a BUG. While the behavior is technically inconsistent and could be considered incorrect, there are several important factors to consider:
+
+First, Django has behaved this way for many years across multiple major versions. This isn't a regression or newly introduced issue, but rather a long-standing behavior that thousands of applications have been built around. Changing this behavior would be a breaking change that could affect many existing Django applications in production. The Django team is typically very conservative about backward compatibility, especially for behaviors that have existed for so long.
+
+Second, while the conceptual model in the documentation suggests null and blank are separate concerns, the actual use case for null=True, blank=False is questionable. In practice, if you want to require a field in forms (blank=False), you typically also want to prevent NULL values in the database (null=False). The combination of requiring a value in forms but allowing NULL in the database is an edge case that most applications don't need. The documentation should be updated to clearly warn developers about this behavior and guide them toward more appropriate field configurations for their use cases. This would prevent confusion while maintaining backward compatibility.

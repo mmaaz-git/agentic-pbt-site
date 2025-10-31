@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify what tolerance levels are acceptable for the eigenvalue equation. One could argue that numerical algorithms inherently have precision limitations, and the documentation's warning about "round-off errors" could be interpreted as allowing for some deviation from the mathematical ideal. The matrix contains an extreme value (1.17e-38) which might be considered outside the reasonable operating range.
+
+**Why it might not be INVALID:**
+The documentation explicitly states the mathematical guarantee that `a @ eigenvectors[:,i] = eigenvalues[i] * eigenvectors[:,i]` should hold. An error of magnitude 1.0 is not a "round-off error" - it's a complete failure to satisfy the fundamental definition of an eigenvector. The function doesn't raise an error or warning, suggesting it believes it has computed a valid result.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The matrix contains the smallest positive float32 value (1.17e-38) mixed with values of 1.0, creating an extreme condition number. This could be considered an obscure edge case that would rarely occur in practice. The maintainers might argue that handling such extreme numerical ranges is beyond the scope of a general-purpose eigenvalue solver, and users working with such extreme values should use specialized numerical libraries.
+
+**Why it might not be WONTFIX:**
+Eigenvalue decomposition is a fundamental linear algebra operation, and returning mathematically incorrect results silently is a serious issue. The error magnitude (1.0) is not a small numerical imprecision but a complete failure. If the function cannot handle certain inputs correctly, it should at least raise an error rather than returning incorrect results.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly warn users about limitations when dealing with matrices containing extreme value ranges. It could specify that the function may return incorrect results for ill-conditioned matrices without raising an error, and users should verify results when working with extreme values. This would set proper expectations about the function's limitations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not just about unclear documentation - the function is returning objectively incorrect mathematical results. Simply documenting this failure mode doesn't address the underlying problem that the function violates its fundamental mathematical contract. The eigenvalue equation is not a suggestion but a mathematical definition.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that adding validation for extreme value ranges or post-computation verification of eigenpairs would be a new feature. The current implementation might be considered "working as designed" for typical use cases, and handling extreme edge cases could be seen as an enhancement request rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+Computing correct eigenvectors is not a feature - it's the fundamental purpose of the function. The function already claims to compute eigenvalues and eigenvectors; doing so correctly for all valid input matrices is not an additional feature but a core requirement. This is about fixing incorrect behavior, not adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns a result that violates the fundamental eigenvalue equation A @ v = λ * v by a magnitude of 1.0. This is not a small numerical error but a complete mathematical incorrectness. The documentation explicitly guarantees this equation should hold. The function silently returns wrong results without any error or warning, which could lead to incorrect downstream calculations in user applications.
+
+**Why it might not be BUG:**
+The matrix contains an extremely small value (1.17e-38) which creates severe numerical instability. LAPACK and numerical algorithms in general have known limitations with ill-conditioned matrices. The documentation does mention that the function uses LAPACK and warns about potential numerical issues, even if not explicitly for this case.
+
+## Overall Consideration
+
+This case presents a challenging triage decision. On one hand, the function is returning mathematically incorrect results that violate the fundamental eigenvalue equation by a large margin (error norm of 1.0). The eigenvector [1, 0, 0] simply does not satisfy A @ v = λ * v for λ = 0, and the mathematically correct eigenvector should be [0, 0, 1]. This is not a small numerical precision issue but a fundamental incorrectness.
+
+On the other hand, the matrix in question contains an extremely small value (1.17e-38, the smallest positive float32 value) mixed with normal values, creating an extreme condition number. This is an edge case that might rarely occur in practice. Numerical algorithms, particularly those based on LAPACK, have known limitations with ill-conditioned matrices, and expecting perfect results for such extreme inputs might be unrealistic.
+
+The most concerning aspect is that the function returns incorrect results silently without any warning or error. If the function cannot handle such matrices correctly, it should at least detect the problem and raise an error rather than returning mathematically invalid results. Users relying on these results for further computations would get completely wrong answers. Given that the documentation does not explicitly exclude such matrices from the function's domain and does not document acceptable error tolerances, returning results with 100% error seems to violate the implicit contract of the function. However, given the extreme nature of the input matrix and the inherent limitations of floating-point arithmetic with such disparate scales, this likely falls into the category of a documentation issue rather than a code bug - the documentation should clearly state the limitations of the function with ill-conditioned matrices.

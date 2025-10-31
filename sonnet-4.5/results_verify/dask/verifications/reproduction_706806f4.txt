@@ -1,0 +1,49 @@
+## Bug Reproduction Analysis
+
+### Confirmed Bug Behavior
+
+The bug report is technically correct about the crash. When `sorted_columns` is called with statistics containing a None max value:
+
+```python
+statistics = [{"columns": [{"name": "a", "min": 0, "max": None}]}]
+result = sorted_columns(statistics)
+```
+
+This causes a TypeError: `'<' not supported between instances of 'NoneType' and 'int'`
+
+The error occurs at line 442 in the function: `assert divisions == sorted(divisions)`
+
+### Root Cause Analysis
+
+1. The function builds a `divisions` list that tracks min/max values through row groups
+2. When a column has `min=0` and `max=None`, the function:
+   - Sets `divisions = [0]` (the min value)
+   - Sets `max = None`
+   - Sets `success = True` (because min is not None)
+   - Since there's only one row group, it skips the loop at lines 428-438
+   - At line 441, it appends `max` (which is None) to divisions, making `divisions = [0, None]`
+   - At line 442, it tries to assert `divisions == sorted(divisions)`
+   - The sorted() function fails because Python 3 cannot compare None with integers
+
+### Test Results
+
+1. **Exact reproducer**: Confirmed to crash with TypeError
+2. **Property-based test**: Crashes on inputs with None max values
+3. **Edge cases tested**:
+   - `min=0, max=None`: Crashes with TypeError
+   - `min=None, max=10`: Returns empty list (handled correctly)
+   - `min=None, max=None`: Returns empty list (handled correctly)
+   - Multiple row groups with None in max: Crashes with TypeError
+   - Normal case with valid min/max: Works correctly
+
+### Behavior Analysis
+
+The function appears to have logic to handle None values:
+- Line 427: Checks if min is None and sets success = False
+- Line 430-432: Checks for None min values in subsequent row groups
+
+However, it fails to check if max is None before adding it to divisions. The function's logic assumes that if min is not None, then the column is valid for creating divisions, but doesn't account for the case where max could still be None.
+
+### Python Version Note
+
+This is a Python 3 specific issue. In Python 2, None could be compared with other types (it was considered less than everything), but Python 3 removed this implicit ordering, making comparisons between None and numbers raise TypeError.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for `to_orc()` states that `write_index=True` will "write the index" but does not promise that reading the data back will automatically restore the index. The documentation for `read_orc()` clearly shows that you need to specify an `index` parameter to set a column as the index. Since the documentation never promises automatic round-trip preservation of indexes, and there's a documented workaround (specifying the index column name when reading), this could be considered expected behavior that users misunderstood.
+
+**Why it might not be INVALID:**
+Most users would reasonably expect that writing with `write_index=True` and then reading back would preserve the index, especially since this is how other formats like Parquet work in Dask. The parameter name `write_index` strongly implies the index will be preserved in a way that can be automatically restored. The fact that single-partition writes work correctly but multi-partition writes don't makes this seem like a bug rather than intended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only affects unnamed indexes (default RangeIndex), and there's a clear workaround: users can name their indexes before writing and specify the index column when reading. The ORC format itself doesn't have special index semantics - it's a columnar format where everything is just columns. Fixing this would require Dask to implement special metadata handling for ORC files to track which column was the index, which might be complex and not worth the effort given the workaround exists.
+
+**Why it might not be WONTFIX:**
+This is a data corruption issue that silently produces incorrect results. Users expect round-trip operations to preserve data integrity, and index alignment is crucial for many DataFrame operations. The bug affects a common use case (multi-partition DataFrames with default indexes) and has no warning or error message to alert users to the problem. Silent data corruption is generally considered a serious issue worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is technically working as implemented - the index IS written to the ORC file as a column, and users CAN restore it by specifying the index column name when reading. The real issue is that the documentation doesn't explain this clearly. It should explicitly state that: (1) indexes are saved as regular columns in ORC, (2) automatic index restoration is not supported, (3) users need to specify the index column name when reading to restore the index, and (4) this differs from formats like Parquet that do preserve indexes automatically.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The user's expectation of round-trip preservation is reasonable, and the current behavior violates the principle of least surprise. Simply documenting the limitation doesn't address the underlying issue that `write_index=True` creates a false expectation. If the index can't be automatically restored, perhaps `write_index=True` shouldn't be the default, or the function should store metadata to enable automatic restoration.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+ORC format doesn't natively support DataFrame indexes, so automatic index preservation would be a new feature that requires Dask to implement additional metadata handling. This could involve storing index information in ORC file metadata or using a naming convention for index columns that `read_orc()` could detect. Since the current implementation technically works (index is saved as a column), adding automatic restoration would be an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The parameter `write_index=True` already exists and is the default, which implies this feature is supposed to work. Users aren't asking for new functionality - they expect the existing functionality to work correctly. The fact that it works for single partitions but not multiple partitions suggests this is a bug in the implementation rather than a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is inconsistent - single partition writes preserve indexes correctly but multi-partition writes don't. The `write_index=True` default creates a strong expectation that indexes will be preserved. The bug causes silent data corruption where index values are changed without any warning. This violates the basic expectation that writing and reading data should preserve its structure. Many DataFrame operations depend on correct index alignment, and this bug could cause incorrect results in joins, merges, and other operations.
+
+**Why it might not be BUG:**
+The code is working exactly as written - each partition is read independently and gets its own RangeIndex starting from 0. The ORC format doesn't have native index support, so Dask is doing the best it can by saving the index as a column. The documentation doesn't explicitly promise round-trip index preservation, and there's a documented way to specify which column should be the index when reading. This could be seen as a limitation of the ORC format rather than a bug in Dask.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a **DOCUMENTATION_FIX** issue rather than a bug. Here's why:
+
+First, the investigation reveals that the functionality is working as designed - the index IS being written to the ORC file when `write_index=True`, just as a regular column rather than as special index metadata. The ORC format itself doesn't have a concept of DataFrame indexes; it's purely columnar storage. When reading back, Dask has no way to automatically identify which column was the original index without additional metadata that ORC doesn't provide.
+
+Second, there's a clear and functional workaround: users can name their index and specify it when reading back with `dd.read_orc(path, index='index_name')`. This works correctly and preserves the index values. The issue is that users don't know they need to do this because the documentation doesn't explain how indexes are handled in ORC format.
+
+Third, while the behavior is surprising and could lead to errors, it's not technically incorrect given the constraints of the ORC format. Dask is doing exactly what the code says - writing the index as a column and creating fresh indexes when reading partitions. The problem is that the documentation creates false expectations by not explaining this clearly. The documentation should explicitly state that indexes are converted to regular columns in ORC format and need to be manually restored when reading, unlike formats like Parquet that preserve index metadata.

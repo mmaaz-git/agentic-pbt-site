@@ -1,0 +1,40 @@
+## Bug Reproduction Results
+
+I successfully reproduced the reported bug. Here are the technical details:
+
+### Test Case Execution:
+
+The provided test case with `Decimal('129452608601646.99')` was executed and confirmed the precision loss:
+
+```
+Original:      129452608601646.99
+Reconstructed: 129452608601646.98
+Equal:         False
+Loss:          0.01
+```
+
+### Root Cause Analysis:
+
+1. **JSON Serialization Path**: When calling `model.json()`, pydantic uses the `decimal_encoder` function which converts the Decimal to a float: `129452608601646.98`
+
+2. **Float Precision Limitation**: The value `129452608601646.99` cannot be exactly represented as a IEEE 754 double precision float. When converted to float, it becomes `129452608601646.98` due to binary representation limitations.
+
+3. **Deserialization**: When parsing the JSON back with `parse_raw()`, the float value `129452608601646.98` is converted back to a Decimal, but the precision is already lost.
+
+### Comparison with dict() Method:
+
+I verified that `model.dict()` + `parse_obj()` preserves Decimal precision correctly:
+- Dict representation: `{'value': Decimal('129452608601646.99')}`
+- This round-trips perfectly because the Decimal object is preserved in Python's dict
+
+### Hypothesis Test Results:
+
+The hypothesis property-based test failed immediately on the provided example, confirming the bug is reproducible and systematic for large decimal values with fractional parts.
+
+### Technical Verification:
+
+The pydantic source code explicitly shows:
+- Line 51 in json.py: `Decimal: decimal_encoder`
+- Lines 38-41: `return float(dec_value)` for decimals with fractional parts
+
+This is working as designed - pydantic v1 intentionally converts Decimals to floats for JSON serialization, which causes precision loss for values that cannot be exactly represented in IEEE 754 double precision format.

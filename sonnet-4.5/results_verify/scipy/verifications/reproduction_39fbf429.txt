@@ -1,0 +1,55 @@
+## Reproduction Analysis
+
+### Bug Report Claims vs Reality
+
+**Claim**: The method returns `inf` for single-element arrays
+**Reality**: The method raises `ZeroDivisionError` for single-element arrays
+
+When testing `NumericAttribute._basic_stats` with a single-element array `[5.0]`:
+- Expected (per bug report): Returns `(5.0, 5.0, 5.0, inf)`
+- Actual behavior: Raises `ZeroDivisionError: float division by zero`
+
+The bug report's claim that "nbfac = 1.0 / 0 = inf" is incorrect. In Python, `1.0 / 0` raises a `ZeroDivisionError`, it does not return infinity.
+
+### Additional Bugs Found
+
+1. **Empty arrays**: The method also fails for empty arrays with `ValueError: zero-size array to reduction operation fmin which has no identity`
+
+2. **Incorrect formula**: The method uses an incorrect formula for sample standard deviation:
+   - Current: `std * (n / (n-1))`
+   - Correct: `std * sqrt(n / (n-1))`
+
+   This means even for arrays with 2+ elements, the calculated standard deviation is wrong.
+
+### Mathematical Context
+
+The method appears to be attempting to calculate sample standard deviation using Bessel's correction. The sample standard deviation formula is:
+
+```
+s = sqrt(sum((x_i - mean)^2) / (n-1))
+```
+
+This can be computed from population standard deviation as:
+```
+sample_std = population_std * sqrt(n / (n-1))
+```
+
+However, the code incorrectly uses `n/(n-1)` instead of `sqrt(n/(n-1))`.
+
+For n=1, sample standard deviation is mathematically undefined because:
+- The denominator (n-1) becomes 0
+- You cannot estimate population variance from a single sample
+
+### Testing Results
+
+1. Single element array `[5.0]`: ZeroDivisionError (not inf as claimed)
+2. Empty array `[]`: ValueError
+3. Two elements `[5.0, 10.0]`: Returns 5.0 instead of correct 3.536
+4. Five elements `[1,2,3,4,5]`: Returns 1.768 instead of correct 1.581
+
+### Is This Actually a Bug?
+
+The core issue exists: the method fails for single-element arrays. However:
+1. The bug report incorrectly describes the failure mode
+2. The method has additional problems not mentioned
+3. Most importantly: **The method is never called anywhere in the codebase** (dead code)

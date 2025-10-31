@@ -1,0 +1,39 @@
+REPRODUCTION ANALYSIS
+=====================
+
+Bug Report Summary
+------------------
+The bug report claims that five constraint types (Ge, Lt, Le, Len, MultipleOf) in pydantic.experimental.pipeline._apply_constraint are incorrectly applied twice: once as a schema constraint and once as a wrapper validator function. The report claims that Gt is implemented correctly with an else clause that prevents double application.
+
+Reproduction Steps
+------------------
+1. Created test file with the bug report's property-based test and manual reproduction code
+2. Ran the manual reproduction which clearly shows the issue:
+   - Gt constraint produces: {'type': 'int', 'gt': 10}
+   - Ge constraint produces: {'type': 'function-after', 'function': ..., 'schema': {'type': 'int', 'ge': 10}}
+   - Lt, Le, MultipleOf, Len all produce similar function-after wrappers
+
+3. The key difference: Gt produces a simple schema with the constraint applied directly, while the other constraints produce a function-after wrapper EVEN THOUGH the constraint is also in the inner schema.
+
+Verification of Code
+--------------------
+Examined the source code at pydantic/experimental/pipeline.py lines 444-548:
+
+- Gt implementation (lines 448-463):
+  * Has an if block that applies constraint to schema when type is int/float/decimal
+  * Has an ELSE clause (line 458) that creates a check function only when schema doesn't support native constraint
+
+- Ge implementation (lines 464-478):
+  * Has an if block that applies constraint to schema when type is int/float/decimal
+  * MISSING else clause - the check_ge function and _check_func call happen unconditionally
+  * This means the constraint is applied TWICE: once in the schema, once as a wrapper
+
+- Lt, Le, Len, MultipleOf all have the same bug pattern - missing else clause
+
+Effect of the Bug
+-----------------
+1. Performance Impact: The constraint is validated twice - once by pydantic-core's built-in schema validation and again by the wrapper function
+2. Consistency Issue: Similar constraint types behave differently (Gt vs Ge/Lt/Le)
+3. Unnecessary Complexity: The resulting schema is more complex than needed with redundant validation
+
+The bug report is accurate - these constraints are indeed being applied twice due to missing else clauses.

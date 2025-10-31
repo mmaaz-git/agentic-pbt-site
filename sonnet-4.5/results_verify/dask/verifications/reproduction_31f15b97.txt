@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. The tests confirm that `dask.utils.parse_bytes` incorrectly handles whitespace-only and empty strings.
+
+### Test Results:
+
+1. **Empty string test**: `parse_bytes('')` returns `1` (expected: ValueError)
+2. **Whitespace character tests**:
+   - `parse_bytes('\r')` returns `1` (expected: ValueError)
+   - `parse_bytes('\n')` returns `1` (expected: ValueError)
+   - `parse_bytes('\t')` returns `1` (expected: ValueError)
+   - `parse_bytes(' ')` returns `1` (expected: ValueError)
+   - `parse_bytes('   ')` returns `1` (expected: ValueError)
+   - `parse_bytes('\r\n')` returns `1` (expected: ValueError)
+   - `parse_bytes('\v')` returns `1` (expected: ValueError)
+   - `parse_bytes('\f')` returns `1` (expected: ValueError)
+
+3. **Control test with invalid unit**: `parse_bytes('5 foos')` correctly raises `ValueError: Could not interpret 'foos' as a byte unit`
+
+### How the Bug Occurs:
+
+Looking at the implementation (lines 1614-1639 in dask/utils.py), the bug happens because:
+
+1. Line 1616: `s = s.replace(" ", "")` removes spaces but leaves other whitespace
+2. Line 1617-1618: If no digits found, prepends "1" to the string
+3. For empty string or whitespace-only input:
+   - After removing spaces, we get '' or whitespace like '\r', '\n', etc.
+   - No digits found, so "1" is prepended → becomes '1' or '1\r', '1\n', etc.
+4. Lines 1620-1626: Loop finds the split between number and unit suffix
+   - For '1\r', index becomes 1 (after the '1')
+   - prefix = '1\r', suffix = ''
+5. Line 1629: `float('1\r')` works! Python's float() strips trailing whitespace
+6. Line 1634: `byte_sizes['']` = 1 (empty string maps to 1 byte)
+7. Result: Returns 1 instead of raising an error
+
+The Hypothesis test correctly identifies this as a failure - whitespace-only strings should not be silently accepted and converted to 1 byte.

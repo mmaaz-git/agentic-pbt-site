@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for pd.cut and pd.qcut does not explicitly guarantee that these functions will handle ALL valid floating-point numbers, including extremely small denormalized numbers like 2.2e-313. These values are at the very edge of what floating-point arithmetic can represent (near the minimum positive float64 value of ~5e-324). The functions are designed for practical data binning, and such extreme values are unlikely to occur in real-world data analysis scenarios.
+
+**Why it might not be INVALID:**
+The input values ARE valid Python floats that can be represented in memory, and the functions accept float inputs without documented restrictions on their magnitude. The functions crash with an exception rather than handling the edge case gracefully, which suggests unintended behavior rather than a deliberate design choice to exclude such values.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely obscure edge case involving denormalized floating-point numbers that are 313 orders of magnitude smaller than 1. In practical data analysis, such values are essentially zero and would never appear in real datasets. The computational cost and complexity of fixing this edge case may not be justified given that it affects numbers so small they're effectively indistinguishable from zero in any practical context. The workaround is simple: users can pre-process their data to replace such extreme values with zero.
+
+**Why it might not be WONTFIX:**
+The fix is relatively simple (as shown in the bug report) - just cap the number of decimal places or check for NaN results. The functions shouldn't crash on valid input, even if that input is unusual. Other users might encounter similar issues with different extreme values, and a robust solution would prevent a class of potential failures.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to note that pd.cut and pd.qcut may not handle extremely small floating-point values (e.g., smaller than 1e-300) due to numerical precision limitations. This would set appropriate expectations without requiring code changes. The documentation currently doesn't mention any limitations on the range of input values, which could be seen as incomplete.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is a crash with an unhelpful error message, not a documented limitation. Simply documenting that "the function may crash with very small numbers" doesn't seem like good API design. If this were intentional behavior, the function should raise a more informative error message rather than failing deep in the rounding logic.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting extremely small denormalized floating-point numbers could be viewed as a new feature rather than a bug fix. The current implementation works well for typical use cases, and adding support for edge cases like 2.2e-313 would be extending the functionality beyond its original design scope. This would be a request to enhance the robustness of the functions to handle a wider range of numerical inputs.
+
+**Why it might not be FEATURE_REQUEST:**
+The functions already accept float inputs and claim to bin "values" without restrictions. This isn't asking for new functionality but rather asking for the existing functionality to work with all valid inputs that the function signature accepts. The user isn't requesting a new parameter or behavior, just that the current behavior not crash.
+
+## BUG Considerations
+**Why it might be BUG:**
+The functions accept float inputs but crash on certain valid float values due to an internal implementation detail (numpy.around's limitation). The error message is misleading and doesn't indicate the actual problem. The bug report provides a clear reproduction case, identifies the exact cause, and even provides potential fixes. The functions should either handle all valid floats or explicitly validate and reject problematic inputs with a clear error message.
+
+**Why it might not be BUG:**
+Values like 2.2e-313 are so extraordinarily small that they're at the very limits of floating-point representation. These denormalized numbers are edge cases that may be outside the reasonable design parameters of a data analysis library. The fact that numpy.around() itself fails with such extreme decimal places suggests this is a fundamental limitation of the numerical computing stack, not a pandas-specific bug.
+
+## Overall Consideration
+
+This bug report involves an extreme edge case where pandas.cut and pandas.qcut fail on denormalized floating-point numbers around 1e-308 to 1e-313. The technical analysis in the bug report is accurate: the internal _round_frac function calculates an excessive number of decimal places (>308) for these tiny values, causing numpy.around() to return NaN, which then causes the binning functions to fail.
+
+The key question is whether functions that accept floating-point inputs should be expected to handle ALL representable floating-point values, including those at the extreme edges of the format's range. These values are so small that they're essentially computational artifacts rather than meaningful data. In practical data analysis, values this small would typically be treated as zero or filtered out during data cleaning.
+
+While the bug is technically valid from a pure correctness standpoint, the practical impact is negligible. No real-world dataset would contain meaningful values at 2.2e-313 - such values are more likely to be uninitialized memory, computational underflow, or other artifacts. The proposed fix would add complexity to handle cases that arguably shouldn't occur in the first place. Given that this unreliable bug reporter has a 90% false positive rate, and this edge case is extraordinarily unlikely to affect real users, this should be classified as WONTFIX.

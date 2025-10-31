@@ -1,0 +1,70 @@
+BUG REPRODUCTION REPORT
+=======================
+
+1. BUG CLAIM:
+The bug report claims that is_subperiod and is_superperiod violate a fundamental symmetry property when source == target == 'Y'.
+
+2. REPRODUCTION RESULTS:
+
+Test Case 1: The specific reported bug (Y, Y)
+----------------------------------------------
+is_subperiod('Y', 'Y') = False
+is_superperiod('Y', 'Y') = True
+✗ CONFIRMED: Symmetry violated for Y->Y
+
+Test Case 2: Other same-frequency cases
+----------------------------------------
+- Q: is_subperiod=False, is_superperiod=False - OK
+- M: is_subperiod=False, is_superperiod=False - OK
+- W: is_subperiod=True, is_superperiod=True - OK
+- D: is_subperiod=True, is_superperiod=True - OK
+- h: is_subperiod=True, is_superperiod=True - OK
+- min: is_subperiod=True, is_superperiod=True - OK
+- s: is_subperiod=True, is_superperiod=True - OK
+- ms: is_subperiod=True, is_superperiod=True - OK
+- us: is_subperiod=True, is_superperiod=True - OK
+- ns: is_subperiod=True, is_superperiod=True - OK
+
+Test Case 3: Property-based testing with Hypothesis
+---------------------------------------------------
+Found 10 symmetry violations out of 400 tests:
+- is_subperiod('Y', 'Y')=False, is_superperiod('Y', 'Y')=True
+- is_subperiod('Y-MAR', 'Y-MAR')=False, is_superperiod('Y-MAR', 'Y-MAR')=True
+- is_subperiod('Y-FEB', 'Y-FEB')=False, is_superperiod('Y-FEB', 'Y-FEB')=True
+- is_subperiod('Y-JAN', 'Y-JAN')=False, is_superperiod('Y-JAN', 'Y-JAN')=True
+- is_subperiod('D', 'B')=False, is_superperiod('B', 'D')=True
+
+Test Case 4: Valid asymmetric relationships
+-------------------------------------------
+All these work correctly (symmetric):
+- is_subperiod(M, Y)=True, is_superperiod(Y, M)=True
+- is_subperiod(D, M)=True, is_superperiod(M, D)=True
+- is_subperiod(h, D)=True, is_superperiod(D, h)=True
+- is_subperiod(s, h)=True, is_superperiod(h, s)=True
+
+3. ROOT CAUSE ANALYSIS:
+
+For the Y->Y case:
+- In is_subperiod('Y', 'Y'):
+  1. Checks _is_annual(target) = True
+  2. Checks _is_quarterly(source) = False
+  3. Falls through to check if 'Y' in {'D', 'C', 'B', 'M', 'h', 'min', 's', 'ms', 'us', 'ns'}
+  4. Returns False (Y is not in that set)
+
+- In is_superperiod('Y', 'Y'):
+  1. Checks _is_annual(source) = True
+  2. Checks _is_annual(target) = True
+  3. Returns get_rule_month('Y') == get_rule_month('Y') = True
+
+The asymmetry exists because is_superperiod explicitly handles the case where both source and target are annual, but is_subperiod does not.
+
+For the D->B case:
+- is_subperiod('D', 'B') checks if 'D' in {'B', 'h', 'min', 's', 'ms', 'us', 'ns'} = False
+- is_superperiod('B', 'D') checks if 'D' in {'D', 'C', 'B', 'h', 'min', 's', 'ms', 'us', 'ns'} = True
+
+4. TECHNICAL ACCURACY:
+The bug report is technically accurate:
+- The code does behave as described
+- The symmetry violation is real and reproducible
+- The root cause analysis in the bug report correctly identifies the issue
+- The proposed fix would resolve the inconsistency

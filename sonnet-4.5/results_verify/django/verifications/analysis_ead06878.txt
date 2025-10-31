@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for get_script_name doesn't explicitly promise to handle all possible WSGI environ inputs without crashing. One could argue that if a client sends invalid UTF-8, it's reasonable for the server to reject it with an error. The function's purpose is to return the script name, and if that script name contains invalid UTF-8, perhaps crashing is the correct behavior to prevent security issues or data corruption.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that the function crashes on input that is valid according to the WSGI specification (PEP 3333). The WSGI spec explicitly requires environ values to be ISO-8859-1 encoded, which can represent any byte value. Django should handle all valid WSGI input without crashing. The crash is reproducible and technically accurate.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Invalid UTF-8 in URLs is relatively rare in practice. Modern browsers and HTTP clients typically send properly encoded UTF-8 URLs. The issue only affects malformed or malicious requests, which could be filtered at the web server level before reaching Django. The crash provides clear feedback that the input is invalid, which might be preferable to silently accepting bad data.
+
+**Why it might not be WONTFIX:**
+This is a crash that can be triggered by external user input, which is a potential denial-of-service vector. The inconsistency with other functions in the same module (get_path_info, get_str_from_wsgi) suggests this is not intentional behavior but an oversight. The fix is trivial (adding errors='replace' parameter) and would improve robustness without breaking existing functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what happens with invalid UTF-8 input. If the intended behavior is to crash on invalid UTF-8, the documentation should explicitly state this limitation and warn users about potential crashes. The documentation could be updated to clarify that get_script_name requires valid UTF-8 input, unlike other similar functions.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The inconsistency with other functions in the same module suggests this is a code bug, not a documentation issue. Functions handling similar WSGI environ data (get_path_info, get_str_from_wsgi) handle invalid UTF-8 gracefully. The pattern established by these functions implies get_script_name should also handle such input without crashing.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding error handling for invalid UTF-8 could be seen as a new feature - making the function more robust against malformed input. The current implementation might be considered "working as designed" if it was never intended to handle invalid UTF-8. Adding graceful error handling would be an enhancement to make Django more resilient.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but fixing a crash. The function already exists and should handle all valid WSGI input according to the specification. Other similar functions in the same module already handle this case correctly, so this is about fixing inconsistent behavior rather than adding new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case of inconsistent error handling within the same module. Two similar functions (get_path_info and get_str_from_wsgi) handle invalid UTF-8 gracefully, while get_script_name crashes. The WSGI specification (PEP 3333) requires handling ISO-8859-1 encoded strings, which can contain bytes that are invalid UTF-8. The function crashes on valid WSGI input that follows the specification. This creates a denial-of-service vector where malicious actors can crash Django applications by sending crafted URLs.
+
+**Why it might not be BUG:**
+The function technically works correctly for valid UTF-8 input, which is what most legitimate clients send. One could argue that crashing on invalid input is a reasonable way to reject malformed requests. The documentation doesn't explicitly promise to handle invalid UTF-8, so the current behavior might be considered acceptable.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate BUG for three compelling reasons:
+
+First, there is a clear inconsistency in error handling within the same module. The get_path_info() function uses repercent_broken_unicode() to handle invalid UTF-8 sequences, converting them to percent-encoded strings. The get_str_from_wsgi() function uses decode(errors='replace') to replace invalid sequences with replacement characters. However, get_script_name() uses bare decode() without any error handling, causing it to crash. This inconsistency within django.core.handlers.wsgi strongly suggests an oversight rather than intentional design.
+
+Second, the crash violates the robustness principle of web frameworks. Django should be able to handle all input that conforms to the WSGI specification without crashing. PEP 3333 explicitly requires WSGI environ values to be decoded as ISO-8859-1, which can represent any byte value (0x00-0xFF). When Django re-encodes these values to bytes and attempts to decode as UTF-8, it must handle the case where the original bytes were not valid UTF-8. The current implementation fails this requirement.
+
+Third, this creates a genuine security concern. External user input (the URL) can trigger a server crash, which is a potential denial-of-service vector. Malicious actors could send requests with invalid UTF-8 sequences to crash Django applications. While such requests might be filtered at the web server level, Django should not assume this protection exists. The framework should be resilient against malformed input, especially when other functions in the same module already demonstrate this resilience.

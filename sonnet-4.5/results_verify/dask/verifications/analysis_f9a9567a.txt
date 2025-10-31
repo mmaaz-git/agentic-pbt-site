@@ -1,0 +1,76 @@
+BUG TRIAGE ANALYSIS
+==================
+
+## Analysis for Each Category
+
+### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function incorrectly strips legitimate English words like "feedback", "faceache", "beefcafe"
+- The docstring example 'hello-world-1' → 'hello-world' clearly shows compound words should be preserved
+- The behavior is inconsistent: "world" is preserved but "feedback" is not, despite both being English words
+- This causes actual data loss in task names, potentially leading to key collisions
+- The hex pattern is overly broad, matching any 8-char string with only a-f letters
+- The bug is reproducible and has clear impact on functionality
+
+**Arguments AGAINST:**
+- The docstring does show 'x-abcdefab' → 'x' being stripped, which is also 8 hex-like chars
+- Could argue it's working as designed if the intent was to strip ANY 8-char hex-looking string
+
+### 2. INVALID (Incorrect Report)
+**Arguments FOR:**
+- The docstring example 'x-abcdefab' → 'x' shows an 8-character a-f string being stripped
+- The current behavior matches the literal interpretation of the regex pattern
+
+**Arguments AGAINST:**
+- "feedback" is clearly an English word, not a hex identifier
+- The 'hello-world' example strongly implies meaningful words should be preserved
+- No reasonable user would expect "feedback" to be stripped from a task name
+- The comment "# ignores hex" implies it should ignore hex identifiers, not English words
+
+### 3. WONTFIX (Trivial/Unimportant)
+**Arguments FOR:**
+- Could argue these 8-char a-f words are rare in practice
+- Might be considered an edge case
+
+**Arguments AGAINST:**
+- "feedback" is a common English word used in many contexts
+- This causes actual functional problems (key collisions, lost information)
+- The fix is simple and low-risk
+- Multiple real words are affected (feedback, faceache, beefcafe, deafface, etc.)
+
+### 4. FEATURE_REQUEST (New Functionality)
+**Arguments FOR:**
+- Could argue that distinguishing English words from hex is a new feature
+
+**Arguments AGAINST:**
+- The 'hello-world' example shows this should already work
+- This is fixing broken behavior, not adding new functionality
+- Users expect English words in task names to be preserved
+
+### 5. DOCUMENTATION_FIX (Documentation Issue)
+**Arguments FOR:**
+- The documentation doesn't explicitly state how to handle English words that look like hex
+- Could update docs to clarify this is expected behavior
+
+**Arguments AGAINST:**
+- The code behavior is clearly wrong, not the documentation
+- The 'hello-world' example implies the correct behavior
+- No user would expect "feedback" to be stripped
+- Documenting this as correct behavior would be counterintuitive
+
+## Detailed Assessment
+
+The core issue is that the regex pattern `[a-f]+` combined with `.match()` and the 8-character length check is too broad. It was clearly intended to catch hex identifiers like git short hashes or random IDs, not English words.
+
+Evidence this is a bug:
+1. **Docstring contradiction**: 'hello-world-1' preserves "world" but 'task-feedback-1' doesn't preserve "feedback"
+2. **Semantic intent**: The function strips suffixes, not meaningful task name components
+3. **User expectation**: No reasonable user expects "feedback" to be stripped
+4. **Practical impact**: Causes key collisions and lost information
+5. **Easy fix**: The pattern should check for actual hex (0-9,a-f mix) not just a-f letters
+
+The 'x-abcdefab' example in the docstring is likely a randomly generated hex string, not an English word. The intent was to strip hex identifiers, not words that happen to use only letters a-f.
+
+## Final Determination
+
+This is clearly a **BUG**. The function's behavior contradicts its documented examples ('hello-world' preservation), violates user expectations, and causes actual functional problems. The fact that English words like "feedback" get incorrectly stripped is an implementation bug in the hex detection logic, not intended behavior.

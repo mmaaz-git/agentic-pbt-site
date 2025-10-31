@@ -1,0 +1,46 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in xarray.backends.chunks.build_grid_chunks.
+
+### Test Results
+
+1. **Basic Bug Case (size=1, chunk_size=2)**:
+   - Expected: chunks that sum to 1
+   - Actual: chunks=(2, 1), sum=3
+   - The function returns chunks whose sum exceeds the input size by 2
+
+2. **Property-Based Test**:
+   - The hypothesis test fails immediately with size=1, chunk_size=2
+   - This confirms the invariant violation: sum(chunks) != size
+
+3. **Additional Edge Cases**:
+   - size=1, chunk_size=2: chunks=(2, 1), sum=3 (INCORRECT)
+   - size=1, chunk_size=10: chunks=(10, 1), sum=11 (INCORRECT)
+   - size=2, chunk_size=3: chunks=(3, 2), sum=5 (INCORRECT)
+   - size=5, chunk_size=5: chunks=(5,), sum=5 (CORRECT)
+   - size=10, chunk_size=3: chunks=(3, 3, 3, 1), sum=10 (CORRECT)
+
+### Pattern Identified
+
+The bug specifically occurs when `size < chunk_size`. In these cases:
+- The first chunk is calculated as `chunk_size - (region_start % chunk_size)` = chunk_size (when region_start=0)
+- This first chunk already exceeds the total size
+- The calculation then proceeds to add additional chunks based on negative remainder logic
+- This results in chunks that sum to more than the original size
+
+### Root Cause
+
+Looking at lines 146-149 of the function:
+```python
+chunks_on_region = [chunk_size - (region_start % chunk_size)]
+chunks_on_region.extend([chunk_size] * ((size - chunks_on_region[0]) // chunk_size))
+if (size - chunks_on_region[0]) % chunk_size != 0:
+    chunks_on_region.append((size - chunks_on_region[0]) % chunk_size)
+```
+
+When size < chunk_size:
+1. Line 146 creates first chunk = chunk_size (when region_start=0)
+2. Line 147: (size - chunk_size) // chunk_size = negative // chunk_size = -1, which adds no chunks
+3. Line 148-149: (size - chunk_size) % chunk_size produces a positive remainder due to Python's modulo behavior with negatives, incorrectly adding another chunk
+
+The bug is real and the reproduction confirms the reported behavior exactly.

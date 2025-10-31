@@ -1,0 +1,28 @@
+## Bug Reproduction Results
+
+I have successfully reproduced the reported bug. Here are the technical details:
+
+### Actual Behavior
+
+1. **With max_bytes=-1**: The function reads the entire file (confirmed with 10MB test file). This happens because Python's file.read(-1) is a special case that reads until EOF.
+
+2. **With max_bytes=0**: Raises EndOfStream exception even when the file has data, because read(0) returns empty bytes which triggers the EndOfStream check.
+
+3. **With other negative values** (e.g., -2, -10, -100): Raises ClosedResourceError. This happens because:
+   - Python's file.read() only accepts -1 as a special negative value
+   - Any other negative value causes Python to raise ValueError: "read length must be non-negative or -1"
+   - FileReadStream.receive() catches this ValueError and converts it to ClosedResourceError (line 78-79)
+
+### Verification of Bug Report Claims
+
+The bug report is **partially correct**:
+- ✅ TRUE: max_bytes=-1 does read the entire file instead of a bounded amount
+- ✅ TRUE: This could cause memory issues with large files
+- ✅ TRUE: The parameter name "max_bytes" semantically implies a maximum constraint
+- ❌ FALSE: The report implies all negative values behave the same way, but only -1 reads the entire file
+
+### Root Cause
+
+The issue occurs because FileReadStream.receive() directly passes the max_bytes parameter to Python's file.read() without validation. Python's file.read() has special handling for -1 (read all), which conflicts with the semantic meaning of "max_bytes" as an upper bound.
+
+The current error handling also masks the real issue - when negative values other than -1 are passed, the resulting ValueError is caught and converted to ClosedResourceError, which incorrectly suggests the file is closed when it's actually a parameter validation issue.

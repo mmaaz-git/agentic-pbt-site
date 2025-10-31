@@ -1,0 +1,53 @@
+Bug Reproduction Results
+========================
+
+1. Bug Location Confirmed:
+Line 276 of /scipy/io/arff/_arffread.py contains:
+```python
+elif "yy":
+```
+This should be:
+```python
+elif "yy" in pattern:
+```
+
+2. Technical Verification:
+- Confirmed that bool('yy') = True in Python (any non-empty string is truthy)
+- The condition `elif "yy":` ALWAYS evaluates to True, regardless of the pattern content
+- This causes the code block to always execute, even when "yy" is not in the pattern
+
+3. Bug Impact - Test Results:
+
+A. Cases where bug is MASKED (overwrites hide the error):
+   - "date MM-dd" -> unit=D (correct, but Y was set then overwritten)
+   - "date dd-MM" -> unit=D (correct, but Y was set then overwritten)
+   - "date HH:mm:ss" -> unit=s (correct, but Y was set then overwritten)
+   - "date HH" -> unit=h (correct, but Y was set then overwritten)
+   - "date mm" -> unit=m (correct, but Y was set then overwritten)
+   - "date ss" -> unit=s (correct, but Y was set then overwritten)
+
+B. Cases where bug is EXPOSED (produces incorrect output):
+   - "date H" -> unit=Y (WRONG! Should be h, but no HH check to overwrite)
+   - "date m" -> unit=Y (WRONG! Should be m, but no mm check to overwrite)
+   - "date s" -> unit=Y (WRONG! Should be s, but no ss check to overwrite)
+
+4. Execution Flow Analysis for "date H":
+   1. Pattern matches, becomes "H"
+   2. Check "yyyy" in "H": False, skip
+   3. Check "yy" (BUG): Always True, enters block
+   4. Replace "yy" in "H": No change (harmless)
+   5. Set datetime_unit = "Y" (INCORRECT)
+   6. No further matches to overwrite
+   7. Returns datetime_unit = "Y" (WRONG OUTPUT)
+
+5. Hypothesis Test Results:
+The hypothesis test successfully found failing cases. Pattern "H" (and similar single-character time patterns) expose the bug by returning datetime_unit='Y' when no year component exists in the pattern.
+
+6. Bug Classification:
+This is a REAL LOGIC ERROR that:
+- Always executes the wrong code path
+- Sometimes produces incorrect output (unit='Y' for non-year patterns)
+- Makes the code confusing and fragile
+- Could break if refactored or if new patterns are added
+
+The bug report is technically accurate and demonstrates real incorrect behavior in edge cases.

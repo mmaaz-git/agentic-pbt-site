@@ -1,0 +1,34 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the bug described in the report. The bug occurs in the `_clear_cache` function in scipy.datasets._utils.py.
+
+### Bug Behavior Confirmed:
+
+1. **Test Case 1: Invalid dataset with non-existent cache directory**
+   - Input: A fake dataset function not in the method_files_map registry, with a non-existent cache directory
+   - Expected: Should raise ValueError about invalid dataset
+   - Actual: Function returns silently after printing "Cache Directory ... doesn't exist. Nothing to clear."
+
+2. **Test Case 2: Invalid dataset with existing cache directory**
+   - Input: Same fake dataset function, but with an existing cache directory
+   - Expected: Should raise ValueError about invalid dataset
+   - Actual: Correctly raises ValueError with message "Dataset method nonexistent_dataset doesn't exist..."
+
+### Root Cause:
+
+The issue is at lines 24-26 in _utils.py:
+```python
+if not os.path.exists(cache_dir):
+    print(f"Cache Directory {cache_dir} doesn't exist. Nothing to clear.")
+    return
+```
+
+This early return happens BEFORE the dataset validation logic (lines 38-42), which means invalid datasets are never validated when the cache directory doesn't exist.
+
+### Impact:
+
+This creates inconsistent behavior where:
+- Invalid datasets raise errors when cache exists
+- Invalid datasets are silently ignored when cache doesn't exist
+
+This violates the principle of fail-fast and consistent error handling. Users providing invalid dataset parameters should receive immediate feedback regardless of whether the cache directory exists.

@@ -1,0 +1,43 @@
+BUG REPRODUCTION REPORT
+=====================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. HYPOTHESIS TEST RESULTS:
+   - The property-based test using Hypothesis failed immediately with a minimal example
+   - Failing example: n_categories=1, codes=[-1]
+   - The test correctly identified that -1 sentinel values are being corrupted
+
+2. MANUAL REPRODUCTION:
+   - The manual reproduction code ran successfully and confirmed the bug
+   - Input: Categorical with codes [0, 1, -1, 2] and categories ['a', 'b', 'c']
+   - Expected output: ['a', 'b', NaN, 'c']
+   - Actual output after from_dataframe(): ['a', 'b', 'c', 'c']
+   - The NaN at index 2 was incorrectly converted to 'c'
+
+3. SOURCE CODE ANALYSIS:
+   - Located the bug in /home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/interchange/from_dataframe.py
+   - Lines 251-254 contain the problematic code:
+     ```python
+     # Doing module in order to not get ``IndexError`` for
+     # out-of-bounds sentinel values in `codes`
+     if len(categories) > 0:
+         values = categories[codes % len(categories)]
+     ```
+   - The modulo operation (codes % len(categories)) converts -1 to 2 when len(categories)=3
+   - This transforms the sentinel value into a valid category index
+
+4. ROOT CAUSE VERIFICATION:
+   - Tested the modulo behavior separately:
+     - codes: [0, 1, -1, 2]
+     - codes % 3: [0, 1, 2, 2]
+   - Confirmed that -1 % 3 = 2 in Python, which explains the corruption
+   - The -1 sentinel (representing NaN) becomes index 2, pointing to category 'c'
+
+5. IMPACT:
+   - Data corruption: Missing values are silently converted to valid category values
+   - Silent failure: No errors or warnings are raised
+   - Round-trip violation: Data changes after going through the interchange protocol
+   - This affects ANY categorical data with missing values when using from_dataframe()
+
+The bug is 100% reproducible and the report accurately describes the problem.

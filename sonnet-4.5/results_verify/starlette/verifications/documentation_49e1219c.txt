@@ -1,0 +1,35 @@
+## Documentation Analysis for Jinja2Templates
+
+### Official Documentation
+The Starlette documentation (https://www.starlette.io/templates/) specifies:
+- The directory parameter can be "a string, os.Pathlike or a list of strings or os.Pathlike denoting a directory path"
+- A preconfigured jinja2.Environment instance can be passed via the env parameter
+- The documentation does NOT explicitly state what should happen when empty sequences are provided
+
+### Type Hints and Overloads
+Looking at the code's type annotations (lines 67-82), there are two @overload decorators:
+
+1. First overload (lines 67-74): Takes a `directory` parameter of type `str | PathLike[str] | Sequence[str | PathLike[str]]` (NOT optional)
+2. Second overload (lines 76-82): Takes ONLY an `env` parameter of type `jinja2.Environment` (NOT optional)
+
+These overloads clearly indicate the intended API design:
+- EITHER provide a directory (non-empty, meaningful path)
+- OR provide an environment
+
+### The Assertion's Intent
+Line 98: `assert bool(directory) ^ bool(env), "either 'directory' or 'env' arguments must be passed"`
+
+This assertion message explicitly states the XOR relationship: "either 'directory' or 'env' arguments must be passed" (emphasis on EITHER, not BOTH).
+
+### Analysis of Empty Sequences
+The documentation and type hints suggest that:
+1. When using the directory parameter, it should represent actual directory paths
+2. An empty sequence (`[]`, `()`, `""`) doesn't represent a valid directory path
+3. The XOR assertion correctly identifies that an empty sequence is "falsy" and shouldn't be considered as providing a directory
+
+### Conclusion
+The documentation and type hints support the assertion's logic (line 98) that uses truthiness checks. An empty sequence is not a valid directory specification, and when it evaluates to False, the code should use the provided env parameter instead. The bug is that the conditional logic (line 100) doesn't match this intent by using `is not None` instead of a truthiness check.
+
+The behavior described in the bug report (that the code should use the provided env when directory is an empty sequence) aligns with both:
+- The assertion's logic and error message
+- The reasonable interpretation that empty sequences don't constitute valid directory paths

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report claims the categorize parameter violates a "documented contract" that it should only affect performance, not results. However, the documentation never explicitly states this contract. It only says categorize makes hashing "more efficient when the array contains duplicate values." The documentation doesn't promise identical results between categorize=True and categorize=False. The user is inferring a contract that isn't explicitly stated. Different parameters producing different outputs is not inherently a bug unless documented otherwise.
+
+**Why it might not be INVALID:**
+The behavior is counterintuitive - most users would expect an "optimization" parameter not to change the semantic results. The fact that two distinct strings ('', '\x00') receive identical hashes could be seen as incorrect behavior regardless of the categorize parameter. Hash functions should generally distinguish between different inputs.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case involving empty strings and null bytes that would rarely occur in practice. The vast majority of real-world data wouldn't encounter this issue. The performance benefit of the categorize optimization likely outweighs the cost of this edge case. Fixing this might require changes to pandas.factorize() which could have broader implications and break existing code that depends on current behavior.
+
+**Why it might not be WONTFIX:**
+Hash consistency is important for data integrity. Even edge cases matter when dealing with hash functions, as they're often used for deduplication, grouping, and joins. The issue affects the correctness of results, not just performance or aesthetics.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is arguably working as designed - it's using factorize() which has its own string handling logic. The real issue is that the documentation doesn't warn users that categorize=True may produce different hashes for certain edge cases. Adding a note to the documentation explaining that categorize may change hash values for certain inputs (particularly involving empty strings and null bytes) would set correct expectations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting problematic behavior doesn't make it correct. If the function produces incorrect hashes (treating different strings as identical), that's a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation works for most cases, and the user is essentially asking for enhanced handling of edge cases involving empty strings and null bytes. This could be viewed as requesting a new feature: "Support for consistent hashing of empty strings and null bytes with categorize=True." The function wasn't originally designed with these edge cases in mind.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the function already claims to hash arrays deterministically. The issue is that it's failing to do so correctly for certain inputs. Fixing broken behavior isn't a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+Two distinct strings ('' and '\x00') receiving identical hash values is fundamentally wrong behavior for a hash function. Hash functions should produce different outputs for different inputs (with collision probability). This violates the basic contract of what a hash function should do, regardless of what optimization parameters are used.
+
+**Why it might not be BUG:**
+The documentation never promised that categorize wouldn't change results. The parameter is working as implemented - it uses factorize() for performance, and factorize() has its own logic for handling strings. The behavior might be intentional, trading perfect correctness for performance in edge cases. Without explicit documentation stating the hashes must be identical, this is more of an undocumented behavioral quirk than a bug.
+
+## Overall Consideration
+After careful analysis, this appears to be a DOCUMENTATION_FIX issue rather than a bug. The core problem is that the user has inferred a contract from the documentation that isn't explicitly stated. The documentation says categorize is "more efficient" but never promises it won't change hash values. The actual behavior - using factorize() which can treat certain distinct strings as identical - is how the code was designed to work for performance reasons.
+
+The fact that factorize() treats '' and '\x00' as the same is likely due to how pandas handles missing/null values internally. While this behavior is surprising and could be considered incorrect from a pure hashing perspective, it's consistent with how pandas handles these values elsewhere in the library. The issue isn't that the code is broken, but that the documentation doesn't adequately explain the trade-offs involved with the categorize parameter.
+
+The best resolution would be to update the documentation to explicitly state that categorize=True may produce different hash values than categorize=False, particularly for edge cases involving empty strings, null bytes, and other special characters. This would set proper expectations while preserving the current performance optimization that benefits the vast majority of use cases.

@@ -1,0 +1,33 @@
+## Reproduction Results
+
+I successfully reproduced the bug as described in the bug report.
+
+### Hypothesis Test
+The Hypothesis test failed exactly as described, with the following error:
+- Input: ArrowExtensionArray(pa.array([None])), loc=0, item=0
+- Error: pyarrow.lib.ArrowNotImplementedError: Unsupported cast from int64 to null using function cast_null
+
+### Direct Reproduction
+The direct reproduction code also failed with the same error:
+```python
+arr = ArrowExtensionArray(pa.array([None]))
+result = arr.insert(0, 42)
+```
+Output: ArrowNotImplementedError: Unsupported cast from int64 to null using function cast_null
+
+### Additional Testing
+I conducted additional tests to understand the behavior:
+
+1. When creating an array with mixed None and non-None values (e.g., [None, 42]), PyArrow infers the type as int64, not null.
+2. When creating an array with only None values, PyArrow creates a null-type array.
+3. PyArrow allows casting FROM null to int64 (results in null values in int64 type).
+4. PyArrow does NOT allow casting FROM int64 to null type (raises ArrowNotImplementedError).
+
+The error occurs in the insert() method at line 2116 of base.py:
+```python
+item_arr = type(self)._from_sequence([item], dtype=self.dtype)
+```
+
+When self.dtype is null and item is a non-None value, _from_sequence creates an int64 array and then attempts to cast it to null type, which fails.
+
+The bug report accurately describes the issue and the error message matches exactly.

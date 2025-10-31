@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported in attrs' asdict() function. Here's what I found:
+
+### 1. Bug Confirmation
+The bug is **REAL** and **REPRODUCIBLE**. When calling `asdict()` with `retain_collection_types=True` on an attrs class containing namedtuples within a list, the function crashes with:
+```
+TypeError: Point.__new__() missing 1 required positional argument: 'y'
+```
+
+### 2. Test Results
+
+#### Simple reproduction test:
+```python
+Point = namedtuple('Point', ['x', 'y'])
+@attr.s
+class Container:
+    points = attr.ib()
+
+c = Container(points=[Point(1, 2)])
+result = asdict(c, retain_collection_types=True)  # CRASHES
+```
+Result: **TypeError** as reported
+
+#### Control test without retain_collection_types:
+```python
+result = asdict(c)  # Works fine
+# Output: {'points': [[1, 2]]}
+```
+Result: **SUCCESS** - Works when retain_collection_types is False/default
+
+### 3. Root Cause Verification
+I examined the source code in `/home/npc/miniconda/lib/python3.13/site-packages/attr/_funcs.py`:
+
+- Lines 96-103: Main `asdict()` function has workaround for namedtuples with try/except block
+- Lines 163-175: Helper `_asdict_anything()` function lacks the same workaround
+- The inconsistency causes crashes when namedtuples appear in nested collections
+
+### 4. Code Comments Confirm Intent
+The source code contains comments acknowledging this is a known workaround:
+- Line 102: "# Workaround for TypeError: cf.__new__() missing 1 required positional argument (which appears, for a namedturle)"
+- Line 289: Similar comment in `astuple()` function
+
+Note: There's a typo "namedturle" instead of "namedtuple" in the comments.
+
+### Conclusion
+The bug is confirmed and the analysis in the bug report is accurate. The `_asdict_anything()` helper function needs the same namedtuple workaround that exists in the main `asdict()` function.

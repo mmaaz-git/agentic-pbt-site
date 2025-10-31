@@ -1,0 +1,42 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Results
+Running the provided Hypothesis test confirms the bug. The test expects a `TypeError` when passing infinity values to `ensure_python_int()`, but instead receives an `OverflowError`:
+
+```
+AssertionError: Expected TypeError but got OverflowError: cannot convert float infinity to integer
+Falsifying example: test_ensure_python_int_infinity_raises_typeerror(value=inf)
+```
+
+### Direct Reproduction
+I also tested the function directly with both positive and negative infinity:
+
+```python
+ensure_python_int(float('inf'))   # Raises OverflowError: cannot convert float infinity to integer
+ensure_python_int(float('-inf'))  # Raises OverflowError: cannot convert float infinity to integer
+```
+
+Both cases raise `OverflowError` instead of the documented `TypeError`.
+
+### Root Cause Analysis
+Examining the source code reveals the issue. The function implementation at lines 115-119 in `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/dtypes/common.py`:
+
+```python
+try:
+    new_value = int(value)
+    assert new_value == value
+except (TypeError, ValueError, AssertionError) as err:
+    raise TypeError(f"Wrong type {type(value)} for value {value}") from err
+```
+
+The except clause only catches `TypeError`, `ValueError`, and `AssertionError`. When Python's built-in `int()` function is called with infinity, it raises `OverflowError`, which is not caught and thus propagates directly to the caller.
+
+### Verification of Python's Behavior
+I confirmed that Python's built-in `int()` function raises `OverflowError` for infinity:
+```python
+int(float('inf'))  # Raises: OverflowError: cannot convert float infinity to integer
+```
+
+The bug report is accurate: the function raises `OverflowError` when given infinity values, contradicting its docstring which promises to raise `TypeError` for values that can't be converted to int.

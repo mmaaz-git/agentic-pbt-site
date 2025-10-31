@@ -1,0 +1,41 @@
+## Bug Reproduction Report for dask.utils.ndeepmap
+
+### Reproduction Status: CONFIRMED
+
+I have successfully reproduced the bug described in the report. The function `ndeepmap` exhibits the exact behavior described when `n <= 0` and a multi-element list is passed.
+
+### Test Results
+
+1. **Hypothesis test**: The property-based test passed successfully, confirming that for ANY list with 2+ elements, when `n=0`, only the first element is processed and the rest are silently discarded.
+
+2. **Specific example reproduction**:
+   - `ndeepmap(0, inc, [1])` returns `2`
+   - `ndeepmap(0, inc, [1, 2, 3, 4, 5])` also returns `2`
+   - Both results are identical despite different input sizes
+
+3. **Additional testing revealed**:
+   - With `n=0` and list `[10, 20, 30]`, the function returns `11` (only processes first element)
+   - With `n=0` and list `[100]`, the function returns `101`
+   - With `n=1` and list `[10, 20, 30]`, the function correctly returns `[11, 21, 31]`
+   - With `n=-1` and list `[10, 20, 30]`, the function returns `11` (same behavior as n=0)
+
+### Impact Analysis
+
+The bug is real and has the following characteristics:
+
+1. **Silent data loss**: When `n <= 0` and a multi-element list is provided, all elements except the first are silently discarded without warning or error.
+
+2. **Inconsistent behavior**: The function behaves differently based on the value of `n`:
+   - When `n=1`: Applies function to all elements and returns a list
+   - When `n<=0` with list: Only applies function to first element and returns scalar
+   - When `n<=0` with non-list: Applies function to the value
+
+3. **Testing gap**: The existing test in `dask/tests/test_utils.py` only tests with a single-element list for `n=0`, which doesn't expose this bug:
+   ```python
+   L = [1]
+   assert ndeepmap(0, inc, L) == 2
+   ```
+
+### Conclusion
+
+The bug is confirmed. The function silently discards data when `n <= 0` and the input is a multi-element list, which can lead to silent data corruption in applications that depend on this utility function.

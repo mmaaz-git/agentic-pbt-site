@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+I have successfully reproduced the reported bug and verified the technical details.
+
+### Test Environment
+- NumPy version: 2.3.0
+- Test case: `numpy.random.uniform(-5e-324, 0.0)`
+
+### Reproduction Results
+
+1. **Hypothesis test passes**: The property-based test using Hypothesis does not find failures with normal floating-point ranges, indicating this is specific to extremely small ranges.
+
+2. **Specific failing case confirmed**: With `low=-5e-324` and `high=0.0`:
+   - Approximately 50% of generated values violate the upper bound
+   - All violations return exactly `0.0` (not values near 0.0)
+   - This behavior is consistent across different random seeds
+
+3. **Violation rates across seeds**:
+   - Seed 123: 50.4% violations
+   - Seed 1: 50.6% violations
+   - Seed 3: 51.2% violations
+   - Average: ~50% violation rate
+
+### Technical Analysis
+
+1. **The value -5e-324 is significant**:
+   - It is a subnormal (denormalized) number
+   - It's the smallest representable negative float in IEEE 754
+   - Hex representation: -0x0.0000000000001p-1022
+
+2. **Floating-point arithmetic breakdown**:
+   The likely implementation formula `low + (high - low) * random_unit` produces:
+   - When random_unit ≥ ~0.5: Result rounds to exactly 0.0
+   - When random_unit < ~0.5: Result stays at -5e-324
+   - No intermediate values exist between -5e-324 and 0.0
+
+3. **Range analysis**:
+   - Range [-5e-324, 0.0): ~50% violations
+   - Range [-1e-323, 0.0): ~24% violations
+   - Range [-2.225e-308, 0.0) (smallest normal): 0% violations
+   - When low rounds to 0.0 (e.g., -1e-324): 100% violations
+
+4. **New Generator API has same issue**:
+   The recommended np.random.Generator.uniform() shows identical behavior with ~50% violation rate, indicating this is a fundamental implementation issue, not specific to the legacy API.
+
+### Conclusion
+The bug report is technically accurate. The function does return values equal to `high` when dealing with subnormal number ranges, violating the documented half-open interval `[low, high)`. This occurs because there are only two representable float values in the range [-5e-324, 0.0]: the value -5e-324 itself and 0.0.

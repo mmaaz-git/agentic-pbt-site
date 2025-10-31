@@ -1,0 +1,66 @@
+Bug Reproduction Results for pandas.api.types.is_re_compilable
+==============================================================
+
+Testing Environment:
+--------------------
+- pandas version: 2.2.3 (from installed environment)
+- Python version: 3.13
+- Test location: /home/npc/pbt/agentic-pbt/worker_/54/
+
+Reproduction Results:
+---------------------
+
+1. SPECIFIC TEST CASES FROM BUG REPORT:
+All the specific test cases mentioned in the bug report were confirmed to crash:
+
+- Input: '?' → EXCEPTION: PatternError: nothing to repeat at position 0
+- Input: '*' → EXCEPTION: PatternError: nothing to repeat at position 0
+- Input: '+' → EXCEPTION: PatternError: nothing to repeat at position 0
+- Input: '(?'→ EXCEPTION: PatternError: unexpected end of pattern at position 2
+- Input: '[' → EXCEPTION: PatternError: unterminated character set at position 0
+
+For all these cases, re.compile() also raises re.error with the same messages,
+confirming that these are indeed invalid regex patterns.
+
+2. HYPOTHESIS TESTING:
+The hypothesis test successfully found multiple failing examples:
+- Input: '(' → PatternError: missing ), unterminated subpattern at position 0
+- Input: ')' → PatternError: unbalanced parenthesis at position 0
+- Input: '?' → PatternError: nothing to repeat at position 0
+
+The test confirms that is_re_compilable raises exceptions instead of returning False
+for invalid regex patterns.
+
+3. CURRENT IMPLEMENTATION ANALYSIS:
+The current implementation in pandas/core/dtypes/inference.py:
+```python
+def is_re_compilable(obj) -> bool:
+    try:
+        re.compile(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+```
+
+The function only catches TypeError (for non-string inputs like integers) but does NOT
+catch re.error exceptions that occur when a string contains an invalid regex pattern.
+
+4. EXPECTED vs ACTUAL BEHAVIOR:
+- EXPECTED: is_re_compilable('?') should return False
+- ACTUAL: is_re_compilable('?') raises PatternError
+
+The bug report is ACCURATE. The function crashes with PatternError (a subclass of re.error)
+when given invalid regex patterns, instead of returning False as documented.
+
+5. VERIFICATION OF PROPOSED FIX:
+The proposed fix to catch both TypeError and re.error would correctly handle all cases:
+- Invalid regex strings would return False (catching re.error)
+- Non-string objects would return False (catching TypeError)
+- Valid regex strings would return True
+
+Conclusion:
+-----------
+The bug report is technically correct. The function does not behave as its documentation
+suggests - it should return a boolean for all inputs, but instead raises exceptions for
+invalid regex patterns.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify that the tracker process should be excluded from monitoring. One could argue that without explicit documentation stating this behavior, the current implementation isn't technically wrong - it's just doing what the code says, even if that's not what was intended. The function works and produces resource measurements, just with the tracker included.
+
+**Why it might not be INVALID:**
+This is clearly a programming error - comparing an integer with a Process object is a type mismatch that can never work as intended. The code structure strongly suggests the intent was to exclude the tracker (why else pass the pid and check inequality?). The comparison `p.pid != pid` is meaningless when comparing different types, and the fact that it always returns True is clearly unintended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The impact is relatively minor - the tracker process typically uses minimal resources compared to actual computations being profiled. In practice, the additional overhead from including the tracker in measurements might be negligible for most use cases. Users are unlikely to notice or care about this small discrepancy in resource measurements.
+
+**Why it might not be WONTFIX:**
+This is a clear logic error with an obvious fix. The type mismatch is objectively wrong and fixing it requires changing just `.pid` to `.pid.pid`. Profiling tools should be accurate, and including the profiler's own overhead violates the principle of measuring only the target code. Even small inaccuracies matter for a diagnostic tool.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify whether the tracker should be included or excluded. One could update the documentation to say "Note: resource measurements include the overhead of the profiling process itself" and leave the code as-is. This would make the current behavior "correct" according to updated documentation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly has a bug - it's comparing incompatible types. This isn't a case where the code works differently than documented; it's a case where the code doesn't work as the programmer intended. The structure shows clear intent to filter out the tracker, but the implementation is broken. Documentation can't fix a type mismatch error.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting a new feature: "Add capability to exclude the profiler process from resource measurements." Currently the profiler includes all processes, and we're asking for new functionality to filter out the tracker. This would be adding precision that wasn't there before.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the code already attempts to exclude the tracker process, it just does it incorrectly due to a bug. The filtering logic exists but is broken. Fixing broken existing functionality is bug fixing, not adding features. The intent to exclude is clear from the code structure.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a textbook programming error - a type mismatch where an integer is compared to a Process object. The comparison `p.pid != pid` where pid is a Process object is objectively wrong. The code's structure clearly shows intent to filter out the tracker process (why else would it pass pid and check inequality?), but the implementation fails due to comparing incompatible types. The fix is trivial and obvious.
+
+**Why it might not be BUG:**
+The profiler still functions and produces resource measurements, even if they include the tracker. The documentation doesn't explicitly promise that the tracker will be excluded. The impact is minimal in practice. Without explicit documentation about excluding the tracker, this could be considered undefined behavior rather than a bug.
+
+## Overall Consideration
+
+Looking at all the evidence, this is clearly a **BUG**. The decisive factor is the type mismatch - comparing `p.pid` (an integer) with `pid` (a Process object) is unambiguously wrong. This isn't a matter of interpretation or missing documentation; it's a programming error where incompatible types are compared, resulting in a comparison that always returns True regardless of the actual PID values.
+
+The code structure reveals clear intent: the developer wanted to filter out the tracker process from monitoring. They obtained the current process, passed it to `_update_pids`, and wrote a comparison intending to exclude processes matching that PID. However, they made a simple mistake by forgetting to access the `.pid` attribute, comparing the entire Process object instead of its PID. This is a common Python programming error.
+
+While the impact may be minor in practice (the tracker process likely uses minimal resources), this doesn't change the fact that the code contains an objective error. A profiler should measure only the target code's resource usage, not its own overhead. Including the profiler in its own measurements violates the basic principle of profiling tools. The fix is trivial (change `pid` to `pid.pid`), the bug is real, and it should be corrected.
+
+## Decision: BUG

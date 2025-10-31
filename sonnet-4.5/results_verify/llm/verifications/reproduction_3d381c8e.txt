@@ -1,0 +1,38 @@
+Bug Reproduction Report for truncate_string
+============================================
+
+I have successfully reproduced the bug as described in the report.
+
+Test Results:
+-------------
+1. The Hypothesis test fails as reported:
+   - Input: truncate_string('00000', max_length=1)
+   - Expected: Result with length <= 1
+   - Actual: Result = '000...' with length 6
+   - This violates the max_length constraint
+
+2. Manual testing reveals the issue is systematic for small max_length values:
+   - max_length=1: Returns strings with length 6-12+ (e.g., 'hello wor...' with length 12)
+   - max_length=2: Returns strings with length 7-13+ (e.g., 'hello worl...' with length 13)
+   - max_length=3: Returns '...' with length 3 (matches max_length by coincidence)
+   - max_length=4: Returns 'h...' with length 4 (correct)
+   - max_length=5: Returns 'he...' with length 5 (correct)
+
+Root Cause Analysis:
+--------------------
+The bug occurs in lines 475-476 of the code:
+```python
+else:
+    return text[: max_length - 3] + "..."
+```
+
+When max_length < 3:
+- max_length=1: text[:1-3] = text[:-2] = all but last 2 chars
+- max_length=2: text[:2-3] = text[:-1] = all but last 1 char
+
+This is because negative indices in Python slicing mean "from the end", not "empty string".
+So instead of truncating, the function actually keeps most of the original string and appends "...",
+making the result much longer than max_length.
+
+The bug report's analysis is technically accurate: the function violates its contract by returning
+strings longer than max_length when max_length < 3.

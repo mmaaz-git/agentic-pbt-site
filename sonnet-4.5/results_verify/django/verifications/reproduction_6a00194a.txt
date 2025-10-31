@@ -1,0 +1,36 @@
+REPRODUCTION ANALYSIS
+====================
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+1. BUG CONFIRMATION
+The bug is real and reproducible. When a Signal is created with use_caching=True and send() is called with a non-weakly-referenceable sender (like None, int, str, or plain object()), a TypeError occurs.
+
+2. EXACT ERROR
+The error occurs at line 183 in dispatcher.py:
+    or self.sender_receivers_cache.get(sender) is NO_RECEIVERS
+
+The traceback shows:
+TypeError: cannot create weak reference to 'NoneType' object
+
+3. REPRODUCED TEST CASES
+All test cases from the bug report were confirmed:
+- sender=None: FAILS with TypeError
+- sender=object(): FAILS with TypeError
+- sender=42: FAILS with TypeError
+- sender="string": FAILS with TypeError
+- sender=MyClass(): SUCCESS (custom classes support weak references)
+
+4. CONTROL TEST
+With use_caching=False, all sender types work correctly, confirming the issue is specifically related to the caching mechanism.
+
+5. HYPOTHESIS TEST
+The hypothesis test fails as expected when use_caching=True is tested, confirming the property-based test correctly identifies the bug.
+
+6. ROOT CAUSE
+The issue is that on line 47, a WeakKeyDictionary is created when use_caching=True:
+    self.sender_receivers_cache = weakref.WeakKeyDictionary() if use_caching else {}
+
+WeakKeyDictionary cannot accept keys that don't support weak references (like None, int, str, or plain object instances). When the code tries to access this cache with such a sender on line 183, it crashes.
+
+The bug is correctly identified and reproducible.

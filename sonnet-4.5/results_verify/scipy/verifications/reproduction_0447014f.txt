@@ -1,0 +1,38 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmation
+The bug is confirmed to occur exactly as described. When `scipy.sparse.linalg.spsolve_triangular` is called with a sparse matrix that has `int64` index arrays, it crashes with a TypeError.
+
+### Reproduction Results
+
+1. **Simple test case**:
+   - Created a 2x2 lower triangular sparse matrix from coordinate format
+   - Default behavior creates `int64` indices and indptr arrays
+   - Function crashes with: "TypeError: row indices and column pointers must be of type cint"
+
+2. **Property-based test**:
+   - All 10 randomly generated test cases with hypothesis failed with the same TypeError
+   - The failure is consistent across different matrix sizes (2x2 to 8x8)
+
+3. **Workaround verification**:
+   - Converting indices and indptr to `int32` before calling the function works correctly
+   - The function produces correct results when given int32 arrays
+
+### Root Cause
+The issue lies in the underlying `_superlu.gstrs` C extension function, which only accepts `int32` (cint) arrays for indices and indptr. I tested this directly:
+- `_superlu.gstrs` with int32 indices: Success
+- `_superlu.gstrs` with int64 indices: TypeError
+
+### Default Behavior Analysis
+When creating CSR arrays from coordinate format (the most natural way), scipy defaults to:
+- From Python lists: `int64` indices and indptr
+- From numpy arrays: preserves the dtype of input arrays
+- This means the default, most intuitive usage pattern leads to the crash
+
+### Comparison with Other Functions
+Other scipy.sparse.linalg functions handle int64 indices without issue:
+- `spsolve`: Works with int64 indices
+- `splu`: Works with int64 indices
+This inconsistency makes `spsolve_triangular` an outlier in the API.

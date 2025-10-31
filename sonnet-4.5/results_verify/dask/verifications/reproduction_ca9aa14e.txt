@@ -1,0 +1,29 @@
+REPRODUCTION OF BUG REPORT: dask.utils.format_bytes Output Length Violation
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. BUG CONFIRMATION:
+   - The bug exists exactly as described in the report
+   - For n = 1,125,899,906,842,624,000 (which equals 1000 * 2^50), format_bytes returns '1000.00 PiB'
+   - This output has 11 characters, violating the documented guarantee
+   - The value is indeed < 2^60 (verified: n < 2^60 = True)
+
+2. HYPOTHESIS TEST RESULTS:
+   - The property-based test using Hypothesis fails as expected
+   - Both example values fail:
+     * n=1,125,894,277,343,089,729 produces '1000.00 PiB' (11 chars)
+     * n=1,125,899,906,842,624,000 produces '1000.00 PiB' (11 chars)
+
+3. BOUNDARY ANALYSIS:
+   - 999.99 * 2^50 produces '999.99 PiB' (10 chars) - within limit
+   - 1000.00 * 2^50 produces '1000.00 PiB' (11 chars) - violates limit
+   - 1000.01 * 2^50 produces '1000.01 PiB' (11 chars) - violates limit
+
+   This confirms the boundary is exactly at 1000 PiB where the output switches from 10 to 11 characters.
+
+4. ROOT CAUSE:
+   The function uses f"{n / k:.2f} {prefix}B" formatting which includes 2 decimal places.
+   When n/k >= 1000, the integer part requires 4 digits, plus decimal point (1),
+   plus 2 decimal digits (2), plus space (1), plus unit (3 for "PiB") = 11 total characters.
+
+The bug is accurately described and the reproduction code works exactly as stated in the report.

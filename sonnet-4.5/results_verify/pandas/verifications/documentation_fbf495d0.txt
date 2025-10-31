@@ -1,0 +1,53 @@
+## Documentation Analysis Report
+
+### Official Pandas Documentation
+
+#### Categorical Data Documentation
+According to the official pandas documentation (https://pandas.pydata.org/docs/user_guide/categorical.html):
+- **Missing values in Categorical data are represented by np.nan**
+- **Missing values should NOT be included in the Categorical's categories, only in the values**
+- **When working with Categorical's codes, missing values will always have a code of -1**
+
+This is explicitly stated: "When working with the Categorical's `codes`, missing values will always have a code of `-1`."
+
+Example from documentation:
+```python
+s = pd.Series(["a", "b", np.nan, "a"], dtype="category")
+s.cat.codes
+# Output: 0, 1, -1, 0 (where -1 represents the null value)
+```
+
+#### Interchange Protocol Implementation in Pandas
+From the pandas source code (`pandas/core/interchange/column.py`):
+- Lines 58-60 explicitly define that categorical columns use sentinel value -1 for null values:
+  ```python
+  # Null values for categoricals are stored as `-1` sentinel values
+  # in the category date (e.g., `col.values.codes` is int8 np.ndarray)
+  DtypeKind.CATEGORICAL: (ColumnNullType.USE_SENTINEL, -1),
+  ```
+
+#### DataFrame Interchange Protocol Specification
+The official interchange protocol (https://data-apis.org/dataframe-protocol/latest/API.html) defines:
+- `ColumnNullType.USE_SENTINEL` as a valid null representation method
+- The `describe_null()` method returns a tuple of (kind, value) where value is the sentinel
+- The protocol allows flexibility but expects proper handling of sentinel values
+
+### Expected Behavior Based on Documentation
+1. Categorical null values should be represented as -1 in the codes array
+2. The interchange protocol should preserve these null values when transferring data
+3. After interchange, null positions should remain null (not be converted to valid categories)
+4. The `set_nulls()` function should be able to identify and properly set null values
+
+### Actual Behavior vs Documentation
+The current implementation violates the documented behavior:
+- The modulo operation converts -1 sentinel values to valid category indices
+- This contradicts pandas' own specification that -1 represents null values
+- The interchange protocol's requirement to preserve null information is violated
+- The implementation comment acknowledges sentinel values exist but handles them incorrectly
+
+### Conclusion
+The bug represents a clear violation of both:
+1. Pandas' own documented specification for categorical null values
+2. The interchange protocol's requirement to preserve null value information
+
+The implementation directly contradicts the documented behavior and specifications.

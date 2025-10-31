@@ -1,0 +1,46 @@
+## Reproduction Analysis
+
+I successfully reproduced the bug reported in `xarray.backends.chunks.build_grid_chunks`.
+
+### Test Results:
+
+1. **Hypothesis Test**: Failed with the exact input mentioned in the bug report (size=1, chunk_size=2)
+   - Function returned chunks: (2, 1)
+   - Sum of chunks: 3
+   - Expected size: 1
+   - This violates the fundamental invariant that sum(chunks) should equal size
+
+2. **Edge Case Testing**: The bug occurs whenever size < chunk_size:
+   - size=1, chunk_size=2: chunks=(2, 1), sum=3 (Expected: 1)
+   - size=1, chunk_size=10: chunks=(10, 1), sum=11 (Expected: 1)
+   - size=2, chunk_size=3: chunks=(3, 2), sum=5 (Expected: 2)
+   - size=3, chunk_size=5: chunks=(5, 3), sum=8 (Expected: 3)
+   - size=10, chunk_size=20: chunks=(20, 10), sum=30 (Expected: 10)
+
+3. **Working Cases**: The function works correctly when size >= chunk_size:
+   - size=10, chunk_size=3: chunks=(3, 3, 3, 1), sum=10 ✓
+   - size=10, chunk_size=10: chunks=(10,), sum=10 ✓
+
+### Root Cause:
+
+Looking at the code (lines 146-149 of chunks.py):
+```python
+chunks_on_region = [chunk_size - (region_start % chunk_size)]
+chunks_on_region.extend([chunk_size] * ((size - chunks_on_region[0]) // chunk_size))
+if (size - chunks_on_region[0]) % chunk_size != 0:
+    chunks_on_region.append((size - chunks_on_region[0]) % chunk_size)
+```
+
+When region=None (default), region_start=0, so:
+- Line 146: First chunk is set to `chunk_size` (e.g., 2 when chunk_size=2)
+- Line 148-149: Since `size - chunk_size < 0` when size < chunk_size, the remainder calculation yields a negative value that wraps around, adding an erroneous additional chunk
+
+The function incorrectly assumes the first chunk can always be of size `chunk_size`, even when the total size is smaller.
+
+### Impact:
+
+This bug would cause issues in real-world scenarios where:
+- Small arrays or array dimensions are chunked with larger chunk sizes
+- Data processing pipelines that expect chunk sums to equal dimension sizes would fail
+- Memory allocation based on chunk sizes would be incorrect
+- Parallel processing could attempt to access non-existent data

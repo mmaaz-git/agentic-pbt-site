@@ -1,0 +1,46 @@
+## Bug Reproduction Results
+
+### Test Execution
+
+I successfully reproduced the bug exactly as described in the report. All test cases behaved as expected:
+
+1. **Short hash_key (5 bytes)**:
+   - Input: hash_key="short"
+   - Result: ValueError: key should be a 16-byte string encoded, got b'short' (len 5)
+
+2. **Multi-byte UTF-8 (19 bytes)**:
+   - Input: hash_key="000000000000000🦄" (16 characters, but 19 bytes due to emoji)
+   - Result: ValueError: key should be a 16-byte string encoded, got b'000000000000000\xf0\x9f\xa6\x84' (len 19)
+
+3. **Default 16-byte key**:
+   - Works correctly with default "0123456789123456"
+
+4. **Custom 16-byte key**:
+   - Input: hash_key="abcdefghijklmnop" (exactly 16 ASCII characters = 16 bytes)
+   - Result: Success
+
+5. **Longer hash_key (20 bytes)**:
+   - Input: hash_key="12345678901234567890"
+   - Result: ValueError: key should be a 16-byte string encoded, got b'12345678901234567890' (len 20)
+
+### Hypothesis Test
+
+The hypothesis test confirmed that ANY non-16-byte hash_key causes a ValueError. The test tried various random strings and all failed with the same error about requiring exactly 16 bytes.
+
+### Technical Analysis
+
+The bug is real and consistent:
+- The function requires EXACTLY 16 bytes when the hash_key is UTF-8 encoded
+- This is NOT 16 characters, but 16 bytes
+- Multi-byte UTF-8 characters (emojis, special characters) count as multiple bytes
+- The error occurs deep in the C extension code (pandas._libs.hashing)
+- The error message references bytes, not characters, which users might not understand
+
+### Impact
+
+Users cannot:
+- Use any hash_key that isn't exactly 16 bytes
+- Easily understand why their hash_key is rejected without understanding UTF-8 encoding
+- Find this requirement anywhere in the documentation
+
+The documentation states the parameter is a "str" for "string key to encode" with no mention of the 16-byte requirement.

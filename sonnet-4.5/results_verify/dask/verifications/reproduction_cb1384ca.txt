@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is accurate. The `unquote` function in `dask.diagnostics.profile_visualize` crashes with an `IndexError` when given the input `(dict, [])`.
+
+### Reproduction Steps
+1. Created test script to reproduce the bug
+2. Confirmed that `(dict, [])` is a valid Dask task according to `istask()` function
+3. Verified the crash occurs exactly as described in the bug report
+
+### Test Results
+
+#### Direct Bug Reproduction
+- Input: `(dict, [])`
+- Expected: Should return an empty dictionary `{}`
+- Actual: Crashes with `IndexError: list index out of range`
+- Location: Line 33 in profile_visualize.py where it accesses `expr[1][0]` without checking if list is non-empty
+
+#### Hypothesis Property-Based Test
+- The Hypothesis test successfully found the minimal failing example: `(dict, [])`
+- The test fails consistently with this input
+- The idempotence property cannot be tested because the function crashes
+
+#### Related Tests
+- `(tuple, [])` works correctly, returns `()`
+- `(list, [])` works correctly, returns `[]`
+- `(set, [])` works correctly, returns `set()`
+- `(dict, [[('a', 1), ('b', 2)]])` works but produces incorrect output `{('a', 1): ('b', 2)}` instead of expected `{'a': 1, 'b': 2}`
+
+### Root Cause
+The function has a special case for handling `dict` tasks that checks:
+1. `expr[0] == dict` ✓
+2. `isinstance(expr[1], list)` ✓
+3. `isinstance(expr[1][0], list)` ✗ (IndexError when list is empty)
+
+The code assumes that if `expr[1]` is a list, it must be non-empty, which is not always true.
+
+### Conclusion
+The bug is confirmed and reproducible. The function crashes on a valid Dask task expression `(dict, [])` due to an unchecked list index access.

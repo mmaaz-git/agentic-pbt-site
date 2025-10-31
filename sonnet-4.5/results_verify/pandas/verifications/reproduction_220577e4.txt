@@ -1,0 +1,37 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug reported in pandas.core.strings.slice_replace. The bug manifests when start > stop, causing the method to deviate from Python's standard slicing behavior.
+
+### Hypothesis Test Results
+The property-based test using Hypothesis fails on the exact example provided:
+- Input: strings=['0'], start=1, stop=0, repl=''
+- Pandas result: '0'
+- Expected result: '00'
+
+The test correctly identifies that pandas_result should equal `original[:start] + repl + original[stop:]`
+
+### Manual Reproduction Results
+
+Test case 1: strings=['0'], start=1, stop=0, repl=''
+- Pandas produces: '0'
+- Expected (Python slicing): '00'
+- The expectation is '0'[:1] + '' + '0'[0:] = '0' + '' + '0' = '00'
+
+Test case 2: strings=['hello'], start=3, stop=1, repl='X'
+- Pandas produces: 'helXlo'
+- Expected (Python slicing): 'helXello'
+- The expectation is 'hello'[:3] + 'X' + 'hello'[1:] = 'hel' + 'X' + 'ello' = 'helXello'
+
+### Python Slicing Behavior Verification
+When start > stop in Python:
+- 'hello'[3:1] returns '' (empty string)
+- '0'[1:0] returns '' (empty string)
+
+This is standard Python behavior: when start >= stop, the slice is empty.
+
+### Effect of the Bug
+The bug causes incorrect string manipulation when start > stop. Instead of following Python's slicing semantics where:
+- string[:start] takes characters from beginning to start
+- string[stop:] takes characters from stop to end
+
+Pandas appears to be adjusting the stop position when the slice is empty, leading to incorrect results. This breaks the expected invariant that slice_replace(start, stop, repl) should be equivalent to string[:start] + repl + string[stop:].

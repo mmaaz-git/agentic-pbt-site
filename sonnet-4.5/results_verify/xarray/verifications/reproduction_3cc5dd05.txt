@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+### Test Case from Bug Report
+The bug report claims that `build_grid_chunks(size=1, chunk_size=2, region=None)` returns chunks that sum to 3 instead of 1.
+
+**Reproduction Result: CONFIRMED**
+```
+Input: size=1, chunk_size=2, region=None
+Output: (2, 1)
+Sum: 3
+Expected sum: 1
+```
+
+### Additional Test Cases
+I tested multiple scenarios to understand the pattern:
+
+| size | chunk_size | chunks     | sum | Expected | Status |
+|------|------------|------------|-----|----------|--------|
+| 1    | 1          | (1,)       | 1   | 1        | ✓      |
+| 1    | 2          | (2, 1)     | 3   | 1        | ✗      |
+| 1    | 10         | (10, 1)    | 11  | 1        | ✗      |
+| 2    | 1          | (1, 1)     | 2   | 2        | ✓      |
+| 10   | 3          | (3,3,3,1)  | 10  | 10       | ✓      |
+| 3    | 10         | (10, 3)    | 13  | 3        | ✗      |
+| 5    | 5          | (5,)       | 5   | 5        | ✓      |
+| 7    | 3          | (3, 3, 1)  | 7   | 7        | ✓      |
+
+### Root Cause Analysis
+The bug occurs when `chunk_size > size`. The function logic:
+
+1. Always creates a first chunk of size `chunk_size - (region_start % chunk_size)`
+   - When region_start=0, this becomes `chunk_size`
+2. Calculates remaining as `size - first_chunk`
+   - When chunk_size > size, remaining becomes negative
+3. With negative remaining:
+   - `remaining // chunk_size` gives -1, so no full chunks are added
+   - `remaining % chunk_size` is non-zero (e.g., -1 % 2 = 1)
+   - So it adds a "last chunk" of size `remaining % chunk_size`
+
+For size=1, chunk_size=2:
+- First chunk = 2
+- Remaining = 1 - 2 = -1
+- -1 % 2 = 1 (in Python, modulo with negatives gives positive result)
+- Final chunks = (2, 1), sum = 3
+
+### Mathematical Verification
+The fundamental invariant that chunks should sum to the size is clearly violated. This is a logic error where the function doesn't handle the case where the desired chunk size exceeds the total data size.

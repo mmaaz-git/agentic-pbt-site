@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that `sp_values` must NEVER contain fill values after operations. It only describes the initial construction behavior. One could argue that after operations, the internal representation is an implementation detail and as long as the dense representation is correct (which it is), the behavior is acceptable. The user might be imposing an undocumented constraint on internal implementation details.
+
+**Why it might not be INVALID:**
+The documentation clearly states that `sp_values` is "An ndarray containing the non-fill_value values" without any qualification that this only applies at construction time. The entire concept of sparse arrays is based on not storing fill values, and this is a fundamental invariant. The documentation's examples consistently show `sp_values` containing only non-fill values.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only occurs when one array has no gaps (`ngaps == 0`). In practice, sparse arrays are meant for data with many gaps, so operating on arrays with no gaps is unusual. The dense representation is still correct, and the performance impact might be negligible. Fixing this might add complexity for minimal benefit.
+
+**Why it might not be WONTFIX:**
+This violates a core invariant of sparse arrays that could lead to downstream issues. Other operations that assume `sp_values` doesn't contain fill values could malfunction. The fix is relatively simple (re-sparsify the result), and maintaining invariants is important for correctness and preventing subtle bugs.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about what happens to the sparse representation after arithmetic operations. It could explicitly state that in some edge cases, the internal representation might temporarily violate the usual invariants for performance reasons, and that users shouldn't rely on `sp_values` always excluding fill values after operations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The existing documentation is already clear that `sp_values` contains "non-fill_value values" and the entire concept of sparse arrays is based on this invariant. Changing the documentation to allow this violation would be admitting a design flaw rather than fixing the actual issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that maintaining the sparse invariant after all operations is a new feature that wasn't originally implemented. The current code works correctly for the dense representation, and adding automatic re-sparsification after operations could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for the existing functionality to work correctly according to its documented invariants. Sparse arrays already exist and are supposed to maintain their sparsity property. This is fixing broken behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code violates a fundamental invariant of sparse arrays where `sp_values` should only contain non-fill values. This is clearly documented behavior, and the violation could cause issues in other operations that rely on this invariant. The bug is reproducible, has a clear root cause, and affects the correctness of the sparse representation. The fix is straightforward and maintains the intended behavior.
+
+**Why it might not be BUG:**
+The dense representation is still correct, which is what ultimately matters to users. The internal representation details might be considered an implementation choice rather than a bug. The code has been working this way potentially for a long time without causing major issues.
+
+## Overall consideration
+
+After careful analysis, this appears to be a valid BUG. The documentation clearly establishes that `sp_values` should contain only non-fill values, with examples consistently showing this behavior. This is not just an implementation detail but a fundamental property of sparse arrays that other code likely depends on. The bug report correctly identifies a violation of this invariant that occurs during arithmetic operations when one array has no gaps.
+
+The issue is technically correct and well-documented in the bug report. The reproducer works as described, and the root cause analysis is accurate. While the dense representation remains correct, violating the sparse array invariant could lead to subtle bugs in other operations that assume this invariant holds. For instance, operations that iterate over `sp_values` expecting only non-fill values could produce incorrect results or behave unexpectedly.
+
+The proposed fix of re-sparsifying the result when necessary is reasonable and maintains the correct behavior. This is not a feature request or documentation issue but a genuine bug where the implementation fails to maintain a documented invariant. Given that sparse arrays are a specialized data structure where maintaining invariants is crucial for correctness and efficiency, this should be classified as a BUG that needs fixing.

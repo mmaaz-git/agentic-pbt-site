@@ -1,0 +1,41 @@
+Bug Reproduction Report
+=======================
+
+I have successfully reproduced the bug reported in scipy.io.matlab.savemat.
+
+1. Hypothesis Test Execution:
+   - The property-based test failed as reported
+   - When testing keys starting with digits (e.g., '0', '1test'), the test fails because:
+     a) No MatWriteWarning is issued
+     b) The keys ARE saved to the file (contrary to documentation)
+
+2. Manual Reproduction:
+   - Test case with key '0':
+     * No warnings issued
+     * Key '0' was successfully saved and loaded back
+   - Test case with key '1test':
+     * No warnings issued
+     * Key '1test' was successfully saved and loaded back
+
+3. Behavior Comparison:
+   To verify the inconsistency, I tested struct fields vs top-level keys:
+
+   a) Struct fields with digit-prefixed keys ('0field'):
+      - Warning WAS issued: "Starting field name with a underscore or a digit (0field) is ignored"
+      - Field was NOT saved (correct behavior per documentation)
+
+   b) Top-level keys with underscore prefix ('_hidden'):
+      - Warning WAS issued: "Starting field name with a underscore (_hidden) is ignored"
+      - Key was NOT saved (correct behavior)
+
+   c) Top-level keys with digit prefix ('0', '1test'):
+      - Warning was NOT issued
+      - Keys WERE saved (incorrect behavior per documentation)
+
+4. Source Code Analysis:
+   The bug is located in _mio5.py at line 884 in the MatFile5Writer.put_variables method.
+   - Line 884 only checks: if name[0] == '_'
+   - Should check: if name[0] in '_0123456789'
+   - The struct field handling at line 486 correctly checks both cases
+
+The bug is confirmed: Top-level dictionary keys starting with digits are incorrectly saved without warning, while the documentation states they should be ignored with a warning.

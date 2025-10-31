@@ -1,0 +1,50 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### 1. The Bug Is Real
+
+The specific example from the bug report is confirmed:
+- Input: n = 1125894277343089729
+- Condition: n < 2**60 ✓ (True)
+- Output: '1000.00 PiB'
+- Output length: 11 characters
+- Expected (per docstring): <= 10 characters
+- **Result: BUG CONFIRMED**
+
+### 2. Mathematical Verification
+
+The mathematical claims in the bug report are accurate:
+- 1000 * 2**50 = 1,125,899,906,842,624,000
+- 2**60 = 1,152,921,504,606,846,976
+- 1000 * 2**50 < 2**60 is TRUE
+- Values from 1000 * 2**50 to 2**60-1 all violate the 10-character limit
+
+### 3. Systematic Testing
+
+My testing revealed the exact boundary where the bug occurs:
+- Values < 1000 PiB format correctly within 10 characters
+  - "999.99 PiB" = 10 characters ✓
+- Values >= 1000 PiB exceed 10 characters
+  - "1000.00 PiB" = 11 characters ✗
+  - "1023.00 PiB" = 11 characters ✗
+  - "1024.00 PiB" = 11 characters ✗
+
+### 4. Root Cause
+
+The implementation formats values with 2 decimal places:
+```python
+return f"{n / k:.2f} {prefix}B"
+```
+
+This means:
+- Values < 10 PiB: "X.XX PiB" = 8 characters
+- Values 10-99 PiB: "XX.XX PiB" = 9 characters
+- Values 100-999 PiB: "XXX.XX PiB" = 10 characters
+- Values >= 1000 PiB: "XXXX.XX PiB" = 11+ characters
+
+The docstring claim "For all values < 2**60, the output is always <= 10 characters" is violated for values >= 1000 * 2**50 (which are still < 2**60).
+
+### 5. Impact Assessment
+
+This is a genuine documentation/implementation mismatch. The docstring makes an explicit promise that the implementation does not fulfill. Code that relies on this 10-character guarantee (for formatting tables, fixed-width displays, etc.) could experience layout issues with large values.

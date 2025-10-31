@@ -1,0 +1,29 @@
+Bug Reproduction Results
+
+1. Simple Reproduction Test:
+   - The bug report is CORRECT - the code does crash with IndexError when given relational data with trailing newline
+   - Test with '0.0\n' in relational attribute: IndexError: string index out of range
+   - Test without trailing newline '0.0': Works correctly
+   - Test with multiple rows '1.0\n2.0\n3.0\n': IndexError: string index out of range
+   - Test with multiple rows without trailing '1.0\n2.0\n3.0': Works correctly
+
+2. Hypothesis Property Test:
+   - The property-based test fails exactly as described
+   - Failing example: has_trailing_newline=True, num_rows=1, values containing 0.0
+   - The test confirms the bug occurs consistently when relational data ends with \n
+
+3. Root Cause Analysis:
+   - When relational data contains "0.0\n", it gets unescaped to '0.0\n'
+   - split("\n") on '0.0\n' produces ['0.0', ''] (empty string at end)
+   - split_data_line is called on the empty string ''
+   - Line 476 tries to access line[-1] on empty string, causing IndexError
+
+4. Technical Verification:
+   - The bug occurs exactly at line 476 of _arffread.py in split_data_line function
+   - The error happens because the code doesn't check if line is empty before accessing line[-1]
+   - This is a classic boundary condition error - not handling empty strings
+
+5. Impact Assessment:
+   - This affects ANY ARFF file with relational attributes where the data ends with a newline
+   - The bug makes it impossible to load certain valid-looking ARFF files
+   - Files that might naturally have trailing newlines (e.g., programmatically generated) will fail

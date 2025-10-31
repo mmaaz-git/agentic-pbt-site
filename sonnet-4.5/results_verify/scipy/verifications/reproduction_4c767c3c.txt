@@ -1,0 +1,45 @@
+=== BUG REPRODUCTION REPORT ===
+
+I have successfully reproduced and verified the bug described in the report. Here's what I found:
+
+## Bug Confirmation
+The bug exists exactly as reported: Line 276 of scipy/io/arff/_arffread.py contains `elif "yy":` which should be `elif "yy" in pattern:`. The condition `elif "yy":` is always True because "yy" is a non-empty string.
+
+## Reproduction Results
+
+### 1. Property-Based Test from Bug Report
+The hypothesis test provided in the bug report initially appeared to pass, but this is misleading. The test passes for most common patterns because subsequent 'if' statements overwrite the incorrectly set datetime_unit='Y'.
+
+### 2. Simple Reproduction Case
+The specific example from the bug report (date 'MM') actually produces:
+- Actual output: Format='%m', Unit='M'
+- NOT the claimed output: Format='%m-%m', Unit='Y'
+
+The bug report's claim about the output is incorrect for this specific case.
+
+### 3. Actual Bug Impact Found
+Through testing, I discovered cases where the bug DOES cause incorrect behavior:
+
+a) Empty pattern: `date ''`
+   - Expected: Should raise ValueError("Invalid or unsupported date format")
+   - Actual: Returns Format='', Unit='Y' (incorrectly accepts invalid format)
+
+b) Invalid pattern: `date 'XXX'` (no valid date components)
+   - Expected: Should raise ValueError("Invalid or unsupported date format")
+   - Actual: Returns Format='XXX', Unit='Y' (incorrectly accepts invalid format)
+
+## Root Cause Analysis
+The bug has these effects:
+
+1. **Always executes the elif block**: When 'yyyy' is not in the pattern, the elif block always executes because `"yy"` evaluates to True.
+
+2. **Sets datetime_unit = 'Y' unnecessarily**: This gets overwritten by later blocks for valid patterns, but remains for invalid patterns.
+
+3. **Prevents proper error handling**: Lines 298-299 check if `datetime_unit is None` to raise an error for invalid formats. Because the bug sets datetime_unit='Y', invalid patterns that have no valid date components are incorrectly accepted.
+
+4. **Inefficient code**: Calls `pattern.replace("yy", "%y")` even when "yy" is not in the pattern.
+
+## Verified Impact
+- For valid date patterns (MM, dd, HH, etc.): No incorrect output (later blocks overwrite the incorrect 'Y')
+- For invalid patterns with no date components: INCORRECT - accepts them instead of raising ValueError
+- Performance: Unnecessary code execution for all patterns without 'yyyy'

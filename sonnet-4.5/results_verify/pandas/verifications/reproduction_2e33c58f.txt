@@ -1,0 +1,36 @@
+=== BUG REPRODUCTION REPORT ===
+
+I have successfully reproduced the bug described in the report. The issue occurs when round-tripping DataFrames containing uint64 values that exceed the int64 maximum value (2^63 - 1) through the 'table' orient JSON format.
+
+## Reproduction Results:
+
+1. **Hypothesis Test**: The property-based test correctly identified the failure with two distinct issues:
+   - Values below int64 minimum (-9223372036854775809) cause a ValueError: "Value is too small"
+   - Values at exactly 2^63 (9223372036854775808) silently overflow to negative values
+
+2. **Manual Reproduction**: Confirmed the exact scenario from the bug report:
+   - Original value: 9223372036854775808 (uint64)
+   - After round-trip: -9223372036854775808 (int64)
+   - Data corruption confirmed: The value changes sign without warning
+
+3. **Schema Analysis**:
+   - All integer types (int8, int16, int32, int64, uint8, uint16, uint32, uint64) are mapped to generic "integer" in the table schema
+   - The JSON correctly serializes the uint64 value as 9223372036854775808
+   - Upon reading back, pandas interprets all integers as int64, causing overflow for uint64 values > 2^63-1
+
+4. **Comparison with Other Orients**:
+   - 'split', 'records', 'index', 'columns', and 'values' orients ALL handle the uint64 value correctly
+   - Only 'table' orient exhibits the overflow issue
+
+## Technical Details:
+
+The bug occurs because:
+1. The table schema maps both signed and unsigned integers to a generic "integer" type
+2. When reading JSON with table orient, pandas defaults to int64 for all integer values
+3. The value 9223372036854775808 is valid in JSON and correctly serialized
+4. But when parsed back as int64, it overflows to -9223372036854775808
+
+The issue is particularly serious because:
+- It causes **silent data corruption** with no warnings or errors
+- The corrupted values have opposite signs, making the error catastrophic for numerical computations
+- It only affects the 'table' orient, creating inconsistent behavior across pandas JSON operations

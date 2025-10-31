@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function's behavior could be considered working as intended if we interpret "seq" as meaning "sequence-like objects that have a tolist() method" rather than Python lists. The tolist dispatcher is specifically designed to convert numpy-like arrays to lists, and the function might have been designed primarily for DataFrame/numpy operations rather than plain Python lists. The comment at line 282-283 says "Convert from an ndarray to a plain list" which suggests the primary expected input is ndarray, not list.
+
+**Why it might not be INVALID:**
+The function's own docstring explicitly demonstrates usage with Python lists in multiple examples (lines 262-277). These are not just comments but actual doctest-style examples that show `L = ['A', 'B', 'C', 'D', 'E', 'F']` being passed directly to the function. When documentation examples don't work, that's a clear indication of a bug, not invalid usage.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered a trivial issue if the function is primarily internal and most users interact with it through higher-level DataFrame operations that already convert data to appropriate numpy types. The workaround is simple (convert list to numpy array first), and fixing it might add unnecessary complexity to handle an edge case that rarely occurs in practice.
+
+**Why it might not be WONTFIX:**
+The examples in the docstring are the first thing developers see when learning to use this function. Having non-working examples is not trivial - it fundamentally breaks the contract between documentation and implementation. Additionally, the fix is extremely simple (a single isinstance check) and doesn't add meaningful complexity.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the docstring examples should be updated to show numpy arrays instead of lists, making it clear that the function expects array-like objects with a tolist() method. The comment "Convert from an ndarray to a plain list" suggests the intended input is ndarray, so the documentation could be clarified to reflect this expectation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function internally needs a list to work with (for bisect operations), and Python lists are the most natural input for a function that processes sorted sequences. Changing the documentation to require numpy arrays would make the API less intuitive and force unnecessary conversions for users who already have lists. The code should match the documentation, not vice versa.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting Python lists could be viewed as adding a new feature to handle a broader range of inputs. The current implementation supports numpy/pandas types, and adding list support would be extending functionality to cover native Python types that weren't originally in scope.
+
+**Why it might not be FEATURE_REQUEST:**
+The docstring examples have always shown lists as valid input - this isn't requesting new functionality but rather fixing existing documented behavior. The examples aren't showing "future functionality" or "nice to have" features; they're showing basic usage that should work today.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function's docstring contains multiple examples using Python lists as input, establishing a clear contract that lists are valid input. When executed, these exact examples fail with a TypeError. This is a textbook case of implementation not matching documentation. The function already converts input to a list internally (line 284), showing that lists are the intended working format. The bug is simply that it tries to convert lists to lists using a dispatcher that doesn't handle lists.
+
+**Why it might not be BUG:**
+If the function was truly never intended to work with Python lists directly and the examples were mistakenly written using lists instead of arrays, then this might not be a bug but rather a documentation error. However, this interpretation requires assuming multiple documentation examples were all written incorrectly.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a clear BUG. The evidence is compelling:
+
+First, the function's own documentation explicitly shows Python lists being used as input in every single example. These aren't comments or informal descriptions - they're doctest-style examples that show exact input and expected output. When documentation provides concrete examples of usage, those examples establish the contract that the function must fulfill. The fact that these examples fail when executed is a fundamental violation of that contract.
+
+Second, the function's internal logic already works entirely with Python lists. Line 284 converts the input to a list (via tolist), and all subsequent operations use list methods and bisect operations that require lists. The bug is simply that the tolist dispatcher doesn't have a handler for inputs that are already lists. This is clearly an oversight - the function needs lists internally, accepts arrays that it converts to lists, but fails when given lists directly.
+
+Third, the proposed fix is trivial and obviously correct: check if the input is already a list before trying to convert it. This one-line fix (`if not isinstance(seq, list): seq = tolist(seq)`) makes the function work exactly as documented while maintaining full backward compatibility. The fact that such a simple fix resolves the issue and makes all documented examples work indicates this is indeed a bug rather than a design decision or documentation error.

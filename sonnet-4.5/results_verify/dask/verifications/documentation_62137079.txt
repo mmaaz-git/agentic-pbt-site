@@ -1,0 +1,54 @@
+Documentation Analysis for dask.sizeof Function
+================================================
+
+## Official Documentation Findings
+
+1. **Purpose of sizeof**:
+   - The sizeof function computes the size of an object in bytes
+   - Used internally by Dask to determine which objects to spill to disk during memory management
+   - Part of Dask's memory optimization strategy
+
+2. **Registration Mechanism**:
+   - Uses a dispatcher pattern via `@sizeof.register(type)` decorator
+   - Allows custom implementations for different object types
+   - Third-party libraries can register via entry points under group "dask.sizeof"
+
+3. **Return Type Contract**:
+   The documentation DOES NOT explicitly specify what type sizeof should return. It only states:
+   - "Must return the object's size in bytes"
+   - Examples show returning `array.nbytes` or similar numeric values
+   - No explicit mention that it must be Python int vs numpy integer types
+
+4. **Test Suite Evidence**:
+   In dask/tests/test_sizeof.py lines 65-67, there are explicit assertions:
+   ```python
+   assert isinstance(sizeof(df), int)
+   assert isinstance(sizeof(df.x), int)
+   assert isinstance(sizeof(df.index), int)
+   ```
+
+   These test assertions establish an implicit contract that sizeof should return Python int type.
+   However, note that `isinstance(x, int)` returns True for numpy integer types as well in NumPy >= 1.x,
+   since numpy integers inherit from Python int.
+
+5. **Implementation Patterns**:
+   Looking at the source code (dask/sizeof.py), most implementations wrap return values with `int()`:
+   - Line 107: `return int(x.nbytes)`  # cupy arrays
+   - Line 116: `return int(x.nbytes)`  # numba arrays
+   - Line 128: `return int(x.nbytes)`  # rmm buffers
+   - Line 140: `return int(x.nbytes)`  # numpy arrays (regular path)
+   - Line 139: `return xs.nbytes`     # numpy arrays (broadcast path) - NO int() wrapper
+
+6. **Consistency Pattern**:
+   The codebase shows a clear pattern of wrapping nbytes with int() for consistency, except for line 139.
+
+## Key Finding
+
+The documentation does not explicitly require sizeof to return Python int vs numpy integer types.
+The requirement is inferred from:
+1. Test suite assertions using isinstance(result, int)
+2. Consistent implementation pattern of wrapping with int() in most paths
+3. The fact that line 140 wraps with int() but line 139 doesn't appears to be an oversight
+
+The bug report's claim about "contract violation" is based on implicit expectations from the test suite
+and implementation patterns, not explicit documentation requirements.

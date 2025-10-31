@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that changing fill_value should preserve the logical data. SparseArray is fundamentally about efficient storage where fill_value defines what the "holes" in the sparse representation mean. Changing fill_value could reasonably be interpreted as redefining what those holes represent, not as a data-preserving operation. The current behavior is consistent with this interpretation - you're changing the semantic meaning of the sparse representation.
+
+**Why it might not be INVALID:**
+The behavior violates user expectations. Most users would expect that a property setter, especially one that appears to be metadata-like, wouldn't change the actual data values when converted back to dense format. The fact that sparse.to_dense() returns different values after only changing fill_value is surprising and could lead to data corruption in user code.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only affects users who: (1) create a SparseArray with values equal to fill_value, and (2) then modify fill_value after creation. This is likely a rare use case. The workaround is simple - create a new SparseArray instead of modifying fill_value. The performance impact of fixing this (materializing implicit values) could be significant for large arrays and may not be worth it for such a rare scenario.
+
+**Why it might not be WONTFIX:**
+The bug can cause silent data corruption, which is a serious issue. Users might not realize their data has changed after what appears to be a simple metadata update. The fact that it only affects certain data patterns makes it even more insidious - code might work fine in testing but fail with specific data. This is not a trivial cosmetic issue but a potential data integrity problem.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation completely lacks any mention of what happens when fill_value is modified after creation. If this behavior is intentional, it should be clearly documented with warnings about the data mutation effect. The documentation could simply state that fill_value should not be modified after creation, or that doing so reinterprets the sparse data rather than preserving the logical values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior seems fundamentally broken from a user perspective. Simply documenting a confusing and error-prone behavior doesn't make it correct. If the setter exists and is public API, users will expect it to work sensibly. Making it a documentation issue ignores the underlying design problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for a new feature - a fill_value setter that preserves data by materializing implicit values before changing the fill_value. This would be a new capability that doesn't currently exist. The current setter is working as implemented (even if not as expected), and the request is to enhance it with data preservation logic.
+
+**Why it might not be FEATURE_REQUEST:**
+Having a setter that appears to work but silently corrupts data is not a missing feature - it's broken behavior. Users aren't asking for new functionality; they're expecting the existing setter to not corrupt their data. A property setter that changes data values is a violation of basic programming principles, not a feature gap.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of the principle of least surprise. A property setter should not mutate the logical data that an array represents. The current behavior can lead to silent data corruption where users believe they're just changing metadata but are actually changing their data values. The implementation is objectively incomplete - it updates the dtype but doesn't handle the data preservation that would be necessary for correctness.
+
+**Why it might not be BUG:**
+The behavior might be intentional - sparse arrays are about efficient representation, and fill_value is part of that representation, not just metadata. Without explicit documentation stating that fill_value changes should preserve data, this could be considered working as designed. The fact that there's a setter at all suggests someone thought about this, and perhaps the current behavior is deliberate.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be primarily a DOCUMENTATION_FIX issue. The root cause is that the documentation doesn't specify what should happen when fill_value is modified after creation. The current behavior, while surprising, is internally consistent - SparseArray is a sparse representation where fill_value defines what implicit values mean, and changing fill_value changes that interpretation.
+
+However, the complete lack of documentation or warnings about this behavior is problematic. Users have no way to know that changing fill_value will appear to mutate their data. At minimum, the documentation should clearly warn about this behavior or explicitly state that fill_value should not be modified after creation.
+
+The fact that the setter exists without any guards or warnings suggests this is an oversight rather than intentional design. Either the setter should be removed/disabled, or it should be documented with clear warnings about its effects. Given that removing the setter would be a breaking change, documenting the current behavior with strong warnings seems most appropriate.

@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug in scipy.signal.windows.tukey that violates the symmetry guarantee when sym=True for very small alpha values.
+
+### Hypothesis Test Reproduction
+Running the provided property-based test with Hypothesis immediately found a failing case:
+- M=2, alpha=2.8429516001933894e-89
+- The test correctly identified that the window is not symmetric when it should be
+
+### Minimal Example Reproduction
+The minimal example provided in the bug report was verified:
+- Input: M=2, alpha=1e-300, sym=True
+- Expected output: A symmetric window
+- Actual output: [0. 1.] which is NOT symmetric (reversed is [1. 0.])
+
+### Additional Testing
+Tested with various alpha values to identify the threshold where the bug occurs:
+- alpha >= 1e-10: Window is correctly symmetric [0. 0.]
+- alpha < 1e-50: Window becomes asymmetric [0. 1.]
+
+### Root Cause Verification
+Through detailed calculation analysis, I confirmed the exact mechanism of the bug:
+1. For very small alpha (e.g., 1e-300), the calculation involves extremely large terms:
+   - -2.0/alpha ≈ -2e+300
+   - 2.0*n3/alpha/(M-1) ≈ 2e+300
+
+2. Due to Python's left-to-right evaluation of the expression:
+   (-2.0/alpha + 1 + 2.0*n3/alpha/(M-1))
+   The intermediate calculation becomes:
+   - Step 1: -2e+300 + 1 = -2e+300 (the +1 is lost due to floating-point precision)
+   - Step 2: -2e+300 + 2e+300 = 0 (catastrophic cancellation)
+
+3. This yields cos(0) = 1 instead of cos(π) = -1, resulting in w3[0] = 1.0 instead of 0.0
+
+The bug is consistently reproducible and the mechanism is well understood.

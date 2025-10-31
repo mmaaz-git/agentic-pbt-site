@@ -1,0 +1,48 @@
+## Bug Reproduction Results
+
+### Test Execution Summary
+I successfully reproduced the bug reported. The function `pandas.api.types.is_re_compilable` does indeed crash with `re.PatternError` when given invalid regex patterns.
+
+### Invalid Pattern Test Results
+Tested the following invalid regex patterns:
+- `'?'` - CRASHED with PatternError: nothing to repeat at position 0
+- `'*'` - CRASHED with PatternError: nothing to repeat at position 0
+- `'+'` - CRASHED with PatternError: nothing to repeat at position 0
+- `'\'` - CRASHED with PatternError: bad escape (end of pattern) at position 0
+- `'['` - CRASHED with PatternError: unterminated character set at position 0
+- `'('` - CRASHED with PatternError: missing ), unterminated subpattern at position 0
+- `')'` - CRASHED with PatternError: unbalanced parenthesis at position 0
+
+All 7 invalid regex patterns caused the function to raise `PatternError` exceptions instead of returning `False`.
+
+### Valid Pattern Test Results
+Tested valid patterns to confirm normal behavior:
+- `'.*'` - Returned `True` (correctly)
+- `'abc'` - Returned `True` (correctly)
+- `'[a-z]+'` - Returned `True` (correctly)
+- `r'\d+'` - Returned `True` (correctly)
+- `'(hello|world)'` - Returned `True` (correctly)
+
+### Direct re.compile() Behavior
+When calling `re.compile()` directly on the invalid patterns, it raises `re.error` exceptions (the parent class of `PatternError`). This is the expected behavior for `re.compile()` when given invalid patterns.
+
+### Current Implementation Analysis
+The current implementation in `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/dtypes/inference.py`:
+```python
+def is_re_compilable(obj) -> bool:
+    try:
+        re.compile(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+```
+
+The function only catches `TypeError` which handles non-string inputs (like integers), but does not catch `re.error` or its subclasses, which are raised for syntactically invalid regex patterns.
+
+### Verification of Bug Report Claims
+1. **Claim**: Function crashes with `re.PatternError` on invalid regex patterns - **CONFIRMED**
+2. **Claim**: Function should return `False` instead - **REASONABLE** based on function name and documentation
+3. **Claim**: The fix is to catch `re.error` in addition to `TypeError` - **CORRECT**
+
+The bug report accurately describes the problem and provides a valid fix. The function name `is_re_compilable` clearly suggests it should check compilability without crashing, and the return type annotation `-> bool` confirms it should always return a boolean value.

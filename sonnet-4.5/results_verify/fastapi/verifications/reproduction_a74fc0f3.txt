@@ -1,0 +1,55 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed.
+
+1. Test Environment:
+   - FastAPI version: 0.115.12
+   - Python version: 3.13
+   - Module: fastapi.encoders.decimal_encoder
+
+2. Bug Reproduction:
+
+   The specific failing case mentioned in the bug report was tested:
+   - Input: Decimal('9202420.974752872')
+   - Expected: Round-trip should preserve the value
+   - Actual: Value lost precision after encoding to float and back
+
+   Results:
+   - Original decimal: 9202420.974752872
+   - Encoded value: 9202420.974752871 (as float)
+   - Decoded value: 9202420.974752871
+   - Round-trip preserved? False
+   - Loss of precision: 1E-9
+
+3. Additional Testing:
+
+   I tested multiple Decimal values with varying precision levels:
+
+   - 7 out of 9 test cases with fractional parts lost precision
+   - Precision loss occurs when Decimal values with fractional parts are converted to float
+   - Float representation is limited to ~15-17 decimal digits of precision (sys.float_info.dig = 15)
+
+   Examples of precision loss:
+   - Decimal('0.123456789012345678901234567890') lost 18 digits of precision
+   - Decimal('999999999999.999999999999') rounded to 1000000000000.0
+   - Decimal('9007199254740992.1') lost the .1 fractional part entirely
+
+4. Code Analysis:
+
+   The function decimal_encoder() at line 37-55 of fastapi/encoders.py:
+   - Returns int for decimals with non-negative exponents (line 53)
+   - Returns float for decimals with negative exponents (line 55)
+
+   The issue occurs at line 55 where `float(dec_value)` causes precision loss due to
+   binary floating-point representation limitations.
+
+5. Impact:
+
+   The bug affects any Decimal value with fractional parts that exceed float's precision
+   capabilities. This is particularly problematic for:
+   - Financial calculations requiring exact decimal arithmetic
+   - Scientific measurements with high precision requirements
+   - Any application where decimal precision must be preserved
+
+The bug report is accurate and the reproduction confirms the precision loss issue.

@@ -1,0 +1,61 @@
+BUG REPRODUCTION REPORT
+=======================
+
+1. TEST SETUP
+------------
+Tested the bug report using pandas interchange protocol with categorical data containing null values represented by code -1.
+
+2. REPRODUCTION RESULTS
+----------------------
+
+Test Case 1: Single null value (categories=['A'], codes=[-1])
+- Original DataFrame: Shows NaN value correctly
+- Original pd.isna() check: True (correctly identifies as null)
+- After interchange conversion: Shows 'A' instead of NaN
+- Result pd.isna() check: False (null is lost)
+- CONFIRMED: Null value is incorrectly converted to first category
+
+Test Case 2: Multiple nulls (categories=['A','B','C'], codes=[-1,0,-1,1,-1])
+- Original: Shows NaN at indices 0, 2, 4
+- After conversion: Shows 'C' at indices 0, 2, 4 (all former nulls)
+- Why 'C'? Because -1 % 3 = 2, and categories[2] = 'C'
+- CONFIRMED: All null values converted to wrong category values
+
+Test Case 3: Hypothesis test with random data
+- Test fails immediately on first example with null values
+- Assertion error: "Null at index 0 not preserved"
+- CONFIRMED: Property-based test demonstrates consistent failure
+
+3. ROOT CAUSE VERIFICATION
+-------------------------
+Line 254 of from_dataframe.py:
+```python
+values = categories[codes % len(categories)]
+```
+
+Mathematical proof of bug:
+- When code = -1 (null sentinel)
+- With 1 category: -1 % 1 = 0 → maps to categories[0]
+- With 3 categories: -1 % 3 = 2 → maps to categories[2]
+- Result: Null values always map to a valid category instead of remaining null
+
+4. ADDITIONAL OBSERVATIONS
+-------------------------
+- The `set_nulls` function at line 263 cannot fix this issue because:
+  1. The pd.Categorical is already constructed with wrong values
+  2. The validity buffer may not properly identify these as nulls
+  3. The damage is done at line 254 before null handling occurs
+
+- The comment at lines 251-252 acknowledges sentinel values exist but misunderstands their purpose
+- This is silent data corruption - no errors or warnings are raised
+
+5. IMPACT ASSESSMENT
+-------------------
+- Data integrity issue: NULL values are silently converted to actual data
+- This could cause serious issues in data analysis where NULL has specific meaning
+- The bug is deterministic and reproducible 100% of the time
+- Affects any categorical data with null values going through the interchange protocol
+
+6. CONCLUSION
+------------
+The bug report is technically accurate. The code demonstrably converts null values (code -1) into actual category values through an inappropriate modulo operation. This is a clear violation of data preservation semantics expected from a data interchange protocol.

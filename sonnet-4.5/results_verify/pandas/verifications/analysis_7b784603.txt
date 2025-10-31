@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function behaves as designed internally. The hash_key parameter is intentionally only used for object arrays since numeric arrays use a different hashing algorithm that doesn't require a key. The 16-byte requirement comes from the underlying C implementation for object hashing. The function technically works correctly - it hashes arrays deterministically as documented. The parameter validation difference could be viewed as an implementation detail rather than a bug.
+
+**Why it might not be INVALID:**
+The inconsistent behavior is clearly problematic from an API design perspective. Users reasonably expect that if a function accepts a parameter, it should either always use it or always validate it the same way. Having different validation rules based on input type without documentation creates a confusing and error-prone API. The fact that invalid keys are silently accepted and ignored for numeric arrays while causing errors for object arrays is a clear inconsistency.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function (in pandas.util) that most users don't directly interact with. The inconsistency might be considered a minor issue that doesn't affect the vast majority of pandas users. Fixing it would require either adding validation for all dtypes (which would break existing code) or removing validation for object dtypes (which could cause cryptic errors). The current behavior has likely been in place for years without causing major issues.
+
+**Why it might not be WONTFIX:**
+The issue affects anyone who uses this function with mixed data types or tries to use custom hash keys. It's not an obscure edge case but a fundamental API inconsistency. The function is part of the public API (pandas.util.hash_array) and is documented, so it should have consistent behavior. The fix is straightforward and would improve the API's usability and predictability.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The main issue is that the documentation doesn't explain the actual behavior. If the docs clearly stated that hash_key must be 16 bytes for object arrays and is ignored for numeric arrays, users would understand the expectations. The code itself might be working as intended, but the documentation fails to communicate the design. Adding proper documentation would resolve the user confusion without changing any behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the inconsistent behavior doesn't fix the underlying API design problem. Having parameters that are silently ignored in some cases but strictly validated in others is poor API design, regardless of documentation. Users shouldn't need to read fine print to understand that a parameter behaves completely differently based on input type. The issue is with the code behavior, not just the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report is essentially asking for a new feature: consistent hash_key validation across all input types. Currently, custom hash keys only work with object arrays, and the request is to either make them work with all arrays or validate them consistently. This could be viewed as an enhancement request to improve the API rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but pointing out inconsistent behavior in existing functionality. The hash_key parameter already exists and is documented as a parameter for the function. Users aren't asking for something new but for the existing parameter to behave consistently. Inconsistent parameter validation is typically considered a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits objectively inconsistent behavior that violates principles of good API design. The same parameter (hash_key) has completely different validation rules depending on the input type, without any documentation of this difference. The parameter is silently ignored for numeric types but strictly validated for object types. This creates a situation where code that works with one data type fails with another, which is unexpected and error-prone. The documentation claims hash_key is a parameter for the function but doesn't mention it's only used for certain inputs.
+
+**Why it might not be BUG:**
+The function produces correct hash values for all inputs - it doesn't crash, corrupt data, or produce incorrect results. The hash_key being ignored for numeric arrays could be considered an optimization since numeric hashing doesn't need a key. The 16-byte requirement for object arrays comes from the underlying C implementation and might be a necessary constraint. The function works as the developers intended, even if that intent isn't well communicated.
+
+## Overall Consideration
+
+After careful analysis, this issue sits at the intersection of poor API design and inadequate documentation. The function works correctly from a technical standpoint - it successfully hashes all array types and produces deterministic results. However, it violates fundamental API design principles by having a parameter that behaves inconsistently based on input type.
+
+The strongest argument for this being a documentation issue is that the function works as designed internally. The hash_key parameter is genuinely only needed for object array hashing due to the different algorithms used. Numeric arrays use a mathematical hashing approach that doesn't require a key, while object arrays use a key-based approach for security and distribution properties. From this perspective, the code is correct but poorly documented.
+
+However, the current state creates a poor user experience. A developer using this function with mixed data types will encounter confusing errors that only appear with certain inputs. The silent acceptance and ignoring of invalid hash_keys for numeric arrays is particularly problematic because it gives users false confidence that their key is being used. This inconsistency makes the API unpredictable and error-prone, which goes beyond just a documentation issue. The fact that the parameter validation is inconsistent rather than the parameter simply being optional for certain types makes this feel more like a design flaw than a documentation gap.

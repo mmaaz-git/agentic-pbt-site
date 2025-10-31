@@ -1,0 +1,50 @@
+BUG REPRODUCTION REPORT
+=======================
+
+Successfully reproduced the bug as described in the bug report.
+
+## Test Results
+
+### Direct Reproduction Tests
+
+1. **timestamp_as_unit with year=1000**:
+   - Created a valid pd.Timestamp(year=1000, month=1, day=1) with unit='us'
+   - Calling timestamp_as_unit(ts, 'ns') raises OutOfBoundsDatetime
+   - Error message: "Cannot cast 1000-01-01 00:00:00 to unit='ns' without overflow."
+
+2. **default_precision_timestamp with year=1000**:
+   - Calling default_precision_timestamp(year=1000, month=1, day=1) raises OutOfBoundsDatetime
+   - Error message: "Cannot cast 1000-01-01 00:00:00 to unit='ns' without overflow."
+
+### Hypothesis Test Results
+
+Both property-based tests failed immediately:
+- test_timestamp_as_unit_preserves_value failed on first example (year=1)
+- test_default_precision_timestamp_returns_ns failed on first example (year=1)
+
+### Range Testing
+
+Tested various years to confirm the nanosecond range limitation:
+- Years 1-1677: Both functions crash with OutOfBoundsDatetime
+- Years 1678-2262: Both functions work correctly
+- Years 2263-9999: Both functions crash with OutOfBoundsDatetime
+
+This confirms the documented pandas nanosecond range of approximately 1678-2262.
+
+### Pandas Behavior
+
+Tested pandas directly (version 2.3.2):
+- pd.Timestamp can create timestamps for all years (1-9999)
+- Timestamps outside ns range are stored with 'us' precision by default
+- The as_unit() method exists and works for 's', 'ms', 'us' units
+- The as_unit('ns') method correctly raises OutOfBoundsDatetime for dates outside ns range
+
+## Effect of the Bug
+
+The bug causes xarray's compatibility functions to crash on valid timestamps that pandas can handle. The functions:
+
+1. Don't handle the OutOfBoundsDatetime exception that pandas raises
+2. Don't provide any fallback behavior when conversion to 'ns' fails
+3. Force all timestamps to 'ns' precision even when unnecessary (default_precision_timestamp)
+
+This breaks xarray functionality for historical dates (before 1678) and far-future dates (after 2262), even though pandas itself supports these dates with different time units.

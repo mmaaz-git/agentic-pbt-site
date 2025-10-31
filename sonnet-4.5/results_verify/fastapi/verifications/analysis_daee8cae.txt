@@ -1,0 +1,94 @@
+# Bug Report Analysis and Categorization
+
+## Consideration for Each Category
+
+### 1. BUG (Valid Bug Report)
+
+**Arguments FOR categorizing as BUG:**
+- The implementation violates the OAuth2 RFC 6749 specification which explicitly states "space-delimited" not "whitespace-delimited"
+- The asymmetric use of `split()` and `" ".join()` creates a logical inconsistency
+- Data loss occurs silently (whitespace-only scopes, trailing whitespace)
+- The round-trip property is violated, which is a reasonable expectation for parsing/formatting operations
+- The documentation doesn't mention the normalization behavior
+- The behavior can cause security issues if scopes contain meaningful whitespace
+
+**Arguments AGAINST:**
+- Python's `split()` behavior is well-known among Python developers
+- Some might argue normalization is a feature, not a bug
+- The examples in documentation only show single-space separation
+
+### 2. INVALID
+
+**Arguments FOR categorizing as INVALID:**
+- Scopes with tabs, newlines, or multiple spaces might be considered malformed input
+- The OAuth2 spec says "space-delimited" but doesn't explicitly forbid normalization
+- Whitespace-only scopes don't make semantic sense
+
+**Arguments AGAINST:**
+- The RFC clearly specifies "space" as delimiter, not "any whitespace"
+- The code silently modifies data without documentation
+- Even if the input is unusual, silent data modification is problematic
+
+### 3. WONTFIX
+
+**Arguments FOR categorizing as WONTFIX:**
+- Scopes with embedded newlines/tabs are extremely rare in practice
+- Most OAuth2 implementations probably have similar behavior
+- Fixing this might break existing code that relies on the normalization
+
+**Arguments AGAINST:**
+- This isn't just an edge case - double spaces are not that uncommon
+- The fix is simple and well-defined
+- Breaking changes can be managed with proper versioning
+
+### 4. DOCUMENTATION_FIX
+
+**Arguments FOR categorizing as DOCUMENTATION_FIX:**
+- The code's behavior might be intentional normalization
+- Could document that FastAPI normalizes whitespace in scopes
+- Could add a note about the `split()` behavior
+
+**Arguments AGAINST:**
+- The code behavior violates the OAuth2 RFC specification
+- Documentation can't fix a specification violation
+- The asymmetric split/join is a code smell indicating a bug
+
+### 5. FEATURE_REQUEST
+
+**Arguments FOR categorizing as FEATURE_REQUEST:**
+- Could be seen as requesting strict OAuth2 compliance as a new feature
+- Preserving exact whitespace could be considered an enhancement
+
+**Arguments AGAINST:**
+- This is fixing incorrect behavior, not adding new functionality
+- OAuth2 compliance should be expected, not a feature
+
+## Detailed Analysis
+
+### Specification Compliance
+The OAuth2 RFC 6749 is clear: scopes are "space-delimited" strings. The use of `split()` without arguments violates this by treating tabs, newlines, and other whitespace as delimiters. This is a specification violation, not an implementation choice.
+
+### Asymmetric Operations
+The code uses:
+- `scope.split()` for parsing (splits on all whitespace)
+- `" ".join(scopes)` for formatting (joins with space only)
+
+This asymmetry is a clear code smell indicating a bug. If the intent was normalization, both operations should be documented and symmetric.
+
+### Security Implications
+OAuth2 scopes are security-critical. Silent modification of security tokens without documentation is a security concern. An application might rely on exact scope matching, and the normalization could cause unexpected authorization behavior.
+
+### Practical Impact
+While scopes with tabs or newlines might be rare, double spaces are not uncommon in user input. The silent normalization could cause confusion and debugging difficulties.
+
+## Final Assessment
+
+This is a **BUG** because:
+
+1. **Specification Violation**: The implementation violates OAuth2 RFC 6749's requirement for "space-delimited" scopes
+2. **Asymmetric Operations**: Using different whitespace handling for split vs join is logically inconsistent
+3. **Undocumented Behavior**: The normalization is not documented, violating principle of least surprise
+4. **Data Loss**: Information is silently lost without error or warning
+5. **Security Context**: In a security-critical context like OAuth2, exact behavior matters
+
+The bug report correctly identifies a real issue with clear reproduction steps, proper analysis, and a reasonable fix. The fact that the fix might break some existing code doesn't make this less of a bug - it just means the fix needs careful versioning and migration planning.

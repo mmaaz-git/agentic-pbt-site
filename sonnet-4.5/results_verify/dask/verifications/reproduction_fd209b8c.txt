@@ -1,0 +1,44 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I have successfully reproduced the bug described in the report. The bug occurs exactly as described when the `sorted_columns` function encounters parquet statistics with None values in the min or max fields.
+
+## Reproduction Results
+
+1. **First failing case** - statistics with None values in both min and max for first row group, then valid min but None max in second:
+   - Input: `[{'columns': [{'name': 'test_col', 'min': None, 'max': None}]}, {'columns': [{'name': 'test_col', 'min': 0, 'max': None}]}]`
+   - Result: TypeError: '>=' not supported between instances of 'int' and 'NoneType'
+   - Location: Line 433 in sorted_columns function
+   - Cause: The code tries to compare `c["min"] >= max` where max is None from the previous iteration
+
+2. **Alternative failing case** - single row group with valid min but None max:
+   - Input: `[{'columns': [{'name': 'test_col', 'min': 0, 'max': None}]}]`
+   - Result: TypeError: '<' not supported between instances of 'NoneType' and 'int'
+   - Location: Line 442 in sorted_columns function
+   - Cause: The code appends None to divisions list, then tries to sort a list containing None values
+
+3. **Property-based testing** - The hypothesis test successfully found multiple failing cases, confirming that the bug occurs whenever:
+   - A row group has None as the max value
+   - Subsequent row groups are processed (triggering the comparison error)
+   - Or when trying to sort divisions that contain None values
+
+## Bug Impact
+
+The bug causes the function to crash with a TypeError when processing parquet files with incomplete or missing statistics metadata. This is a real-world scenario since:
+
+1. Parquet files may have missing statistics for various reasons (older format, corruption, etc.)
+2. The function already has partial None handling (checks for min being None on line 430)
+3. The function's purpose is to identify sorted columns from statistics, and missing statistics should result in that column being skipped, not a crash
+
+## Code Analysis
+
+Looking at the implementation:
+- Line 421-424: Checks that min and max keys exist in statistics, but doesn't check their values
+- Line 426: Sets `max = c["max"]` without checking if it's None
+- Line 427: Only checks if `c["min"]` is not None for success flag
+- Line 430: Checks if `c["min"]` is None in the loop but doesn't check max
+- Line 433: Attempts comparison `c["min"] >= max` which fails when max is None
+- Line 441: Appends max to divisions even if it's None
+- Line 442: Attempts to sort divisions which fails if it contains None
+
+The bug is clear and reproducible - the function needs to handle None values in both min AND max fields consistently.

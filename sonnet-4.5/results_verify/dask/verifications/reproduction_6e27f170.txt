@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the bug report for `dask.utils.format_bytes`.
+
+### Bug Reproduction
+
+1. **Hypothesis Test**: The hypothesis test successfully found the counterexample with `n=1_125_894_277_343_089_729`. The test correctly fails when checking that the output length is <= 10 characters.
+
+2. **Manual Reproduction**: I confirmed the exact behavior mentioned in the bug report:
+   - Input: `1_125_894_277_343_089_729`
+   - Output: `'1000.00 PiB'`
+   - Length: 11 characters
+   - The input is indeed < 2**60
+   - The assertion `len(result) <= 10` fails
+
+3. **Additional Test Cases**: I verified the boundary conditions:
+   - `format_bytes(999 * 2**50)` → `'999.00 PiB'` (10 chars) ✓
+   - `format_bytes(1000 * 2**50)` → `'1000.00 PiB'` (11 chars) ✗
+   - `format_bytes(1024 * 2**50 - 1)` → `'1024.00 PiB'` (11 chars) ✗
+
+### Root Cause
+
+The bug occurs because:
+1. The function formats numbers with 2 decimal places (`.2f`)
+2. When the value reaches 1000 PiB or higher (but still less than 1024 PiB to trigger EiB), the format becomes "XXXX.XX PiB" which is 11 characters
+3. The docstring claims all outputs for values < 2**60 will be <= 10 characters
+
+### Impact
+
+The bug is a documentation/contract violation. The actual function works correctly in terms of formatting bytes into human-readable strings. However, it doesn't meet the specific constraint about output length that is documented in both:
+- The function's docstring (line 1788 of dask/utils.py)
+- The official Dask documentation
+
+The bug affects values in the range [1000 * 2**50, 2**60), which are extremely large values (1000+ PiB) that are uncommon in practice but still within the documented constraint range.

@@ -1,0 +1,71 @@
+## Bug Triage Analysis
+
+### Considering BUG (Valid Bug)
+**Arguments for:**
+- The function converts valid filesystem paths ("/") into invalid ones ("")
+- PyArrow FileSelector accepts "/" as valid input but rejects empty strings
+- The bug causes real downstream failures (FileNotFoundError)
+- The behavior is objectively incorrect: "/" is universally recognized as the root directory
+- The bug affects multiple inputs: "/", "///", "s3:///"
+- The proposed fix is reasonable and maintains backward compatibility for normal paths
+
+**Arguments against:**
+- The function is internal/private (starts with underscore)
+- No documentation exists specifying expected behavior
+
+**Verdict:** Strong case for BUG
+
+### Considering INVALID
+**Arguments for:**
+- Function is private/internal, not part of public API
+- No documentation specifies how edge cases should be handled
+- Could argue that passing "/" to parquet operations doesn't make sense
+
+**Arguments against:**
+- The bug causes actual failures in production code
+- "/" is a valid filesystem path by any reasonable standard
+- The function is used internally by public APIs (read_parquet)
+- Even internal functions shouldn't break on valid inputs
+
+**Verdict:** Weak case for INVALID
+
+### Considering WONTFIX
+**Arguments for:**
+- Edge case that might rarely occur in practice (reading parquet from root directory)
+- Function is internal and could be considered implementation detail
+- Users shouldn't normally be passing "/" to parquet operations
+
+**Arguments against:**
+- The fix is trivial (4 lines of code)
+- The bug causes actual failures, not just theoretical issues
+- Other protocols like "s3:///" are also affected
+- The cost of fixing is minimal compared to potential user frustration
+
+**Verdict:** Weak case for WONTFIX
+
+### Considering FEATURE_REQUEST
+**Arguments for:**
+- Could frame as "add support for root directory paths"
+- Function never explicitly claimed to support "/" as input
+
+**Arguments against:**
+- This is fixing broken behavior, not adding new functionality
+- "/" is already a valid path - it should work without special support
+- The function already handles paths, just incorrectly for this edge case
+
+**Verdict:** Very weak case for FEATURE_REQUEST
+
+### Considering DOCUMENTATION_FIX
+**Arguments for:**
+- Function lacks any documentation
+- Could document that "/" shouldn't be used
+
+**Arguments against:**
+- The code behavior is wrong, not the (non-existent) documentation
+- Documenting a limitation doesn't fix the underlying bug
+- PyArrow expects valid paths, and "" is not valid
+
+**Verdict:** Very weak case for DOCUMENTATION_FIX
+
+### Final Assessment
+This is clearly a **BUG**. The function transforms valid filesystem paths into invalid ones, causing downstream failures. The fact that "/" becomes "" is not a documentation issue or missing feature - it's incorrect behavior that breaks the contract with PyArrow's FileSelector. The bug is reproducible, has a clear fix, and affects real use cases (even if edge cases).

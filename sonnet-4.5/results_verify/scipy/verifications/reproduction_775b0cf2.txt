@@ -1,0 +1,36 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results:
+
+1. **Confirmed Bug**: The reported bug is reproducible. When calling `windows.tukey(2, alpha=2.225073858507e-311)`, the function returns `[0. nan]` with RuntimeWarnings about overflow and invalid values.
+
+2. **Root Cause Identified**:
+   - The issue occurs in line 946 of the source code: `w3 = 0.5 * (1 + xp.cos(xp.pi * (-2.0/alpha + 1 + 2.0*n3/alpha/(M-1))))`
+   - When alpha is extremely small (< ~2.225e-308), the division `-2.0/alpha` produces `-inf`
+   - This infinity propagates through the cosine calculation, resulting in NaN
+
+3. **Threshold Analysis**:
+   - The problem occurs for alpha values smaller than approximately `sys.float_info.min` (2.225e-308)
+   - This includes subnormal/denormal floating point numbers
+   - Alpha = 0.0 is handled correctly (returns all ones) due to the `if alpha <= 0` check
+   - Alpha values >= sys.float_info.min work correctly
+
+4. **Test Results for Various Alpha Values**:
+   - alpha=2.225074e-311: Produces NaN ✗
+   - alpha=1e-308: Produces NaN ✗
+   - alpha=1e-310: Produces NaN ✗
+   - alpha=5e-324 (smallest subnormal): Produces NaN ✗
+   - alpha=2.225074e-308 (sys.float_info.min): Works correctly ✓
+   - alpha=0.0: Works correctly (returns [1, 1]) ✓
+   - alpha=1e-10: Works correctly ✓
+
+5. **Mathematical Analysis**:
+   - The division by alpha in the formula causes numerical overflow when alpha < sys.float_info.min
+   - Specifically, `-2.0/alpha` evaluates to `-inf` for such values
+   - The cosine of infinity is undefined, producing NaN
+
+6. **Behavior vs Documentation**:
+   - The documentation states alpha should be in range [0, 1]
+   - The value 2.225073858507e-311 is technically within this range (it's positive and less than 1)
+   - The documentation doesn't warn about numerical instability for extremely small values
+   - Window functions should produce finite values for all valid inputs

@@ -1,0 +1,38 @@
+REPRODUCTION OF BUG REPORT
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The Hypothesis test provided in the bug report fails as expected:
+- Test case: @given(st.dictionaries(st.text(min_size=1), st.integers()))
+- Falsifying example: {'0': -9_223_372_036_854_775_809} (which is -2^63 - 1)
+- Result: ValueError: Value is too small
+- This confirms ujson has problems with large negative integers
+
+2. MANUAL TEST REPRODUCTION:
+Testing the specific value -2^64 (-18,446,744,073,709,551,616):
+- ujson_dumps(-2^64) returns: "-18446744073709551616" (correct serialization)
+- ujson_loads("-18446744073709551616") returns: 0 (INCORRECT - silent corruption)
+- Expected: -18446744073709551616
+- Actual: 0
+- This confirms the bug report's claim of silent data corruption
+
+3. ADDITIONAL TESTING REVEALED:
+Testing values around -2^64:
+- Value -18446744073709551615 (-2^64 + 1): Raises "ValueError: Value is too small"
+- Value -18446744073709551616 (-2^64): Returns 0 (silent corruption)
+- Value -18446744073709551617 (-2^64 - 1): Returns -1 (silent corruption)
+- Value -9223372036854775808 (-2^63): Returns correctly
+- Value -9223372036854775809 (-2^63 - 1): Raises "ValueError: Value is too small"
+
+4. STDLIB JSON COMPARISON:
+Python's standard json library handles ALL these values correctly:
+- json.loads("-18446744073709551616") returns: -18446744073709551616 (correct)
+- json.loads("-18446744073709551617") returns: -18446744073709551617 (correct)
+- All test values round-trip correctly with stdlib json
+
+CONCLUSION:
+The bug is confirmed. ujson exhibits three behaviors with large negative integers:
+1. Raises ValueError for some values (e.g., -2^63 - 1)
+2. Silently corrupts data for other values (e.g., -2^64 returns 0, -2^64-1 returns -1)
+3. Works correctly for values within [-2^63, 2^63-1]
+
+The silent corruption is particularly dangerous as it provides no error indication, potentially leading to serious data integrity issues in production systems.

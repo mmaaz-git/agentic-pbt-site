@@ -1,0 +1,67 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## Function Documentation
+
+The `apply_filters` function has clear documentation in its docstring:
+
+```python
+def apply_filters(parts, statistics, filters):
+    """Apply filters onto parts/statistics pairs
+
+    Parameters
+    ----------
+    parts: list
+        Tokens corresponding to row groups to read in the future
+    statistics: List[dict]
+        List of statistics for each part, including min and max values
+    filters: Union[List[Tuple[str, str, Any]], List[List[Tuple[str, str, Any]]]]
+        List of filters to apply, like ``[[('x', '=', 0), ...], ...]``. This
+        implements partition-level (hive) filtering only, i.e., to prevent the
+        loading of some row-groups and/or files.
+
+        Predicates can be expressed in disjunctive normal form (DNF). This means
+        that the innermost tuple describes a single column predicate. These
+        inner predicates are combined with an AND conjunction into a larger
+        predicate. The outer-most list then combines all of the combined
+        filters with an OR disjunction.
+
+        Predicates can also be expressed as a List[Tuple]. These are evaluated
+        as an AND conjunction. To express OR in predicates, one must use the
+        (preferred) List[List[Tuple]] notation.
+
+    Returns
+    -------
+    parts, statistics: the same as the input, but possibly a subset
+    """
+```
+
+## Key Observations
+
+1. **No Empty Filters Specification**: The documentation does not explicitly state what should happen when `filters` is an empty list. It only describes the format for non-empty filters.
+
+2. **Return Value Semantics**: The documentation states the function returns "the same as the input, but possibly a subset". This implies:
+   - The function should always return valid output
+   - Output can be the same as input (no filtering) or a subset (some filtering applied)
+   - An empty filter list would logically mean "no filtering", thus returning the original input
+
+3. **Caller Context**: In the actual Dask codebase, `apply_filters` is called conditionally:
+   ```python
+   if self.filters and stats:
+       parts, stats = apply_filters(parts, stats, self.filters)
+   ```
+   The caller explicitly checks that filters is non-empty before calling the function. This suggests the function was not designed to handle empty filters.
+
+4. **Public vs Internal**: While the function appears to be internal (not documented in public API), it:
+   - Is not prefixed with underscore
+   - Has comprehensive docstring
+   - Can be imported and called directly
+
+## Documentation Gap
+
+The documentation doesn't specify:
+- Whether empty filters are valid input
+- What the expected behavior should be for empty filters
+- Whether the function is considered internal or public API
+
+Given the return specification ("same as input, but possibly a subset"), the most reasonable interpretation is that empty filters should return the input unchanged, as no filtering criteria means no subset selection should occur.

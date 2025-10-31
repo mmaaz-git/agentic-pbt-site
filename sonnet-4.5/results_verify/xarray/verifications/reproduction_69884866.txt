@@ -1,0 +1,67 @@
+BUG REPRODUCTION RESULTS
+========================
+
+## Test Case from Bug Report
+
+The bug report provided a specific failing case: start=0.0, stop=1.5, step=1.0
+
+### Expected Behavior (according to bug report)
+- Expected step: 1.0
+- Expected values: [0.0, 1.0]
+
+### Actual Behavior (confirmed by running the code)
+- Actual step: 0.75
+- Actual values: [0.0, 0.75]
+
+**Result: BUG REPRODUCED SUCCESSFULLY**
+
+## Property-Based Test
+
+The hypothesis test from the bug report was run and confirmed that the step parameter is not preserved.
+Multiple test cases failed where the actual step differed from the requested step.
+
+## Additional Test Cases Run
+
+1. start=0.0, stop=1.5, step=1.0
+   - Expected step: 1.0, Actual step: 0.75
+   - Expected values: [0.0, 1.0], Actual values: [0.0, 0.75]
+   - **FAILS**
+
+2. start=0.0, stop=2.0, step=1.0
+   - Expected step: 1.0, Actual step: 1.0
+   - Expected values: [0.0, 1.0], Actual values: [0.0, 1.0]
+   - **PASSES** (only by coincidence when stop/size equals step)
+
+3. start=0.0, stop=10.0, step=3.0
+   - Expected step: 3.0, Actual step: 2.5
+   - numpy.arange gives: [0.0, 3.0, 6.0, 9.0]
+   - RangeIndex.arange gives: [0.0, 2.5, 5.0, 7.5]
+   - **FAILS**
+
+4. start=0.0, stop=1.0, step=0.3
+   - Expected step: 0.3, Actual step: 0.25
+   - numpy.arange gives: [0.0, 0.3, 0.6, 0.9]
+   - RangeIndex.arange gives: [0.0, 0.25, 0.5, 0.75]
+   - **FAILS**
+
+## Root Cause Analysis (Confirmed)
+
+The bug report's analysis is correct:
+1. Line 219 calculates: size = math.ceil((stop - start) / step)
+2. Line 221-223 creates: RangeCoordinateTransform(start, stop, size, ...)
+3. The RangeCoordinateTransform.step property (lines 58-65) recalculates: step = (stop - start) / size
+
+This means:
+- For (0.0, 1.5, 1.0): size = ceil(1.5/1.0) = 2, new_step = 1.5/2 = 0.75
+- For (0.0, 10.0, 3.0): size = ceil(10.0/3.0) = 4, new_step = 10.0/4 = 2.5
+
+## Comparison with numpy.arange
+
+numpy.arange(0.0, 1.5, 1.0) produces [0.0, 1.0] - preserves step exactly
+RangeIndex.arange(0.0, 1.5, 1.0) produces [0.0, 0.75] - changes step to 0.75
+
+The behaviors are fundamentally different, contradicting the documentation claim of similarity.
+
+## Technical Impact
+
+The bug is technically correct - the step parameter is not preserved as documented. The actual implementation uses a different algorithm that recalculates the step based on dividing the interval evenly by the calculated number of points, rather than using the provided step directly.

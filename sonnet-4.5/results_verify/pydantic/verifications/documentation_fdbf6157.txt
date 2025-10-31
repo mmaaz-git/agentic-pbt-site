@@ -1,0 +1,50 @@
+## Documentation Analysis
+
+### Django Documentation
+
+1. **Official Django Documentation**:
+   - The Django documentation for HttpResponse headers is relatively minimal
+   - It shows how to set and retrieve headers using dictionary-like syntax
+   - States headers are case-insensitive
+   - Mentions headers cannot contain newlines (raises BadHeaderError)
+   - **Does NOT specify**: How non-ASCII characters are handled
+   - **Does NOT mention**: MIME encoding or RFC 2047
+   - **Does NOT document**: That values may be transformed during storage
+
+2. **Expected Behavior from Documentation**:
+   - The documentation shows examples like `response["Age"] = 120` and implies you get back what you set
+   - The case-insensitive example (`request.headers["User-Agent"] == request.headers["user-agent"]`) suggests transparent access
+   - No warning that header values might be encoded/transformed
+
+### Source Code Analysis
+
+1. **Implementation Details** (from django/http/response.py):
+   - `ResponseHeaders.__setitem__` calls `_convert_to_charset(value, "latin-1", mime_encode=True)`
+   - This MIME-encodes values that can't be represented in latin-1
+   - `ResponseHeaders` inherits `__getitem__` from `CaseInsensitiveMapping` which simply returns stored value
+   - No decoding happens on retrieval
+
+2. **Code Comments**:
+   - The `_convert_to_charset` method states it will "apply MIME-encoding" if value can't be represented
+   - No documentation that the user will get back the encoded form
+
+### HTTP Standards
+
+1. **RFC 7230 (HTTP/1.1)**:
+   - HTTP headers historically use ISO-8859-1 (latin-1)
+   - Newly defined headers SHOULD limit to US-ASCII
+   - Non-ASCII historically supported "only through use of RFC 2047 encoding"
+
+2. **RFC 2047 (MIME Encoding)**:
+   - Defines encoding for non-ASCII text in headers
+   - Applications should work with decoded content, not the encoded form
+   - The encoding is meant to be transparent to the application layer
+
+### Key Finding
+
+The documentation never mentions that:
+1. Non-ASCII values will be MIME-encoded
+2. Retrieved values may differ from set values
+3. The encoding is one-way (no automatic decoding)
+
+This is a significant documentation gap. Users would reasonably expect `response[key]` to return what they set, especially given the dictionary-like interface and the lack of any documentation suggesting otherwise.

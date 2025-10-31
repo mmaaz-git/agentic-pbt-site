@@ -1,0 +1,53 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug reported in the xarray.corr() function where it can return correlation coefficients that exceed the mathematically valid range of [-1, 1].
+
+### Reproduction Steps
+
+1. **Hypothesis Test Reproduction**
+   - Ran the provided property-based test using Hypothesis
+   - The test immediately found a failure case with the provided data
+   - Confirmed that the assertion fails when correlation exceeds 1.0
+
+2. **Manual Test Case Reproduction**
+   - Used the specific failing input: `array([[1., 1.], [0., 0.], [0., 0.]])`
+   - Created two DataArrays from the first two columns
+   - Computed correlation using xr.corr()
+   - Result: 1.00000000000000022 (exceeds 1.0 by ~2.22e-16)
+
+### Verification Results
+
+**xarray behavior:**
+- Input data: Two identical arrays [1., 0., 0.]
+- Standard deviation: 0.4714045207910317 for both arrays
+- Correlation value: 1.00000000000000022
+- Exceeds 1.0: True
+- Amount over 1.0: 2.22e-16
+
+**NumPy comparison:**
+- Same input data processed with np.corrcoef()
+- NumPy correlation: 1.00000000000000000
+- Exceeds 1.0: False
+- NumPy correctly bounds the result to exactly 1.0
+
+### Root Cause
+The issue occurs in the _cov_corr function at line 312 of computation.py:
+```python
+corr = cov / (da_a_std * da_b_std)
+```
+
+Due to floating-point arithmetic precision errors, this division can produce values slightly outside [-1, 1] when the arrays are perfectly correlated. The computation involves:
+1. Computing covariance
+2. Computing standard deviations
+3. Dividing covariance by product of standard deviations
+
+Small rounding errors in any of these steps can cause the final result to exceed the mathematical bounds.
+
+### Impact
+While the deviation is small (2.22e-16), it violates the fundamental mathematical property that correlation coefficients must be in [-1, 1]. This can cause:
+- Failed assertions in user code that checks bounds
+- Unexpected behavior in downstream calculations
+- Violation of mathematical invariants
+
+The bug is confirmed and reproducible.

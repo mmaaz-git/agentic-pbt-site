@@ -1,0 +1,59 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+1. HYPOTHESIS TEST REPRODUCTION
+--------------------------------
+The Hypothesis test provided in the bug report was executed successfully. The test failed as expected with the specific example:
+- Input: origin=':', spaces_after=1
+- Result: AssertionError - Got 400 status code instead of expected 200
+- Config: allow_origins=[': '] (with trailing space)
+- Request: origin=':' (without space)
+
+2. SIMPLE EXAMPLE REPRODUCTION
+-------------------------------
+Three test cases were executed:
+
+Test 1 - Trailing space:
+- Configuration: allow_origins=['http://example.com '] (with trailing space)
+- Request origin: 'http://example.com' (no space)
+- Result: Status 400 (FAILED - expected 200)
+
+Test 2 - Leading space:
+- Configuration: allow_origins=[' http://example.com'] (with leading space)
+- Request origin: 'http://example.com' (no space)
+- Result: Status 400 (FAILED - expected 200)
+
+Test 3 - Control (no spaces):
+- Configuration: allow_origins=['http://example.com'] (no spaces)
+- Request origin: 'http://example.com' (no spaces)
+- Result: Status 200 (PASSED - as expected)
+
+3. CODE ANALYSIS
+----------------
+Examined the source code at:
+/home/npc/pbt/agentic-pbt/envs/starlette_env/lib/python3.13/site-packages/starlette/middleware/cors.py
+
+Key findings:
+- Line 65: self.allow_origins = allow_origins (stored as-is without normalization)
+- Line 67: self.allow_headers = [h.lower() for h in allow_headers] (headers ARE normalized)
+- Line 102: return origin in self.allow_origins (exact string matching)
+
+The code shows inconsistent normalization:
+- Headers are normalized (lowercased) on line 67
+- Headers are also stripped on line 129
+- Origins are NOT normalized at all on line 65
+
+4. EFFECT OF THE BUG
+--------------------
+When developers configure CORS middleware with origin URLs that accidentally contain whitespace (e.g., from configuration files, environment variables, or copy-paste errors), valid CORS requests from browsers will be rejected with 400 errors. This happens because:
+
+1. The middleware stores the origins with whitespace intact
+2. Browsers send origin headers without whitespace (per spec)
+3. The exact string comparison fails
+4. Valid requests are incorrectly rejected
+
+This is particularly problematic because:
+- The whitespace is often invisible to developers
+- The error message doesn't indicate the whitespace issue
+- It works fine when there's no whitespace
+- Other parameters like headers ARE normalized, creating inconsistency

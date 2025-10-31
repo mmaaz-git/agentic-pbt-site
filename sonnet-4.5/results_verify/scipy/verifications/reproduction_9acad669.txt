@@ -1,0 +1,53 @@
+REPRODUCTION TEST RESULTS
+========================
+
+1. BUG REPORT CLAIM vs ACTUAL BEHAVIOR:
+
+   CLAIM: Function returns the unmodified input array
+   ACTUAL: Function returns a MODIFIED array, but with INCORRECT values (inf on diagonal instead of 0)
+
+   The bug report's claim is partially incorrect. The function does NOT return the "unmodified input array". Instead:
+   - With C-contiguous arrays: Returns correct shortest paths with diagonal = 0
+   - With F-contiguous arrays: Returns INCORRECT results with diagonal = inf
+
+2. DETAILED TEST RESULTS:
+
+   A. Simple 3x3 Random Graph Test:
+      - C-contiguous + overwrite=True: Diagonal = [0, 0, 0] ✓ CORRECT
+      - F-contiguous + overwrite=True: Diagonal = [inf, inf, inf] ✗ INCORRECT
+      - C-contiguous + overwrite=False: Diagonal = [0, 0, 0] ✓ CORRECT
+      - F-contiguous + overwrite=False: Diagonal = [inf, inf, inf] ✗ INCORRECT
+
+   B. Property Test (Hypothesis):
+      - Test FAILS for all values of n >= 3
+      - C-contiguous and F-contiguous arrays produce different results
+      - This violates the invariant that results should be identical regardless of memory layout
+
+   C. Exception Behavior:
+      - A ValueError IS raised internally: "ndarray is not C-contiguous"
+      - The exception IS ignored/suppressed by the C extension
+      - Error message appears in stderr but doesn't propagate to Python
+
+3. CRITICAL FINDING:
+   The bug is MORE SEVERE than reported. The function doesn't just return the input unchanged - it returns WRONG RESULTS:
+   - Sets diagonal to inf instead of 0
+   - This completely breaks the shortest path computation
+   - The results are mathematically incorrect (distance from node to itself should be 0, not infinity)
+
+4. SCOPE OF BUG:
+   - Affects ALL F-contiguous arrays regardless of overwrite parameter
+   - Affects both overwrite=True AND overwrite=False
+   - Not limited to overwrite=True as the bug report suggests
+   - Also affects float32 arrays, not just float64
+
+5. VERIFICATION OF FLOYD-WARSHALL ALGORITHM:
+   When working correctly (C-contiguous), the function properly computes:
+   - Diagonal elements as 0 (distance to self)
+   - Shortest paths between all node pairs
+   - Handles disconnected nodes (inf values) correctly
+
+6. CORE ISSUE:
+   The F-contiguous array handling is fundamentally broken. The function:
+   - Raises an internal exception that gets suppressed
+   - Returns incorrect mathematical results
+   - Violates the basic invariant of the Floyd-Warshall algorithm

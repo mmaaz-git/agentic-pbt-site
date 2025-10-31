@@ -1,0 +1,52 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported for pandas.io.sas.sas7bdat._parse_datetime.
+
+Test Results:
+-------------
+
+1. Property-based test: CONFIRMED
+   - The Hypothesis test immediately failed with value 10000000000000.0 (1e13)
+   - AssertionError raised confirming _parse_datetime crashes with OverflowError
+
+2. Direct test with 1e15 seconds: CONFIRMED
+   - OverflowError: "Python int too large to convert to C int"
+   - Crash occurs when attempting to create timedelta
+
+3. Direct test with 1e15 days: CONFIRMED
+   - OverflowError: "Python int too large to convert to C int"
+   - Same crash with days unit
+
+4. NaN handling: WORKING
+   - Returns pd.NaT as expected for NaN values
+   - This demonstrates inconsistent error handling (NaN handled gracefully, large values crash)
+
+5. Normal values: WORKING
+   - 100000 seconds -> 1960-01-02 03:46:40
+   - 100 days -> 1960-04-10 00:00:00
+
+6. Boundary testing revealed:
+   - Values up to 1e11 seconds work fine
+   - Values >= 1e12 seconds cause OverflowError
+   - Python's timedelta.max limit is 86400000000000.0 seconds (8.64e13)
+   - When adding to datetime(1960, 1, 1), overflow occurs around 5e11 seconds
+
+Function Source Code:
+--------------------
+The function is extremely simple with no error handling:
+
+```python
+def _parse_datetime(sas_datetime: float, unit: str):
+    if isna(sas_datetime):
+        return pd.NaT
+
+    if unit == "s":
+        return datetime(1960, 1, 1) + timedelta(seconds=sas_datetime)
+    elif unit == "d":
+        return datetime(1960, 1, 1) + timedelta(days=sas_datetime)
+    else:
+        raise ValueError("unit must be 'd' or 's'")
+```
+
+The bug is real and reproducible. The function crashes with OverflowError when values exceed Python's timedelta limits instead of handling them gracefully.

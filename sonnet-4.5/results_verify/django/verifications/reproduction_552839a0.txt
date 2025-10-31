@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is CONFIRMED. The `GetLanguageInfoListNode.get_language_info()` method in Django's `django.templatetags.i18n` module uses a fragile heuristic to distinguish between string language codes and sequence inputs, which fails for sequences with single-character first elements.
+
+### Steps Taken to Reproduce
+
+1. **Examined Source Code**: Located the actual Django source at `/home/npc/miniconda/lib/python3.13/site-packages/django/templatetags/i18n.py`, lines 40-46. The code exactly matches what the bug report describes.
+
+2. **Ran Hypothesis Property-Based Test**: The test immediately found multiple failing examples, including the specific case mentioned in the bug report: `['x', 'Unknown Language']`. The test confirmed that ANY sequence with a single-character first element triggers the bug.
+
+3. **Ran Manual Reproduction Code**: Confirmed the exact behavior described in the bug report:
+   - For sequence `['x', 'Unknown Language']`: `language[0]` is `'x'` with `len(language[0]) = 1`, causing it to take the ELSE branch and call `str(['x', 'Unknown Language'])`, resulting in the string `"['x', 'Unknown Language']"` being passed to `translation.get_language_info()`, which then raises a KeyError.
+
+   - For sequence `['en', 'English']`: `language[0]` is `'en'` with `len(language[0]) = 2`, causing it to take the IF branch and correctly call `translation.get_language_info('en')`.
+
+   - For string `'en'`: `language[0]` is `'e'` with `len(language[0]) = 1`, causing it to take the ELSE branch and call `str('en')` which is `'en'`, working correctly by coincidence.
+
+### The Bug
+
+The code at lines 43-46:
+```python
+if len(language[0]) > 1:
+    return translation.get_language_info(language[0])
+else:
+    return translation.get_language_info(str(language))
+```
+
+This logic is fundamentally flawed because:
+1. It assumes all sequences will have first elements with length > 1
+2. It relies on string indexing behavior (`'en'[0]` = `'e'`) coincidentally working
+3. It doesn't actually check the type of the input, just the length of the first indexed element
+
+### Impact
+
+Any sequence (list, tuple, etc.) passed to `get_language_info()` where the first element is a single character will fail with a KeyError. This includes valid single-character language codes or any data structure that happens to have a single-character string as its first element.
+
+### Verification
+
+The bug is 100% reproducible and the report accurately describes both the problem and its root cause. The suggested fix (using `isinstance(language, str)` to properly check types) would correctly address the issue.

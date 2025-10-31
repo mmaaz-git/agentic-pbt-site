@@ -1,0 +1,46 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+I have successfully reproduced the bug reported against django.http.parse_cookie.
+
+## Reproduction Steps Performed
+
+1. Located the parse_cookie function at:
+   /home/npc/miniconda/lib/python3.13/site-packages/django/http/cookie.py
+
+2. Ran the property-based test from the bug report:
+   - The Hypothesis test fails immediately on the simple case {'0': ';'}
+   - The parsed result is {'0': ''} instead of {'0': ';'}
+   - This confirms the function incorrectly handles semicolons in values
+
+3. Ran the specific reproduction example:
+   - Input: 'session="abc;123"; user=john'
+   - Expected: {'session': 'abc;123', 'user': 'john'}
+   - Actual result: {'session': '"abc', '': '123"', 'user': 'john'}
+   - This shows the function splits on semicolons BEFORE unquoting
+
+4. Compared with Python's SimpleCookie:
+   - SimpleCookie correctly parses: {'session': 'abc;123', 'user': 'john'}
+   - Django's parse_cookie incorrectly parses: {'session': '"abc', '': '123"', 'user': 'john'}
+   - The two implementations produce different results
+
+## Core Issue Confirmed
+
+The bug is real and happens because:
+1. The function splits the entire cookie string on ';' first (line 12 in cookie.py)
+2. Then it attempts to unquote values (line 22)
+3. This order is wrong - it should respect quoted strings when splitting
+
+When the cookie string 'session="abc;123"; user=john' is processed:
+- It's first split on ';' into: ['session="abc', '123"', ' user=john']
+- This breaks the quoted value "abc;123" into two parts
+- The function then tries to process these broken parts separately
+
+## Impact
+
+This bug affects any application that:
+- Uses quoted cookie values containing semicolons
+- Expects RFC-compliant cookie parsing
+- Needs to store structured data in cookies (like JSON or URLs with parameters)
+
+The bug is consistently reproducible and represents a clear violation of cookie parsing standards.

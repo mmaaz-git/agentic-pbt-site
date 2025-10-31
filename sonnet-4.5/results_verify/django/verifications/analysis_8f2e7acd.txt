@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Django documentation doesn't explicitly specify what should happen when an empty string is used as the padding parameter. Since this is an edge case not covered in the documentation, one could argue that the current behavior is simply undefined behavior rather than a bug. The function technically works for all normal use cases with non-empty padding strings.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that Django's implementation violates a fundamental invariant of SQL LPAD/RPAD functions - they should always return strings of the exact specified length or NULL. Major SQL databases (MySQL, Oracle, PostgreSQL) all return NULL for empty padding strings. Django aims to provide consistent database functionality across backends, so deviating from standard SQL behavior is a legitimate bug.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Using an empty string as padding is an obscure edge case that likely never occurs in real-world applications. Who would ever want to pad a string with nothing? This could be considered a trivial issue that doesn't merit fixing since it only affects users who misuse the function with nonsensical inputs.
+
+**Why it might not be WONTFIX:**
+This isn't just a cosmetic issue - it violates a core invariant that LPAD/RPAD should return strings of exact length. Applications might rely on this invariant for data formatting, fixed-width file generation, or database constraints. The fix is also simple (just check for empty string), so the cost-benefit ratio favors fixing it.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The Django documentation doesn't explicitly state what happens with empty padding strings. One could argue that the documentation should be updated to specify that empty padding strings result in the original text being returned unchanged. This would document the current behavior rather than changing it.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior clearly contradicts established SQL standards that Django is trying to emulate. All major databases return NULL for empty padding, not the original string. Documenting non-standard behavior would be misleading when the correct fix is to align with SQL standards.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Handling empty padding strings could be viewed as a new feature rather than a bug fix. The current implementation handles the "normal" cases (non-empty padding) correctly, and adding support for empty padding strings could be framed as extending functionality to handle additional edge cases.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality - it's fixing broken functionality. The functions already claim to implement SQL LPAD/RPAD, which have well-defined behavior for empty padding strings (return NULL). The issue is that the current implementation is incorrect, not that it lacks a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of SQL standard behavior that Django aims to emulate. All major SQL databases (MySQL, Oracle, PostgreSQL) return NULL when padding with empty strings because it's impossible to pad to the required length with nothing. The current implementation returns strings of incorrect length, violating the fundamental invariant that LPAD/RPAD always return strings of the exact specified length. This could cause data corruption, formatting errors, and inconsistencies between Django's SQLite backend and other databases.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is that Django's documentation doesn't explicitly specify the behavior for empty padding strings. However, this is a weak argument since Django clearly intends to implement standard SQL functions, and the standard behavior is well-established across all major databases.
+
+## Overall Consideration
+
+After thorough analysis, this appears to be a valid BUG. The evidence is compelling:
+
+First, Django's LPAD/RPAD functions are explicitly designed to emulate standard SQL functions of the same name. These aren't Django-specific inventions but implementations of well-established SQL functionality. When implementing standard functions, it's reasonable to expect standard behavior, even if not every edge case is explicitly documented. The fact that MySQL, Oracle, and PostgreSQL all return NULL for empty padding strings establishes a clear industry standard.
+
+Second, the current behavior violates a fundamental invariant of LPAD/RPAD functions - they should always return strings of exactly the specified length (or NULL if that's impossible). Returning the original string unchanged when it's shorter than the target length is objectively incorrect. This isn't a matter of interpretation or preference; it's a mathematical violation of the function's contract. Applications that depend on fixed-width formatting could experience data corruption or processing errors due to this bug.
+
+Third, the fix is straightforward and low-risk. Adding a simple check for empty strings at the beginning of both functions would align Django's behavior with SQL standards without breaking any legitimate use cases. The current behavior with empty padding strings is already broken, so fixing it won't negatively impact properly functioning code. This is a clear case where the correct behavior is well-defined, the current implementation is demonstrably wrong, and the fix is simple.

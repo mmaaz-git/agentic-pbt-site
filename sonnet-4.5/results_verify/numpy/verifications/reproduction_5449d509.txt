@@ -1,0 +1,40 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in NumPy's case transformation functions.
+
+## Reproduction Steps Taken
+
+1. **Property-based test reproduction**:
+   - Ran the hypothesis test with the failing input ['ẖ']
+   - Confirmed that NumPy char.swapcase('ẖ') returns 'H' (single character)
+   - Confirmed that Python str.swapcase('ẖ') returns 'H̱' (two characters: H + combining macron below)
+   - The assertion fails as expected: numpy_result != python_result
+
+2. **Manual reproduction example**:
+   - Verified all test cases from the bug report
+   - Character 'ẖ' (U+1E96): NumPy returns 'H', Python returns 'H̱' (H + combining diacritic)
+   - Character 'ǰ' (U+01F0): NumPy returns 'J', Python returns 'J̌' (J + combining caron)
+   - Character 'ß' (German eszett): NumPy returns 'S', Python returns 'SS' (two S characters)
+
+3. **Extended testing across all functions**:
+   - Tested numpy.char.upper: All three test characters show truncation
+   - Tested numpy.char.swapcase: All three test characters show truncation
+   - Tested numpy.char.capitalize: All three test characters show truncation
+   - Tested numpy.char.title: All three test characters show truncation
+
+## Observed Behavior
+
+The bug is systematic and consistent:
+- When a Unicode case transformation produces a multi-character result (either through decomposition with combining diacritics or expansion like ß→SS), NumPy truncates the result to the first character only.
+- This happens silently with no warning or error.
+- The truncation results in loss of information that makes the transformation non-reversible.
+
+## Impact
+
+This is a real bug that causes:
+1. Data loss/corruption for certain Unicode characters
+2. Inconsistency with Python's standard string behavior
+3. Silent failure that could go unnoticed in production code
+
+The bug report's code examples all execute correctly and demonstrate the issue as described.

@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmation
+**The bug is REAL and REPRODUCIBLE.** The `truncate_string` function violates its documented invariant when `max_length < 3`.
+
+### Technical Details
+
+The function uses the following logic for simple truncation:
+```python
+return text[: max_length - 3] + "..."
+```
+
+When `max_length < 3`, this creates negative slice indices:
+- `max_length=0`: `text[:-3] + "..."` → Returns "Hello wo..." (length 11)
+- `max_length=1`: `text[:-2] + "..."` → Returns "Hello wor..." (length 12)
+- `max_length=2`: `text[:-1] + "..."` → Returns "Hello worl..." (length 13)
+
+In Python, negative slice indices count from the end of the string, so instead of truncating to a very short string, it returns most of the original text plus the ellipsis.
+
+### Test Results
+```
+Testing with "Hello world" (length 11):
+max_length=0: 'Hello wo...' (actual length=11) ❌ VIOLATES INVARIANT
+max_length=1: 'Hello wor...' (actual length=12) ❌ VIOLATES INVARIANT
+max_length=2: 'Hello worl...' (actual length=13) ❌ VIOLATES INVARIANT
+max_length=3: '...' (actual length=3) ✓ OK
+max_length=4: 'H...' (actual length=4) ✓ OK
+```
+
+### Documentation vs. Implementation
+The docstring promises: "Maximum length of the result string"
+The implementation violates this promise for `max_length < 3`.
+
+### Root Cause Analysis
+The bug occurs because:
+1. The code assumes `max_length >= 3` to accommodate the ellipsis "..."
+2. When `max_length < 3`, the calculation `max_length - 3` becomes negative
+3. Negative indices in Python slicing have different semantics (counting from end)
+4. This causes the function to return strings LONGER than `max_length`
+
+The bug report correctly identified both the issue and its root cause.

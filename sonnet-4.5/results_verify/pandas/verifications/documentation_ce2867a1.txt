@@ -1,0 +1,30 @@
+=== Documentation Analysis for pandas.plotting.deregister_matplotlib_converters ===
+
+The documentation for `deregister_matplotlib_converters()` states:
+
+"Remove pandas formatters and converters.
+
+Removes the custom converters added by :func:`register`. This attempts to set the state of the registry back to the state before pandas registered its own units. Converters for pandas' own types like Timestamp and Period are removed completely. Converters for types pandas overwrites, like ``datetime.datetime``, are restored to their original value."
+
+Key points from the documentation:
+1. The function "attempts to set the state of the registry back to the state before pandas registered its own units"
+2. It should restore converters that pandas overwrites (like datetime.datetime) to their "original value"
+3. Pandas' own types (Timestamp, Period) should be removed completely
+
+The word "attempts" is important here - it suggests this is a best-effort operation, not a guarantee.
+
+However, the documentation also says it restores converters to their "original value" for types that pandas overwrites. This implies that if a converter didn't exist originally for a type, it shouldn't exist after deregistration.
+
+Implementation details from source code:
+- The `register()` function caches previous converters in `_mpl_units` dictionary before replacing them
+- The `deregister()` function:
+  1. Removes pandas converters from the registry
+  2. Restores all converters from `_mpl_units` back to the registry
+
+The issue is that `_mpl_units` may contain converters that were not in the registry when the user initially called register(). This happens because:
+1. When pandas tries to register its converters, it checks if a converter already exists
+2. If no converter exists initially, matplotlib might lazily create one when pandas accesses the registry
+3. This lazily-created converter gets cached in `_mpl_units`
+4. When deregister is called, it restores this converter that wasn't there originally
+
+The documentation says the function "attempts to set the state of the registry back to the state before pandas registered its own units" but the implementation doesn't fully achieve this goal when matplotlib's lazy initialization is involved.

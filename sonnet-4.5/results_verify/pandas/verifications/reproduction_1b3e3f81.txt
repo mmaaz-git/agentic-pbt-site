@@ -1,0 +1,66 @@
+BUG REPRODUCTION RESULTS
+
+REPRODUCTION STATUS: CONFIRMED - The bug is reproducible and behaves exactly as reported.
+
+TEST RESULTS SUMMARY:
+All test cases from the bug report were successfully reproduced, confirming that length_of_indexer returns negative values for slices with negative steps.
+
+DETAILED TEST RESULTS:
+
+1. slice(None, None, -1) with target_len=1:
+   - Function returns: -1
+   - Expected/Actual: 1
+   - The function returns a negative length for a valid reverse slice
+
+2. slice(None, None, -1) with target_len=5:
+   - Function returns: -5
+   - Expected/Actual: 5
+   - Returns negative of the actual length for full reverse slice
+
+3. slice(None, None, -2) with target_len=4:
+   - Function returns: -2
+   - Expected/Actual: 2
+   - Returns negative value for reverse slice with step -2
+
+4. slice(5, None, -1) with target_len=7:
+   - Function returns: -2
+   - Expected/Actual: 6
+   - Incorrect calculation, not even the negative of the actual length
+
+5. slice(None, 2, -1) with target_len=6:
+   - Function returns: -2
+   - Expected/Actual: 3
+   - Another incorrect negative value
+
+HYPOTHESIS TEST:
+The hypothesis test immediately failed on the first example, confirming systematic issues with negative step handling.
+
+PYTHON STANDARD BEHAVIOR:
+Testing Python's built-in slice.indices() method shows:
+- It correctly handles all negative step cases
+- len(range(*slice.indices(target_len))) always returns the correct non-negative length
+- This is the standard, well-tested approach for computing slice lengths
+
+ROOT CAUSE VERIFICATION:
+The bug occurs in the manual slice normalization logic at lines 313-316 of the source:
+```python
+elif step < 0:
+    start, stop = stop + 1, start + 1
+    step = -step
+return (stop - start + step - 1) // step
+```
+
+This logic incorrectly handles negative steps by:
+1. Swapping and adjusting start/stop values incorrectly
+2. Negating the step but not properly adjusting the formula
+3. Resulting in negative values when stop < start after the swap
+
+PROPOSED FIX VALIDATION:
+The proposed fix using `len(range(*indexer.indices(len(target))))`:
+- Correctly returns non-negative lengths for all test cases
+- Matches the actual behavior of Python slicing
+- Replaces 18 lines of buggy code with 1 line of correct code
+- Leverages Python's well-tested slice handling
+
+CONCLUSION:
+The bug is 100% reproducible and behaves exactly as described in the report. The function returns negative lengths for slices with negative steps, violating the fundamental invariant that lengths must be non-negative.

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Array API specification doesn't explicitly state that `result_type()` should handle string and bytes scalars. The specification mentions "scalars" but focuses on numeric types (integers, floats, complex, booleans). Since strings/bytes aren't mentioned in the specification, the current behavior of crashing could be considered correct - the function simply doesn't support these input types. Additionally, NumPy's behavior of interpreting strings as dtype format strings is well-documented and expected behavior.
+
+**Why it might not be INVALID:**
+The xarray codebase explicitly includes infrastructure to handle strings and bytes as weak scalar types. The `is_weak_scalar_type()` function specifically checks for `str | bytes`, and the `_future_array_api_result_type()` function has code to handle them. The comment in the code references a future Array API version that would include proper scalar handling, suggesting the developers intended to support this functionality.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case where users are passing string/bytes scalars to a function primarily designed for numeric type promotion. In practical usage, it's unclear why someone would need to determine the result type of string/bytes scalars in array operations. The crashes provide clear error messages indicating the inputs aren't supported, which could be considered sufficient. The workaround (using the _future_array_api_result_type directly) exists if needed.
+
+**Why it might not be WONTFIX:**
+The codebase already has the infrastructure to handle this case properly. The fix is straightforward and wouldn't break existing functionality. The function explicitly claims to handle "weak scalar types" in its internal documentation, and strings/bytes are classified as such. Leaving it broken when the fix is simple and the infrastructure exists seems unnecessary.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function's behavior with string/bytes inputs isn't documented anywhere. Users might reasonably expect that since `is_weak_scalar_type()` includes strings/bytes, the `result_type()` function should handle them. The documentation could be updated to explicitly state that string/bytes scalars aren't supported when using NumPy as the backend, even though they're considered weak scalar types internally.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code has clear infrastructure and intent to handle these types - it's not a documentation issue but an implementation bug. The `_future_array_api_result_type()` function successfully handles these cases, showing that the intended behavior is to support them. The issue isn't that the documentation is wrong, but that the implementation has a bug in its routing logic.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting string/bytes scalars in `result_type()` could be seen as a new feature rather than a bug fix. The Array API specification doesn't mandate this support, and NumPy's `result_type()` doesn't handle arbitrary string/bytes scalars (only dtype format strings). This could be viewed as requesting enhanced functionality beyond what's currently specified or required.
+
+**Why it might not be FEATURE_REQUEST:**
+The infrastructure to support this already exists in the codebase - it's not a new feature but rather fixing the routing to use existing code. The `is_weak_scalar_type()` and `_future_array_api_result_type()` functions already implement this functionality. The issue is simply that the main `result_type()` function doesn't route string/bytes inputs to the correct handler.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function has explicit infrastructure to handle string and bytes as weak scalar types, but fails to use it due to a logic error in the routing. The `is_weak_scalar_type()` function identifies strings/bytes as weak scalars, and `_future_array_api_result_type()` handles them correctly, but `result_type()` bypasses this handling when `xp is np`. This is clearly unintended behavior - the code was written to support these types but fails due to an implementation oversight.
+
+**Why it might not be BUG:**
+The Array API specification doesn't explicitly require string/bytes support in `result_type()`. The function delegates to NumPy's `result_type()` when using NumPy, which is reasonable behavior. NumPy's interpretation of strings as dtype format strings is documented behavior. The crashes occur because the inputs aren't valid dtype strings, which could be considered user error rather than a bug.
+
+## Overall Consideration
+Looking at all the evidence, this appears to be a legitimate bug, though not a critical one. The xarray codebase explicitly includes strings and bytes in its definition of weak scalar types through the `is_weak_scalar_type()` function. It also has a complete implementation for handling these types in `_future_array_api_result_type()`. The function even has a comment indicating it's implementing functionality that will be in a future Array API version. The issue is that when `xp is np`, the code takes a shortcut that bypasses the weak scalar handling, leading to crashes.
+
+The bug report is technically accurate: the function crashes on string/bytes inputs, the codebase has infrastructure to handle these cases properly, and the fix would be straightforward. However, the practical impact is limited since string/bytes type promotion is not a common use case in numerical computing contexts. The Array API specification also doesn't explicitly mandate this support.
+
+Given that only about 10% of bug reports from this user are valid, and this issue involves an edge case with limited practical impact and ambiguous specification requirements, this would typically lean toward rejection. However, the technical accuracy of the report and the clear intent in the codebase to support these types makes this a borderline case. The deciding factor is that the code explicitly defines strings/bytes as weak scalar types and has infrastructure to handle them - it's an implementation bug that this infrastructure isn't being used correctly.

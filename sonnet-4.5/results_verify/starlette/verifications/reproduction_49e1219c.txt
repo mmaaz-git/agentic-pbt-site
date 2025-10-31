@@ -1,0 +1,37 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported for `starlette.templating.Jinja2Templates.__init__`.
+
+### Test Results
+
+1. **Direct Reproduction Test**: FAILED
+   - When passing `directory=[]` (an empty list) and a valid `env` object, the test fails
+   - The `templates.env` is not the same as the provided `custom_env`
+   - Output: `templates.env is custom_env: False`
+   - This means a new environment is being created instead of using the provided one
+
+2. **Property-Based Test**: FAILED
+   - The test fails for all three empty sequence cases: `[]`, `()`, and `""`
+   - The failure message confirms that when an empty directory is provided, the code creates a new environment instead of using the provided `env` parameter
+
+### Root Cause Analysis
+
+The bug exists exactly as described in the report. Looking at the code in `/home/npc/pbt/agentic-pbt/envs/starlette_env/lib/python3.13/site-packages/starlette/templating.py`:
+
+- Line 98: `assert bool(directory) ^ bool(env), "either 'directory' or 'env' arguments must be passed"`
+- Line 100: `if directory is not None:`
+
+The inconsistency is:
+1. The assertion uses `bool(directory)` which evaluates to `False` for empty sequences (`[]`, `()`, `""`)
+2. The conditional check uses `directory is not None` which evaluates to `True` for empty sequences
+
+When `directory=[]` and `env=custom_env`:
+- `bool([])` = `False`, `bool(env)` = `True`
+- `False ^ True` = `True` → assertion passes ✓
+- `[] is not None` = `True` → code enters the first branch and creates a new environment ✗
+
+This means the code incorrectly tries to create an environment from an empty directory instead of using the provided `env` parameter.
+
+### Impact
+
+This is a valid logic bug that causes unexpected behavior when users provide empty sequences as the directory parameter along with a custom environment. The code should respect the provided environment but instead creates a new one, potentially losing custom configurations the user intended to use.

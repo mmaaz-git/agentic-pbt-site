@@ -1,0 +1,46 @@
+## Bug Reproduction Results
+
+### Technical Verification
+The bug report is technically accurate. I successfully reproduced the exact error described:
+
+1. **Hypothesis Test**: The property-based test fails immediately on the first example with `http://@/path`
+   - Error: `IndexError: string index out of range`
+   - Location: Line 129 in datastructures.py (as reported)
+
+2. **Manual Testing**: All four test URLs crash with the same error:
+   - `http://@/path` - netloc='@', hostname=None, after rpartition hostname=''
+   - `http:///path` - netloc='', hostname=None, after rpartition hostname=''
+   - `http://user@/path` - netloc='user@', hostname=None, after rpartition hostname=''
+   - `http://user:pass@/path` - netloc='user:pass@', hostname=None, after rpartition hostname=''
+
+3. **Root Cause Confirmed**:
+   - When hostname is None, the code extracts it using `netloc.rpartition("@")`
+   - For URLs with empty host component, this returns an empty string
+   - Line 129 tries to access `hostname[-1]` on an empty string
+   - This raises IndexError as described
+
+### URL Validity Analysis
+The URLs in question are edge cases but are technically parseable by Python's urllib:
+```python
+>>> from urllib.parse import urlsplit
+>>> urlsplit("http://@/path")
+SplitResult(scheme='http', netloc='@', path='/path', query='', fragment='')
+>>> urlsplit("http:///path")
+SplitResult(scheme='http', netloc='', path='/path', query='', fragment='')
+```
+
+These URLs are unusual but can occur in real scenarios:
+- File URLs often have empty netloc: `file:///path/to/file`
+- URLs with authentication but no host could appear in configuration files
+- Programmatically generated URLs might create these patterns
+
+### Behavioral Comparison
+The current behavior (crash) vs expected behavior (graceful handling):
+- **Current**: IndexError crash when calling replace() on these URLs
+- **Expected per bug report**: Method should handle empty hostnames gracefully
+- **Proposed fix**: Check if hostname is empty before accessing its last character
+
+The fix suggested in the bug report (`if hostname and hostname[-1] != "]"`) would prevent the crash while maintaining correct behavior for:
+- IPv6 addresses (which end with ']')
+- Regular hostnames with ports
+- Empty hostnames (new case handled)

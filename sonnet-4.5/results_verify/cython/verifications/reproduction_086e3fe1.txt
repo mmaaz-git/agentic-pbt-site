@@ -1,0 +1,32 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+1. Bug Reproduction:
+   - The simple test case crashes exactly as described with AttributeError: 'NoneType' object has no attribute 'find_module'
+   - The hypothesis-based property test also fails with the same error
+   - The error occurs on line 89 of /home/npc/miniconda/lib/python3.13/site-packages/Cython/Build/Inline.py
+
+2. Conditions for Bug:
+   - Occurs when calling safe_type() with a custom class instance (not built-in types)
+   - Occurs when context parameter is None (which is the default value)
+   - Built-in types (int, float, bool, list, tuple, dict, str, complex) work fine with context=None
+
+3. Root Cause:
+   The function iterates through the Method Resolution Order (MRO) of the custom class. For a custom class like CustomClass, the MRO is [CustomClass, object]. During the first iteration:
+   - base_type = CustomClass
+   - base_type.__module__ = '__main__' (not in builtins)
+   - Code attempts to call context.find_module('__main__', need_pxd=False)
+   - Since context is None, this raises AttributeError
+
+4. Effect:
+   The function crashes before reaching the 'object' base class in the MRO, which would have returned 'object' as the safe type.
+
+5. Test Results:
+   - All built-in types work correctly with context=None
+   - Custom classes consistently fail with context=None
+   - The proposed fix (checking if context is not None before calling find_module) resolves the issue
+   - With the fix, custom classes correctly return 'object' as their safe type when context is None
+
+The bug is 100% reproducible and the error matches exactly what was described in the bug report.

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This behavior could be argued as intentional if the design philosophy is that pyrex_ options represent "legacy mode" and should completely override any new-style parameters to maintain strict backward compatibility. However, this interpretation is not supported by any documentation and would be a very counterintuitive design choice.
+
+**Why it might not be INVALID:**
+The bug is real and demonstrable. When a user explicitly provides a cython_ parameter value, they have a reasonable expectation that this explicit value will be used, not silently overridden by a backward-compatibility translation. The current behavior violates the principle of least surprise and explicit is better than implicit.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue this is an edge case that rarely occurs in practice - users are unlikely to provide both pyrex_ and cython_ versions of the same parameter. The pyrex_ options are deprecated and users should migrate fully to cython_ options. Fixing this might add complexity for a scenario that shouldn't exist in well-maintained code.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it causes explicit user parameters to be silently ignored, which can lead to confusing debugging scenarios. Users migrating from Pyrex might have configuration files with pyrex_ options while explicitly setting cython_ options in code, creating exactly this scenario. The fix is straightforward and improves robustness.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never explicitly states what should happen when both pyrex_ and cython_ parameters are provided. One could argue the current behavior should simply be documented as "pyrex_ options take precedence for backward compatibility" and users should be warned not to mix them.
+
+**Why it might not be DOCUMENTATION_FIX:**
+While documentation is lacking, the current behavior is clearly wrong from a software engineering perspective. Explicit parameters should not be silently overridden. This is a code bug, not just a documentation issue. Documenting broken behavior doesn't make it correct.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting both pyrex_ and cython_ parameters simultaneously with proper precedence rules could be seen as a new feature rather than a bug fix. The current code was never designed to handle this case gracefully, so adding support for it is enhancing functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but rather fixing broken existing functionality. The Extension class already accepts both parameter types; it just handles them incorrectly when both are present. Users aren't asking for something new - they're asking for the existing parameters to work as expected.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear logic error in the code. When both pyrex_ and cython_ parameters are provided, the explicit cython_ parameters are completely discarded due to the flawed recursive call pattern. This violates fundamental programming principles where explicit parameters should take precedence over implicit translations. The behavior is undocumented, counterintuitive, and causes explicit user input to be silently ignored.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if this was intentional design, but there's no evidence supporting that interpretation. The code comment only mentions "translation for backwards compatibility," not "override explicit parameters."
+
+**Overall consideration**
+After careful analysis, this is unquestionably a BUG in the implementation. The code has a clear logic flaw where the recursive call pattern causes explicit cython_ parameters to be completely discarded when any pyrex_ option is present. This is not a documentation issue, as no reasonable documentation would specify that deprecated backward-compatibility options should override explicit current parameters.
+
+The bug occurs because when pyrex_ options are detected, the code makes a recursive call to Extension.__init__ with the converted options in **kw but fails to pass the explicit cython_ parameters that were provided as named arguments. This causes lines 83-92 (which set the cython attributes) to never execute, leaving the object with only the converted pyrex values.
+
+This is exactly the kind of subtle but impactful bug that should be fixed. It affects anyone trying to gradually migrate from pyrex_ to cython_ options, and the current behavior violates the principle of least surprise. The fix is straightforward and would make the code more robust and predictable.

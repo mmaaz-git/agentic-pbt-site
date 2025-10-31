@@ -1,0 +1,69 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+## Test Results
+
+I successfully reproduced the reported bug. The tests confirm the following:
+
+### 1. Empty Date Format Test
+- Input: `DateAttribute.parse_attribute('test_attr', "date ''")`
+- Expected: Should raise ValueError
+- Actual: Returns DateAttribute with datetime_unit='Y' and date_format='\'\''
+- **BUG CONFIRMED**
+
+### 2. Whitespace-Only Date Format Test
+- Input: `DateAttribute.parse_attribute('test_attr', "date '   '")`
+- Expected: Should raise ValueError
+- Actual: Returns DateAttribute with datetime_unit='Y' and date_format=''
+- **BUG CONFIRMED**
+
+### 3. Property-Based Testing
+Tested various whitespace inputs:
+- '' (empty): BUG - no ValueError raised, datetime_unit='Y'
+- ' ' (single space): BUG - no ValueError raised, datetime_unit='Y'
+- '  ' (double space): BUG - no ValueError raised, datetime_unit='Y'
+- '\t' (tab): BUG - no ValueError raised, datetime_unit='Y'
+- '\n' (newline): OK - ValueError raised (due to regex not matching multiline)
+- '   \t   ' (mixed): BUG - no ValueError raised, datetime_unit='Y'
+
+## Root Cause Analysis
+
+The bug is exactly as reported - on line 276 of _arffread.py:
+
+```python
+elif "yy":  # This is ALWAYS True
+```
+
+This condition evaluates to True for ANY input because the string "yy" is truthy in Python. The correct code should be:
+
+```python
+elif "yy" in pattern:  # Check if "yy" is IN the pattern
+```
+
+## Code Flow Analysis
+
+1. When an empty or whitespace-only date format is provided:
+   - The regex matches and extracts the empty/whitespace pattern
+   - The code checks `if "yyyy" in pattern` - False for empty pattern
+   - Then hits `elif "yy":` which is ALWAYS True
+   - Sets datetime_unit = "Y" incorrectly
+   - Never reaches the validation at lines 298-299 that would raise ValueError
+
+2. The intended behavior (based on code structure):
+   - Check for various date components (yyyy, yy, MM, dd, etc.)
+   - If none are found, datetime_unit remains None
+   - Lines 298-299 should raise ValueError for "Invalid or unsupported date format"
+
+## Technical Impact
+
+The bug causes the parser to accept invalid date formats that contain no actual date formatting components, returning a malformed DateAttribute object instead of raising the intended ValueError. This could lead to downstream errors when trying to parse actual date values with these invalid formats.
+
+## Public API Accessibility
+
+Important finding: Despite documentation claiming date attributes are not implemented:
+1. Date attributes ARE functional through the public loadarff() API
+2. ARFF files with valid date formats load successfully
+3. The bug affects user-facing functionality - loadarff() with empty date format raises a confusing "time data '' does not match format" error instead of the intended "Invalid or unsupported date format" error
+4. The DateAttribute class is directly accessible from scipy.io.arff._arffread
+
+This confirms the bug affects actual user-facing functionality, not just unused code.

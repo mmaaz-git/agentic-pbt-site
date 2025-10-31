@@ -1,0 +1,44 @@
+## Documentation Analysis
+
+### Function Status
+`_read_orc` is an **internal/private function** as indicated by:
+1. The leading underscore in its name (Python convention for private functions)
+2. It is not exposed in the main dask.dataframe API (confirmed via hasattr check)
+3. It is not documented in the public API documentation
+
+### Documentation Findings
+
+#### Public API Documentation
+The public `read_orc` function documentation states:
+- `columns: None or list(str) - Columns to load. If None, loads all.`
+- No mention of parameter mutation
+- No warning about columns list being modified
+
+#### Internal Function Documentation
+The `_read_orc` function has:
+- No docstring
+- No documentation about parameter mutation behavior
+- No indication that it modifies the columns parameter
+
+### Key Observations
+
+1. **No Mutation Warning**: Neither the public `read_orc` nor the internal `_read_orc` documentation mentions that the `columns` parameter will be modified.
+
+2. **Python Conventions**: Python convention and best practices dictate that functions should not mutate their input parameters unless:
+   - It's explicitly documented
+   - The function name suggests mutation (e.g., `list.sort()` vs `sorted()`)
+   - It's the primary purpose of the function
+
+3. **Internal vs Public**: While `_read_orc` is internal, it's still called through the public API chain:
+   - `read_orc` (public) → `dd.from_map` → `_read_orc` (internal)
+   - The columns parameter is passed through this chain
+
+4. **Actual Usage Pattern**: The public `read_orc` function does protect against this mutation in most cases by creating a new list at line 98:
+   ```python
+   if columns is not None and index in columns:
+       columns = [col for col in columns if col != index]
+   ```
+   However, when `index` is NOT in the original `columns` list, the original list is passed directly to `_read_orc` where it gets mutated.
+
+### Conclusion
+The lack of documentation about parameter mutation, combined with Python's strong conventions against unexpected mutations, supports that this is indeed a bug rather than intended behavior.

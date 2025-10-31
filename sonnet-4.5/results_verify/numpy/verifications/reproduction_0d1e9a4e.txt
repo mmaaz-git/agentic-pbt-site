@@ -1,0 +1,37 @@
+Bug Reproduction Analysis for django.utils.lorem_ipsum.words()
+
+I successfully reproduced the bug as described in the report. Here are the findings:
+
+1. CONFIRMED: words(-1, common=True) returns 18 words instead of 0 words or raising an error
+   - Actual output: 'lorem ipsum dolor sit amet consectetur adipisicing elit sed do eiusmod tempor incididunt ut labore et dolore magna'
+   - This is 18 out of the 19 COMMON_WORDS
+
+2. The bug is caused by Python's list slicing behavior on line 285 of the source code:
+   ```python
+   else:
+       word_list = word_list[:count]  # Line 285
+   ```
+
+   When count is -1 and word_list has 19 elements:
+   - word_list[:-1] returns all elements except the last one (18 words)
+   - This is standard Python slicing behavior, not a Python bug
+
+3. Interestingly, the behavior differs between common=True and common=False:
+   - words(-1, common=True) returns 18 words
+   - words(-1, common=False) returns 0 words (empty string)
+
+   This inconsistency occurs because:
+   - With common=True, word_list starts with 19 COMMON_WORDS
+   - With common=False, word_list starts empty []
+   - The slicing [:−1] on an empty list returns an empty list
+
+4. Testing various negative values with common=True:
+   - words(-1, common=True): 18 words (all but last 1)
+   - words(-5, common=True): 14 words (all but last 5)
+   - words(-10, common=True): 9 words (all but last 10)
+   - words(-19, common=True): 0 words (all but all 19)
+   - words(-20, common=True): 0 words (beyond list bounds)
+
+5. The Hypothesis test correctly identifies this as unexpected behavior, as it asserts that negative counts should return 0 words or raise an error.
+
+The technical details in the bug report are accurate. The function does indeed return unexpected results for negative count values due to Python's negative list slicing semantics.

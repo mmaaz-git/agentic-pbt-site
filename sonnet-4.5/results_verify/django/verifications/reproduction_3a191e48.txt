@@ -1,0 +1,34 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug in `django.db.backends.sqlite3._functions._sqlite_lpad`. The bug report is accurate in its description of the problem.
+
+### Test Results
+
+The function fails when `fill_text` is an empty string:
+
+1. `_sqlite_lpad('', 1, '')` returns `''` (length 0) instead of a string of length 1
+2. `_sqlite_lpad('hello', 10, '')` returns `'hello'` (length 5) instead of length 10
+3. `_sqlite_lpad('x', 5, '')` returns `'x'` (length 1) instead of length 5
+
+In contrast, when `fill_text` is non-empty, the function works correctly:
+- `_sqlite_lpad('hello', 10, '*')` correctly returns `'*****hello'` (length 10)
+
+### Root Cause
+
+The bug occurs in line 395 of _functions.py:
+```python
+return (fill_text * length)[:delta] + text
+```
+
+When `fill_text` is an empty string:
+- `fill_text * length` equals `''` (empty string multiplied by any number is still empty)
+- `''[:delta]` equals `''` (slicing empty string returns empty)
+- The result is just `text` without any padding
+
+This violates the fundamental invariant that LPAD should always return a string of exactly `length` characters.
+
+### Hypothesis Test
+
+The Hypothesis property-based test correctly identifies this issue by testing the invariant that the result should always have length equal to the requested `length` parameter (when result is not None).
+
+The bug is consistently reproducible and affects any case where `fill_text` is an empty string and padding is needed (i.e., when `len(text) < length`).

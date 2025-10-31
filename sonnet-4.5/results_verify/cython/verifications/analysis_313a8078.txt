@@ -1,0 +1,76 @@
+## Bug Triage Analysis
+
+### Considering Each Category:
+
+#### BUG (Valid Bug)
+**Arguments for:**
+- The method crashes with an unclear error when receiving control characters in attribute values
+- This is a crash bug that prevents the debug writer from functioning
+- The method accepts arbitrary string values but doesn't validate them for XML compatibility
+- The crash happens deep in the lxml library, not at the API boundary
+- There's no documentation warning users about these restrictions
+- The method is part of the public API used by the Cython compiler itself
+
+**Arguments against:**
+- XML inherently has character restrictions that are well-known
+- The error message from lxml is technically accurate
+
+#### INVALID
+**Arguments for:**
+- XML specifications clearly state that control characters are not allowed
+- It could be argued that callers should know not to pass invalid XML characters
+
+**Arguments against:**
+- The method signature accepts any string values without documenting restrictions
+- The crash happens internally, not at a documented API boundary
+- Other parts of Cython might legitimately generate strings with control characters that need to be recorded
+
+#### WONTFIX
+**Arguments for:**
+- Control characters in debug information attributes might be extremely rare
+- The effort to fix might not be worth it for an edge case
+
+**Arguments against:**
+- This causes a crash, not just incorrect behavior
+- Debug information is important for development
+- The fix is relatively simple (filter or escape characters)
+
+#### DOCUMENTATION_FIX
+**Arguments for:**
+- Could document that only XML-safe strings should be passed
+
+**Arguments against:**
+- This is a crash bug, not just a documentation issue
+- Users shouldn't need to know XML internals to use a debug writer
+- The method should handle this internally
+
+#### FEATURE_REQUEST
+**Arguments for:**
+- Could be seen as requesting new functionality to handle control characters
+
+**Arguments against:**
+- This is fixing a crash, not adding new functionality
+- The method already claims to handle arbitrary attribute values
+
+### Decision Rationale:
+
+This is a **BUG** because:
+
+1. **API Contract**: The method signature accepts **kwargs (arbitrary keyword arguments) without any documented restrictions on what values are acceptable. Users of this API have no way to know that control characters will cause crashes.
+
+2. **Crash vs Error**: The method crashes with a low-level XML error rather than handling the invalid input gracefully. A well-designed API should either:
+   - Filter/escape invalid characters automatically
+   - Raise a clear, high-level error at the API boundary
+   - Document the restrictions clearly
+
+3. **Internal Use**: This is used internally by the Cython compiler to generate debug information. The compiler might legitimately encounter strings with control characters (e.g., in string literals, file paths, or other metadata) and should handle them gracefully.
+
+4. **Debug Writer Purpose**: A debug writer should be robust and not crash when encountering unusual but valid program data. Control characters might appear in:
+   - String literals in the source code
+   - Generated variable names
+   - File paths on certain systems
+   - Other metadata
+
+5. **Simple Fix Available**: The proposed fix (filtering invalid characters) is straightforward and doesn't break existing functionality.
+
+The bug report correctly identifies a crash condition in production code that should be fixed.

@@ -1,0 +1,32 @@
+## Bug Reproduction Results
+
+I have successfully reproduced the bug reported in the FastAPI dependencies module. The bug occurs when creating circular dependencies between Dependant objects.
+
+### Test Results:
+
+1. **Property-Based Test**: FAILED with RecursionError
+   - Created two Dependant objects (dep1 and dep2) where dep1 depends on dep2 and dep2 depends on dep1
+   - The test crashed with `RecursionError: maximum recursion depth exceeded`
+   - Stack trace shows infinite recursion in get_flat_dependant() function
+
+2. **Direct Reproduction Code**: FAILED with RecursionError
+   - Same setup as above, directly calling get_flat_dependant(dep1)
+   - Resulted in identical RecursionError
+
+3. **Additional Testing with skip_repeats=True**: PASSED
+   - When using get_flat_dependant(dep1, skip_repeats=True), the function completes successfully
+   - This works because the two lambda functions have different cache_keys
+   - The skip_repeats mechanism checks if sub_dependant.cache_key is in visited list
+
+### Analysis of the Code:
+
+Looking at the actual implementation in `/home/npc/miniconda/lib/python3.13/site-packages/fastapi/dependencies/utils.py`:
+
+- The function maintains a `visited` list to track processed cache_keys
+- When `skip_repeats=True`, it skips dependencies whose cache_key is already in visited
+- However, when `skip_repeats=False` (default), there is no protection against circular references
+- The function will recurse infinitely when encountering circular dependencies
+
+### Conclusion:
+
+The bug is confirmed. The get_flat_dependant() function does not handle circular dependencies when skip_repeats=False (the default), leading to RecursionError. The function lacks a mechanism to detect and break circular reference cycles during recursion.

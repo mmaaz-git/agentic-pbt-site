@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function might be working as designed, and the documentation could be imprecise. The TypeError is technically correct from Python's perspective - when you try to create a set from unhashable items, it's a type error. Some might argue that letting Python's natural TypeError bubble up is the correct behavior, and the docstring's mention of "ValueError" was meant to apply only to the explicit validation checks the function performs, not to implicit type errors from operations.
+
+**Why it might not be INVALID:**
+The docstring explicitly states "Raise ValueError if the `names` parameter contains duplicates or has an invalid data type." The phrase "has an invalid data type" clearly covers the case of unhashable elements, and the documentation promises ValueError, not TypeError. The type annotation `Sequence[Hashable]` indicates that non-hashable elements are invalid inputs that should be validated. The function is responsible for its documented contract regardless of what Python's built-in functions do internally.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a very edge case - most users would never pass lists or dicts as column names, as it doesn't make practical sense. The current error message "unhashable type: 'list'" is actually quite clear about what went wrong. Changing this behavior might require additional code complexity for minimal benefit. The TypeError provides sufficient information for debugging, and fixing this might be considered low priority.
+
+**Why it might not be WONTFIX:**
+Exception types matter for error handling in production code. Users might have try-except blocks catching ValueError as promised by the documentation. The fix is relatively simple (wrap the set() call in try-except), and consistency between documentation and implementation is important for API reliability. This is not just about the error message but about maintaining a consistent API contract.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior (raising TypeError) might be considered reasonable, and it could be argued that the documentation should be updated to reflect that TypeError is raised for type-related issues while ValueError is raised for value-related issues like duplicates. The parameter description says "array-like or None" which is vague about the hashability requirement. Updating the docs to mention TypeError for unhashable elements would be a simpler fix.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The type annotation explicitly requires `Sequence[Hashable]`, making it clear that unhashable elements are invalid values, not type errors. The ValueError exception type is more semantically correct here - the parameter type is correct (it's a sequence), but the values within it are invalid (non-hashable). Other pandas functions consistently use ValueError for validation failures, and changing the documentation would break that consistency.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting unhashable column names is a new feature that was never intended to work. The current behavior rejects these inputs (correctly), and the bug report is essentially asking for better error handling, which could be seen as an enhancement. Adding validation for hashability before checking duplicates would be adding new validation logic that wasn't there before.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but for the existing error handling to match its documented behavior. The function already promises to validate and raise ValueError for invalid data types - this is about fixing that existing promise, not adding new features. The type annotation and docstring already establish what the function should do; this is about implementation matching specification.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function's docstring explicitly promises to "Raise ValueError if the `names` parameter contains duplicates or has an invalid data type." The type annotation `Sequence[Hashable]` clearly indicates that non-hashable elements are invalid, and the function should validate this. The current implementation violates its documented contract by raising TypeError instead of ValueError. This is a clear case where implementation doesn't match specification. The fix is straightforward and maintains backward compatibility for all valid inputs.
+
+**Why it might not be BUG:**
+One could argue that TypeError is the "natural" exception for this case and that the documentation's use of "ValueError" was meant to apply only to the explicit checks the function performs (duplicates and ordering), not to implicit type errors from Python's built-in functions. The current error is still informative and helps users understand what went wrong.
+
+## Overall Consideration
+After careful analysis, this appears to be a valid bug. The function has a clear documented contract that promises to raise ValueError for invalid data types, and unhashable elements clearly fall under "invalid data type" given the type annotation requiring Hashable elements. The implementation violates this contract by allowing Python's set() constructor to raise TypeError instead.
+
+The distinction between ValueError and TypeError matters for API consistency and error handling. ValueError is the appropriate exception here because the input type is correct (it's a sequence), but the values within it are invalid (non-hashable when hashable is required). This is similar to how a function expecting positive integers would raise ValueError (not TypeError) when given negative integers.
+
+While this might not be the highest priority bug, it represents a clear violation of the documented API contract. The fix is simple and maintains full backward compatibility for valid inputs. The only change would be that invalid inputs would raise the documented exception type instead of an undocumented one. This makes it a legitimate bug that should be fixed to maintain API consistency and reliability.

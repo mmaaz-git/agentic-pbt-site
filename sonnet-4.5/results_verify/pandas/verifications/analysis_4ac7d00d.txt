@@ -1,0 +1,48 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that cut() must handle subnormal floating-point numbers correctly. One could argue that values like 1.1125369292536007e-308 (which is below numpy's "tiny" threshold of 2.225e-308) are outside the normal operating range of float64 arithmetic. The function technically receives valid inputs and attempts to process them, but encounters numerical precision issues that are inherent to floating-point arithmetic at these scales.
+
+**Why it might not be INVALID:**
+The function accepts float64 arrays as input, and subnormal numbers ARE valid float64 values. The documentation makes no mention of minimum range requirements or precision limitations. A user providing valid float64 values has every right to expect them to be binned correctly, not silently converted to NaN. The fundamental purpose of cut() is to bin values, and complete data loss violates this core functionality.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case involving subnormal numbers that are rarely encountered in real-world data analysis. The values in question (1.11e-308) are so small that they're below the normal range of float64 precision. Fixing this would require special-case handling for an incredibly rare scenario that most users will never encounter. The maintainers might consider this an acceptable limitation of floating-point arithmetic.
+
+**Why it might not be WONTFIX:**
+Silent data loss is a serious issue. When ALL input values become NaN with no warning or error message, users have no way to know their data was lost. The second test case actually crashes with a cryptic error message. This isn't just a minor inconvenience - it's complete failure of the function. The fix is relatively simple (detect small ranges and use appropriate epsilon values), making this a reasonable issue to address.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The code behaves consistently - it fails when the range is too small for the 0.1% adjustment to work properly with float64 precision. The documentation could be updated to warn users about precision limitations with extremely small ranges or subnormal numbers. Adding a note like "cut() may not work correctly with ranges smaller than 1e-300 due to floating-point precision limitations" would set proper expectations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This isn't just a documentation issue - the function completely fails its primary purpose. Documenting that "cut() might return all NaNs for valid inputs" doesn't make that behavior acceptable. Users shouldn't need to check if their data contains subnormal numbers before using a basic binning function. The issue is in the implementation, not the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting subnormal numbers properly could be seen as a new feature rather than a bug fix. The current implementation works fine for normal floating-point ranges, and adding support for extreme edge cases like subnormal numbers could be considered an enhancement. It's requesting the function to handle a case it wasn't originally designed for.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality - it's asking for the existing functionality to work correctly. The function already claims to bin numeric values, and subnormal numbers are valid numeric values. A feature request would be asking for something new, not asking for the core functionality to not silently fail.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a bug. The function silently loses ALL data when given valid float64 inputs, returning NaN for every value with no warning. The property that "non-NA inputs should produce non-NA outputs when binned" is fundamental to any binning function. The crash in the negative case makes it even worse. When a function designed to bin values fails to bin ANY values and instead destroys all the data, that's a serious bug that violates the function's core contract.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is that subnormal numbers are an extreme edge case that could be considered outside normal operating parameters. However, this is a weak argument since they are still valid float64 values and the function accepts them without complaint before failing.
+
+## Overall Consideration
+
+This issue represents a fundamental failure of the pandas.cut() function when dealing with valid but extreme floating-point values. While subnormal numbers are indeed an edge case, the way the function fails is catastrophic - complete silent data loss in one case and a crash in another.
+
+Three key factors make this a legitimate bug:
+
+1. **Silent data loss is unacceptable**: When ALL values become NaN with no error or warning, users have no way to detect the problem. This violates the principle of failing loudly rather than silently corrupting data.
+
+2. **The inputs are valid**: Subnormal float64 values are legitimate Python/NumPy values. The function accepts them without raising any initial errors, setting the expectation that they will be processed correctly.
+
+3. **The fix is straightforward**: The bug report even provides a potential solution - detecting extremely small ranges and using absolute rather than relative epsilon values. This isn't a complex architectural issue but a fixable numerical precision problem.
+
+While this is an edge case, the severity of the failure (complete data loss) and the fact that it occurs with valid inputs makes this a BUG rather than a documentation issue or feature request. Libraries like pandas that are used for scientific computing should handle numerical edge cases gracefully, or at minimum, fail with clear error messages rather than silently destroying data.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The NumPy documentation does not explicitly specify the valid range for the parameter p. Without explicit documentation about parameter constraints or overflow behavior, one could argue that using p=1e-300 is outside the intended use case and the behavior is undefined. The documentation only shows examples with reasonable probability values like 0.35, suggesting these extreme values were never intended to be supported.
+
+**Why it might not be INVALID:**
+The documentation clearly states that the geometric distribution is "supported on positive integers: k = 1, 2, 3, ..." Returning -9223372036854775808 (a negative number) directly violates this documented mathematical property. The parameter p is described as a probability, which by mathematical definition must be between 0 and 1, and the function accepts these values without raising an error, implying they should work correctly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Using probability values like 1e-300 is extremely unrealistic in any practical application. The probability of such rare events is essentially zero for all practical purposes. The expected number of trials (1e300) far exceeds not just int64 limits but any reasonable computational scenario. This is an extreme edge case that would never occur in real-world usage, making it not worth the complexity of fixing.
+
+**Why it might not be WONTFIX:**
+The function silently returns mathematically impossible negative values, which could cause data corruption in downstream calculations. Even if the use case is rare, returning incorrect values without warning is dangerous. The newer Generator API already attempts to handle this differently (returning int64 MAX), suggesting the NumPy team recognizes this as an issue worth addressing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation fails to specify the practical limits of the p parameter and doesn't mention that extremely small values will cause overflow. Adding documentation about the valid parameter range (e.g., "p should be >= 1e-18 to avoid integer overflow") would help users understand the function's limitations. The mathematical constraint that results must fit in int64 is a reasonable implementation detail that should be documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is returning objectively wrong values (negative numbers for a distribution that must be positive). This isn't just a documentation issue - the code behavior is incorrect. Documentation alone cannot fix the fact that the function returns values that violate the fundamental mathematical properties of the geometric distribution.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting extremely small probability values that result in expected values exceeding int64 range could be considered a new feature. The current implementation uses int64 for performance reasons, and supporting arbitrary precision or float returns for extreme cases would be a significant enhancement. The bug report's suggestion to "return float64 instead of int64 when the expected value exceeds int64 range" is essentially requesting new functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts these probability values as valid input without raising an error. Users reasonably expect that if a function accepts an input, it should handle it correctly or raise an appropriate error. This isn't asking for new functionality but for the existing function to work correctly with inputs it already claims to accept.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns negative values (-9223372036854775808) for a probability distribution that by mathematical definition must return positive integers >= 1. This is a clear violation of the documented behavior and mathematical correctness. The function accepts probability values as input but fails to handle them correctly, producing nonsensical results that could corrupt data without warning. The fact that the newer Generator API behaves differently (though still incorrectly) suggests this is recognized as a problem.
+
+**Why it might not be BUG:**
+The use case is extremely edge-case with probability values that have no practical application. The documentation doesn't explicitly promise to handle such extreme values, and one could argue that using p=1e-300 is essentially passing invalid input. The expected value of 1e300 trials is so far beyond computational limits that expecting the function to handle this gracefully might be unreasonable.
+
+## Overall Consideration
+
+This bug report presents a genuine issue where `numpy.random.geometric()` returns mathematically impossible negative values when given very small but technically valid probability parameters. The function violates its documented contract of returning positive integers from the geometric distribution.
+
+However, the practical impact is minimal. Probability values like 1e-300 are so extreme that they have no realistic application - the expected 1e300 trials would take longer than the age of the universe to compute even at maximum speed. While the function should ideally handle edge cases gracefully, this particular edge case is so far removed from practical use that it falls into a gray area.
+
+The most reasonable resolution would be a DOCUMENTATION_FIX to specify the practical limits of the p parameter, warning users that values below approximately 1e-18 may cause overflow. This acknowledges the limitation while avoiding the complexity of implementing arbitrary precision arithmetic for an edge case that will never occur in practice. The alternative would be to validate input and raise a clear error for p values that would cause overflow, which would be a minor code change but might break existing code that somehow relies on this undocumented behavior.

@@ -1,0 +1,42 @@
+## Documentation Analysis
+
+### LimitedStream Documentation
+
+1. **Inline Documentation**:
+   - The LimitedStream class includes a docstring: "Wrap another stream to disallow reading it past a number of bytes."
+   - It references being based on werkzeug.wsgi.LimitedStream implementation
+   - The purpose is clear: limit reading to a specified number of bytes
+
+2. **Official Django Documentation**:
+   - LimitedStream is not publicly documented in Django's main documentation
+   - It's an internal implementation detail of the WSGI handler
+   - No explicit documentation about handling negative limits
+
+### HTTP Specification (RFC 7230)
+
+RFC 7230 Section 3.3.2 explicitly states:
+- "Any Content-Length field value greater than or equal to zero is valid"
+- Negative Content-Length values are NOT valid per HTTP specification
+- Recipients should handle invalid Content-Length values appropriately
+
+### WSGIRequest Implementation
+
+The WSGIRequest code shows:
+```python
+try:
+    content_length = int(environ.get("CONTENT_LENGTH"))
+except (ValueError, TypeError):
+    content_length = 0
+```
+
+This attempts to parse Content-Length as an integer, but doesn't validate if it's negative.
+
+### Key Findings
+
+1. **Specification Compliance**: Negative Content-Length values violate RFC 7230. The HTTP specification only allows values >= 0.
+
+2. **Undocumented Behavior**: The LimitedStream class doesn't document what should happen with negative limits. The current behavior (returning empty bytes) is not explicitly specified.
+
+3. **Security Consideration**: While the current implementation accidentally handles negative limits safely (by returning empty bytes), this is not by design but rather a mathematical coincidence (0 >= negative is True).
+
+4. **Best Practice**: The code should explicitly reject or normalize negative Content-Length values to comply with HTTP specifications and make the intent clear.

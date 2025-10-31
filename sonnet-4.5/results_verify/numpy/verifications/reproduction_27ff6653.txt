@@ -1,0 +1,32 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug reported in numpy.ma.mask_or. Here are my findings:
+
+### Reproduction Steps
+1. Ran the simple test case: `ma.mask_or([False], [False])`
+2. Confirmed it crashes with: `AttributeError: 'NoneType' object has no attribute 'names'`
+3. Stack trace points to line 1808 in numpy/ma/core.py where `dtype1.names` is accessed without checking if `dtype1` is None
+
+### Expected vs Actual Behavior
+- **Expected**: According to documentation, mask_or should accept "array_like" inputs, which includes Python lists
+- **Actual**: Function crashes when given Python lists directly
+
+### Root Cause
+The bug occurs at line 1808 in the mask_or function:
+```python
+(dtype1, dtype2) = (getattr(m1, 'dtype', None), getattr(m2, 'dtype', None))
+if dtype1 != dtype2:
+    raise ValueError(f"Incompatible dtypes '{dtype1}'<>'{dtype2}'")
+if dtype1.names is not None:  # BUG: dtype1 can be None here!
+```
+
+When Python lists are passed as inputs:
+1. `getattr(m1, 'dtype', None)` returns None (lists don't have dtype)
+2. Both dtype1 and dtype2 are None, so they're equal and pass the comparison
+3. Line 1808 tries to access `dtype1.names` but dtype1 is None, causing AttributeError
+
+### Verification
+- Confirmed numpy.logical_or (used internally) works fine with lists
+- Confirmed ma.make_mask works with lists (as shown in function's own examples)
+- Confirmed the issue only affects direct list inputs, not numpy arrays
+- Tested the proposed fix and verified it resolves the issue while maintaining backward compatibility

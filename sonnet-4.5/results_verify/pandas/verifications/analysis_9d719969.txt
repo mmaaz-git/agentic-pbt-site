@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The pyximport documentation does not explicitly specify how Windows path length workarounds should be implemented. One could argue that since this is an internal implementation detail in an undocumented function, and the behavior only manifests in a specific edge case (Windows + long similar paths), the user shouldn't rely on this working in all scenarios. Additionally, pyximport is primarily meant for development use with simple builds, not complex path scenarios.
+
+**Why it might not be INVALID:**
+The bug represents a clear programming error where the wrong Python standard library function is used. The distinction between `os.path.commonprefix()` and `os.path.commonpath()` is well-documented in Python's official documentation, with commonprefix explicitly noted as a string operation that may return invalid paths. Using a function that can return invalid paths and then trying to `chdir()` to that path is objectively incorrect code.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This bug only affects Windows users with very specific directory structures - paths that are similar enough to have a common prefix > 30 characters but diverge mid-directory-name. This is an extremely rare edge case that may never occur in practice. The workaround itself is for another edge case (Windows long path limits), making this an edge case of an edge case. The maintainers might consider this too obscure to fix.
+
+**Why it might not be WONTFIX:**
+The fix is trivial - simply changing `commonprefix` to `commonpath` on one line. The bug causes a complete crash with `FileNotFoundError` when it occurs, preventing the module from working at all. Even if rare, when it happens it's a complete blocker with no workaround for affected users. The correct function (`commonpath`) exists specifically to solve this problem.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The Windows path workaround is not documented anywhere in the official documentation. Users have no way to know this limitation exists or how to structure their projects to avoid it. Adding documentation about path length limitations on Windows and how pyximport handles them would help users understand and avoid this issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is simply using the wrong function - this isn't a documentation issue but a implementation bug. The code's intent (finding a common directory to change to) is clear from the context and comments, but the implementation fails to achieve that intent. Documenting a bug doesn't fix the bug.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that properly handling Windows long paths with similar directory names is a new feature that pyximport doesn't currently support. The current code attempts a workaround but doesn't handle all cases. A proper implementation of Windows long path support would be a feature enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the code already attempts to handle Windows long paths. The request is to fix the existing implementation that crashes due to using the wrong function. The feature (Windows long path workaround) already exists; it's just broken in certain cases.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case of using the wrong Python standard library function. The code uses `os.path.commonprefix()` where it should use `os.path.commonpath()`. The Python documentation explicitly warns that commonprefix is a string operation that may return invalid paths, while commonpath returns valid directory paths. The current code will crash with FileNotFoundError when the paths diverge mid-directory-name, completely preventing pyximport from working. The fix is straightforward and the intent of the code is clear.
+
+**Why it might not be BUG:**
+The issue only manifests in a very specific scenario (Windows + paths with long common prefixes that diverge mid-name + common prefix > 30 chars). PyXimport is meant for simple development builds, not complex production scenarios. The function is internal and undocumented, so users shouldn't rely on its behavior in edge cases.
+
+## Overall consideration
+
+This bug report describes a legitimate implementation error in the pyximport module. The code uses `os.path.commonprefix()` when it clearly intends to find a common directory path, but this function returns string prefixes that may be invalid paths. The correct function for this purpose is `os.path.commonpath()`, which is designed specifically to return valid directory paths.
+
+While the bug only manifests under specific conditions (Windows systems with particular directory structures), when it does occur, it causes a complete failure with `FileNotFoundError`, preventing the module from functioning. The code already attempts to handle Windows long path issues, so this isn't a request for new functionality but rather a fix for broken existing functionality.
+
+The distinction between these two functions is well-established in Python's documentation, with commonprefix explicitly noted as potentially returning invalid paths. Using such a function and then attempting to change directories to its output is objectively incorrect. The fix is trivial (changing one function name) and would make the code work as clearly intended by the original implementation.

@@ -1,0 +1,56 @@
+## Reproduction Analysis
+
+### Bug Reproduction
+
+I successfully reproduced the reported bug. The function `_parse_letter_version` indeed behaves incorrectly when passed integer 0.
+
+#### Test Results:
+
+1. **Integer 0 (BUG CONFIRMED)**:
+   - Input: `_parse_letter_version(None, 0)`
+   - Expected: `('post', 0)`
+   - Actual: `None`
+   - **This is the bug - integer 0 is treated as falsy**
+
+2. **String "0" (works correctly)**:
+   - Input: `_parse_letter_version(None, "0")`
+   - Expected: `('post', 0)`
+   - Actual: `('post', 0)`
+   - **Works as expected**
+
+3. **Integer 1 (works correctly)**:
+   - Input: `_parse_letter_version(None, 1)`
+   - Expected: `('post', 1)`
+   - Actual: `('post', 1)`
+   - **Works as expected**
+
+### Root Cause Analysis
+
+The bug is in line 495 of the implementation:
+```python
+if not letter and number:
+```
+
+This condition uses Python's truthiness evaluation where integer 0 is considered falsy. When `number=0`, the condition evaluates to `False` even though 0 is a valid number.
+
+### Impact on Version Parsing
+
+Interestingly, when parsing actual version strings like "1.0-0", the Version class works correctly:
+- `Version("1.0-0")` successfully creates a version object
+- `Version("1.0-0").post` returns `0` as expected
+
+This is because the regex parsing always passes strings to `_parse_letter_version`:
+- The regex captures "0" as a string from "1.0-0"
+- String "0" is truthy in Python, so the bug doesn't manifest
+
+However, the bug would manifest if:
+1. The function is called directly with integer 0 (as in the test case)
+2. Future code changes cause integers to be passed instead of strings
+3. Other code paths in the packaging system use this function with integer inputs
+
+### Type Contract Violation
+
+The function signature explicitly accepts `SupportsInt` (which includes integers), but the implementation doesn't handle integer 0 correctly. This is a violation of the type contract and creates inconsistent behavior between:
+- Integer 0 vs String "0"
+- Integer 0 vs Integer 1
+- The type signature vs the implementation

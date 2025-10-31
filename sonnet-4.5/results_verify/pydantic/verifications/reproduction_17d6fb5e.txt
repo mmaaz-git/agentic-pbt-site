@@ -1,0 +1,57 @@
+## Bug Reproduction Results
+
+### Test Setup
+I created and ran tests to verify the claimed hash/equality contract violation in pydantic.v1's BaseModel.
+
+### Test Results
+
+#### Test 1: Basic Reproduction
+Created two different model classes (Model1 and Model2) with identical fields and values:
+- `Model1(x=42)` and `Model2(x=42)`
+- **Result**: `m1 == m2` returns `True` ✓
+- **Result**: `hash(m1) != hash(m2)` (different hash values) ✓
+- **CONFIRMED VIOLATION**: Objects that are equal have different hash values
+
+#### Test 2: Set Membership Issue
+- Created a set with `m1`: `{Model1(x=42)}`
+- Tested if `m2` is in the set
+- **Result**: `m2 in s` returns `False` even though `m1 == m2`
+- **Impact**: Set membership is broken - equal objects are not found in sets
+
+#### Test 3: Dictionary Key Issue
+- Created a dict with `m1` as key: `{m1: "value1"}`
+- Tried to access using `m2` as key
+- **Result**: `KeyError` - m2 not found even though `m1 == m2`
+- **Impact**: Dictionary lookups fail for equal objects
+
+#### Test 4: Property-Based Testing with Hypothesis
+- Ran the provided Hypothesis test that generates random model classes and values
+- **Result**: Test fails with multiple distinct failures
+- **Confirms**: The violation occurs systematically, not just in specific cases
+
+### Technical Analysis
+
+The bug occurs because:
+
+1. **Equality implementation** (`__eq__` at line 911-915):
+   - Compares only `self.dict() == other.dict()`
+   - Ignores the model class type entirely
+   - Makes `Model1(x=1) == Model2(x=1)` return True
+
+2. **Hash implementation** (`generate_hash_function` at lines 102-106):
+   - Calculates `hash(self.__class__) + hash(tuple(self.__dict__.values()))`
+   - Includes the class in the hash
+   - Makes `hash(Model1(x=1))` different from `hash(Model2(x=1))`
+
+### Verification of Python's Contract
+
+Python's documentation clearly states: "The only required property is that objects which compare equal have the same hash value."
+
+This is a **fundamental violation** of Python's hash/equality contract with real-world consequences:
+- Sets and dictionaries behave incorrectly
+- Code that relies on hash tables will have unexpected behavior
+- The violation is systematic and affects all frozen BaseModel instances
+
+### Conclusion
+
+The bug report is **technically correct**. The implementation violates Python's fundamental hash/equality contract, causing demonstrable issues with set membership and dictionary lookups.

@@ -1,0 +1,43 @@
+## Reproduction Analysis
+
+### Bug Report Claims
+The bug report claims that `decimal_encoder` incorrectly detects integer-valued Decimals, causing values like `Decimal('1.0')` and `Decimal('42.00')` to be encoded as floats instead of ints.
+
+### Technical Verification
+
+1. **Hypothesis Test Results**: The hypothesis test fails as reported. The test correctly identifies that `Decimal('1.0')` and `Decimal('42.00')` are integer values (they equal their integral value) but are encoded as floats instead of ints.
+
+2. **Current Behavior**: The function uses `exponent >= 0` to decide encoding:
+   - `Decimal('1')` has exponent=0 → encoded as int ✓
+   - `Decimal('1.0')` has exponent=-1 → encoded as float
+   - `Decimal('42.00')` has exponent=-2 → encoded as float
+
+   All three values represent integers, but only the first is encoded as int.
+
+3. **Docstring Examples Match Implementation**: The docstring examples are accurate:
+   - `decimal_encoder(Decimal("1.0"))` returns `1.0` (float) - CONFIRMED
+   - `decimal_encoder(Decimal("1"))` returns `1` (int) - CONFIRMED
+
+### Round-Trip Testing
+
+Surprisingly, the round-trip testing shows that both current and proposed behaviors successfully round-trip:
+- `Decimal('1')` → `1` (int) → JSON → `1` (int) → `Decimal('1')` ✓
+- `Decimal('1.0')` → `1.0` (float) → JSON → `1.0` (float) → `Decimal('1.0')` ✓
+
+The values successfully convert back to Decimal and compare as equal. This contradicts the documentation's claim that "Encoding this as a float results in failed round-tripping between encode and parse."
+
+### Key Finding
+
+The bug report's technical details are correct:
+1. The function does encode `Decimal('1.0')` as float instead of int
+2. `Decimal('1.0')` does represent an integer value
+3. The proposed fix would change this behavior
+
+However, the round-trip claim in the documentation appears to be overstated - both encodings successfully round-trip in basic testing. The issue may be more subtle, perhaps related to specific database or validation contexts not tested here.
+
+### Documentation Inconsistency
+
+The docstring has an internal contradiction:
+- The text says encoding integer-valued decimals as float "results in failed round-tripping"
+- But the example shows `Decimal("1.0")` → `1.0` (float) as expected behavior
+- This suggests the current behavior is intentional, not a bug

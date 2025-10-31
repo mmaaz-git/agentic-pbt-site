@@ -1,0 +1,49 @@
+Bug Reproduction Results for pandas.io.sas.sas_xport._split_line
+=================================================================
+
+Test Environment:
+- Python version: 3.13
+- pandas location: /home/npc/miniconda/lib/python3.13/site-packages/pandas/
+
+Test Results:
+
+1. BASIC REPRODUCTION TEST (without '_' field):
+   Input: parts = [("name", 10), ("value", 10)]
+          test_string = "hello     world     "
+   Result: KeyError: '_' was raised
+   Status: BUG CONFIRMED - The function crashes with KeyError when '_' is not in parts
+
+2. NORMAL USAGE TEST (with '_' field):
+   Input: parts = [("name", 10), ("_", 5), ("value", 5)]
+          test_string = "hello     xxx  world"
+   Result: {'name': 'hello', 'value': 'world'}
+   Status: Works correctly - '_' field was filtered out as documented
+
+3. PROPERTY-BASED TEST:
+   The hypothesis test that excludes '_' from parts list consistently triggers KeyError
+   Status: BUG CONFIRMED - Any parts list without '_' causes failure
+
+Technical Details of the Bug:
+
+The implementation at line 174 contains:
+```python
+del out["_"]
+```
+
+This is an unconditional deletion that assumes '_' will always be present in the output dictionary. If no field named '_' was included in the parts parameter, the dictionary won't have this key, causing a KeyError.
+
+Bug Behavior Verification:
+- The bug report's claim is ACCURATE
+- The reproduction code provided in the bug report works exactly as described
+- The KeyError occurs on line 174 when attempting to delete the '_' key
+- All current internal callers work because they always include '_' in their parts lists
+
+Impact Assessment:
+- This is a private function (starts with underscore)
+- All current internal uses include '_' fields, so production code is not affected
+- External code or future refactoring could trigger this issue
+- The error message (KeyError: '_') is cryptic and doesn't help users understand the requirement
+
+The bug report's suggested fixes are both technically valid:
+1. Using `out.pop("_", None)` would silently handle missing '_' fields
+2. Documenting the requirement would clarify the API contract

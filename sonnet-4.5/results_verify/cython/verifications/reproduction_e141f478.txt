@@ -1,0 +1,48 @@
+REPRODUCTION ANALYSIS
+=====================
+
+The bug report claims that Template._repr incorrectly constructs UnicodeDecodeError and UnicodeEncodeError exceptions with a single string argument instead of the required 5 arguments.
+
+## Verification of the Bug
+
+1. **Exception Constructor Requirements**:
+   - Confirmed that UnicodeDecodeError and UnicodeEncodeError require exactly 5 arguments: (encoding, object, start, end, reason)
+   - Attempting to construct these exceptions with a single string argument results in: "TypeError: function takes exactly 5 arguments (1 given)"
+
+2. **Code Analysis**:
+   - Lines 353-355 in _tempita.py incorrectly construct UnicodeDecodeError with a single formatted string
+   - Lines 367-369 incorrectly construct UnicodeEncodeError with a single formatted string
+   - The code IS buggy as written
+
+3. **Triggering the Bug**:
+   The bug report's simple reproduction case (passing b'\xff' to substitute) does NOT trigger the error because:
+   - When value is bytes and self._unicode is True, line 338 executes: `value = str(value)`
+   - In Python 3, str(bytes_object) succeeds and creates a string representation like "b'\\xff'"
+   - This means value becomes a string, not bytes, so the check at line 351 fails
+
+4. **Actual Trigger Condition**:
+   The bug CAN be triggered with a custom object that:
+   - Has a __str__ method that raises UnicodeDecodeError
+   - Has a __bytes__ method that returns bytes
+
+   Example that successfully triggers the bug:
+   ```python
+   class SpecialBytes:
+       def __str__(self):
+           raise UnicodeDecodeError('utf-8', b'\xff', 0, 1, 'test')
+       def __bytes__(self):
+           return b'\xff'
+
+   template = Template("{{x}}")
+   template.default_encoding = None
+   result = template.substitute({'x': SpecialBytes()})  # Raises TypeError
+   ```
+
+5. **Bug Impact**:
+   - The bug is real but requires an unusual object type to trigger
+   - Normal bytes values don't trigger it in Python 3
+   - When triggered, users get a confusing TypeError about wrong number of arguments instead of a meaningful error message about encoding issues
+
+## Conclusion
+
+The bug exists in the code as reported. The incorrect exception construction at lines 353-355 and 367-369 will cause a TypeError when those code paths are executed. While the simple test case provided doesn't trigger the bug (due to Python 3's str() behavior with bytes), the bug can be triggered with specially crafted objects.

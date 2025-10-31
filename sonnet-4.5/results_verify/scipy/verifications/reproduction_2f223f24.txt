@@ -1,0 +1,41 @@
+## Bug Reproduction Analysis
+
+### Test Results
+I successfully reproduced the reported bug. The test results confirm:
+
+1. **Empty sparse matrix crash (Test 1):**
+   - Created a 5x5 empty sparse matrix with nnz=0
+   - Calling hb_write() resulted in: `ValueError: zero-size array to reduction operation maximum which has no identity`
+   - The crash occurs at line 79 in hb.py: `indices_fmt = IntFormat.from_number(np.max(indices+1))`
+
+2. **Hypothesis test with failing input (Test 2):**
+   - Tested with rows=1, cols=1, nnz=0 as specified in the bug report
+   - Confirmed the same ValueError crash
+   - The error matches exactly what was reported
+
+3. **Non-empty matrices work correctly (Test 3):**
+   - Tested a 3x3 sparse matrix with 2 non-zero elements
+   - Successfully wrote and read the matrix
+   - Data was preserved correctly through the write/read cycle
+
+### Technical Analysis
+The crash occurs in the `HBInfo.from_data()` method at three locations:
+1. Line 78: `pointer_fmt = IntFormat.from_number(np.max(pointer+1))`
+2. Line 79: `indices_fmt = IntFormat.from_number(np.max(indices+1))`
+3. Line 82: `values_fmt = ExpFormat.from_number(-np.max(np.abs(values)))`
+
+When a sparse matrix has nnz=0:
+- `pointer` array has size > 0 (it contains column pointers)
+- `indices` array is empty (size=0)
+- `values` array is empty (size=0)
+
+Calling `np.max()` on an empty array without providing an `initial` parameter raises ValueError.
+
+### Validity of Empty Sparse Matrices
+Empty sparse matrices are mathematically valid:
+- They represent all-zero matrices
+- SciPy's sparse matrix constructors accept them
+- Other sparse matrix operations handle them correctly
+- The matrix has a valid shape and structure, just no non-zero elements
+
+The bug report's claim is technically correct - the function crashes on valid input data.

@@ -1,0 +1,47 @@
+## Reproduction Analysis
+
+I successfully reproduced the reported behavior using both the hypothesis test and the simple example provided in the bug report.
+
+### Hypothesis Test Results
+The hypothesis test failed as expected with the error:
+```
+AssertionError: Creating outer MultiListener mutated inner: 1 -> 0
+Falsifying example: test_multilistener_doesnt_mutate_input(num_listeners=1)
+```
+
+This confirms that when creating an outer MultiListener with an inner MultiListener as input, the inner MultiListener's listeners list is indeed cleared (goes from 1 to 0).
+
+### Simple Example Results
+Running the simple reproduction code produced:
+```
+Before: len(inner_multi.listeners) = 1
+After: len(inner_multi.listeners) = 0
+```
+
+This confirms the bug report's claim that the inner MultiListener is mutated during the construction of the outer MultiListener.
+
+### Code Analysis
+Examining the implementation at lines 111-120 of stapled.py:
+
+```python
+def __post_init__(self) -> None:
+    listeners: list[Listener[T_Stream]] = []
+    for listener in self.listeners:
+        if isinstance(listener, MultiListener):
+            listeners.extend(listener.listeners)
+            del listener.listeners[:]  # type: ignore[attr-defined]
+        else:
+            listeners.append(listener)
+
+    self.listeners = listeners
+```
+
+Line 116 (`del listener.listeners[:]`) explicitly clears the input MultiListener's listeners list. This is the direct cause of the mutation.
+
+The technical details in the bug report are accurate:
+1. The mutation does occur
+2. The inner MultiListener is left with an empty listeners list
+3. The mutation happens during __post_init__ of the outer MultiListener
+4. The line responsible is exactly as identified in the bug report
+
+However, the key question is whether this is a bug or documented behavior. The docstring says listeners will be "moved" from nested MultiListeners, which in programming terminology often implies destructive transfer rather than copying.

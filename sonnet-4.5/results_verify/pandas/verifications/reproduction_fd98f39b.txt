@@ -1,0 +1,36 @@
+## Bug Reproduction Summary
+
+I have successfully reproduced the bug described in the report. The issue occurs when calling `argmin()` or `argmax()` on a `SparseArray` where all values are equal to the fill value (default 0).
+
+### Test Results:
+
+1. **Basic reproduction**: When creating `SparseArray([0])` or `SparseArray([0, 0, 0])` and calling `argmin()` or `argmax()`, both methods raise:
+   ```
+   ValueError: attempt to get argmin of an empty sequence
+   ```
+
+2. **Property-based test**: The hypothesis test immediately fails on the simplest case `[0]`, confirming that any array containing only the fill value will trigger this bug.
+
+3. **Comparison with numpy**:
+   - `np.argmin([0])` correctly returns `0`
+   - `np.argmax([0])` correctly returns `0`
+   - `np.argmin([0, 0, 0])` correctly returns `0`
+   - `np.argmax([0, 0, 0])` correctly returns `0`
+
+4. **SparseArray with non-fill values**: When the array contains at least one non-fill value (e.g., `[0, 1, 2]`), both methods work correctly.
+
+### Root Cause:
+
+I examined the source code at `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/arrays/sparse/array.py:1648-1684`. The bug occurs in the `_argmin_argmax` method:
+
+1. When all values equal the fill value, the sparse representation stores zero non-fill values
+2. The method filters out NaN values to get `non_nans` array (line 1655)
+3. When all values are fill values, `non_nans` becomes an empty array
+4. Line 1658 calls `non_nan_idx[func(non_nans)]` where `func` is `np.argmin` or `np.argmax`
+5. numpy's `argmin`/`argmax` raise `ValueError` on empty sequences
+
+The bug is a clear inconsistency between SparseArray behavior and both:
+- numpy's standard array behavior (which returns 0 for arrays with all same values)
+- The documented behavior which states it should "Return the index of minimum/maximum value"
+
+The error occurs exactly as described in the bug report.

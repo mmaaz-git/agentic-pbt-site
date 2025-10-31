@@ -1,0 +1,51 @@
+REPRODUCTION ANALYSIS
+=====================
+
+Bug: AppConfig.create() raises IndexError when called with an entry ending with a dot
+
+REPRODUCTION STEPS
+------------------
+
+1. Environment Setup:
+   - Django is installed and configured
+   - Python 3.13 environment with Django
+
+2. Bug Reproduction:
+   Successfully reproduced the bug using the provided test code:
+
+   ```python
+   from django.apps.config import AppConfig
+   AppConfig.create("django.contrib.auth.")
+   ```
+
+   Result: IndexError: string index out of range
+
+   The error occurs at line 172 in django/apps/config.py:
+   ```python
+   if mod_path and cls_name[0].isupper():
+   ```
+
+3. Hypothesis Test Results:
+   - The property-based test from the bug report was executed successfully
+   - Confirmed that entries ending with '.' consistently trigger IndexError
+   - Tested multiple examples: "django.contrib.auth.", "test.", "a.b.c.", etc.
+   - All entries ending with a dot where the final component is empty raise IndexError
+
+4. Root Cause Analysis:
+   When `entry = "django.contrib.auth."`:
+   - `entry.rpartition(".")` returns `('django.contrib.auth', '.', '')`
+   - `mod_path = 'django.contrib.auth'` (truthy)
+   - `cls_name = ''` (empty string)
+   - The code attempts `cls_name[0]` on an empty string, causing IndexError
+
+   The logic assumes that if `mod_path` is truthy, then `cls_name` must have at least one character,
+   but this assumption fails when the entry ends with a dot.
+
+5. Impact:
+   - Any INSTALLED_APPS entry ending with a dot will crash with an unhelpful IndexError
+   - The error message doesn't indicate what the actual problem is
+   - This could occur from typos or programmatic string manipulation
+
+VERIFICATION
+------------
+The bug is 100% reproducible and matches exactly what the bug report describes.

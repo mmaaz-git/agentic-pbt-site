@@ -1,0 +1,33 @@
+DOCUMENTATION ANALYSIS
+
+1. HTTP SPECIFICATION (RFC 7230):
+   - Section 3.3.2 explicitly states: "Any Content-Length field value greater than or equal to zero is valid."
+   - The specification only allows non-negative decimal numbers for Content-Length
+   - Negative values are NOT valid according to the HTTP standard
+   - The specification requires recipients to handle potentially large decimal numerals but doesn't mention negative values
+
+2. DJANGO DOCUMENTATION:
+   - Django's official documentation does not explicitly document how ServerHandler should handle negative Content-Length values
+   - The documentation mentions Content-Length as "The length of the request body (as a string)" in the META headers section
+   - There is no explicit guidance about handling negative or invalid Content-Length values in the public documentation
+
+3. SOURCE CODE DOCUMENTATION:
+   - ServerHandler.__init__ docstring (lines 118-123) states it uses LimitedStream to ignore unread request data
+   - LimitedStream class docstring (lines 16-21) says it wraps a stream to "disallow reading it past a number of bytes"
+   - LimitedStream is based on werkzeug.wsgi.LimitedStream implementation
+   - No documentation explicitly states that negative limits are invalid or should be normalized
+
+4. CODE INTENT:
+   - The error handling in ServerHandler (catching ValueError and TypeError) shows clear intent to normalize invalid values to 0
+   - The same pattern exists in WSGIRequest (django/core/handlers/wsgi.py:74-77)
+   - The intent appears to be: invalid Content-Length should be treated as 0
+
+5. ACTUAL BEHAVIOR WITH NEGATIVE LIMITS:
+   - LimitedStream with negative limit causes all read operations to return empty bytes
+   - This is because the check `_pos >= limit` evaluates to True when limit is negative
+   - This creates a silent failure where request bodies appear empty
+
+6. CONCLUSION:
+   The HTTP specification clearly states Content-Length must be non-negative. The code's error handling
+   shows intent to normalize invalid values to 0. The current behavior violates both the HTTP spec and
+   the apparent intent of the error handling code. This is a legitimate bug, not a documentation issue.

@@ -1,0 +1,48 @@
+## Reproduction Results
+
+### Bug Confirmation
+The bug report is technically accurate. The function `pandas.api.types.is_re_compilable` does indeed crash with `re.PatternError` when given invalid regex patterns like '(', ')', '[', '?', '*', '+'.
+
+### Current Behavior
+When called with invalid regex patterns, the function raises `re.PatternError` exceptions:
+- `is_re_compilable('(')` → raises `re.PatternError: missing ), unterminated subpattern at position 0`
+- `is_re_compilable(')')` → raises `re.PatternError: unbalanced parenthesis at position 0`
+- `is_re_compilable('[')` → raises `re.PatternError: unterminated character set at position 0`
+- `is_re_compilable('?')` → raises `re.PatternError: nothing to repeat at position 0`
+- `is_re_compilable('*')` → raises `re.PatternError: nothing to repeat at position 0`
+
+### Expected Behavior (per bug report)
+The bug report expects these calls to return `False` instead of raising exceptions.
+
+### Current Implementation Analysis
+The current implementation only catches `TypeError` (for non-string types like integers):
+```python
+try:
+    re.compile(obj)
+except TypeError:
+    return False
+else:
+    return True
+```
+
+This successfully handles:
+- `is_re_compilable(1)` → `False` (TypeError caught)
+- `is_re_compilable(None)` → `False` (TypeError caught)
+- `is_re_compilable([])` → `False` (TypeError caught)
+
+But fails to handle syntactically invalid regex strings that raise `re.error` (or `re.PatternError` in Python 3.11+).
+
+### Proposed Fix Verification
+The proposed fix of catching both `TypeError` and `re.error` was tested and works correctly:
+```python
+except (TypeError, re.error):
+    return False
+```
+
+This makes all test cases pass, returning `False` for both non-string types and invalid regex patterns.
+
+### Technical Accuracy
+The bug report's technical details are correct:
+1. The function does crash on invalid regex patterns
+2. The proposed fix does resolve the issue
+3. The Hypothesis test correctly identifies the problem

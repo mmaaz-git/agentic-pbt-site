@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+I have successfully reproduced the bug as described in the report. Here are my findings:
+
+### Bug Report Claims vs. Actual Behavior
+
+1. **Claim**: The function crashes with ValueError when given Unicode digit characters like '²'
+   **Verified**: TRUE - The function does crash with `ValueError: invalid literal for int() with base 10: '²'`
+
+2. **Claim**: The issue is caused by using `str.isdigit()` which returns True for Unicode digits, but then calling `int()` which only accepts ASCII digits
+   **Verified**: TRUE - Testing confirms:
+   - '²'.isdigit() returns True
+   - '²'.isdecimal() returns False
+   - int('²') raises ValueError
+
+3. **Technical Details Confirmed**:
+   - The function at line 609 uses `value.isdigit()` to check if the string contains digits
+   - If True, it calls `int(value)` at line 610
+   - This creates a mismatch because `isdigit()` returns True for Unicode superscript/subscript digits, but `int()` cannot parse them
+
+### Testing Results
+
+Tested various Unicode characters:
+- Superscript digits (²,³,¹,⁴,⁵): isdigit()=True, isdecimal()=False, int() fails
+- Circled digits (①,②,③): isdigit()=True, isdecimal()=False, int() fails
+- Bengali digits (০,১): isdigit()=True, isdecimal()=True, int() succeeds
+- Arabic digits (٠,١): isdigit()=True, isdecimal()=True, int() succeeds
+- ASCII digits (5): isdigit()=True, isdecimal()=True, int() succeeds
+
+### Key Python String Method Differences
+
+- `isdigit()`: Returns True for any Unicode character classified as a digit (includes superscripts, circled numbers, etc.)
+- `isdecimal()`: Returns True only for characters that can be used to form base-10 numbers (what int() accepts)
+- `isnumeric()`: Returns True for digits plus numeric characters like Roman numerals
+
+### Function Context
+
+The `parse_variable_value` function is used to parse compile-time environment variable values in Cython. It's called from `parse_compile_time_env()` which processes configuration strings like "HAVE_OPENMP=True" or "NUM_THREADS=4".
+
+### Bug Impact
+
+The bug causes the function to crash when processing strings containing Unicode digit characters. While this might seem like an edge case, it's a legitimate issue because:
+1. The function accepts arbitrary string input
+2. Users might accidentally include Unicode characters (e.g., copy-pasting from documents)
+3. The crash is unhandled, causing the entire compilation process to fail
+
+The bug report's technical analysis is accurate.

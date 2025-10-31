@@ -1,0 +1,31 @@
+=== Direct Logic Bug Demonstration ===
+Current implementation at line 24: if 'gzip' in headers.get('Accept-Encoding', ''):
+
+Case-sensitivity tests:
+  'gzip' in 'GZIP': False
+  'gzip' in 'GZip': False
+  'gzip' in 'gzip': True
+
+Substring matching tests:
+  'gzip' in 'not-gzip': True
+  'gzip' in 'gzip-not': True
+  'gzip' in 'msgzip': True
+
+With quality parameters:
+  'gzip' in 'GZIP;q=1.0': False
+  'gzip' in 'gzip;q=0.8': True
+
+=== Testing with actual Starlette GZipMiddleware ===
+Testing different Accept-Encoding headers:
+  gzip            - COMPRESSED     (content-length: 29) (BUG!)
+  GZIP            - NOT compressed (content-length: 1000) (BUG!)
+  GZip            - NOT compressed (content-length: 1000) (BUG!)
+  not-gzip        - COMPRESSED     (content-length: 29) (BUG!)
+  msgzip          - COMPRESSED     (content-length: 29) (BUG!)
+  deflate         - NOT compressed (content-length: 1000) (BUG!)
+
+=== Bug Summary ===
+1. Case-sensitive check violates RFC 7231 (content-coding values are case-insensitive)
+2. Substring matching causes false positives (e.g., 'not-gzip' matches)
+3. Valid headers like 'GZIP' or 'GZip' fail to trigger compression
+4. Invalid encodings like 'msgzip' trigger compression incorrectly

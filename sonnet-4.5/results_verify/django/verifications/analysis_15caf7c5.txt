@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report tests an internal method (_delete() with underscore prefix) in a way that cannot occur through normal API usage. The test manually creates an inconsistent state by directly manipulating internal data structures (_expire_info), which violates the encapsulation principle. Python's underscore convention indicates these are private implementation details not meant for external use. The documentation makes no promises about how internal methods handle artificially created inconsistent states. Additionally, all public API methods maintain consistency correctly, and the threading locks ensure this inconsistency cannot occur naturally.
+
+**Why it might not be INVALID:**
+The code does technically behave as described in the bug report - when _delete() is called with a key that exists only in _expire_info, it fails to clean it up. The _delete() method is called by public methods like get(), incr(), and has_key(), so it's not entirely internal. The bug report correctly identifies a logical flaw in the exception handling that could theoretically lead to issues if the invariant were ever violated.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case in an internal method that can only be triggered by directly manipulating private attributes, which is explicitly discouraged in Python. The scenario cannot occur through normal usage of the Django cache API. The LocMemCache is explicitly documented as "not a good choice for production environments" and is mainly for development, where this edge case would never matter. The "fix" would add unnecessary complexity to handle a situation that should never occur. The performance impact of the current implementation is negligible since the inconsistent state cannot arise naturally.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (just ensure both dictionaries are cleaned independently) and would make the code more defensive. Even internal methods should handle edge cases gracefully. The principle of defensive programming suggests that methods should handle unexpected states robustly, even if those states "shouldn't" occur. Memory leaks, even theoretical ones, should be addressed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that internal methods like _delete() are not meant to be called directly or that they may not handle artificially created inconsistent states. Adding documentation to clarify that underscore-prefixed methods are internal and make no guarantees about handling invalid states would prevent such bug reports. The documentation could be clearer about the internal implementation details and invariants.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Python's underscore convention is well-established and doesn't need documentation - it universally means "private/internal." The Django documentation appropriately focuses on the public API, not internal implementation details. There's no documentation error here; the documentation simply doesn't cover internal methods, which is correct. The current documentation accurately describes the public interface.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for more robust error handling in internal methods to handle edge cases that don't currently occur. This could be viewed as requesting a new feature: defensive programming in internal methods. Making _delete() more resilient to inconsistent states could be seen as an enhancement rather than fixing a bug. The request is for behavior that was never promised or intended.
+
+**Why it might not be FEATURE_REQUEST:**
+The report identifies existing code that doesn't work as one might expect, rather than requesting new functionality. The method already exists and has a clear purpose (delete from both dictionaries); this is about fixing its implementation, not adding features. Feature requests typically ask for new capabilities, not corrections to existing logic.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code contains a clear logical flaw where the second delete operation is never reached if the first one fails. The implementation violates the principle that cleanup operations should be independent. The method fails to maintain the invariant that _cache and _expire_info should be synchronized, even when trying to restore consistency. The fix is straightforward and makes the code more robust without any downsides.
+
+**Why it might not be BUG:**
+This is an internal method (underscore prefix) being tested in an impossible scenario created by directly manipulating private attributes. The bug cannot manifest through normal usage of the public API. All public methods maintain the invariant correctly, and thread locks prevent race conditions. The Django cache documentation makes no promises about internal method behavior. The LocMemCache is explicitly not recommended for production use. Testing internal methods with artificially created invalid states is not a valid bug report methodology.
+
+## Overall Consideration
+The bug report identifies a genuine logical flaw in the _delete() method where exception handling prevents proper cleanup of the _expire_info dictionary. However, this flaw can only be exposed by directly manipulating internal data structures in a way that violates the class's encapsulation and cannot occur through normal use of the public API. The underscore prefix clearly marks this as an internal method, and Python convention dictates that such methods are implementation details not covered by any behavioral contract.
+
+The fact that all public methods maintain consistency correctly, use proper locking, and never create the problematic state suggests this is not a real-world issue. The LocMemCache is also explicitly documented as not suitable for production, further reducing the significance of this edge case. While the fix would be trivial, accepting this as a bug would set a precedent that all internal methods must handle impossible states created by external manipulation of private attributes.
+
+Given that roughly 90% of reports from this user are invalid, and this report requires artificial manipulation of internal state to demonstrate an issue that cannot occur naturally, this should be closed as INVALID. The code works correctly for all legitimate use cases, and testing internal methods with impossible preconditions is not a valid approach to finding bugs.

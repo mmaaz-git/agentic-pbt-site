@@ -1,0 +1,32 @@
+Bug Reproduction Analysis
+==========================
+
+## Summary
+I have successfully reproduced the reported bug in scipy.signal.windows.flattop. The function indeed returns values exceeding 1.0 for all odd values of M.
+
+## Hypothesis Test Results
+The property-based test using Hypothesis failed immediately on M=3, confirming that the normalization property is violated. The test correctly identifies that flattop(3) returns a maximum value of 1.000000003, which exceeds the expected maximum of 1.0.
+
+## Manual Test Results
+Testing various values of M revealed a clear pattern:
+- All ODD values of M (3, 5, 7, 9, 11, 13, 15, 17, 19...) produce a maximum value of exactly 1.000000003
+- EVEN values of M produce maximum values less than 1.0, which gradually approach 1.0 as M increases
+- M=1 produces exactly 1.0 (special case - single point window)
+
+This confirms the bug report's claim that odd M values consistently violate the normalization constraint.
+
+## Root Cause Verification
+I verified the root cause identified in the bug report:
+1. The flattop window uses coefficients [0.21557895, 0.41663158, 0.277263158, 0.083578947, 0.006947368]
+2. These coefficients sum to 1.000000003 instead of exactly 1.0
+3. The excess is approximately 3×10⁻⁹
+
+The implementation uses these coefficients directly in a general cosine window function. For odd M values, when all cosine terms align at the center point (n=(M-1)/2), the maximum value equals the sum of the coefficients, which explains why the maximum is 1.000000003.
+
+## Impact
+The deviation from 1.0 is extremely small (3 parts per billion), but it is:
+1. Consistent across all odd M values
+2. Reproducible and deterministic
+3. A violation of the documented contract
+
+The bug report is accurate in its technical analysis and the proposed fix (using coefficients that sum to exactly 1.0) would resolve the issue.

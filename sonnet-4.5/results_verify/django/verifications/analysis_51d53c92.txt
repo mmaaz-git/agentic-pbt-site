@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The dummy backend is explicitly designed to be non-functional and immediately raise ImproperlyConfigured on any real database operation. Since the operators dict is never actually used (any attempt to use it would raise an error), the shared mutable state has no practical impact. The documentation doesn't specify that instances must have isolated operators dicts, and given that this backend is purely a safety mechanism to prevent running without proper configuration, instance isolation may be irrelevant.
+
+**Why it might not be INVALID:**
+The bug is technically accurate - the operators dict is indeed shared between instances, which violates standard object-oriented principles of instance isolation. The reproduction clearly shows that modifying operators on one instance affects all others. This is unexpected behavior from a software engineering perspective, regardless of whether the backend is functional or not.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The dummy backend is never used in production and exists solely to raise errors when no database is configured. The operators dict being shared is unlikely to cause any real-world problems since any code path that would actually use the operators would immediately fail with ImproperlyConfigured. The effort to fix this would provide minimal value since the backend's only purpose is to fail gracefully. Additionally, all other production Django backends also use class-level operators dicts (though they're never modified).
+
+**Why it might not be WONTFIX:**
+Even if the practical impact is minimal, the shared mutable state could cause confusion during testing or development. If someone writes tests that use the dummy backend and modifies operators, it could lead to test pollution. The fix is trivial (moving operators to __init__), so the cost-benefit ratio might still favor fixing it.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify whether operators should be instance-specific or class-level, nor does it document the dummy backend's implementation details. The current behavior might be intentional - perhaps operators was designed to be class-level across all backends. The real issue might be that the documentation should clarify that the dummy backend's operators dict is shared and should not be modified.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The bug report correctly identifies unexpected behavior in the code itself, not a documentation issue. The shared mutable state is a code problem, not a documentation problem. Other backends having class-level operators doesn't justify the dummy backend having a mutable shared dict that can be modified at runtime.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Instance isolation for the operators dict could be viewed as a new feature rather than a bug fix. The current implementation works as designed (even if that design has limitations), and adding instance isolation would be enhancing the backend with new capability. Since the dummy backend is minimal by design, adding features to it might be considered out of scope.
+
+**Why it might not be FEATURE_REQUEST:**
+Instance isolation is a fundamental expectation in object-oriented programming, not a feature. When developers create separate instances of a class, they expect those instances to be independent unless explicitly documented otherwise. This is fixing broken behavior, not adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The shared mutable operators dict is a clear violation of instance isolation principles. The reproduction shows that modifying one instance affects all others, which is unexpected behavior. This is a textbook example of the mutable class attribute antipattern in Python. While the dummy backend isn't used in production, it could still cause test pollution or confusion during development. The fix is straightforward and would align the dummy backend with proper OOP practices.
+
+**Why it might not be BUG:**
+The dummy backend is designed to be non-functional, existing only to raise errors. The operators dict is never actually used in any meaningful way. All other Django backends also define operators at the class level (though they don't modify them). There's no documentation stating that operators should be instance-specific, and the practical impact is essentially zero since the backend can't perform real operations anyway.
+
+## Overall Consideration
+After careful analysis, this bug report presents a technically accurate issue but with minimal practical impact. The dummy backend does indeed have a shared mutable operators dict that violates instance isolation, and the bug report's reproduction is correct. However, this backend exists solely as a safety mechanism to raise ImproperlyConfigured errors when no database is configured, making the operators dict essentially unused in practice.
+
+The strongest argument for WONTFIX is that the dummy backend is never used in production and its only purpose is to fail immediately. The operators dict being shared is unlikely to cause real problems since any code path using it would fail anyway. All other Django backends also use class-level operators definitions, suggesting this might be an intentional pattern, though they use immutable mappings rather than empty mutable dicts.
+
+However, the issue could theoretically cause test pollution if someone modifies the operators dict during testing, and the fix is trivial (moving operators to __init__). The fact that this violates basic OOP principles of instance isolation makes it a legitimate concern, even if the practical impact is minimal. Given that Django is a framework that values correctness and preventing subtle bugs, this should likely be categorized as WONTFIX due to its extremely limited practical impact in a backend that's designed to immediately fail on use.

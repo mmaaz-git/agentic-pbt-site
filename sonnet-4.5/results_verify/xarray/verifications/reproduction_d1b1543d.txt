@@ -1,0 +1,31 @@
+Bug Reproduction Results
+========================
+
+The bug has been successfully reproduced. The xarray.cov function produces mathematically incorrect results when ddof >= valid_count.
+
+Test Results:
+1. Hypothesis property-based test: FAILED
+   - The test failed with 2 distinct failures when testing edge cases with ddof >= data length
+
+2. Specific test cases:
+   - xarray.cov([1.0], ddof=1): Returns nan (not consistent)
+   - xarray.cov([1.0, 2.0], ddof=2): Returns inf (problematic)
+   - xarray.cov([1.0, 2.0, 3.0], ddof=5): Returns -1.0 (mathematically incorrect - variance cannot be negative)
+
+3. Comparison with NumPy behavior:
+   - NumPy consistently returns inf for all cases where ddof >= data length
+   - NumPy also issues a RuntimeWarning: "Degrees of freedom <= 0 for slice"
+   - NumPy never returns negative values for variance/covariance
+
+Key Issues Identified:
+1. xarray returns negative values (e.g., -1.0) when ddof > valid_count, which is mathematically incorrect as covariance should never be negative when computing self-covariance
+2. xarray's behavior is inconsistent (sometimes nan, sometimes inf, sometimes negative)
+3. No warning is issued to users about insufficient degrees of freedom
+
+The bug occurs in the code at line 298 of computation.py:
+```python
+adjust = valid_count / (valid_count - ddof)
+```
+
+When valid_count == ddof, this causes division by zero (inf)
+When valid_count < ddof, this results in a negative adjustment factor, leading to negative covariance values

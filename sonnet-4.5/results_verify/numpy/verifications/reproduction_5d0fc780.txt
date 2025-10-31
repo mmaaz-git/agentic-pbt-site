@@ -1,0 +1,52 @@
+# Reproduction of Bug Report
+
+## Summary
+I have successfully reproduced the bug as described in the report. The round-trip property `fromstring(str(expr)) == expr` is indeed broken for expressions involving exponentiation.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test
+The provided Hypothesis test fails exactly as described:
+- Test input: `'(a * a)'`
+- Failure: AssertionError on round-trip check
+- The test correctly identifies that parsing `'a * a'` then converting to string gives `'a ** 2'`, but parsing `'a ** 2'` back gives a different expression
+
+### 2. Manual Reproduction
+Running the manual example confirms the bug:
+```
+Step 1 - Parse 'a * a': Expr(Op.FACTORS, {Expr(Op.SYMBOL, 'a'): 2})
+Step 2 - Convert to string: 'a ** 2'
+Step 3 - Parse 'a ** 2': Expr(Op.FACTORS, {Expr(Op.SYMBOL, 'a'): 1, Expr(Op.DEREF, Expr(Op.INTEGER, (2, 4))): 1})
+Are they equal? False
+```
+
+The expression `a * a` is correctly normalized to a factor with exponent 2, and `tostring()` correctly outputs `'a ** 2'`. However, when parsing `'a ** 2'` back, the parser incorrectly interprets it as `a * (*2)` (multiplication by a dereferenced 2) instead of exponentiation.
+
+## Root Cause Identified
+
+Through code analysis, I discovered the fundamental issue:
+
+1. **Language Default Mismatch**:
+   - `fromstring()` defaults to `Language.C` (line 1270 in symbolic.py)
+   - `tostring()` defaults to `Language.Fortran` (line 277 in symbolic.py)
+
+2. **Language-Specific Behavior**:
+   - In C language mode, the parser doesn't recognize `**` as an exponentiation operator
+   - Instead, it splits `"a ** 2"` as `['a', '*', '* 2']`
+   - The `'* 2'` part is then interpreted as a dereference operator (`*2`)
+   - In Fortran mode, `**` is properly recognized as exponentiation
+
+3. **Round-trip Success with Consistent Language**:
+   - When both functions use Fortran: Round-trip succeeds
+   - When both use C with proper tostring: `tostring(language=Language.C)` outputs `'a * a'` which round-trips correctly
+   - The bug occurs because of the inconsistent default languages
+
+## Additional Findings
+
+- The bug affects any expression that gets normalized to use exponents (e.g., `x * x * x` becomes `x ** 3`)
+- Simple multiplications with different factors (like `2 * x`) round-trip successfully
+- The issue is specific to the default behavior; explicit language parameters can work around it
+
+## Conclusion
+
+The bug is confirmed and reproducible. The round-trip property fails due to inconsistent default language parameters between `fromstring()` and `tostring()` methods, causing a mismatch in how the power operator is handled.

@@ -1,0 +1,37 @@
+BUG REPRODUCTION RESULTS
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The property-based test from the bug report was successfully reproduced:
+- Test: Assert that s.abs() returns all non-negative values
+- Result: FAILED with input Series([-9223372036854775808])
+- Error: Found negative value in abs result: [-9223372036854775808]
+
+2. DIRECT REPRODUCTION:
+The specific test case was confirmed:
+- Input: Series([-9223372036854775808]) (minimum int64 value)
+- Expected: A positive value or 9223372036854775808
+- Actual: -9223372036854775808 (still negative!)
+- Verification: result.values[0] >= 0 returns False
+
+3. COMPARISON WITH OTHER IMPLEMENTATIONS:
+- pandas.Series.abs(-2^63): Returns -9223372036854775808 (negative)
+- numpy.abs(-2^63): Returns -9223372036854775808 (negative)
+- Python built-in abs(-2^63): Returns 9223372036854775808 (positive, correct)
+
+This shows that Python's built-in abs() handles this correctly by using arbitrary precision integers, while numpy and pandas both suffer from integer overflow.
+
+4. EDGE CASE ANALYSIS:
+Tested various int64 values to understand the scope:
+- abs(min_int64) = -9223372036854775808 (WRONG - negative result)
+- abs(min_int64 + 1) = 9223372036854775807 (correct)
+- abs(-1) = 1 (correct)
+- abs(0) = 0 (correct)
+- abs(max_int64) = 9223372036854775807 (correct)
+
+Only the minimum int64 value (-2^63) triggers this bug.
+
+5. ROOT CAUSE:
+The issue occurs because in two's complement representation, the absolute value of min_int64 (-2^63) would be 2^63, which exceeds the maximum int64 value (2^63 - 1). When numpy performs the operation, it overflows back to the negative minimum value.
+
+6. IMPACT ASSESSMENT:
+The bug report's claim is VERIFIED. The Series.abs() method returns a negative value for the minimum int64, violating the mathematical invariant that |x| ≥ 0. This is a silent failure that could cause incorrect results in downstream calculations.

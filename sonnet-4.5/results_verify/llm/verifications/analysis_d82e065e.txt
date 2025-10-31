@@ -1,0 +1,73 @@
+Bug Report Triage Analysis
+==========================
+
+## BUG (Valid Bug Report)
+**Arguments For:**
+- The bug is reproducible and demonstrable with clear test cases
+- The current behavior (overwriting role with None) loses important information
+- OpenAI's streaming API pattern is well-established: first chunk has role, subsequent chunks have None
+- The loss of role information could break downstream code that depends on it
+- The proposed fix is minimal and sensible (only update role if not None)
+- This is a data integrity issue where information is being lost during processing
+
+**Arguments Against:**
+- No documentation specifies the expected behavior for role handling
+- The function is internal/undocumented, so behavior might be intentional
+- Current code might have been designed this way for a specific reason
+
+## WONTFIX
+**Arguments For:**
+- The function is internal and undocumented
+- There's no specification saying role should be preserved
+- The code has been working this way without complaints (presumably)
+- It's possible that downstream code doesn't actually use the role field from combined chunks
+
+**Arguments Against:**
+- This is not an obscure edge case - it affects all multi-chunk streaming responses
+- The bug causes actual data loss (role information)
+- The fix is trivial and non-breaking
+- This affects a core functionality of the library (OpenAI streaming)
+
+## INVALID
+**Arguments For:**
+- Without documentation, we can't say the current behavior is "wrong"
+- The function might be designed to always take the latest role value
+- There might be cases where role changes mid-stream that we're not aware of
+
+**Arguments Against:**
+- The bug report correctly identifies actual behavior that loses data
+- The test cases are valid and demonstrate the issue
+- OpenAI's API pattern is well-known and the expectation is reasonable
+
+## DOCUMENTATION_FIX
+**Arguments For:**
+- The main issue is lack of documentation about expected behavior
+- Adding documentation about how role is handled would clarify expectations
+- The code works, it just doesn't match user expectations
+
+**Arguments Against:**
+- This is more than a documentation issue - actual data is being lost
+- Even with documentation, losing the role information seems incorrect
+- Documentation wouldn't fix the underlying data loss problem
+
+## FEATURE_REQUEST
+**Arguments For:**
+- Since there's no documented behavior, preserving role could be seen as a new feature
+- The current code "works" in that it doesn't crash
+- This could be framed as "enhance combine_chunks to preserve role information"
+
+**Arguments Against:**
+- This isn't adding new functionality, it's fixing data loss
+- The function already handles role, it just handles it incorrectly
+- This is correcting existing behavior, not adding new capabilities
+
+## Overall Assessment
+
+The strongest case is for **BUG**. While the function lacks documentation, the current behavior demonstrably loses information that was present in the input data. The role field from the first chunk is overwritten with None from subsequent chunks, which:
+
+1. Goes against the established pattern of OpenAI's streaming API
+2. Loses data that was explicitly provided in the input
+3. Could break downstream code expecting role="assistant"
+4. Has a simple, non-breaking fix
+
+The lack of documentation doesn't excuse data loss. Even without explicit documentation, a reasonable expectation is that combining chunks shouldn't lose information that was present in the original chunks. The fact that OpenAI's API deliberately sends role only in the first chunk (to avoid redundancy) strongly suggests that combine_chunks should preserve this information rather than overwrite it with None.

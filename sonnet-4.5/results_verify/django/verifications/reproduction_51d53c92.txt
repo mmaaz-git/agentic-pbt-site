@@ -1,0 +1,62 @@
+## Reproduction of the Reported Bug
+
+I successfully reproduced the bug as described in the report. Here are the test results:
+
+### Test 1: Instance Identity Check
+I created two separate instances of DatabaseWrapper and checked if their `operators` attribute points to the same object:
+
+```
+wrapper1 = DatabaseWrapper({})
+wrapper2 = DatabaseWrapper({})
+wrapper1.operators is wrapper2.operators  # Result: True
+```
+
+**Result**: CONFIRMED - The `operators` dict is the same object (same memory address) for different instances.
+
+### Test 2: Mutation Affects All Instances
+I modified the `operators` dict on one instance and checked if it affected other instances:
+
+```
+wrapper1.operators['CUSTOM'] = 'custom_value'
+'CUSTOM' in wrapper2.operators  # Result: True
+```
+
+**Result**: CONFIRMED - Modifying `operators` on wrapper1 immediately affected wrapper2's `operators`.
+
+### Test 3: New Instances Get Previous Modifications
+I created a third instance after modifying the operators dict:
+
+```
+wrapper3 = DatabaseWrapper({})
+'CUSTOM' in wrapper3.operators  # Result: True
+```
+
+**Result**: CONFIRMED - Even newly created instances inherit the modifications made to the class-level dict.
+
+### Hypothesis Test Results
+The property-based test from the bug report also failed as expected:
+- Test assertion: `wrapper1.operators is not wrapper2.operators`
+- Actual behavior: The assertion fails because they ARE the same object
+- This fails for any input settings dict
+
+### Technical Analysis
+The behavior is exactly as described in the bug report:
+1. The `operators = {}` declaration at class level creates a single mutable dict object
+2. All instances of DatabaseWrapper share this same dict object
+3. Modifications through any instance affect all current and future instances
+4. This is standard Python behavior for mutable class attributes
+
+### Comparison with Other Backends
+I checked other Django database backends:
+- MySQL: Defines `operators` as a class-level dict with actual operator mappings
+- SQLite: Defines `operators` as a class-level dict with actual operator mappings
+- PostgreSQL: Defines `operators` as a class-level dict with actual operator mappings
+- Oracle: Uses a special descriptor pattern to handle operators dynamically
+
+All production backends define `operators` at class level, but they contain immutable string mappings and are never modified at runtime. The dummy backend is unique in having an empty dict that could theoretically be modified.
+
+### Impact Assessment
+The bug is real and reproducible. The shared mutable state violates the principle of instance isolation. While the dummy backend should never be used in production (it raises ImproperlyConfigured on any real operation), this could still cause issues in:
+1. Test environments where the dummy backend might be used
+2. Development scenarios
+3. Any code that inspects or modifies the operators dict for any reason

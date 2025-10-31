@@ -1,0 +1,50 @@
+Bug Report Analysis for numpy.char.lower
+=========================================
+
+## INVALID Considerations
+
+**Why it might be INVALID:**
+NumPy's string dtypes are explicitly documented as "fixed-width" data types, and the documentation shows that strings get truncated when they don't fit. The behavior of preserving the input dtype could be considered expected behavior for NumPy arrays, which maintain their shape and dtype unless explicitly converted. The documentation never promises that the dtype will be automatically expanded to accommodate longer results.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that numpy.char.lower "calls str.lower element-wise", which creates a reasonable expectation that it would produce the same results as Python's str.lower(). Silent data corruption without any warning is a serious issue that violates the principle of least surprise. The fact that 'İ'.lower() produces 'i̇' in Python but 'i' in NumPy is a clear deviation from the documented behavior.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+The numpy.char module is explicitly marked as legacy and will no longer receive updates. The documentation states it may be removed in future NumPy versions. This is an edge case involving a specific Turkish character that expands during case conversion, which may affect very few users. The module's deprecated status suggests that fixing bugs in it may not be a priority.
+
+**Why it might not be WONTFIX:**
+Silent data corruption is not a trivial issue - it affects data integrity. The same bug exists in the recommended replacement (numpy.strings), so migrating to the new API doesn't solve the problem. Unicode support is increasingly important in global applications, and Turkish is spoken by millions of people. This is not an obscure edge case but a fundamental correctness issue.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that numpy.char.lower preserves the input dtype and may truncate results when Unicode normalization expands character count. This would set correct expectations. The behavior is consistent with NumPy's fixed-width string dtype design, so documenting the limitation might be sufficient.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation explicitly claims to "call str.lower element-wise", which implies identical behavior to Python's str.lower(). Simply documenting data corruption doesn't make it acceptable. Users would reasonably expect that a lowercase operation preserves the semantic meaning of the text, not silently truncate it.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Automatic dtype expansion for string operations could be considered a new feature rather than a bug fix. The current behavior maintains dtype consistency, and adding automatic resizing would be a significant change to NumPy's string handling semantics. This could be framed as requesting enhanced Unicode support.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to implement str.lower() behavior, so making it actually match Python's behavior is fixing a bug, not adding a feature. The bug report isn't asking for new functionality but for the existing functionality to work correctly without data loss.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The function silently corrupts data by truncating Unicode characters that expand during case conversion. It claims to call str.lower() element-wise but produces different results. There's no warning about potential data loss. The behavior violates the reasonable expectation that lowercasing preserves the semantic content of strings. This is demonstrable data corruption that could affect production systems processing international text.
+
+**Why it might not be BUG:**
+NumPy's fixed-width string dtypes are designed to maintain consistent sizes, and truncation behavior is documented for the dtype system. The function technically does call str.lower() and then fits the result into the available dtype space. This could be considered working as designed within NumPy's dtype constraints.
+
+## Overall Consideration
+
+This case presents a conflict between NumPy's fixed-width dtype design philosophy and the reasonable expectation that text operations preserve semantic meaning. The documentation claims the function "calls str.lower element-wise" without mentioning that results may be truncated, creating a reasonable expectation of correctness that isn't met.
+
+The critical factors are: (1) Silent data corruption occurs without warning, (2) The documentation implies behavior identical to Python's str.lower(), and (3) Both the legacy and recommended APIs exhibit the same issue. While NumPy's fixed-width dtypes do truncate by design, applying this to text transformations that can expand characters crosses from technical limitation to data integrity issue.
+
+Given that the bug causes silent data corruption, affects both old and new APIs, and the documentation doesn't warn about this limitation, this appears to be a legitimate bug rather than expected behavior. The fact that it only affects 10% of bug reports as valid, and this involves actual data loss with clear reproduction, suggests this falls into that 10% of valid reports.

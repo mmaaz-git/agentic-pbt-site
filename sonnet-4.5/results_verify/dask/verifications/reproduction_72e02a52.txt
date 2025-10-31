@@ -1,0 +1,53 @@
+## Bug Reproduction Analysis
+
+### Technical Verification
+
+I have successfully reproduced the bug exactly as described in the report:
+
+1. **The specific failing case (`b'\x80'`)**:
+   - Confirmed: Raises `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+   - The function crashes with the exact error message reported
+
+2. **UTF-8 bytes work correctly**:
+   - Confirmed: `key_split(b'hello-world-1')` returns `'hello-world'` as expected
+   - This matches the docstring example
+
+3. **Property-based testing**:
+   - Confirmed: The Hypothesis test fails on multiple non-UTF-8 byte sequences
+   - Found 19 failing inputs in 300 test cases
+   - All failures are due to UnicodeDecodeError on invalid UTF-8 sequences
+
+4. **Error handling for other inputs**:
+   - Confirmed: `key_split(None)` correctly returns `'Other'`
+   - This demonstrates the function has error handling for some problematic inputs
+
+### Root Cause Analysis
+
+The bug occurs because:
+
+1. The bytes handling code (line 1979) is: `return key_split(s.decode())`
+2. This `.decode()` call uses UTF-8 encoding by default
+3. The decode operation happens **outside** the try-except block (lines 1982-2002)
+4. Therefore, UnicodeDecodeError exceptions from invalid UTF-8 bytes are not caught
+5. The existing exception handler that returns "Other" only catches exceptions from the string processing logic, not from the bytes decoding
+
+### Expected vs Actual Behavior
+
+**Expected** (based on the function's defensive design):
+- The function should handle invalid inputs gracefully
+- Like with `None` input returning "Other", non-UTF-8 bytes should also return "Other" or be handled without crashing
+- The docstring shows bytes are a supported input type
+
+**Actual**:
+- The function crashes with UnicodeDecodeError on non-UTF-8 byte sequences
+- Valid UTF-8 bytes work fine
+- The exception handler doesn't protect against decode errors
+
+### Impact Assessment
+
+This is a real bug because:
+1. The function explicitly accepts bytes inputs (shown in docstring)
+2. It has error handling that returns "Other" for problematic inputs
+3. The bytes decoding error escapes this error handling due to code structure
+4. In a distributed computing context (Dask's domain), keys might come from various sources and could contain non-UTF-8 bytes
+5. A utility function like `key_split` should be robust and not crash on edge cases

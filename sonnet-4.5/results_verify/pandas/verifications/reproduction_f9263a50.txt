@@ -1,0 +1,36 @@
+## Bug Reproduction Results
+
+### Test Case Verification
+
+1. **Basic Reproduction:**
+   - Confirmed: Empty DataFrame with orient='split' changes index type from int64 to float64
+   - Original: RangeIndex(start=0, stop=0, step=1) with dtype=int64
+   - After round-trip: Index([], dtype='float64')
+   - The bug report's claim is technically accurate about the type change
+
+2. **Behavior Across Different Orient Options:**
+   - orient='split': Changes int64 to float64 (CONFIRMED)
+   - orient='records': Preserves int64 (works correctly)
+   - orient='index': Preserves int64 (works correctly)
+   - orient='columns': Changes int64 to float64 (also affected)
+   - orient='values': Preserves int64 (works correctly)
+   - orient='table': Preserves int64 (works correctly)
+
+3. **Non-empty DataFrame Behavior:**
+   - With data present, orient='split' correctly preserves int64 index type
+   - The issue ONLY occurs with empty DataFrames
+
+4. **Hypothesis Test Results:**
+   - The hypothesis test found multiple issues, including the empty DataFrame case
+   - Also found an unrelated overflow issue with very large negative integers (-9223372036854775809)
+   - The test with check_dtype=False still fails because assert_frame_equal checks inferred_type, not just dtype
+
+5. **Impact Assessment:**
+   - The issue is real and reproducible
+   - It affects empty DataFrames with orient='split' and orient='columns'
+   - When JSON contains "index":[], pandas cannot infer the type and defaults to float64
+   - This is a type inference issue during deserialization of empty arrays
+
+### Technical Analysis
+
+The root cause appears to be that when read_json encounters an empty index array in 'split' format, it has no values to infer the dtype from and defaults to float64. This is different from creating a fresh empty DataFrame which gets a RangeIndex with int64 dtype by default.

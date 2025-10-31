@@ -1,0 +1,48 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug as reported. The issue is confirmed:
+
+### Test Results:
+
+1. **Basic Dictionary Mutation (Test 1):**
+   - Input: `{'x': 'value', 'y': 42}`
+   - After substitute(): `{'x': 'value', 'y': 42, '__template_name__': None, 'z': 100}`
+   - The method added `__template_name__` and namespace values ('z': 100) to the input dict
+
+2. **Template with No Namespace (Test 2):**
+   - Input: `{'a': 1, 'b': 2}`
+   - After substitute(): `{'a': 1, 'b': 2, '__template_name__': None}`
+   - Even without a namespace, `__template_name__` is added
+
+3. **Multiple Test Cases:**
+   - All test dictionaries were mutated
+   - In every case, at minimum `__template_name__` was added
+   - When template has a namespace, those keys are also added to the input dict
+
+### Code Analysis:
+
+The bug is in lines 182-185 of _tempita.py:
+```python
+ns = kw  # Line 182: Creates alias, not a copy!
+ns['__template_name__'] = self.name  # Line 183: Mutates the original dict
+if self.namespace:
+    ns.update(self.namespace)  # Line 185: Also mutates the original dict
+```
+
+Line 182 assigns `ns = kw`, which makes `ns` an alias to the same dictionary object, not a copy. All subsequent modifications to `ns` directly affect the caller's dictionary.
+
+### Comparison with string.Template:
+
+Python's standard `string.Template.substitute()` does NOT mutate the input dictionary:
+- Input: `{'name': 'World'}`
+- After substitute(): `{'name': 'World'}` (unchanged)
+- This confirms the expected behavior for template substitution methods
+
+### Verification:
+
+The bug report is accurate:
+1. The substitute() method does mutate the input dictionary
+2. It adds internal keys like `__template_name__`
+3. It adds namespace values to the input dict
+4. This behavior violates the principle of least surprise
+5. The behavior differs from string.Template, which the documentation references

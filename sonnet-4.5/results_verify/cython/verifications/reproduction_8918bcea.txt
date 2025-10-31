@@ -1,0 +1,49 @@
+BUG REPRODUCTION RESULTS
+
+1. TEST SETUP:
+Created two test cases:
+a) Test 1: .pyxbld file with ONLY make_setup_args() defined (no make_ext)
+b) Test 2: .pyxbld file with BOTH make_ext() and make_setup_args() defined
+
+2. REPRODUCTION CODE:
+The bug report's code was tested exactly as provided:
+- Created a .pyx file with simple content: 'def hello(): return "world"'
+- Created a .pyxbld file with only: 'def make_setup_args():\n    return {"script_args": ["--verbose"]}'
+- Called pyximport.handle_special_build('example', pyx_file)
+
+3. ACTUAL RESULTS:
+
+Test 1 (only make_setup_args):
+- FAILED with AttributeError: 'NoneType' object has no attribute 'sources'
+- Error occurs at line 132 in pyximport.py: "for source in ext.sources"
+- The error matches exactly what the bug report claimed
+
+Test 2 (both make_ext and make_setup_args):
+- SUCCEEDED without errors
+- Returned valid Extension object and setup_args dict
+
+4. ERROR ANALYSIS:
+The crash occurs at lines 131-132 of pyximport.py:
+```python
+ext.sources = [os.path.join(os.path.dirname(special_build), source)
+               for source in ext.sources]
+```
+
+This code unconditionally accesses ext.sources even when ext is None.
+
+5. EXECUTION FLOW:
+When only make_setup_args is defined:
+- Line 112: ext = None (initialized)
+- Lines 120-123: make_ext doesn't exist, so ext remains None
+- Lines 124-128: make_setup_args exists and is called, setup_args gets the dict
+- Line 129-130: assertion passes because setup_args is truthy (ext=None, setup_args={...})
+- Lines 131-132: CRASH - tries to access ext.sources when ext is None
+
+6. BUG CONFIRMATION:
+The bug is 100% reproducible and matches the bug report exactly:
+- The code crashes with AttributeError when .pyxbld defines only make_setup_args()
+- The crash occurs at the exact line indicated in the bug report
+- The proposed fix (checking "if ext:" before accessing ext.sources) would resolve the issue
+
+7. IMPACT:
+This is a real bug that prevents users from using a documented feature where they can define only make_setup_args() in their .pyxbld files to set compiler flags without needing to define a custom Extension.

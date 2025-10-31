@@ -1,0 +1,46 @@
+Bug Report Analysis: TrustedHostMiddleware IPv6 Host Parsing
+============================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The Starlette documentation doesn't explicitly state that it supports IPv6 addresses in the Host header. One could argue that if IPv6 support wasn't explicitly documented as a feature, then the inability to handle IPv6 addresses isn't a bug but rather an unsupported use case. The middleware might have been designed only for domain names and IPv4 addresses.
+
+**Why it might not be INVALID:**
+RFC 3986 and RFC 7230 are fundamental HTTP standards that clearly specify how IPv6 addresses must be formatted in URIs and Host headers. Any HTTP middleware that processes Host headers should reasonably be expected to handle standard-compliant Host header formats. The code attempts to parse Host headers generically without any documented limitation to IPv4-only, so failing to handle a standard format is a legitimate bug.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+IPv6 adoption is still relatively low in many environments, and this issue might be considered an edge case that affects very few users. The maintainers might argue that users can work around this by using domain names instead of raw IPv6 addresses, or by configuring reverse proxies to handle IPv6 before it reaches the application. The complexity of properly parsing IPv6 addresses might be deemed not worth the effort for a rarely-used feature.
+
+**Why it might not be WONTFIX:**
+IPv6 is an established internet standard that's been around for decades, and its usage is growing. Major cloud providers and modern infrastructure increasingly use IPv6. A security middleware that fails to correctly parse standard HTTP headers could lead to both false rejections of valid requests and potential security issues. The fix is relatively simple and doesn't break existing functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the maintainers intended TrustedHostMiddleware to only work with IPv4 and domain names, then the documentation should explicitly state this limitation. Users would then know not to expect IPv6 support and could plan accordingly. The documentation could be updated to clarify that IPv6 addresses in Host headers are not supported.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The bug is in the code logic, not the documentation. The code attempts to parse any Host header by splitting on colons, which is fundamentally incorrect for IPv6. This isn't a case where the documentation is misleading; it's a case where the implementation doesn't handle a standard HTTP header format correctly. Documenting a bug doesn't make it not a bug.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If TrustedHostMiddleware was never designed to support IPv6, then adding IPv6 support would be a new feature rather than a bug fix. The proposed change adds new parsing logic to handle a format that wasn't previously supported. This could be framed as "Add IPv6 support to TrustedHostMiddleware" rather than "Fix IPv6 parsing bug."
+
+**Why it might not be FEATURE_REQUEST:**
+The middleware already attempts to parse Host headers generically without any explicit IPv4-only design. It's not adding a new feature but fixing incorrect parsing of standard HTTP headers. The RFC-compliant format for IPv6 in Host headers has existed since the early 2000s, so supporting it is fixing a deficiency rather than adding something new.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation violates HTTP standards (RFC 3986 and RFC 7230) by incorrectly parsing IPv6 addresses in Host headers. This causes the middleware to reject valid requests from IPv6 clients even when those addresses are explicitly allowed. The bug is reproducible, has a clear root cause, and affects real-world usage. The proposed fix is straightforward and doesn't break existing functionality for IPv4 and domain names.
+
+**Why it might not be BUG:**
+One could argue that without explicit documentation claiming IPv6 support, the inability to handle IPv6 isn't a bug but an unsupported feature. If the middleware was designed before IPv6 became common and never claimed to support it, then this might be better classified as a feature request or documentation issue.
+
+## Overall Consideration
+After analyzing all aspects of this bug report, this appears to be a legitimate bug that should be fixed. The evidence strongly supports this classification for three key reasons.
+
+First, the HTTP standards (RFC 3986 and RFC 7230) clearly define how IPv6 addresses must be formatted in Host headers, using square brackets to enclose the address. Any HTTP middleware that processes Host headers should handle standard-compliant formats. The current implementation's use of simple colon-splitting is fundamentally flawed for IPv6 addresses, which contain multiple colons as part of their standard notation.
+
+Second, the bug has real-world impact. As demonstrated in the reproduction, the middleware incorrectly rejects valid requests from IPv6 clients even when their addresses are explicitly included in the allowed_hosts configuration. This isn't just a theoretical issue - IPv6 is increasingly used in production environments, particularly in cloud infrastructure and modern networks. The inability to correctly validate IPv6 hosts could force users to disable host validation entirely, creating security vulnerabilities.
+
+Third, the proposed fix is surgical and backward-compatible. It correctly handles IPv6 addresses while maintaining existing behavior for IPv4 addresses and domain names. The fix follows the principle of least surprise by making the middleware work with standard HTTP header formats. While one could argue this is adding IPv6 "support," it's more accurately fixing incorrect parsing logic that fails on standard-compliant input. The middleware already accepts IPv6 addresses in its allowed_hosts configuration, so it clearly intends to support them - it just fails to parse them correctly from Host headers.

@@ -1,0 +1,39 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The function `numpy.rec.find_duplicate` fails to detect duplicate NaN values in a list.
+
+## Tests Performed
+
+### 1. Property-Based Test
+The hypothesis test provided in the bug report was executed and confirmed the issue. When given a list containing multiple NaN values, the function fails to include NaN in the result list of duplicated elements.
+
+### 2. Simple Test Case
+Input: `[float('nan'), float('nan'), 1.0, 1.0]`
+Expected Result: A list containing both NaN and 1.0 as duplicated elements (length 2)
+Actual Result: `[1.0]` (length 1, missing NaN)
+
+## Root Cause Analysis
+The bug occurs because `numpy.rec.find_duplicate` uses Python's `Counter` class internally. Counter relies on hashing and equality comparisons. Since NaN values have a special property where `nan != nan` always returns False (per IEEE 754 standard), and different NaN objects created separately have different identities, Counter treats them as distinct items.
+
+### Counter Behavior with NaN
+- When different NaN objects are created (e.g., `float('nan')` called twice), Counter treats them as separate keys
+- Example: `Counter([float('nan'), float('nan'), 1.0, 1.0])` results in `{nan: 1, nan: 1, 1.0: 2}`
+- Each NaN gets counted only once, so neither appears as a duplicate
+
+### Implementation Details
+The function implementation (lines 48-54 of numpy/_core/records.py):
+```python
+def find_duplicate(list):
+    """Find duplication in a list, return a list of duplicated elements"""
+    return [
+        item
+        for item, counts in Counter(list).items()
+        if counts > 1
+    ]
+```
+
+This implementation directly uses Counter without any special handling for NaN values.
+
+## Verification
+The bug is consistently reproducible and affects any list containing multiple NaN values. The function correctly identifies other duplicates (like the duplicate 1.0 values) but fails specifically for NaN values.

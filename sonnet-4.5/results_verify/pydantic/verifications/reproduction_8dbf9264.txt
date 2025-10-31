@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Bug Summary
+The `timedelta_isoformat` function in `pydantic.deprecated.json` produces incorrect ISO 8601 duration strings for negative timedeltas. It outputs Python's internal representation rather than the actual duration value.
+
+### Reproduction Results
+
+**Test Case: timedelta(seconds=-1)**
+
+1. **Input timedelta**: `datetime.timedelta(seconds=-1)`
+   - Python internal representation: `-1 day, 23:59:59`
+   - Actual duration: -1.0 seconds
+
+2. **Function output**: `-P1DT23H59M59.000000S`
+
+3. **Semantic interpretation of output**:
+   - The ISO format `-P1DT23H59M59.000000S` means "negative (1 day + 23 hours + 59 minutes + 59 seconds)"
+   - This equals: -(86400 + 82800 + 3540 + 59) = -172799 seconds
+
+4. **Error**: The function outputs a duration representing -172799 seconds when the actual timedelta is only -1 second. This is a difference of 172798 seconds!
+
+### Root Cause
+The bug occurs because the function directly formats Python's internal representation of negative timedeltas:
+- Python stores negative timedeltas with negative days and positive seconds/microseconds
+- For `timedelta(seconds=-1)`: `days=-1, seconds=86399, microseconds=0`
+- The function incorrectly formats these internal values directly instead of computing the actual total duration
+
+### Implementation Analysis
+The current implementation:
+```python
+def timedelta_isoformat(td: datetime.timedelta) -> str:
+    minutes, seconds = divmod(td.seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    return f'{"-" if td.days < 0 else ""}P{abs(td.days)}DT{hours:d}H{minutes:d}M{seconds:d}.{td.microseconds:06d}S'
+```
+
+The issue is that `td.seconds` is always non-negative (0 to 86399) even for negative timedeltas. The function uses the internal representation components directly without accounting for how Python normalizes negative durations.
+
+### Verification
+The bug was successfully reproduced using:
+1. The property-based test provided in the bug report
+2. Direct testing with the specific failing input `seconds=-1`
+3. The reproduction script showing the exact problem
+
+All tests confirmed the issue: the ISO format output represents a vastly different duration than the input timedelta.

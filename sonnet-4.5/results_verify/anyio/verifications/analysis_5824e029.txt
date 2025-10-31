@@ -1,0 +1,62 @@
+# Bug Report Triage Analysis
+
+## Report Summary
+The bug report claims that `BufferedByteReceiveStream.receive_until()` violates its contract by succeeding when the delimiter is found beyond the max_bytes limit.
+
+## Analysis for Each Category
+
+### BUG (Valid Bug Report)
+**Arguments FOR:**
+1. The documentation states "maximum number of bytes that will be read" which implies a hard limit on read operations
+2. The current behavior is inconsistent - it checks buffer size only when delimiter is NOT found, but not when it IS found
+3. The function can read and buffer more data than max_bytes to find a delimiter, which violates the principle of least surprise
+4. The DelimiterNotFound exception specifically takes max_bytes as a parameter, suggesting it represents a hard limit
+5. In the test case with delimiter=b'\x00\x00' and max_bytes=1, the function reads 2 bytes to find the delimiter but only checks if buffer >= max_bytes when delimiter is not found
+
+**Arguments AGAINST:**
+1. One could argue max_bytes refers only to the returned data size, not total bytes read
+2. The implementation has been this way and might have users depending on current behavior
+
+### INVALID (Incorrect Report)
+**Arguments FOR:**
+1. If max_bytes was meant to limit only the returned data (not including delimiter), the current behavior could be considered correct
+2. The documentation could be interpreted as "bytes that will be returned" rather than "bytes that will be read from stream"
+
+**Arguments AGAINST:**
+1. The documentation clearly says "bytes that will be read" not "bytes that will be returned"
+2. The inconsistency in the implementation (checking buffer size only when delimiter not found) suggests a bug rather than intentional design
+3. Test results show illogical behavior where the same limit is enforced differently based on whether delimiter is found
+
+### WONTFIX (Trivial/Unimportant)
+**Arguments FOR:**
+1. Edge case that might rarely occur in practice (delimiter exactly at boundary)
+2. Existing code might depend on current behavior
+
+**Arguments AGAINST:**
+1. This is a clear violation of documented behavior that could lead to security issues (reading more data than intended)
+2. The fix is straightforward and improves consistency
+3. Buffer overflow prevention is an important security consideration
+
+### FEATURE_REQUEST (New Functionality)
+**Arguments FOR:**
+None - the documentation already describes this behavior, it's just not implemented correctly
+
+**Arguments AGAINST:**
+1. The documentation already promises this behavior
+2. This is fixing existing functionality, not adding new features
+
+### DOCUMENTATION_FIX (Documentation Error)
+**Arguments FOR:**
+1. The documentation could be clarified to be more explicit about what max_bytes means
+2. If the current behavior is intentional, the docs should reflect that
+
+**Arguments AGAINST:**
+1. The documentation is reasonably clear - "maximum number of bytes that will be read"
+2. The implementation is inconsistent with itself, suggesting the bug is in code, not docs
+3. Changing documentation to match current behavior would make the function less useful and predictable
+
+## Conclusion
+
+This is a **BUG**. The implementation fails to properly enforce the max_bytes limit as documented. The function should raise DelimiterNotFound when finding the delimiter would require reading more than max_bytes from the stream. The current implementation only checks buffer size when the delimiter is NOT found, creating an inconsistency that violates the documented contract.
+
+The proposed fix in the bug report is appropriate - checking if the delimiter position plus its length exceeds max_bytes before returning success.

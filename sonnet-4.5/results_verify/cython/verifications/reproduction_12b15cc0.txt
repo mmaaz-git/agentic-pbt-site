@@ -1,0 +1,48 @@
+REPRODUCTION ANALYSIS FOR chars_to_ranges BUG
+
+Bug Report Summary:
+The chars_to_ranges function incorrectly expands character ranges when the input string contains duplicate characters, covering characters that are not in the input.
+
+Reproduction Results:
+
+1. MAIN BUG CASE - Input '00':
+   - Expected: Should only cover {'0'}
+   - Actual: Covers {'0', '1'}
+   - Result: [48, 50) which includes both ord('0')=48 and ord('1')=49
+   - BUG CONFIRMED
+
+2. OTHER DUPLICATE CASES TESTED:
+   - 'aa': Expected {'a'}, Got {'a', 'b'} - BUG CONFIRMED
+   - '11': Expected {'1'}, Got {'1', '2'} - BUG CONFIRMED
+   - 'AAA': Expected {'A'}, Got {'A', 'B', 'C'} - BUG CONFIRMED
+   - 'zz': Expected {'z'}, Got {'z', '{'} - BUG CONFIRMED
+   - '999': Expected {'9'}, Got {'9', ':', ';'} - BUG CONFIRMED
+   - 'aaa': Expected {'a'}, Got {'a', 'b', 'c'} - BUG CONFIRMED
+
+3. NON-DUPLICATE CASES (control):
+   - '01': Expected {'0', '1'}, Got {'0', '1'} - CORRECT
+   - 'ab': Expected {'a', 'b'}, Got {'a', 'b'} - CORRECT
+   - 'ABC': Expected {'A', 'B', 'C'}, Got {'A', 'B', 'C'} - CORRECT
+   - '012': Expected {'0', '1', '2'}, Got {'0', '1', '2'} - CORRECT
+   - 'xyz': Expected {'x', 'y', 'z'}, Got {'x', 'y', 'z'} - CORRECT
+
+Root Cause Analysis:
+The bug occurs in the inner while loop at line 43:
+   while i < n and code2 >= ord(char_list[i]):
+
+When processing duplicates:
+1. First occurrence: Creates initial range [code1, code1+1)
+2. Second occurrence: Since code2 (=code1+1) >= ord(duplicate), the loop continues
+3. This incorrectly increments code2, expanding the range
+
+Proposed Fix Analysis:
+The bug report suggests changing >= to >. However, testing shows this does NOT fix the issue:
+- With >=: '00' produces [48, 50) covering {'0', '1'}
+- With >: '00' still produces [48, 50) covering {'0', '1'}
+
+This is because ord('0')+1 = 49, and 49 > 48 is still True, so the loop still executes.
+
+The real issue is that the algorithm doesn't properly handle duplicate characters - it assumes each character in the sorted list should extend the range, but duplicates shouldn't extend ranges at all.
+
+Property-Based Testing:
+The hypothesis test correctly identifies the bug - when given any text with duplicates, the function returns ranges covering extra characters not in the input.

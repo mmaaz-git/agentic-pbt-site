@@ -1,0 +1,45 @@
+BUG TRIAGE ANALYSIS
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly guarantee perfect round-trip preservation of data through the interchange protocol. The function from_dataframe() is documented as building "a pd.DataFrame from any DataFrame supporting the interchange protocol" but doesn't promise lossless conversion. Additionally, the documentation warns about "severe implementation issues" with the protocol.
+
+**Why it might not be INVALID:**
+The interchange protocol explicitly defines how to represent null values in categorical columns using sentinel values. The implementation has a comment acknowledging it needs to handle sentinel values. When a protocol defines a way to represent nulls and the implementation attempts to handle them but fails, this is not invalid - it's a genuine implementation error. Data loss during interchange defeats the fundamental purpose of a data interchange protocol.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The pandas documentation explicitly recommends using Arrow PyCapsule Interface instead of the interchange protocol from pandas 2.3 onwards. The documentation warns about "severe implementation issues" and recommends limited use cases. Since there's an alternative recommended approach (Arrow), fixing issues in the deprecated interchange protocol might not be a priority.
+
+**Why it might not be WONTFIX:**
+This is a data loss bug that silently converts null values to valid data. Silent data corruption is typically considered serious regardless of whether alternative methods exist. The interchange protocol is still part of the public API and users may rely on it. The fix is straightforward and well-defined.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the interchange protocol was never intended to preserve null values in categorical columns perfectly, then the documentation should explicitly state this limitation. The current documentation doesn't clearly specify that null values in categoricals may be lost during round-trip conversion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The protocol specification clearly defines how nulls should be represented (USE_SENTINEL). The code has a comment showing intent to handle sentinel values. This is not a documentation issue - it's an implementation that doesn't match the documented protocol specification. Documenting data loss as expected behavior would be incorrect when the protocol defines how to preserve nulls.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If the current implementation was never designed to handle null preservation in categorical round-trips, then adding this capability could be considered a new feature rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The protocol already defines sentinel value representation for nulls. The code already attempts to handle sentinels (see the comment about using modulo to avoid IndexError). This isn't asking for new functionality - it's asking for the existing functionality to work correctly. The set_nulls() function is already called but can't work because the data is corrupted before it's called.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case of silent data loss where null values are incorrectly converted to valid category values. The protocol defines how to represent nulls (USE_SENTINEL = -1), the implementation acknowledges needing to handle sentinels (via code comment), but the modulo operation incorrectly maps sentinels to valid indices. The bug is reproducible, the root cause is identified, and the fix is straightforward. Data integrity bugs that cause silent data loss are typically high-priority bugs.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the interchange protocol was never intended to preserve null values in categoricals, but the protocol specification and code comments contradict this. The warnings about implementation issues might suggest known limitations, but silent data corruption goes beyond "implementation issues."
+
+## Overall Consideration
+This is a textbook example of a legitimate bug. The DataFrame interchange protocol explicitly defines how to represent null values in categorical columns using sentinel values (USE_SENTINEL with value -1). The implementation in categorical_column_to_series() contains a comment acknowledging the need to handle these sentinel values to avoid IndexError, demonstrating clear intent to preserve them. However, the modulo operation `codes % len(categories)` incorrectly maps the sentinel value -1 to a valid category index, causing data loss.
+
+The bug report correctly identifies the problematic code, provides a minimal reproduction case, and offers a reasonable fix. The issue causes silent data corruption - null values are converted to valid data without any warning or error. This violates the fundamental principle of data interchange protocols: preserving data integrity during conversion between formats.
+
+While pandas recommends using Arrow's PyCapsule Interface as an alternative, the interchange protocol remains part of the public API. Users who rely on it expect it to work correctly, especially for basic operations like preserving null values. The fact that an alternative exists doesn't excuse silent data corruption in the current implementation. This is unquestionably a bug that should be fixed to prevent data loss for users of the interchange protocol.
+
+FINAL ASSESSMENT: BUG

@@ -1,0 +1,42 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. The issue occurs when calling `argmin()` or `argmax()` on a SparseArray where all values are equal to the fill_value.
+
+### Test Results:
+
+1. **Basic Case ([0] with fill_value=0)**:
+   - Created SparseArray: `[0]` with Fill: 0
+   - The array has 0 sparse values (npoints=0) since all values equal fill_value
+   - Calling `arr.argmin()` raises: `ValueError: attempt to get argmin of an empty sequence`
+   - The same error occurs with `argmax()`
+
+2. **Multiple Values Case ([5,5,5,5] with fill_value=5)**:
+   - Created SparseArray: `[5, 5, 5, 5]` with Fill: 5
+   - Again, npoints=0 since all values equal fill_value
+   - Both `argmin()` and `argmax()` raise the same ValueError
+
+3. **NumPy Comparison**:
+   - NumPy arrays with all identical values work correctly:
+   - `np.array([5, 5, 5, 5]).argmin()` returns 0
+   - `np.array([5, 5, 5, 5]).argmax()` returns 0
+
+4. **Property-Based Test**:
+   - The hypothesis test from the bug report fails on the exact input mentioned: `data=[0], fill_value=0`
+   - The error occurs when trying to call argmin() on a SparseArray with no sparse values
+
+5. **Normal Case (mixed values)**:
+   - When the array has values different from fill_value, everything works correctly
+   - `SparseArray([1, 2, 3, 4], fill_value=0)` correctly returns argmin()=0 and argmax()=3
+
+### Root Cause:
+
+Looking at the source code in `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/arrays/sparse/array.py`:
+
+In the `_argmin_argmax` method (line 1648), the code:
+1. Extracts sparse values (non-fill values) into `values`
+2. Filters out NaN values
+3. Calls `func(non_nans)` where func is np.argmin or np.argmax (line 1658)
+
+When all values equal fill_value, `non_nans` is empty, causing numpy's argmin/argmax to fail with "attempt to get argmin of an empty sequence".
+
+The bug report is accurate and reproducible.

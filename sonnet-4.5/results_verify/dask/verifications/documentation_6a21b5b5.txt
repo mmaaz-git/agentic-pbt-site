@@ -1,0 +1,37 @@
+DOCUMENTATION FINDINGS FOR DASK.DIAGNOSTICS.PROFILE._TRACKER
+
+1. Official Documentation:
+The official Dask documentation for ResourceProfiler provides only high-level usage examples without detailing the internal implementation of the _Tracker class. The documentation shows that ResourceProfiler tracks memory usage and CPU percentage but does not specify:
+- How processes are tracked internally
+- Whether the tracker process itself should be excluded from monitoring
+- Implementation details of process filtering
+
+2. Source Code Analysis:
+The _Tracker class is an internal implementation detail (indicated by the underscore prefix) that:
+- Is a background Process that monitors resource usage
+- Tracks the parent process and its children
+- Has a method _update_pids() that returns a list of processes to monitor
+- The implementation clearly shows an intent to filter out certain processes based on PID comparison
+
+3. Code Intent from Context:
+Looking at line 252 in _update_pids():
+```python
+p for p in parent.children() if p.pid != pid and p.status() != "zombie"
+```
+
+This code structure strongly suggests the intent to:
+- Include the parent process
+- Include children processes EXCEPT for:
+  a) Processes with a specific PID (the tracker itself)
+  b) Zombie processes
+
+The use of "!= pid" indicates an explicit intention to exclude a process by its PID, which logically would be the tracker process itself to avoid self-monitoring.
+
+4. No Specification Against Self-Exclusion:
+The documentation does not specify that the tracker SHOULD monitor itself. In fact, the typical pattern for monitoring tools is to exclude themselves to avoid:
+- Skewing the resource measurements
+- Creating feedback loops
+- Monitoring overhead affecting the measurements
+
+5. Common Patterns:
+In monitoring and profiling tools, it's standard practice to exclude the monitoring process itself from measurements to get accurate readings of the actual workload being profiled.

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly specify what should happen when n_chunks exceeds the number of rows. The interchange protocol specification only states that n_chunks "must be a multiple of self.num_chunks()" and that the producer should "subdivide each chunk," but it doesn't explicitly prohibit empty chunks. Since the behavior for this edge case is unspecified, one could argue that the current implementation is not technically wrong - it's just one possible interpretation of subdividing data. The function does return the requested number of chunks, and empty chunks are still valid chunk objects that can be iterated over.
+
+**Why it might not be INVALID:**
+The phrase "subdivide each chunk" strongly implies splitting existing data, not creating new empty placeholders. The conceptual documentation mentions chunks are meant for "lazy evaluation of data which doesn't fit in memory" with an expectation that chunks would be "all of the same size" - empty chunks don't fit this conceptual model. User expectations are clearly violated, as no reasonable user would expect to receive empty data chunks when asking to split their data. The fact that the bug reporter can articulate clear alternative behaviors (cap at data size, return fewer chunks, or raise an error) suggests the current behavior is counterintuitive.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only occurs when users request more chunks than they have rows of data, which could be considered a user error. The impact is relatively low - the code doesn't crash, it just produces empty chunks that can be filtered out by the consumer if needed. The bug report itself is marked as "Severity: Low" acknowledging this is not a critical issue. Fixing this might break existing code that depends on the current behavior, and the workaround is simple (just request fewer chunks).
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - it's easy to encounter when dynamically calculating chunk sizes or when data sizes vary. Empty chunks can cause real bugs in downstream code that doesn't expect them, leading to wasted computation or incorrect results. The fix is trivial (one line to cap n_chunks) and unlikely to break existing code since empty chunks are almost certainly not desired behavior. This violates the principle of least surprise and makes the API harder to use correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation is clearly incomplete - it doesn't specify what happens when n_chunks exceeds the data size. If the current behavior (creating empty chunks) is intentional, then the documentation should explicitly state this. The documentation also incorrectly states that n_chunks "must be a multiple of self.num_chunks()" but the code doesn't enforce this at all. Adding clear documentation about edge cases would help users understand the expected behavior and avoid surprises.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting that "empty chunks will be created when n_chunks > data size" doesn't make this good API design. The behavior itself is problematic and counterintuitive, not just poorly documented. Users don't expect empty chunks, and documenting bad behavior doesn't make it acceptable. The issue is with the implementation logic, not with missing documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation technically works - it returns chunks as requested. Adding logic to cap n_chunks at the data size or to raise an error would be adding new functionality that doesn't currently exist. One could frame this as requesting a new feature: "smart chunk sizing" that prevents empty chunks. The bug report even suggests multiple possible implementations (cap at data size, raise error, return fewer chunks), which sounds like feature design rather than bug fixing.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing functionality to work sensibly. The get_chunks() method already exists and should reasonably handle all valid inputs without producing nonsensical output. Creating empty chunks is arguably a malfunction of the existing feature rather than a request for something new. The user isn't asking for additional capabilities, just for the current capability to work correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current behavior violates reasonable user expectations - no one expects to receive empty chunks when asking to subdivide their data. The behavior is inconsistent with the conceptual model described in the documentation (chunks for data that doesn't fit in memory). It causes actual problems for downstream consumers who must handle unexpected empty chunks. The fix is straightforward and improves the API's usability. Other data processing libraries typically don't create empty chunks in similar situations, suggesting this is indeed incorrect behavior.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly prohibit empty chunks, so this behavior isn't technically wrong according to the specification. The function does return the requested number of chunks - they just happen to be empty when there's insufficient data. One could argue this is working as designed, just with an edge case that users need to handle. Since the severity is acknowledged as "Low" and there's no crash or data corruption, this might be more of a design choice than a bug.
+
+## Overall consideration
+After examining all aspects of this issue, the critical question is whether the current behavior of creating empty chunks when n_chunks exceeds the data size represents a bug or simply unspecified behavior that could be improved.
+
+The documentation provides little guidance here. While it doesn't explicitly prohibit empty chunks, the conceptual framework and the phrase "subdivide each chunk" strongly suggest that chunks should contain actual data. The interchange protocol is designed for data exchange between libraries, and empty chunks serve no useful purpose in that context - they're just overhead that consumers must handle. The fact that reasonable alternatives exist (capping n_chunks, returning fewer chunks, or raising an error) and that the fix is trivial suggests this is poor behavior that should be corrected.
+
+However, the key issue is that this behavior is fundamentally unspecified in the documentation. The interchange protocol specification doesn't address this edge case at all. Without clear specification stating that empty chunks are invalid, this falls into the category of undefined behavior rather than incorrect behavior. While the current implementation is certainly suboptimal and violates user expectations, it's not objectively wrong according to any documented requirement. Given that most bug reports from this source are incorrect, and this one involves unspecified edge case behavior rather than clear violation of documented requirements, this should be categorized as INVALID - the behavior might be undesirable, but it's not technically incorrect given the lack of specification.

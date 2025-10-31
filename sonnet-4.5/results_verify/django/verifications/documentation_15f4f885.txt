@@ -1,0 +1,54 @@
+## Documentation Analysis for Django DecimalField.to_python()
+
+### Django Documentation Review
+
+1. **DecimalField Purpose**: According to Django documentation, DecimalField represents "a fixed-precision decimal number, represented in Python by a `Decimal` instance."
+
+2. **Required Parameters**:
+   - `max_digits`: The maximum number of digits allowed in the number
+   - `decimal_places`: The number of decimal places to store
+
+3. **General to_python() Method Purpose**:
+   Django's documentation for custom model fields states that `to_python()` should:
+   - "Deal gracefully" with various input types including:
+     * An instance of the correct type (Decimal)
+     * A string representation
+     * None (if field allows null=True)
+   - Convert input values to the desired Python object type consistently
+   - Validate the input and raise ValidationError if conversion fails
+
+4. **Key Documentation Quote**:
+   "As a general rule, `to_python()` should deal gracefully with any of the following arguments"
+   This implies the method should handle different input formats consistently.
+
+5. **What's NOT Specified**:
+   - The documentation does NOT explicitly specify how to_python() should handle floats versus strings
+   - It does NOT specify whether floats and their string representations should produce identical Decimal objects
+   - It does NOT document that floats use a different conversion path (context.create_decimal_from_float) than strings
+   - It does NOT mention that precision (max_digits) is applied during the conversion for floats but not for strings
+
+### Implementation Details Found
+
+From examining the source code:
+
+1. **Different Conversion Paths**:
+   - Float inputs: `self.context.create_decimal_from_float(value)` where context has `prec=max_digits`
+   - String/other inputs: `decimal.Decimal(value)` with no precision constraint
+
+2. **Context Property**:
+   The DecimalField has a cached property that creates a decimal.Context with precision set to max_digits:
+   ```python
+   @cached_property
+   def context(self):
+       return decimal.Context(prec=self.max_digits)
+   ```
+
+3. **Effect of Precision Context**:
+   When using `create_decimal_from_float()` with a low precision context (e.g., prec=1), values get rounded to fit the precision, resulting in scientific notation (e.g., 11.0 becomes 1E+1).
+
+### Documentation Gaps
+
+The documentation does not explicitly state:
+1. Whether float and string representations of the same value should produce identical Decimal objects
+2. That precision constraints are applied differently during conversion based on input type
+3. The existence or use of the context property for float conversion

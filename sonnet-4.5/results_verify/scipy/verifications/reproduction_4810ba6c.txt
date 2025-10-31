@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Test Results
+
+I successfully reproduced the bug described in the report. The behavior is exactly as reported:
+
+1. **When cache directory EXISTS (~/.cache/scipy-data present)**:
+   - scipy.datasets.clear_cache("invalid_string") → AssertionError raised ✓
+   - scipy.datasets.clear_cache(42) → AssertionError raised ✓
+   - scipy.datasets.clear_cache({"key": "value"}) → AssertionError raised ✓
+   - Input validation works correctly
+
+2. **When cache directory DOES NOT EXIST (~/.cache/scipy-data absent)**:
+   - scipy.datasets.clear_cache("invalid_string") → No error, prints "Cache Directory doesn't exist" ✗
+   - scipy.datasets.clear_cache(42) → No error, prints "Cache Directory doesn't exist" ✗
+   - scipy.datasets.clear_cache({"key": "value"}) → No error, prints "Cache Directory doesn't exist" ✗
+   - Input validation is bypassed
+
+### Code Analysis
+
+Examining the implementation in /home/npc/.local/lib/python3.13/site-packages/scipy/datasets/_utils.py:
+
+- Lines 24-26: Function checks if cache_dir exists and returns early if not
+- Line 36: Input validation (assert callable(dataset)) happens AFTER the early return
+
+This creates inconsistent behavior where input validation depends on filesystem state.
+
+### Hypothesis Tests
+
+The provided Hypothesis tests initially appeared to pass when run with pytest, but this was because the cache directory existed on my system. After removing the cache directory, the tests would fail as the invalid inputs are silently accepted.
+
+### Impact
+
+The bug causes:
+1. **Inconsistent error handling**: Same invalid input produces different behavior based on filesystem state
+2. **Silent acceptance of invalid inputs**: User errors go undetected when cache doesn't exist
+3. **Violates fail-fast principle**: Errors should be caught as early as possible
+
+The bug report is accurate and reproducible.

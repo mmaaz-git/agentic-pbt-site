@@ -1,0 +1,49 @@
+REPRODUCTION AND TECHNICAL ANALYSIS
+====================================
+
+1. BUG REPRODUCTION CONFIRMED
+The bug report is technically accurate. When running the provided test case with x0 = [0.0, 1.4e-11, 0.0]:
+
+Result from scipy.optimize.root with default hybr method:
+- success: True
+- message: "The solution converged."
+- residuals: [-0.99999998, 1.4e-11, -0.00695629]
+- max|residual|: 0.99999998
+- solution found: [2.04e-08, 1.4e-11, 0.9965]
+
+The function reports success=True despite the first residual being approximately -1.0, which is clearly not close to zero.
+
+2. HYPOTHESIS TEST RESULTS
+The property-based test correctly fails with the specific input x0 = [0.0, 1.4e-11, 0.0]. The test expects residuals < 1e-5 when success=True, which is a reasonable expectation for a root-finding function.
+
+3. ROOT CAUSE ANALYSIS
+The problem occurs because:
+a) The Jacobian matrix is singular at the starting point (determinant = 0, rank = 2 instead of 3)
+b) Specifically, ∂(x[2]²-1)/∂x[2] = 2*x[2] = 0 when x[2] = 0
+c) The hybr method uses step-based convergence: it declares success when step sizes become small
+d) With a singular Jacobian, the algorithm makes minimal progress and step sizes quickly become small
+e) This triggers the convergence criterion even though residuals remain large
+
+4. VERIFICATION OF DIFFERENT SCENARIOS
+- Starting from [0.5, 0.5, 0.5]: Correctly finds root with residuals ≈ 0
+- Starting from [1.0, 0.0, 1.0]: Correctly finds root with residuals ≈ 0
+- Starting from [0.0, 1.4e-11, 0.1]: Correctly finds root with residuals ≈ 1e-12
+- Setting tol=1e-10 with problematic x0: Correctly reports success=False
+
+5. COMPARISON WITH OTHER METHODS
+- broyden1 method: Finds correct root with max residual ≈ 5.6e-07
+- lm method: Exhibits same bug, reports success with max residual ≈ 1.0
+- fsolve (uses same MINPACK hybrd): Would likely exhibit same behavior
+
+6. MATHEMATICAL VALIDATION
+The actual roots of the system should satisfy:
+- x[0] + 0.5*(x[0] - x[1])³ - 1 = 0
+- 0.5*(x[1] - x[0])³ + x[1] = 0
+- x[2]² - 1 = 0
+
+A correct solution found from other starting points: [0.8411639, 0.1588361, 1.0]
+Verification: All three equations evaluate to approximately 0 at this point.
+
+The solution hybr claims to have found [2.04e-08, 1.4e-11, 0.9965] clearly does NOT satisfy the equations, with the first equation giving -0.99999998 instead of 0.
+
+CONCLUSION: The bug is real and reproducible. The hybr (and lm) methods incorrectly report success when they encounter singular/near-singular Jacobians that prevent further progress, even when residuals remain large.

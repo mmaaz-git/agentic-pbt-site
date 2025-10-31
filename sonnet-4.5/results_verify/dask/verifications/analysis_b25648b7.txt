@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if we argue that passing None values for statistics is not a supported use case. The function might be designed to only work with complete statistics, and None values could be considered invalid input. Additionally, since Parquet files with proper statistics should always have min/max values, one could argue that None statistics represent corrupted or malformed data that shouldn't be handled.
+
+**Why it might not be INVALID:**
+The function already demonstrates clear intent to handle None values through multiple checks (lines 427 and 430-432). The code explicitly checks for None in some places, showing that None values are expected and should be handled. Moreover, Parquet files can legitimately have missing statistics when statistics collection is disabled or for certain data types, making this a valid real-world scenario.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered WONTFIX if the issue only occurs in extremely rare edge cases where Parquet files have partially missing statistics (first row group missing, others present). Such files might be considered malformed, and fixing this might add unnecessary complexity for an uncommon scenario. The workaround is simple - users can filter out None statistics before calling the function.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (adding one None check), and the bug causes a crash rather than returning a graceful empty result. The function already attempts to handle None values elsewhere, so this is clearly an oversight rather than intentional behavior. The bug violates the principle of least surprise - if the function handles None in one place, it should handle it consistently throughout.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how None values should be handled. One could argue that the function works as designed but the documentation should be updated to specify that all row groups must have valid statistics or None handling is undefined. The docstring could be updated to clarify that mixed None/non-None statistics are not supported.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code implementation clearly shows intent to handle None values gracefully - it's not a documentation issue but an implementation bug. The function already handles None correctly in most cases, just missing one check. Fixing the documentation to say "crashes on certain None patterns" would be documenting a bug rather than clarifying intended behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that robust None handling across all edge cases is a new feature rather than a bug fix. The current implementation might only be designed to handle the common cases (all None or no None), and supporting mixed None/non-None statistics could be considered an enhancement. Adding comprehensive None handling might be seen as expanding the function's capabilities.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle None values - it's not asking for new functionality but fixing existing incomplete functionality. The code shows clear intent to handle None (with existing checks), so this is fixing a bug in the current implementation rather than adding a new feature. The TypeError is clearly unintended behavior, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a bug because: (1) The function crashes with a TypeError instead of handling the case gracefully, (2) The function already handles None values in other places, showing intent to support them, (3) The crash occurs on a simple comparison that should be guarded, (4) The fix is trivial and obvious - add a None check before the comparison, (5) Parquet files can legitimately have missing statistics, making this a real-world issue, (6) The function's pattern of defensive programming is incomplete, causing inconsistent behavior.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is if we consider None statistics to be invalid input that the function was never designed to handle. However, this argument is weak given the existing None checks in the code.
+
+**Overall consideration**
+After analyzing all perspectives, this is clearly a BUG. The function demonstrates explicit intent to handle None values through multiple existing checks (lines 427, 430-432), but fails to complete this pattern at line 433. The TypeError crash is unintended - the function should either handle None gracefully throughout or reject it entirely at the start. The inconsistent handling where None is checked in some places but not others is a classic programming oversight.
+
+The bug is not a documentation issue because the code's intent is clear from the existing None checks. It's not a feature request because we're not asking for new functionality but fixing broken existing functionality. It's not WONTFIX because the fix is trivial and the crash is clearly unintended. And it's not INVALID because the function already accepts and attempts to handle None values.
+
+Most compellingly, this violates the principle of defensive programming that the function already follows. If a function checks for None in one place, it should handle it consistently throughout. The fact that the function handles None correctly when it appears in later row groups but crashes when it appears in the first row group is clearly a bug, not a design choice.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior of comparing models based only on their data content could be considered a design choice. Some might argue that if Pydantic never explicitly documented that models of different classes should NOT be equal when they have the same data, then this behavior is not technically incorrect. The user might be imposing their own expectations about how equality should work without checking if Pydantic intended this behavior.
+
+**Why it might not be INVALID:**
+Python's hash/equality contract is not a suggestion or convention - it's a fundamental requirement of the language documented in the official Python data model. Any Python object that implements both `__eq__` and `__hash__` MUST satisfy the invariant that equal objects have equal hashes. This is not something that can be considered "unspecified behavior" as it's a core language requirement that all Python code must follow.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue that this is an obscure edge case that rarely occurs in practice. Most users don't compare models of different classes, and even fewer use them as dictionary keys or in sets. The current behavior has existed in pydantic v1 for a long time, and changing it now could break existing code that relies on cross-class model equality. Since pydantic v2 exists and v1 is in maintenance mode, fixing this could be considered not worth the disruption.
+
+**Why it might not be WONTFIX:**
+This is not an obscure implementation detail but a violation of Python's fundamental contract that causes real bugs. The test demonstrates that sets and dictionaries behave incorrectly, which are common Python data structures. The fact that the bug has existed for a long time doesn't make it acceptable - it means users have been experiencing subtle bugs without understanding why. The fix is also straightforward and unlikely to break legitimate use cases.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior could be considered intentional, with the real issue being that it's not documented. If Pydantic intended for models to compare equal based only on data (perhaps for duck-typing purposes), then the documentation should explicitly state this unusual behavior and warn users about the hash/equality contract violation when using frozen models. Users should be warned not to use different model classes with the same data in sets or as dictionary keys.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Documenting a violation of Python's fundamental hash/equality contract doesn't make it acceptable. You cannot simply document that your implementation violates core Python semantics and expect users to work around it. The Python data model's requirements are non-negotiable for any Python class. Additionally, there's no evidence this behavior was intentional - it appears to be an oversight where equality and hashing were implemented independently without considering their interaction.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting a new feature: "Support for type-aware equality comparison in BaseModel". The current implementation provides structural equality (comparing only data), and the user is requesting nominal equality (comparing both type and data). This could be seen as asking for an enhancement to make pydantic models behave more like traditional Python classes rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but pointing out that the existing functionality is broken according to Python's rules. The hash/equality contract is not optional - it's a requirement for correct Python behavior. When frozen models were made hashable, they should have been made to follow Python's rules. This is fixing broken behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of Python's documented hash/equality contract from the official language specification. The bug causes demonstrable incorrect behavior in fundamental Python data structures (sets and dictionaries). The reproduction shows that equal objects have different hashes, which Python explicitly states must not happen. The bug is not about style or preference but about correctness according to Python's rules. The fix is straightforward and the current behavior cannot be justified as intentional design.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if Pydantic explicitly documented this behavior as intentional and warned users about the consequences. However, no such documentation exists. Another weak argument might be that since pydantic v1 is in maintenance mode and v2 exists, this could be considered too risky to fix. But violations of core Python contracts are serious enough to warrant fixes even in maintenance mode.
+
+## Overall Consideration
+
+This is unequivocally a violation of Python's fundamental hash/equality contract as documented in the official Python data model. The Python documentation explicitly states: "The only required property is that objects which compare equal have the same hash value." The current pydantic.v1 implementation violates this requirement by having `__eq__` compare only data while `__hash__` includes the class type.
+
+The practical consequences are severe and demonstrable. The reproduction shows that sets and dictionaries - two of Python's most fundamental data structures - behave incorrectly with these objects. When `m1 == m2` returns True, Python's contract guarantees that `m2 in {m1}` will also return True, but with pydantic's implementation it returns False. This breaks the basic assumptions that all Python code can make about hashable objects.
+
+While one might argue this is an edge case or that fixing it could break existing code, these arguments don't overcome the fundamental issue: this is not a matter of design preference or undocumented behavior, but a violation of Python's core language semantics. The fact that it affects pydantic.v1 (even in maintenance mode) rather than the latest version doesn't diminish the severity - v1 is still widely used and bugs that violate language contracts should be fixed. The proposed fix is minimal and correct: making `__eq__` check class equality along with data equality, aligning it with the hash function's behavior.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying that it should be idempotent. It's an internal utility function not part of the public API, and the lack of specification means the current behavior might be intentional. The function could have been designed specifically for one-time merging operations in the OpenAPI schema generation process where duplicate calls are not expected.
+
+**Why it might not be INVALID:**
+The function name "deep_dict_update" strongly implies update semantics, and Python's convention is that update operations are idempotent (dict.update, set.update, etc.). The inconsistent behavior where dicts and simple values are idempotent but lists are not suggests this is likely unintentional rather than by design.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function not exposed in FastAPI's public API. If the current usage patterns never call this function multiple times with the same arguments, the non-idempotent behavior might never cause actual issues. Changing it could potentially break existing code that relies on the concatenation behavior.
+
+**Why it might not be WONTFIX:**
+The function is used in OpenAPI schema generation where retries or multiple processing passes could occur. The duplicate elements created by non-idempotent behavior (duplicate tags, duplicate security schemes, duplicate servers) are clearly undesirable and could lead to incorrect API documentation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the list concatenation is intentional behavior, the function should be documented to explain this design choice. The function name could be considered misleading if concatenation is the intended behavior, and documentation could clarify this.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The evidence suggests this is a bug rather than a documentation issue. The function produces clearly incorrect results (duplicate OpenAPI tags, servers, security schemes) when called multiple times. Adding documentation to explain buggy behavior doesn't fix the underlying problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that idempotent list merging is a new feature request since the function currently doesn't support it. The bug report suggests several implementation options that would add this capability.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but rather fixing existing behavior that violates reasonable expectations. The function already attempts to provide deep merging; the list handling is just incorrectly implemented. This is a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the principle of least surprise by handling lists differently from other data types without any clear reason. It produces objectively incorrect results in OpenAPI contexts (duplicate tags, servers, security definitions). The name "update" implies idempotence based on Python conventions. The inconsistent behavior between data types (dicts are idempotent, lists are not) strongly suggests this is unintentional.
+
+**Why it might not be BUG:**
+The function is internal and undocumented, so technically there's no specification being violated. The current FastAPI codebase might never trigger the problematic behavior in practice. Without explicit documentation stating the function should be idempotent, this could be considered expected behavior.
+
+## Overall Consideration
+
+After thorough analysis, this appears to be a valid bug. The function name "deep_dict_update" creates a reasonable expectation of idempotent behavior, following Python's standard conventions where update operations don't accumulate on repeated calls. The current implementation produces objectively problematic results in realistic scenarios - duplicating OpenAPI tags, security schemes, and server definitions when the function is called multiple times.
+
+The bug report correctly identifies that the function handles different data types inconsistently: nested dictionaries are merged idempotently (values are replaced), simple values are replaced idempotently, but lists are concatenated non-idempotently. This inconsistency strongly suggests the list behavior is a bug rather than intentional design. No reasonable use case benefits from accumulating duplicates in lists on repeated calls.
+
+While the function is internal and not part of FastAPI's public API, it's used in critical OpenAPI schema generation code where correctness matters. The potential for this bug to cause issues in retry scenarios, multiple configuration passes, or any situation where the same update might be applied more than once makes it a legitimate concern worth fixing. The bug report provides clear reproduction steps, explains the issue well, and even suggests reasonable fixes.

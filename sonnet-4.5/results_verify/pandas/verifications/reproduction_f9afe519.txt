@@ -1,0 +1,46 @@
+## Bug Reproduction Analysis
+
+### Test Execution Results
+
+I successfully reproduced the reported bug. The test cases confirm the behavior described in the bug report.
+
+### Specific Case (num_values=2, window_size=-1):
+- **Input**: FixedForwardWindowIndexer(window_size=-1), num_values=2
+- **Output**: start=[0, 1], end=[0, 0]
+- **Violation**: start[1]=1 > end[1]=0, violating the invariant start[i] <= end[i]
+
+### Pattern of Violations:
+Testing various negative window sizes revealed a consistent pattern:
+- With window_size=-1: Violations occur for all num_values > 1
+- With window_size=-2: Similar violations with different end values
+- With window_size=-5, -10: More severe violations with multiple indices having start > end
+
+### How the Code Produces This:
+1. The code calculates: `start = np.arange(0, num_values, step)`
+2. Then: `end = start + self.window_size` (adding negative value)
+3. Finally: `end = np.clip(end, 0, num_values)` (clipping negative values to 0)
+
+For example with window_size=-1 and num_values=2:
+- start = [0, 1]
+- end (before clip) = [0, 1] + (-1) = [-1, 0]
+- end (after clip) = [0, 0] (the -1 gets clipped to 0)
+- Result: start[1]=1 > end[1]=0
+
+### Actual Effect on Operations:
+When using these invalid bounds with DataFrame.rolling():
+- All windows produce empty slices (e.g., array[1:0] = empty array)
+- The rolling sum returns all NaN values
+- This is technically "working" (no crash) but produces semantically meaningless results
+
+### Technical Correctness of Bug Report:
+The bug report is technically correct:
+1. The invariant violation (start[i] > end[i]) does occur as claimed
+2. The reproduction code works exactly as shown
+3. The root cause analysis about clipping is accurate
+4. The effect creates empty/invalid window slices
+
+### Comparison with Expected Behavior:
+The bug report suggests this violates user expectations because:
+- Window bounds should represent valid slice boundaries
+- start[i] > end[i] produces empty slices in an unintuitive way
+- A "forward-looking" window with negative size doesn't make semantic sense

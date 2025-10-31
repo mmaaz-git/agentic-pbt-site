@@ -1,0 +1,42 @@
+Documentation Analysis for django.template.Variable
+====================================================
+
+Public API Documentation:
+The Django documentation (https://docs.djangoproject.com) provides limited documentation about the Variable class. The main documentation focuses on template syntax and usage, but does not provide explicit details about the internal Variable class behavior.
+
+Source Code Documentation:
+The Variable class docstring in django/template/base.py:783-799 states:
+- "A template variable, resolvable against a given context"
+- Variables may be hard-coded strings if they begin and end with quotes
+- Provides examples of variable resolution with dot notation
+
+Key Implementation Details from Code:
+1. The Variable.__init__ method (lines 804-848) explicitly contains a comment on line 824: "# '2.' is invalid"
+
+2. The code attempts to parse numeric literals in this order:
+   - If the string contains "." or "e"/"E", it tries to parse as float
+   - Otherwise, it tries to parse as int
+   - If parsing fails (ValueError), it falls back to treating it as a variable name
+
+3. The specific handling for trailing dots (lines 822-826):
+   ```python
+   if "." in var or "e" in var.lower():
+       self.literal = float(var)  # Line 823
+       # "2." is invalid
+       if var[-1] == ".":  # Line 825
+           raise ValueError  # Line 826
+   ```
+
+4. The code establishes an invariant where EITHER literal OR lookups should be set, never both:
+   - literal is set when the input is a numeric literal or quoted string
+   - lookups is set when the input is treated as a variable name
+
+5. The resolve() method (lines 850-866) checks lookups first:
+   - If lookups is not None, it resolves via _resolve_lookup()
+   - Otherwise, it returns the literal value
+
+Critical Issue:
+The code comment explicitly states "2." is invalid, and there is code to raise ValueError for this case. However, the check happens AFTER self.literal is already set to the float value. When the ValueError is caught, the exception handler then sets lookups, resulting in both literal and lookups being set simultaneously, which violates the intended invariant.
+
+No External Specifications:
+There are no external specifications (RFCs, PEPs, etc.) governing how Django template variables should handle numeric literals with trailing dots. This appears to be an internal design decision documented only in the code comment.

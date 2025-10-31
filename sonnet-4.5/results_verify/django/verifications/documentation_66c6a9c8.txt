@@ -1,0 +1,58 @@
+## Documentation Analysis Report
+
+### Function Documentation (from docstring)
+The `quote_etag` function's docstring states:
+```
+If the provided string is already a quoted ETag, return it. Otherwise, wrap
+the string in quotes, making it a strong ETag.
+```
+
+### Key Documentation Findings
+
+1. **Idempotence Promise**
+   - The docstring explicitly promises that if the input is "already a quoted ETag", it will be returned unchanged
+   - This implies idempotence: calling `quote_etag` on its own output should return the same value
+   - The function is expected to recognize its own output as a valid quoted ETag
+
+2. **Django Source Code Analysis**
+   - The function implementation at line 212-220 of django/utils/http.py is:
+     ```python
+     def quote_etag(etag_str):
+         if ETAG_MATCH.match(etag_str):
+             return etag_str
+         else:
+             return '"%s"' % etag_str
+     ```
+   - The ETAG_MATCH regex (lines 15-25) only matches ETags with pattern: `"[^"]*"`
+   - This regex cannot match strings containing internal quotes
+
+3. **HTTP RFC 9110 Specification**
+   According to RFC 9110 Section 8.8.3:
+   - ETags must be surrounded by double quotes
+   - The ABNF grammar is: `opaque-tag = DQUOTE *etagc DQUOTE`
+   - Where `etagc = %x21 / %x23-7E / obs-text`
+   - **Critical: Double quotes (`%x22`) are explicitly excluded from allowed characters within ETags**
+   - The spec does NOT allow traditional escaping of quotes within ETags
+
+4. **Historical Context**
+   - Earlier HTTP specifications allowed backslash escaping, but this was considered problematic
+   - RFC 7232 and RFC 9110 explicitly disallow double-quote characters within the opaque ETag
+   - The change was made to avoid escaping issues
+
+### Documentation vs. Implementation Analysis
+
+1. **The function's behavior contradicts its documented contract**:
+   - The docstring promises idempotence for quoted ETags
+   - The implementation cannot maintain this promise when inputs contain quotes
+
+2. **The implementation doesn't align with HTTP specifications**:
+   - RFC 9110 explicitly disallows quotes within ETags
+   - Django's `quote_etag` will happily wrap strings containing quotes, creating invalid ETags
+   - For example, `quote_etag('"')` produces `'"""'` which violates RFC 9110
+
+3. **The regex pattern is correct per RFC**:
+   - The ETAG_MATCH pattern `"[^"]*"` correctly implements RFC 9110's requirements
+   - It properly rejects ETags with internal quotes
+
+### Conclusion
+The documentation promises idempotence, but the implementation cannot deliver on this promise when handling inputs with quotes. Additionally, the function creates ETags that violate HTTP specifications when given inputs containing quote characters. This is a genuine bug in the implementation, not a documentation issue.

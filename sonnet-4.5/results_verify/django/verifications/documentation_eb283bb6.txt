@@ -1,0 +1,41 @@
+## Django Template Variable Documentation Analysis
+
+After reviewing the Django documentation and source code for the `django.template.Variable` class, here are my findings:
+
+### What the Documentation Says
+
+1. **Variable Class Purpose**: The Variable class is responsible for resolving template variables against a given context. It handles both literals (strings, numbers) and variables that need to be resolved through lookups.
+
+2. **Literals vs Lookups**: The class maintains a clear distinction:
+   - If `self.literal` is set, it contains a pre-resolved value (number or string literal)
+   - If `self.lookups` is set, it contains a tuple of lookup components for resolution against context
+
+3. **Resolution Process**: The `resolve()` method checks `if self.lookups is not None` first to determine whether to return the literal value or perform lookups.
+
+### What the Documentation Does NOT Specify
+
+1. **Numeric String Edge Cases**: The documentation does not specify how numeric strings with trailing dots (like '42.') should be handled. There is no mention of whether these should be treated as valid floats or invalid syntax.
+
+2. **Internal State Invariants**: The documentation does not explicitly state that `literal` and `lookups` must be mutually exclusive, though the code structure strongly implies this invariant.
+
+3. **ValueError Handling for Floats**: The documentation does not explain the specific logic around rejecting floats that end with a dot, nor does it document what should happen when float parsing succeeds but the value is then rejected.
+
+### Source Code Observations
+
+From examining `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/template/base.py`:
+
+1. Lines 822-828 show the float parsing logic:
+   - It attempts `float(var)` for strings containing "." or "e"
+   - If successful, it explicitly checks if the string ends with "." and raises ValueError
+   - This is accompanied by the comment "# '2.' is invalid"
+
+2. The ValueError exception handler (lines 829-848) then:
+   - Processes the string as a variable lookup
+   - Sets `self.lookups` to the split components
+   - **Critically**: Does NOT clear `self.literal` that was already set
+
+3. This creates a state where both `self.literal` and `self.lookups` are non-None, violating the implied invariant.
+
+### Conclusion
+
+The documentation does not specify the expected behavior for numeric strings ending with dots. The code contains an explicit check to reject them as literals (with the comment "'2.' is invalid"), but the implementation has a bug where it fails to clear the literal value when falling back to variable lookup processing. This is an implementation bug, not a documentation issue.

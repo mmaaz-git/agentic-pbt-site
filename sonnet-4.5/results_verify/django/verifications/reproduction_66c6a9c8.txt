@@ -1,0 +1,43 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug reported for `django.utils.http.quote_etag`. The function violates idempotence when given input strings containing quote characters.
+
+### Reproduction Steps Performed
+
+1. **Hypothesis Test Execution**
+   - Ran the property-based test with hypothesis
+   - The test immediately found the failing case with input `'"'` (single quote character)
+   - Confirmed that `quote_etag('"')` returns `'"""'`
+   - And `quote_etag('"""')` returns `'"""""'`
+   - These are not equal, violating idempotence
+
+2. **Manual Test Case Verification**
+   - Tested the specific failing input `'"'`
+   - Result: `quote_etag('"') = '"""'`
+   - Result: `quote_etag('"""') = '"""""'`
+   - Confirmed the assertion failure
+
+3. **Extended Testing**
+   Multiple test cases were evaluated for idempotence:
+
+   | Input | First Call | Second Call | Idempotent? |
+   |-------|------------|-------------|-------------|
+   | `'"'` | `'"""'` | `'"""""'` | **False** |
+   | `'hello'` | `'"hello"'` | `'"hello"'` | True |
+   | `'"hello"'` | `'"hello"'` | `'"hello"'` | True |
+   | `'"""'` | `'"""""'` | `'"""""""'` | **False** |
+   | `'hello"world'` | `'"hello"world"'` | `'""hello"world""'` | **False** |
+   | `''` | `'""'` | `'""'` | True |
+   | `'""'` | `'""'` | `'""'` | True |
+
+### Root Cause Analysis
+The issue occurs because:
+1. The ETAG_MATCH regex pattern `"[^"]*"` only matches quoted strings that don't contain internal quotes
+2. When `quote_etag` wraps a string containing quotes (like `"`), the result (`"""`) doesn't match the pattern
+3. A subsequent call wraps it again, producing `"""""`, violating idempotence
+
+### Effect
+The function fails to be idempotent for any input containing quote characters. This violates the documented contract that states "If the provided string is already a quoted ETag, return it." The function cannot correctly identify its own output as "already a quoted ETag" when the input contains quotes.
+
+This could cause issues in production where `quote_etag` might be called multiple times on the same ETag value through middleware layers or caching systems, resulting in incorrectly formatted ETags with multiple layers of quotes.

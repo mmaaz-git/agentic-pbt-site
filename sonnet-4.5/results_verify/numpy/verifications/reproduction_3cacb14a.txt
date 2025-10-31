@@ -1,0 +1,40 @@
+## Bug Reproduction Results
+
+### Reported Behavior Confirmed
+The bug report is technically accurate in its description of the problem:
+
+1. **RecursionError on unmatched bracket**: Confirmed. Calling `replace_parenthesis('[')` with an unmatched opening bracket causes a RecursionError exactly as described.
+
+2. **COUNTER corruption**: Confirmed. After the RecursionError, the module-level COUNTER generator is corrupted and raises StopIteration on all subsequent calls.
+
+3. **Mechanism**: The bug report's analysis is correct:
+   - When `j = s.find(']', i)` returns -1 (no closing bracket found)
+   - The while loop uses `s.count('[', i+1, j)` with j=-1
+   - This leads to infinite recursion on `replace_parenthesis(s[j + len(right):])`
+   - The RecursionError occurs within the COUNTER.__next__() call
+   - This exhausts/corrupts the generator, causing StopIteration thereafter
+
+### Test Results Summary
+
+**Basic functionality with matched parentheses**: Works correctly
+- `(a)` → correctly replaced and restored
+- `[b]` → correctly replaced and restored
+- `{c}` → correctly replaced and restored
+- Nested parentheses work fine
+- Round-trip works for valid inputs
+
+**Unmatched parentheses behavior**:
+- `[` → RecursionError then COUNTER corruption
+- `(` → StopIteration (COUNTER already corrupted)
+- `{` → StopIteration (COUNTER already corrupted)
+- `)` → Returns unchanged (no opening parenthesis found)
+- `]` → Returns unchanged (no opening parenthesis found)
+- `}` → Returns unchanged (no opening parenthesis found)
+
+### Important Finding
+The code actually has error handling for some cases - it raises ValueError for mismatched parentheses like `(((` with the message "Mismatch of () parenthesis in '((('". This shows the developers did consider error cases, but missed the scenario where the closing bracket is not found at all (j == -1).
+
+### Impact Assessment
+- This is a real crash that occurs on invalid input
+- The COUNTER corruption makes the entire module unusable after one bad call
+- However, the input that triggers this is clearly invalid (unmatched brackets)

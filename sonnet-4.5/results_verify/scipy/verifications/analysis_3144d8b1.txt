@@ -1,0 +1,37 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that args must have exactly 4 elements. It only says "sequence of float" which could theoretically be any length. The function is in a module with an underscore prefix (_zeros), which often indicates internal/private code that may not have the same guarantees as public APIs. Users shouldn't necessarily expect robust error handling from example/internal functions. The behavior when providing the wrong number of arguments is technically "unspecified" since the documentation doesn't say what should happen.
+
+**Why it might not be INVALID:**
+The function does have public documentation and is tested in the official test suite, suggesting it's meant to be used. The fact that it returns uninitialized memory is objectively incorrect behavior - no function should ever return random memory contents. The documentation does mention "3rd order polynomial" which strongly implies 4 coefficients are needed. The error_num values returned (like 31910) are clearly not one of the documented values (-2, -1, 0), which is a contract violation.
+
+**Why it might be WONTFIX:**
+This is an example function in a Cython optimization module, likely meant for demonstration purposes rather than production use. The function name itself contains "example" suggesting it's not critical functionality. The module has an underscore prefix suggesting it's internal. Few users would likely encounter this issue in practice since the function is specialized and somewhat obscure. The effort to fix Cython code might outweigh the benefit for such an edge case in an example function.
+
+**Why it might not be WONTFIX:**
+Returning uninitialized memory is a security concern that could leak sensitive data. Even example code should demonstrate proper practices and not expose users to undefined behavior. The fix is straightforward - just add input validation. Other SciPy functions handle invalid inputs gracefully, so this should too for consistency.
+
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that args must have exactly 4 elements for a 3rd order polynomial. This would clarify the requirement without changing any code. The documentation could also specify that behavior is undefined for other input sizes, warning users to always provide 4 elements. This would be the simplest fix that acknowledges the limitation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is objectively broken - it returns uninitialized memory which is never acceptable behavior. Simply documenting that "the function returns garbage for wrong inputs" doesn't make it correct. The documentation already implies 4 elements are needed by mentioning "3rd order polynomial". Adding more documentation doesn't fix the underlying security and correctness issue.
+
+**Why it might be FEATURE_REQUEST:**
+Adding input validation could be seen as a new feature - making the function more robust and user-friendly. The current implementation might have been minimal by design, and proper error handling would be an enhancement. Supporting variable-length args (e.g., for different polynomial orders) could be a useful feature extension.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing functionality to not return garbage values. Basic input validation and not returning uninitialized memory are fundamental requirements, not features. The function already tries to work with 4 elements; it just fails unsafely when given other sizes.
+
+**Why it might be BUG:**
+The function returns uninitialized memory values, which is a clear security and correctness issue. The error_num field returns invalid values (31910) that are not one of the documented values (-2, -1, 0), violating its contract. The function silently corrupts data instead of failing cleanly, which could cause downstream issues. Even with correct inputs (4 elements), the iterations field still shows uninitialized memory (-574635008). This is objectively incorrect behavior that needs fixing.
+
+**Why it might not be BUG:**
+The function is in an internal module (_zeros) and labeled as an "example", suggesting it may not be production code. The documentation doesn't explicitly specify the required number of arguments or what happens with invalid input. This could be considered unspecified behavior rather than a bug. The function works correctly when used as intended (with 4 elements for error_num at least).
+
+**Overall consideration**
+This case presents a challenging triage decision. On one hand, the function is returning uninitialized memory which is objectively incorrect and potentially dangerous behavior. The error_num values returned are clearly outside the documented range, and even with correct inputs, some fields show garbage values. This strongly suggests a legitimate bug that should be fixed.
+
+On the other hand, this is an example function in what appears to be an internal module (with the underscore prefix in _zeros). The documentation, while mentioning a 3rd order polynomial, doesn't explicitly require exactly 4 arguments. The function name itself contains "example", suggesting it may be demonstration code not intended for production use. The issue only occurs when the function is misused (wrong number of arguments), and it works correctly for its intended use case as shown in the test suite.
+
+The most concerning aspect is the security implication of returning uninitialized memory, which could potentially leak sensitive data. However, given that this is example code in an internal module that works correctly when used as intended (as demonstrated by the existing tests), and the documentation doesn't explicitly specify the behavior for invalid inputs, this leans toward being either INVALID (unspecified behavior in internal example code) or DOCUMENTATION_FIX (the docs should clarify the requirement for exactly 4 arguments). The fact that even with correct arguments some fields show uninitialized values, but the test suite accepts this, suggests this might be expected behavior for this internal example function.

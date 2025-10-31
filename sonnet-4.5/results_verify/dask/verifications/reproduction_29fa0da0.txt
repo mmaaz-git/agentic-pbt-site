@@ -1,0 +1,49 @@
+# Bug Reproduction Analysis
+
+## Summary
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in dask.bag.from_sequence.
+
+## Test Results
+
+1. **Hypothesis Property Test**: FAILED
+   - The property test quickly found a failing case: seq of length 5 with npartitions=4 produces 3 partitions instead of 4
+   - This confirms the bug exists across various input combinations
+
+2. **Manual Test Case**: FAILED
+   - Input: seq=[1, 2, 3, 4], npartitions=3
+   - Expected: 3 partitions
+   - Actual: 2 partitions
+
+3. **Specific Failing Case from Report**: FAILED
+   - Input: seq=[0, 0, 0, 0, 0], npartitions=4
+   - Expected: 4 partitions
+   - Actual: 3 partitions
+
+4. **Downstream zip() Problem**: FAILED
+   - bag1 with [0, 0, 0] and npartitions=3 creates 3 partitions
+   - bag2 with [0, 0, 0, 0] and npartitions=3 creates 2 partitions
+   - db.zip(bag1, bag2) fails with AssertionError due to different partition counts
+
+## Root Cause Analysis
+
+Examining the source code at /home/npc/miniconda/lib/python3.13/site-packages/dask/bag/core.py lines 1789-1808:
+
+The function calculates a `partition_size` from the requested `npartitions`:
+- For sequences <= 100 items: `partition_size = int(math.ceil(len(seq) / npartitions))`
+- For sequences > 100 items: `partition_size = max(1, int(math.floor(len(seq) / npartitions)))`
+
+Then it uses `partition_all(partition_size, seq)` to create the partitions.
+
+The problem is that this approach doesn't guarantee exactly `npartitions` partitions:
+- Example: seq of length 4 with npartitions=3
+  - partition_size = ceil(4/3) = 2
+  - partition_all(2, [1,2,3,4]) creates [[1,2], [3,4]] = 2 partitions (not 3!)
+
+## Impact
+
+This is a real bug that:
+1. Violates the API contract - users specify npartitions expecting that many partitions
+2. Causes downstream failures - functions like db.zip() require equal partition counts
+3. Makes it impossible to reliably create bags with matching partition counts for different sequence lengths
+
+The bug report is accurate and the reproduction code correctly demonstrates the issue.

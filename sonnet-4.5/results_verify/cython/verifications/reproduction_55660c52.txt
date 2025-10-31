@@ -1,0 +1,41 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed:
+
+### What the bug report claims:
+When `validate_logit_bias()` receives a dictionary with integer-convertible keys but values outside the range [-100, 100], it raises a specific error "Value must be between -100 and 100" but this immediately gets caught and replaced with the generic "Invalid key-value pair in logit_bias dictionary".
+
+### Reproduction results:
+
+1. **Direct reproduction**: When calling `validate_logit_bias({"100": 150})`, the function returns:
+   - Actual output: "Invalid key-value pair in logit_bias dictionary"
+   - Expected output: "Value must be between -100 and 100"
+
+2. **Hypothesis test**: The property-based test correctly fails, demonstrating that:
+   - For input `{'0': 101}` (valid key, out-of-range value), the specific range error is masked
+   - For input `{':': 101}` (invalid key), the generic error is appropriate
+
+### Code analysis:
+Looking at lines 421-429 of the actual implementation:
+```python
+try:
+    int_key = int(key)
+    int_value = int(value)
+    if -100 <= int_value <= 100:
+        validated_logit_bias[int_key] = int_value
+    else:
+        raise ValueError("Value must be between -100 and 100")
+except ValueError:
+    raise ValueError("Invalid key-value pair in logit_bias dictionary")
+```
+
+The problem is clear: The `except ValueError` block catches ALL ValueErrors, including:
+1. Errors from `int(key)` conversion (legitimate use of generic message)
+2. Errors from `int(value)` conversion (legitimate use of generic message)
+3. The specific range validation error on line 427 (problematic - loses useful information)
+
+This makes debugging harder because users don't know whether their error is due to:
+- Non-integer keys/values
+- Out-of-range values
+
+The bug is valid and reproducible.

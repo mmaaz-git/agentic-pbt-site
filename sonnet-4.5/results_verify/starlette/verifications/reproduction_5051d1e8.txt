@@ -1,0 +1,38 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I have successfully reproduced the bug described in the report. Here are the findings:
+
+1. CODE LOCATION:
+   The bug is in `/home/npc/miniconda/lib/python3.13/site-packages/starlette/middleware/gzip.py` at line 24:
+   ```python
+   if "gzip" in headers.get("Accept-Encoding", ""):
+   ```
+
+2. REPRODUCTION RESULTS:
+
+   a) Hypothesis test FAILED as expected:
+      - Testing case variants ["gzip", "GZIP", "Gzip", "GZip", "gZip", "GzIp"]
+      - The test failed on "GZIP" because Python's `in` operator is case-sensitive
+      - "gzip" in "GZIP" returns False, when it should return True per HTTP specs
+
+   b) Simple reproduction confirmed both issues:
+      - 'gzip' in 'GZIP': False (case-sensitivity issue)
+      - 'gzip' in 'not-gzip': True (substring matching issue)
+
+3. MIDDLEWARE BEHAVIOR TESTING:
+   I tested the actual middleware with a test client and confirmed:
+   - "gzip" (lowercase) → compression applied ✓
+   - "GZIP" (uppercase) → NO compression applied (bug confirmed)
+   - "GZip" (mixed case) → NO compression applied (bug confirmed)
+   - "not-gzip" → compression INCORRECTLY applied (bug confirmed)
+   - "gzip-not" → compression INCORRECTLY applied (bug confirmed)
+   - "gzip;q=1.0" → compression applied ✓
+   - "GZIP;q=1.0" → NO compression applied (bug confirmed)
+
+4. IMPACT:
+   - Clients sending valid uppercase or mixed-case "GZIP" headers won't receive compressed responses
+   - Hypothetical encodings containing "gzip" as a substring would be incorrectly treated as requesting gzip compression
+   - This violates HTTP standards where header values should be case-insensitive
+
+The bug report is accurate in both its description and reproduction code. The issue is real and affects the proper functioning of the GZipMiddleware in Starlette version 0.46.2.

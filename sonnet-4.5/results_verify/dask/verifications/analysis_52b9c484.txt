@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This is an internal/private function (starts with underscore) that is never exposed to users and is only called internally within parquet statistics aggregation code. The function has no documentation specifying its behavior for edge cases like empty lists. Since it's internal, there's no API contract that says it must handle empty lists gracefully. Additionally, in the actual usage context within the parquet module, it appears unlikely that an empty cols list would ever be passed to this function during normal statistics aggregation, as statistics would only exist when there are actual columns with data.
+
+**Why it might not be INVALID:**
+The bug is technically real - the function does enter an infinite loop with empty list input. The code has a clear logic error where the termination condition assumes at least one iteration of the for loop will occur. Even internal functions should generally not hang indefinitely on any input. The fix is trivial (checking for empty list) and would make the code more robust.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an obscure edge case in an internal function that would likely never occur in practice. The function is only used for aggregating parquet column statistics, and empty column lists wouldn't make sense in that context. The maintainers might consider this too trivial to fix since it affects an internal function that users don't directly interact with, and the scenario (empty column statistics) is unrealistic in actual usage. The bug has been labeled as "Low Severity" even by the reporter.
+
+**Why it might not be WONTFIX:**
+Infinite loops are generally considered serious bugs regardless of how likely they are to occur. The fix is extremely simple (3 lines of code) and would prevent potential production hangs if the function is ever called with unexpected inputs. Even if unlikely, defensive programming suggests handling this case to prevent system hangs.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function has no documentation at all - no docstring, no comments, nothing explaining its purpose or expected inputs. Adding documentation that specifies "cols must be a non-empty list" would clarify the expected usage. This would acknowledge that empty lists are not supported inputs rather than fixing the code to handle them.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Since this is an internal function not exposed in the public API, there's no user-facing documentation to fix. Internal functions often lack documentation, and adding docs for every internal function's edge cases might be considered unnecessary overhead. The issue is really in the code logic, not in misleading or missing documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting empty list input could be seen as adding new functionality that the function was never designed to handle. The current implementation clearly wasn't written with empty lists in mind, and adding support for them would be extending the function's capabilities beyond its original design. The request could be reframed as "Please add support for empty column lists in statistics aggregation."
+
+**Why it might not be FEATURE_REQUEST:**
+Handling empty lists is not really a new feature but rather fixing a logic error. The function should either handle empty lists or explicitly reject them with a clear error message. Allowing infinite loops is not a missing feature but a bug. The expected behavior for empty input (returning an empty list) is the natural extension of the function's existing logic.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function contains a clear logic error that causes an infinite loop with empty list input. This violates the fundamental principle that functions should terminate for all valid inputs. The bug is reproducible and the fix is straightforward. Even though it's an internal function, infinite loops are serious issues that could cause production systems to hang. The code analysis clearly shows the flaw in the termination logic.
+
+**Why it might not be BUG:**
+This is an internal/private function (prefixed with underscore) that is never meant to be called directly by users. The function has no documentation specifying its behavior, so there's no violated contract. In its actual usage context within the parquet module, empty column lists would never occur during statistics aggregation. The bug report even acknowledges this is unlikely to happen in normal usage. Internal functions often have preconditions that aren't explicitly checked, and empty input might simply be outside the function's intended domain.
+
+## Overall Consideration
+
+After careful analysis, this appears to be an edge case bug in an internal function that would rarely if ever occur in practice. The function `_aggregate_columns` is clearly marked as internal (underscore prefix) and is only used within the parquet statistics aggregation pipeline where empty column lists wouldn't make sense. The function has no documentation establishing a contract for how it should behave with empty inputs.
+
+While the infinite loop is technically a bug, several factors suggest this should be closed as WONTFIX: (1) It's an internal function not exposed to users, (2) The scenario is extremely unlikely in real usage since statistics aggregation implies the existence of data, (3) The reporter themselves marked it as "Low Severity" and acknowledged it may not be reachable through normal usage, and (4) The function appears to work correctly for all realistic inputs it would receive in its actual context.
+
+The most reasonable response would be WONTFIX, acknowledging that while the technical issue exists, it's in an internal function with an unrealistic input scenario that doesn't warrant a fix. Alternatively, INVALID could be justified since internal functions often have implicit preconditions (non-empty input) that aren't checked, and violating these preconditions leads to undefined behavior rather than bugs. The fact that this would "cause production hangs" as claimed in the report is highly questionable since the function would never receive empty input in its actual usage context.

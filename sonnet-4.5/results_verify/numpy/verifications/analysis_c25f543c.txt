@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The current implementation appears to be intentional based on the existing test suite. The test at line 5014 explicitly expects `allequal(y, y, fill_value=False)` to return False when y has masked values, meaning an array is not equal to itself if it contains masked values and fill_value=False. This suggests the semantic interpretation is that when fill_value=False, masked values are considered "not equal to anything," including themselves. Under this interpretation, ANY presence of masked values would make arrays unequal, which is exactly what the current implementation does.
+
+**Why it might not be INVALID:**
+The documentation states fill_value controls "Whether masked values in a or b are considered equal (True) or not (False)," which implies it should affect how masked positions are compared, not whether to skip comparison entirely. The current implementation returns False without even checking if unmasked values are equal, which seems to contradict the documentation's implication that comparison should still occur.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The behavior has existing tests that explicitly verify this exact behavior, suggesting it's intentional. The semantic meaning that "masked values are not equal to anything when fill_value=False" is internally consistent, even if counterintuitive. Changing this would break backward compatibility and existing test cases. The use case for fill_value=False may be rare enough that this behavior, while surprising, isn't worth fixing.
+
+**Why it might not be WONTFIX:**
+The current behavior is genuinely confusing and doesn't match what users would expect from reading the documentation. The fact that two arrays with identical unmasked portions return False just because they have masks seems like a significant limitation that reduces the usefulness of the fill_value parameter.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about the exact behavior. It currently says masked values are "considered equal (True) or not (False)" but doesn't explicitly state that when fill_value=False, ANY masked value causes the entire comparison to return False. The documentation could be updated to say: "When fill_value=False, returns False if either array contains any masked values."
+
+**Why it might not be DOCUMENTATION_FIX:**
+The bug reporter's interpretation that the function should still compare unmasked values is reasonable based on the current documentation. Simply updating documentation to match the current behavior would still leave a function with unexpected and arguably broken semantics.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report's proposed behavior (comparing unmasked values and treating masked positions as unequal) could be seen as a new feature request for more nuanced comparison behavior. Perhaps a new parameter or function could provide this behavior without breaking existing code.
+
+**Why it might not be FEATURE_REQUEST:**
+The reported behavior seems like what the existing function should do based on its documentation and name. This isn't asking for new functionality but rather for the existing functionality to work as one would reasonably expect.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation describes fill_value as controlling whether "masked values in a or b are considered equal," implying that comparison still happens but masked positions are treated differently. The current implementation completely skips comparison when fill_value=False and any masks exist, which doesn't match the documented behavior. Two arrays with identical unmasked values should reasonably be considered "equal" at those positions regardless of the fill_value parameter.
+
+**Why it might not be BUG:**
+The existing test suite explicitly tests for and expects this exact behavior. The test `assert not allequal(y, y, fill_value=False)` shows that an array with masked values is intentionally not equal to itself when fill_value=False. This strongly suggests the current behavior is by design, not a bug.
+
+## Overall Consideration
+
+After careful analysis, this appears to be primarily a **DOCUMENTATION_FIX** issue. Here's why:
+
+The current implementation has a clear and tested semantic model: when `fill_value=False`, masked values are treated as "not equal to anything," including themselves. This is evidenced by the test case that expects `allequal(y, y, fill_value=False)` to return False when y contains masked values. Under this interpretation, it makes logical sense to immediately return False if any masked values exist, since masked values cannot be equal to anything.
+
+However, the documentation doesn't clearly convey this semantic model. It says masked values are "considered equal (True) or not (False)" which could reasonably be interpreted as "masked positions are treated as equal or unequal during comparison" rather than "the presence of any mask makes the arrays unequal." The documentation should explicitly state: "When fill_value=False, returns False if either array contains any masked values, as masked values are considered unequal to everything, including themselves."
+
+While the proposed behavior in the bug report (comparing unmasked values and only treating masked positions as unequal) might be more intuitive and useful, changing this would break backward compatibility and existing tests. The current behavior, while surprising, is internally consistent with the semantic model that masked values with fill_value=False are fundamentally incomparable.

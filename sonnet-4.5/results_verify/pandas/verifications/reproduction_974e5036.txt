@@ -1,0 +1,47 @@
+REPRODUCTION RESULTS FOR pandas.io.json.ujson_loads BUG
+
+1. BUG REPRODUCTION - CONFIRMED:
+   The bug report is technically accurate. The specific test case reproduces exactly as described:
+
+   Input: n = -18446744073709551616 (which is -2^64)
+   Process: ujson_dumps(n) -> "-18446744073709551616"
+           ujson_loads("-18446744073709551616") -> 0
+   Result: Silent corruption - the value becomes 0 instead of the original number
+
+   Python's standard json module handles this correctly:
+   json.dumps(n) -> "-18446744073709551616"
+   json.loads("-18446744073709551616") -> -18446744073709551616
+
+2. EDGE CASE TESTING RESULTS:
+
+   Value                    | ujson_dumps | ujson_loads | Behavior
+   -------------------------|-------------|-------------|------------------------
+   2^64                     | ERROR       | N/A         | "Value is too big!"
+   2^64 - 1                 | OK          | OK          | Round-trips correctly
+   -2^64                    | OK          | CORRUPTED   | Silently becomes 0
+   -2^64 + 1                | ERROR       | N/A         | "Value is too small"
+   -2^64 - 1                | OK          | CORRUPTED   | Silently becomes -1
+   -2^63 - 1                | ERROR       | N/A         | "Value is too small"
+   2^63, 2^63-1, -2^63      | OK          | OK          | Round-trips correctly
+
+3. INCONSISTENT BEHAVIOR CONFIRMED:
+   - Values >= 2^64 raise "Value is too big!"
+   - Values <= -2^64 + 1 and != -2^64 raise "Value is too small"
+   - BUT: -2^64 exactly silently becomes 0 (no error)
+   - AND: -2^64 - 1 silently becomes -1 (no error)
+
+4. PROPERTY-BASED TESTING:
+   - Hypothesis test with the specific examples confirms the failures
+   - -18446744073709551616 (-2^64) -> 0
+   - -18446744073709551617 (-2^64 - 1) -> -1
+   - Random integer testing didn't find additional silent corruptions in 1000 samples
+
+5. TECHNICAL ANALYSIS:
+   The behavior suggests an unsigned 64-bit integer underflow issue in the C implementation:
+   - -2^64 when cast to uint64 would be 0
+   - -2^64 - 1 when cast to uint64 would be UINT64_MAX (18446744073709551615), then likely wrapped to -1
+
+   This is a clear implementation bug where certain negative values are being mishandled during parsing.
+
+CONCLUSION:
+The bug report is accurate. ujson_loads DOES silently corrupt -2^64 to 0, and -2^64-1 to -1, while raising exceptions for other out-of-range values. This inconsistent and undocumented behavior represents data corruption without warning.

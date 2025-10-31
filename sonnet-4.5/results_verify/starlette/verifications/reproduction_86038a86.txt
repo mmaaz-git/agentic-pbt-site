@@ -1,0 +1,52 @@
+## Bug Reproduction Analysis
+
+### Test Execution Results
+
+I successfully reproduced the bug reported in the TrustedHostMiddleware. The tests confirm that the middleware incorrectly handles IPv6 addresses.
+
+### Key Findings:
+
+1. **Current Implementation Behavior:**
+   - The middleware uses `host = headers.get("host", "").split(":")[0]` to extract the hostname
+   - This splits on the FIRST colon character
+   - For IPv6 addresses like `[::1]`, this results in extracting `[` instead of `[::1]`
+   - For IPv6 addresses like `[2001:db8::1]`, this extracts `[2001` instead of `[2001:db8::1]`
+
+2. **Test Results:**
+   - All IPv6 test cases FAILED:
+     - `[::1]` → extracted as `[` → rejected (should be accepted)
+     - `[::1]:8080` → extracted as `[` → rejected (should be accepted)
+     - `[2001:db8::1]` → extracted as `[2001` → rejected (should be accepted)
+   - All IPv4 test cases PASSED:
+     - `localhost` → correctly extracted
+     - `127.0.0.1:8080` → correctly extracted as `127.0.0.1`
+
+3. **Actual Middleware Behavior:**
+   - Created test applications with TrustedHostMiddleware configured to accept IPv6 addresses
+   - All requests with IPv6 Host headers returned 400 "Invalid host header"
+   - IPv4 addresses continued to work correctly
+
+4. **Technical Analysis:**
+   - IPv6 addresses use colons as part of the address notation (e.g., `2001:db8::1`)
+   - RFC 3986 requires IPv6 addresses in URLs/Host headers to be enclosed in brackets
+   - Port numbers come AFTER the closing bracket: `[IPv6]:port`
+   - The current implementation's naive split on first colon breaks this format
+
+### Bug Confirmation:
+
+The bug is **100% CONFIRMED**. The middleware cannot properly validate IPv6 addresses in the Host header because:
+
+1. The string splitting logic is fundamentally incompatible with IPv6 address notation
+2. This makes it impossible to whitelist IPv6 addresses in `allowed_hosts`
+3. Any request from an IPv6 client with a properly formatted Host header will be rejected
+
+### Impact:
+
+- **Severity:** HIGH - Complete inability to support IPv6 clients
+- **Scope:** Any Starlette application using TrustedHostMiddleware with IPv6 clients
+- **Standards Violation:** Does not comply with RFC 3986 for IPv6 address representation
+
+The proposed fix in the bug report correctly addresses the issue by:
+1. Detecting IPv6 addresses (those starting with `[`)
+2. Using different parsing logic for IPv6 vs IPv4/hostname
+3. Properly extracting the host portion while preserving the brackets

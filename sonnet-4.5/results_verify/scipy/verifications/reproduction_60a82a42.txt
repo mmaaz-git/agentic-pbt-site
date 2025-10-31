@@ -1,0 +1,35 @@
+Bug Reproduction Analysis for scipy.special.inv_boxcox1p
+========================================================
+
+The bug report has been successfully reproduced and verified. The issue is real and affects the inverse Box-Cox transformation function for extremely small lambda values.
+
+Reproduction Results:
+---------------------
+1. **Hypothesis test**: The property-based test fails as reported. The test correctly identifies that the round-trip property inv_boxcox1p(boxcox1p(x, λ), λ) = x is violated for small lambda values. The test failed with lambda=4.621463356761384e-156.
+
+2. **Manual reproduction**: The specific case mentioned in the bug report (x=1.0, lambda=1e-300) was confirmed:
+   - boxcox1p(1.0, 1e-300) = 0.6931471805599453 (which is log(2), correct)
+   - inv_boxcox1p(0.6931471805599453, 1e-300) = 0.6931471805599453 (incorrect, should be 1.0)
+   - Error: 0.3068528194400547
+
+3. **Threshold identification**: Through systematic testing, the bug appears consistently when lambda is less than or equal to approximately 1e-160:
+   - lambda=0.0: Works correctly (error=0)
+   - lambda=1e-100: Works correctly (error~2.2e-16, within floating point precision)
+   - lambda=1e-150: Works correctly (error=0)
+   - lambda=1e-160 and smaller: BUG - returns the input unchanged instead of the correct inverse
+
+Effect of the Bug:
+------------------
+When lambda is extremely small (< ~1e-160), the function inv_boxcox1p fails to compute the correct inverse transformation. Instead of applying the inverse formula, it returns the input value unchanged. This breaks the fundamental mathematical property that an inverse function should satisfy: f^(-1)(f(x)) = x.
+
+The bug specifically affects:
+- The inverse transformation for very small non-zero lambda values
+- Round-trip operations where data is transformed and then inverse-transformed
+- Any code relying on the mathematical correctness of the inverse Box-Cox transformation
+
+The bug does NOT affect:
+- The case when lambda=0 exactly (this works correctly)
+- Lambda values >= 1e-100 approximately (these work correctly)
+- The forward transformation boxcox1p (this appears to work correctly for all tested values)
+
+This is clearly a numerical precision issue in the implementation where extremely small lambda values are not being handled correctly in the inverse function.

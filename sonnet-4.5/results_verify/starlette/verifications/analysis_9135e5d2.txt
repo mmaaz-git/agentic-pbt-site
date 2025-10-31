@@ -1,0 +1,95 @@
+# Bug Report Triage Analysis
+
+## Considerations for Each Category
+
+### BUG (Valid Bug Report)
+
+**Arguments FOR classifying as BUG:**
+1. **Inconsistent behavior**: The middleware applies different normalization rules to configuration vs. runtime checking
+2. **Silent failure**: Users who accidentally include whitespace get a non-obvious failure
+3. **Violates principle of least surprise**: Most developers would expect whitespace to either be:
+   - Consistently preserved (both in config and checking)
+   - Consistently stripped (both in config and checking)
+4. **Creates unusable configurations**: Any header configured with whitespace will NEVER match incoming requests
+5. **The fix is simple and non-breaking**: Stripping whitespace during initialization would fix the issue without breaking valid use cases
+
+**Arguments AGAINST classifying as BUG:**
+1. Header names with whitespace are technically invalid per HTTP spec
+2. Users shouldn't be configuring headers with whitespace in the first place
+
+### INVALID
+
+**Arguments FOR classifying as INVALID:**
+1. **Invalid input**: HTTP header names MUST NOT contain whitespace per RFC 7230
+2. **User error**: Developers should know not to include whitespace in header names
+3. **Working as designed**: The code correctly rejects invalid headers
+
+**Arguments AGAINST classifying as INVALID:**
+1. The middleware accepts the invalid configuration without error
+2. The inconsistency in handling makes it a bug, not just invalid input
+3. Many libraries defensively handle such cases
+
+### WONTFIX
+
+**Arguments FOR classifying as WONTFIX:**
+1. **Edge case**: Most developers won't accidentally add whitespace to header names
+2. **User responsibility**: Developers should validate their configuration
+3. **Low impact**: Easy workaround - just don't add whitespace
+
+**Arguments AGAINST classifying as WONTFIX:**
+1. The fix is trivial (one-line change)
+2. The current behavior creates confusion
+3. It's not an obscure edge case - whitespace issues are common in configuration
+
+### FEATURE_REQUEST
+
+**Arguments FOR classifying as FEATURE_REQUEST:**
+1. **New capability**: Adding defensive whitespace handling could be seen as a new feature
+2. **Enhancement**: Making the middleware more robust against invalid input
+3. **Not explicitly supported**: Documentation doesn't promise whitespace handling
+
+**Arguments AGAINST classifying as FEATURE_REQUEST:**
+1. This is fixing inconsistent behavior, not adding new functionality
+2. The middleware already strips whitespace in one place but not another
+3. Basic consistency isn't a feature, it's expected behavior
+
+### DOCUMENTATION_FIX
+
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+1. **Undefined behavior**: Documentation doesn't specify how whitespace is handled
+2. **Could document the limitation**: Could add a note that headers must not contain whitespace
+3. **Clarification needed**: The current behavior could be documented as intentional
+
+**Arguments AGAINST classifying as DOCUMENTATION_FIX:**
+1. The inconsistent behavior is clearly problematic, not just poorly documented
+2. Documenting broken behavior doesn't make it correct
+3. The issue is in the code logic, not the documentation
+
+## Final Analysis
+
+This is clearly a **BUG** for the following reasons:
+
+1. **Inconsistent normalization**: The middleware strips whitespace when checking incoming headers (line 129) but preserves it in configuration (line 67). This inconsistency is the core issue.
+
+2. **Creates broken configurations**: Any header configured with whitespace will never work, making the configuration effectively broken. The middleware accepts invalid input without error but then fails to work with it.
+
+3. **Violates defensive programming principles**: Good middleware should either:
+   - Reject invalid input with a clear error
+   - Normalize input to make it valid
+   - Handle both sides consistently
+
+   The current implementation does none of these.
+
+4. **Simple, non-breaking fix**: The proposed fix (adding `.strip()` to line 67) would:
+   - Make the behavior consistent
+   - Not break any existing valid configurations
+   - Follow the principle of being liberal in what you accept
+
+5. **Not a documentation issue**: While the documentation could be clearer, the core issue is the inconsistent behavior in the code. Even if documented, this behavior would still be problematic.
+
+6. **Not an edge case**: Configuration errors with whitespace are common, especially when:
+   - Loading from external config files
+   - Copy-pasting from documentation
+   - Programmatically generating headers
+
+The bug report correctly identifies a logic error in the middleware that should be fixed.

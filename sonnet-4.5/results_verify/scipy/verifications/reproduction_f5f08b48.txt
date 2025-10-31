@@ -1,0 +1,57 @@
+## Bug Reproduction Results
+
+### Hypothesis Test Reproduction
+
+The property-based test from the bug report was successfully reproduced. The test fails consistently on single-element arrays:
+
+```
+Failed with shape (1,): Invalid number of data points (0) specified
+  Input value: [0.]
+  rfft result: [0.+0.j]
+```
+
+The test also revealed other failures with odd-length arrays (shapes 27 and 79), but these appear to be tolerance/precision issues rather than crashes.
+
+### Simple Example Reproduction
+
+The bug was confirmed with the exact example from the report:
+
+```python
+x = np.array([5.])
+rfft_result = scipy.fft.rfft(x)  # Returns [5.+0.j]
+result = scipy.fft.irfft(rfft_result)  # Raises ValueError
+```
+
+Error message: `ValueError: Invalid number of data points (0) specified`
+
+### Root Cause Verification
+
+The default n calculation was verified:
+- For single-element input: rfft output has length 1
+- Default n = 2*(1-1) = 0
+- This triggers the ValueError since n=0 is invalid
+
+### Workaround Verification
+
+The suggested workaround was confirmed to work:
+```python
+result = scipy.fft.irfft(rfft_result, n=1)  # Returns [5.]
+```
+
+This correctly recovers the original input.
+
+### Comparison with Multi-Element Arrays
+
+For comparison, a 2-element array works fine:
+- Input: [1., 2.]
+- rfft output length: 2
+- Default n = 2*(2-1) = 2
+- irfft successfully recovers the original array
+
+### Technical Accuracy of Report
+
+The bug report is technically accurate:
+1. The crash occurs exactly as described
+2. The root cause (n=0 from default calculation) is correctly identified
+3. The workaround (explicit n=1) works as stated
+4. The error message is indeed cryptic and unhelpful

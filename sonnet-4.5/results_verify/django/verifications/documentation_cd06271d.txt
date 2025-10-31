@@ -1,0 +1,70 @@
+## Documentation Analysis
+
+After examining the Django source code and available documentation, here are my findings:
+
+### Field.validate() Documentation
+
+The docstring for Field.validate() states:
+"Validate value and raise ValidationError if necessary. Subclasses should override this to provide validation logic."
+
+This is a very generic description that doesn't specify the interaction between choices, blank, and null constraints.
+
+### Key Observations from Source Code
+
+1. **empty_values definition**: `[None, '', [], (), {}]`
+   - These are considered "empty" by Django
+
+2. **Validation Order in Field.validate()** (lines 807-827):
+   ```python
+   # Step 1: Check choices (but ONLY for non-empty values)
+   if self.choices is not None and value not in self.empty_values:
+       # validate against choices
+
+   # Step 2: Check null constraint
+   if value is None and not self.null:
+       raise ValidationError
+
+   # Step 3: Check blank constraint
+   if not self.blank and value in self.empty_values:
+       raise ValidationError
+   ```
+
+### Documentation Gaps
+
+The documentation does not explicitly state:
+
+1. **What should happen when empty values are in choices**: There's no clear documentation about whether an empty string or None in choices should override blank=False or null=False settings.
+
+2. **Precedence rules**: No documentation specifies whether:
+   - Choices validation takes precedence over blank/null validation
+   - Or blank/null validation takes precedence over choices
+   - Or they should be independent constraints
+
+3. **Design intent**: The documentation doesn't clarify if skipping choice validation for empty values is intentional or an oversight.
+
+### Reasonable Expectations
+
+From a developer perspective, there are reasonable arguments for both behaviors:
+
+**Argument for current behavior (not a bug):**
+- blank/null are database-level constraints that should always be enforced
+- choices is a validation constraint that supplements but doesn't override database constraints
+- Empty values need special handling regardless of choices
+
+**Argument for the reported behavior (is a bug):**
+- If a developer explicitly includes '' or None in choices, they're saying "this is a valid value"
+- The choices constraint is more specific than the general blank/null constraint
+- Principle of least surprise: if I say `choices=[('', 'Empty')]`, I expect '' to be valid
+
+### Comparison with Other Frameworks
+
+Many form validation libraries (including Django's own forms) follow the principle that if a value is in the allowed choices, it's valid, regardless of other constraints. This supports the bug report's position.
+
+### Conclusion on Documentation
+
+The documentation is **ambiguous** on this specific interaction. There's no explicit statement about:
+- Whether empty values in choices should bypass blank/null validation
+- The intended precedence between these constraints
+- The rationale for the current implementation
+
+This ambiguity makes it difficult to definitively say whether this is a bug or intended behavior based on documentation alone.

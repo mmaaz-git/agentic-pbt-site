@@ -1,0 +1,55 @@
+## Documentation Analysis for FileReadStream.receive
+
+### Key Documentation from ByteReceiveStream ABC (lines 141-152 in abc/_streams.py):
+
+The abstract base class `ByteReceiveStream` defines the `receive` method with the following documentation:
+
+```python
+async def receive(self, max_bytes: int = 65536) -> bytes:
+    """
+    Receive at most ``max_bytes`` bytes from the peer.
+
+    .. note:: Implementers of this interface should not return an empty
+        :class:`bytes` object, and users should ignore them.
+
+    :param max_bytes: maximum number of bytes to receive
+    :return: the received bytes
+    :raises ~anyio.EndOfStream: if this stream has been closed from the other end
+    """
+```
+
+**Critical Note**: The documentation includes an explicit note at line 146-147 that states: "Implementers of this interface should not return an empty :class:`bytes` object, and users should ignore them."
+
+This note suggests that implementations SHOULD NOT return empty bytes objects (b''), implying that if an empty result would be returned, something else should happen instead (like raising EndOfStream).
+
+### FileReadStream.receive Implementation (lines 75-86 in streams/file.py):
+
+The actual implementation:
+1. Calls `file.read(max_bytes)` via thread synchronization
+2. If data is truthy (non-empty), returns the data
+3. If data is falsy (empty bytes b''), raises EndOfStream
+
+### Python's file.read() Behavior:
+
+From testing, Python's built-in file.read(0) always returns b'' (empty bytes) regardless of whether:
+- The file has data remaining
+- The file is at EOF
+- The file is in the middle of reading
+
+### Documentation Interpretation:
+
+The documentation note "Implementers of this interface should not return an empty :class:`bytes` object" appears to be the key guidance here. This suggests that:
+
+1. The current implementation follows the documented interface requirement by NOT returning empty bytes
+2. When `read(0)` returns b'', the implementation correctly raises EndOfStream instead of returning the empty bytes
+3. The documentation does not specify any special handling for max_bytes=0
+
+### What the Documentation Does NOT Say:
+
+- There is no specification for what should happen when max_bytes=0
+- There is no distinction made between "read returned empty because EOF" vs "read returned empty because 0 bytes requested"
+- There is no documented behavior for using receive(0) as a "no-op" or "state check"
+
+### Conclusion from Documentation:
+
+Based on the explicit documentation note that implementations "should not return an empty :class:`bytes` object", the current behavior of raising EndOfStream when receiving b'' from file.read() appears to be following the documented interface contract. The bug report's expectation that receive(0) should return b'' contradicts the explicit documentation guidance.

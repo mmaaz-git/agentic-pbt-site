@@ -1,0 +1,61 @@
+## Bug Triage Analysis
+
+### Evaluation for Each Category
+
+#### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function explicitly promises in its docstring that "if any two elements of percentiles differ, they remain different after rounding"
+- This promise is violated for inputs like [0.01, 0.010000000000000002]
+- The bug causes a complete failure of DataFrame.describe() with a cryptic error message
+- The inputs are mathematically distinct (pass np.unique() and != checks)
+- The issue is reproducible and deterministic
+- The bug report correctly identifies both the issue and root cause
+
+**Arguments AGAINST:**
+- None. This is a clear violation of documented behavior.
+
+#### INVALID
+**Arguments FOR:**
+- Could argue that percentiles differing by 2e-18 are "effectively the same"
+- Machine epsilon limitations are expected in floating point
+
+**Arguments AGAINST:**
+- The docstring explicitly promises to handle ANY differences, not just "reasonable" differences
+- The values ARE different according to Python/NumPy (!= returns True, np.unique identifies them as distinct)
+- The system already validates and accepts these as distinct percentiles in _refine_percentiles
+
+#### WONTFIX
+**Arguments FOR:**
+- Percentiles differing by 2e-18 are an extreme edge case unlikely in practice
+- Users shouldn't be passing such similar percentiles
+- Could be considered a floating point precision limitation
+
+**Arguments AGAINST:**
+- The function explicitly documents it will handle this case
+- The failure mode is severe (complete crash of describe())
+- The error message is confusing and doesn't help users understand the problem
+- Property-based testing legitimately found this issue
+
+#### DOCUMENTATION_FIX
+**Arguments FOR:**
+- Could update docs to say "percentiles must differ by at least 0.0001" or similar
+- Could document that very close percentiles may cause issues
+
+**Arguments AGAINST:**
+- The current documentation makes an explicit promise about behavior
+- The code should be fixed to match the documentation, not vice versa
+- Changing the docs would be a breaking change to the API contract
+
+#### FEATURE_REQUEST
+**Arguments FOR:**
+- Could frame as "please support very close percentiles"
+
+**Arguments AGAINST:**
+- The documentation already promises this works
+- This is fixing broken existing functionality, not adding new functionality
+
+### Conclusion
+
+This is clearly a **BUG**. The function's docstring makes an explicit, unambiguous promise that distinct percentiles will remain distinct after formatting. The implementation fails to deliver on this promise, causing downstream failures. The fact that the percentiles are extremely close (differing by 2e-18) does not excuse the violation of the documented contract.
+
+The suggested fix in the bug report (either raising a clear error or increasing precision) is reasonable and would resolve the issue appropriately.

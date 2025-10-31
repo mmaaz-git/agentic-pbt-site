@@ -1,0 +1,47 @@
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify how matrix_rank should handle subnormal values. The function is designed for "numerical rank" detection, not exact mathematical rank. The tolerance formula is working as documented (S.max() * shape * eps), and the fact that it produces 0 for subnormal values could be considered an expected consequence of the formula rather than a bug. The documentation never guarantees that mathematically singular matrices will always be detected as singular.
+
+**Why it might not be INVALID:**
+The fundamental mathematical property that a singular matrix (det=0) must have rank < n is being violated. This is not merely an edge case or undefined behavior - it's a core mathematical invariant. Users reasonably expect that a matrix with determinant exactly 0 would be recognized as rank-deficient. The current behavior produces mathematically incorrect results that violate basic linear algebra principles.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+Subnormal numbers are an extremely rare edge case (values < 2.225e-308) that would almost never occur in practical applications. The computational cost of checking for and handling subnormal values in every matrix_rank call might not be justified for such an obscure scenario. NumPy's focus is on practical numerical computing, not on maintaining mathematical perfection for values that are essentially numerical noise. The workaround is simple - users can specify their own tolerance if working with subnormal values.
+
+**Why it might not be WONTFIX:**
+This bug causes matrix_rank to return objectively incorrect mathematical results. A singular matrix having full rank is not just a minor inconvenience but a fundamental violation of linear algebra. The fix is trivial (adding a minimum tolerance check) with negligible performance impact. The bug could cause silent failures in code that relies on rank detection for algorithmic decisions. Given NumPy's role as a foundational scientific computing library, mathematical correctness should take precedence over dismissing edge cases.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly warn that the default tolerance calculation may produce 0 for subnormal values, leading to incorrect rank for such matrices. Users could be advised to provide custom tolerance when working with extremely small values. The documentation could clarify that the function provides "numerical rank" which may differ from mathematical rank in extreme edge cases involving subnormal numbers.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is not just unintuitive but mathematically wrong. Documenting incorrect behavior doesn't make it acceptable. The issue isn't that users misunderstand what the function should do - the function is genuinely producing incorrect results for valid input matrices. A documentation fix would be papering over a real algorithmic flaw rather than addressing the root problem.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Supporting proper rank calculation for subnormal matrices could be seen as a new feature rather than a bug fix. The current implementation works correctly for normal floating-point ranges, and extending support to subnormal values could be considered an enhancement. Users wanting this behavior could request a new parameter or mode that handles extreme edge cases more carefully.
+
+**Why it might not be FEATURE_REQUEST:**
+Matrix rank is a well-defined mathematical concept that doesn't depend on the magnitude of matrix elements. The function already claims to compute matrix rank - it's not adding new functionality to make it work correctly for all valid inputs. This is fixing broken existing functionality, not adding new capabilities. The function accepts subnormal values as input without error, so it should handle them correctly.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The function returns mathematically incorrect results for valid input. A singular matrix (det=0) mathematically must have rank < n, but matrix_rank returns full rank. The bug has a clear root cause (tolerance calculation producing 0 for subnormal values) and a simple fix. The issue violates fundamental linear algebra properties that users rightfully expect to hold. The function silently produces wrong answers rather than failing loudly, which is particularly dangerous for scientific computing.
+
+**Why it might not be BUG:**
+The function is behaving exactly as documented - the tolerance formula S.max() * shape * eps produces 0 for subnormal values as a natural consequence of floating-point arithmetic. The function is designed for practical numerical rank, not theoretical mathematical rank. Subnormal values are so extremely small that they're arguably numerical noise rather than meaningful data. The edge case is so rare that it may not warrant changing the default behavior.
+
+## Overall Consideration
+
+This case presents a clear conflict between mathematical correctness and practical engineering concerns. On one hand, we have a function that demonstrably returns mathematically incorrect results - reporting full rank for a provably singular matrix. This violates fundamental linear algebra properties that form the theoretical foundation of numerical computing. The bug is reproducible, has a clear root cause, and affects valid (if unusual) input values.
+
+On the other hand, subnormal floating-point values are an extremely rare edge case that most users will never encounter. Values around 1e-311 are so close to zero that they're often considered numerical noise rather than meaningful data. The current tolerance calculation works well for the 99.999% case of normal floating-point values, and adding special handling for subnormals could be seen as over-engineering for a virtually non-existent use case.
+
+However, NumPy is a foundational library for scientific computing where correctness matters. The proposed fix is minimal (adding a simple max() check), has negligible performance impact, and would prevent the function from returning provably wrong results. While the practical impact may be limited, the principle of maintaining mathematical correctness for all valid inputs seems important for a library of NumPy's stature. The fact that the function accepts these values without error implies it should handle them correctly, and returning rank=2 for a matrix with det=0 is unambiguously incorrect regardless of the magnitude of the values involved.

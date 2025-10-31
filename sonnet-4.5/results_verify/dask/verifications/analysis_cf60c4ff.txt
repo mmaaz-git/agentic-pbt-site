@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Django documentation does not explicitly specify what should happen when negative length values are passed to LPAD/RPAD functions. Without clear documentation stating the expected behavior, the current implementation (using Python's negative slicing) could be considered a valid design choice. Different SQL databases handle this differently (PostgreSQL returns empty string, MySQL returns NULL), so there's no universal standard that Django must follow.
+
+**Why it might not be INVALID:**
+The current behavior is clearly unintentional. Using Python's negative slicing (`text[:-n]`) to truncate strings from the end is not a reasonable interpretation of padding functions. No SQL database truncates strings this way for negative lengths. The behavior appears to be an accidental side effect of the implementation rather than a deliberate design decision.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving negative length values, which are arguably invalid inputs to padding functions. Real-world applications should not be passing negative lengths to LPAD/RPAD. The current behavior, while not standard, is deterministic and doesn't cause crashes or data corruption. Changing it now could break existing code that may inadvertently rely on this behavior.
+
+**Why it might not be WONTFIX:**
+The issue affects basic SQL compatibility. Django's goal is to provide consistent database abstraction, and having SQLite behave differently from other databases for the same SQL functions undermines this goal. The fix is trivial (adding a check for negative length) and would improve compatibility with standard SQL implementations.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+Django's documentation doesn't specify the behavior for negative lengths, so this could be addressed by simply documenting the current Python slicing behavior as the intended behavior for SQLite. This would clarify expectations without changing any code, avoiding potential breaking changes.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is clearly a bug, not a feature that needs documentation. No developer would expect or want LPAD/RPAD to truncate strings when given negative lengths. Documenting this quirk would be documenting a bug rather than fixing it. The behavior is inconsistent with all major SQL databases.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Handling negative length values could be seen as adding new functionality that wasn't previously specified or supported. The current implementation doesn't explicitly handle this case, so adding proper handling could be viewed as a new feature for better SQL compatibility.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but fixing incorrect behavior in existing functionality. LPAD and RPAD are standard SQL functions with well-established semantics. Making them work correctly with all input values (including negative lengths) is a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation clearly violates expected SQL semantics. Both PostgreSQL and MySQL handle negative lengths in defined ways (empty string or NULL), while Django's implementation produces nonsensical results (truncated strings). The bug is reproducible, the fix is straightforward, and the current behavior is obviously unintended - it's using Python's negative array slicing in a SQL context where it doesn't belong.
+
+**Why it might not be BUG:**
+Django's documentation doesn't promise PostgreSQL compatibility for these functions. Without explicit documentation about the expected behavior, this could be considered undefined behavior rather than incorrect behavior. The functions work correctly for their primary use case (positive lengths), and negative lengths could be considered invalid input.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though not a critical one. The current behavior is clearly unintentional - using Python's negative slicing semantics (`text[:-n]`) in SQL padding functions is nonsensical. When a developer calls LPAD with a negative length, they're not asking to remove characters from the end of the string, which is what currently happens.
+
+The bug report correctly identifies that major SQL databases (PostgreSQL, MySQL) handle negative lengths in well-defined ways, either returning empty strings or NULL. Django's current behavior matches neither standard and appears to be an oversight in the implementation. The code uses `text[:length]` without considering that length might be negative, leading to unexpected Python slicing behavior.
+
+However, this is a relatively minor edge case that likely affects few users in practice. Most applications would not intentionally pass negative lengths to padding functions. While the fix is trivial and would improve SQL compatibility, the issue has apparently existed for a long time without causing significant problems. Given that Django's documentation doesn't explicitly promise any particular behavior for negative lengths, this could reasonably be classified as either a bug or a documentation issue. That said, the current behavior is so clearly unintended and contrary to SQL conventions that it should be considered a bug worth fixing.

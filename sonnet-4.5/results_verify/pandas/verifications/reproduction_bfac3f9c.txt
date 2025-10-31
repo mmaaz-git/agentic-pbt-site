@@ -1,0 +1,41 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmation
+The bug is CONFIRMED. Calling `ExcelWriter.close()` twice does raise a `ValueError: I/O operation on closed file` as described in the bug report.
+
+### Test Results
+
+1. **Main reproduction test**:
+   - First close() call: Succeeded without error
+   - Second close() call: Raised `ValueError: I/O operation on closed file`
+   - This confirms the exact behavior described in the bug report
+
+2. **Hypothesis test**:
+   - The test failed with the same error when attempting to call close() twice
+   - Error: `ValueError: I/O operation on closed file`
+
+3. **Comparison with Python's built-in file objects**:
+   - Standard Python file objects (using `open()`) handle multiple close() calls gracefully
+   - Calling close() twice on a regular file object does NOT raise an error
+   - This demonstrates that Python's file-like objects are expected to be idempotent
+
+### Code Analysis
+Looking at the pandas source code (pandas/io/excel/_base.py:1355-1358):
+```python
+def close(self) -> None:
+    """synonym for save, to make it more file-like"""
+    self._save()
+    self._handles.close()
+```
+
+The implementation directly calls `self._handles.close()` without checking if the file is already closed. This causes the error on the second call.
+
+### Impact
+The bug occurs consistently and reliably. Any code that calls `close()` twice on an ExcelWriter instance will encounter this error. This can happen in:
+- Defensive programming patterns where close() is called in finally blocks
+- Context manager usage combined with explicit close() calls
+- Error handling code that attempts to ensure resources are cleaned up
+
+The bug is real and reproducible exactly as described in the report.

@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug reported in Flask's TaggedJSONSerializer regarding the loss of datetime microseconds during serialization/deserialization.
+
+### Hypothesis Test Reproduction
+
+The Hypothesis test provided in the bug report fails as expected:
+- Test: Roundtrip test for datetime objects with timezone
+- Failing input: `datetime(2000, 1, 1, 0, 0, 0, 1, tzinfo=timezone.utc)`
+- Expected: Datetime with 1 microsecond should be preserved
+- Actual: Datetime loses microseconds, returns with 0 microseconds
+- Error: AssertionError - Expected datetime with microseconds, got datetime without
+
+### Manual Reproduction
+
+The manual example also reproduces the bug exactly as described:
+- Input: `datetime(2000, 1, 1, 0, 0, 0, 123456, tzinfo=timezone.utc)`
+- Microseconds before: 123456
+- Serialized format: `{" d":"Sat, 01 Jan 2000 00:00:00 GMT"}`
+- Deserialized result: `datetime(2000, 1, 1, 0, 0, 0, 0, tzinfo=timezone.utc)`
+- Microseconds after: 0
+- Result: AssertionError - microseconds are lost
+
+### Root Cause Verification
+
+I examined the source code in `/flask/json/tag.py` and confirmed:
+1. The `TagDateTime` class uses `http_date()` from Werkzeug to serialize datetimes
+2. The `http_date()` function formats dates in RFC 2822 format ("Sat, 01 Jan 2000 00:00:00 GMT")
+3. RFC 2822 format only supports second-level precision, not microseconds
+4. When deserializing with `parse_date()`, microseconds cannot be recovered as they were never stored
+
+### Impact
+
+The bug is real and affects any Flask application that:
+- Stores datetime objects in sessions
+- Requires sub-second precision
+- Expects serialization/deserialization to be lossless
+
+The silent data loss (no error or warning) makes this particularly problematic as developers may not realize precision is being lost.

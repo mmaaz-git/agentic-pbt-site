@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior complained about in the bug report is explicitly documented in the source code's docstring examples. Lines 1278-1283 of array.py show that `arr.astype(SparseDtype(np.dtype('float64')))` converting [0, 0, 1, 2] to [nan, nan, 1.0, 2.0] is the intended and documented behavior. The documentation clearly states this is what happens when you don't specify a fill_value, and even provides an alternative (specifying fill_value=0.0) if you want to preserve zeros. The bug reporter's expectation that astype should automatically preserve data values contradicts the explicitly documented behavior.
+
+**Why it might not be INVALID:**
+While the behavior is documented in code examples, one could argue that the principle of least surprise suggests that a type conversion operation should preserve actual data values. The fact that numpy's astype preserves values (np.array([0]).astype('float64') returns [0.]) creates a reasonable expectation that pandas' SparseArray should behave similarly. Additionally, the documentation doesn't explicitly explain WHY this design choice was made or warn users about potential data loss.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This appears to be a deliberate design choice for sparse arrays where the fill_value concept is central to the data structure's efficiency. Changing this behavior would be a breaking change that could affect existing code that relies on the current behavior. The sparse array's whole point is to efficiently store data by not storing fill_values, and the current behavior maintains consistency with this design philosophy. Users who need to preserve zeros have a documented workaround (explicit fill_value).
+
+**Why it might not be WONTFIX:**
+The issue represents actual data corruption from a user perspective - values that were 0 become nan, which is semantically very different. This is not a trivial edge case but affects a common scenario (converting integer sparse arrays to float). The severity of silently changing data values could warrant fixing despite being a breaking change.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+While the behavior is shown in an example, the documentation could be clearer about warning users that this operation can change actual data values. A prominent warning that "values equal to the fill_value will be replaced with the new dtype's default fill_value" would help users understand the implications. The current documentation focuses on showing what happens but doesn't emphasize the potential for data loss.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already shows the exact behavior with clear examples. Lines 1278-1292 demonstrate both the default behavior and how to preserve values using an explicit fill_value. The examples are comprehensive and show the actual output, so the documentation is technically complete and accurate.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for smarter default behavior where astype would automatically convert the fill_value to preserve data integrity. This could be implemented as a new feature with a parameter like `preserve_fill_values=True` or by making the default behavior smarter about fill_value conversion. This would add functionality without breaking existing code if done with a new parameter.
+
+**Why it might not be FEATURE_REQUEST:**
+The functionality already exists - users can specify the fill_value explicitly to get the desired behavior. The bug report frames this as incorrect behavior rather than a missing feature. The reporter suggests changing existing behavior rather than adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior violates the principle of data preservation during type conversion. When a user calls astype, they expect the operation to change the data type, not the data values. The inconsistency with numpy's behavior and with pandas' own string dtype conversion (astype('float64') works correctly) suggests this might be an implementation oversight. The fact that update_dtype has logic to convert fill_values but isn't being used correctly (as the reporter notes) indicates this might be a genuine bug in the implementation.
+
+**Why it might not be BUG:**
+The behavior is explicitly documented with examples showing this exact scenario. The docstring at lines 1278-1283 shows that [0, 0, 1, 2] becomes [nan, nan, 1.0, 2.0] when using SparseDtype('float64'). This appears to be intentional design, not an accident. The documentation even provides the alternative approach for users who want to preserve values.
+
+**Overall consideration**
+After careful analysis, this appears to be INVALID as a bug report. The behavior described is explicitly documented in the source code's docstring with clear examples showing that zeros become nans when converting to float64 without an explicit fill_value. The documentation shows this at lines 1278-1283 and immediately follows with an example of how to preserve values by specifying fill_value=0.0. This indicates the behavior is intentional, not accidental.
+
+The design makes sense from a sparse array perspective: sparse arrays are defined by their fill_value, and when you change dtypes, the fill_value changes to the new dtype's default unless explicitly specified. While this may be surprising to users familiar with regular arrays, it's consistent with the sparse array abstraction where values equal to fill_value are not explicitly stored.
+
+The bug reporter's claim that this "silently corrupts data" is overstated - the behavior is documented, and users who need to preserve values have a clear, documented path to do so. This is a case where the sparse array abstraction works differently from dense arrays by design, not by accident.

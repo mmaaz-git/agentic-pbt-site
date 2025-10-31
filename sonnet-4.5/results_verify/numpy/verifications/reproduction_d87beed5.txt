@@ -1,0 +1,40 @@
+## Reproduction Results
+
+I have successfully reproduced the bug described in the report. The behavior is confirmed as described.
+
+### Property-Based Test Result
+The Hypothesis test fails immediately with the exact example provided in the bug report:
+- Input: s='0', old='00'
+- Python result: '0' (unchanged, as expected since '00' cannot exist in '0')
+- NumPy result: 'R' (incorrectly replaces with truncated replacement string)
+
+### Manual Reproduction
+Running the provided reproduction code confirms the bug:
+```
+Python: '0'.replace('00', 'REPLACEMENT') = '0'
+NumPy:  char.replace('0', '00', 'REPLACEMENT') = 'R'
+```
+
+### Additional Testing
+I tested several more cases to understand the pattern:
+1. s='a', old='ab', new='XYZ' → Python returns 'a', NumPy returns 'X'
+2. s='x', old='xyz', new='123456' → Python returns 'x', NumPy returns '1'
+3. s='1', old='123', new='ABCDEFG' → Python returns '1', NumPy returns 'A'
+
+The pattern is consistent: when the search pattern is longer than the string being searched:
+- Python's str.replace() correctly returns the original string unchanged
+- NumPy's char.replace() incorrectly returns the first character of the replacement string
+
+### Important Discovery
+The bug appears to be specific to scalar strings or single-element arrays. When testing with multi-element arrays, NumPy char.replace behaves correctly:
+- For array ['0', 'hello', 'test'] with pattern '00' → correctly returns ['0', 'hello', 'test']
+
+However, for scalar '0' or single-element array ['0']:
+- char.replace('0', '00', 'REPLACEMENT') returns array('R', dtype='<U1')
+- The function incorrectly performs a replacement and truncates the result
+
+### NumPy Version
+Testing was performed on NumPy version 2.3.0
+
+### Conclusion
+The bug is real and behaves exactly as described in the report. NumPy's char.replace function has a critical logic error when handling cases where the search pattern is longer than the string being searched, specifically for scalar inputs or single-element arrays.

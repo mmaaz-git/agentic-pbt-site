@@ -1,0 +1,35 @@
+REPRODUCTION ANALYSIS
+=====================
+
+Bug Reproduction Status: CONFIRMED
+
+1. Hypothesis Test Results:
+   - The property-based test fails immediately on the empty list input []
+   - Error: Expected shape (1, 0) but got (0, 0) for lst=[]
+   - The test correctly identifies that empty 1D arrays are mishandled
+
+2. Manual Test Results:
+   - Empty array with oned_as='row' produces (0, 0) instead of expected (1, 0)
+   - Empty array with oned_as='column' produces (0, 0) instead of expected (0, 1)
+   - Non-empty array with oned_as='row' correctly produces (1, 3)
+   - This confirms the oned_as parameter is completely ignored for empty 1D arrays
+
+3. Source Code Verification:
+   - Located the bug in scipy/io/matlab/_miobase.py lines 326-327
+   - The matdims function has a special case: if shape[0] == 0: return (0, 0)
+   - This special case executes BEFORE checking the oned_as parameter
+   - For non-empty 1D arrays, the oned_as parameter is correctly respected
+
+4. Additional Testing:
+   - Confirmed that 2D empty arrays work correctly:
+     * np.zeros((1, 0)) correctly saves/loads as (1, 0)
+     * np.zeros((0, 1)) correctly saves/loads as (0, 1)
+     * np.zeros((0, 0)) correctly saves/loads as (0, 0)
+   - This proves the system CAN handle different empty array shapes
+   - The bug is specifically in the 1D array handling logic
+
+Effect:
+The bug causes inconsistent behavior where the oned_as parameter works for all 1D arrays
+EXCEPT empty ones. This breaks the round-trip property for empty 1D arrays and violates
+the principle of uniform behavior across the input domain. Users cannot reliably save and
+restore empty 1D arrays with the intended orientation.

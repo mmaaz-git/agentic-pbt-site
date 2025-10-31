@@ -1,0 +1,49 @@
+# Bug Reproduction Analysis
+
+## Bug Summary
+The Flask environment variable parsing functions `get_debug_flag()` and `get_load_dotenv()` fail to strip whitespace from environment variable values before parsing them.
+
+## Reproduction
+I successfully reproduced the bug using both the provided test cases and Hypothesis property-based tests.
+
+### Test Results for get_debug_flag():
+- `FLASK_DEBUG='false'` → Returns `False` (correct)
+- `FLASK_DEBUG=' false'` → Returns `True` (incorrect, should be False)
+- `FLASK_DEBUG='false '` → Returns `True` (incorrect, should be False)
+- `FLASK_DEBUG='\tfalse'` → Returns `True` (incorrect, should be False)
+
+### Test Results for get_load_dotenv():
+- `FLASK_SKIP_DOTENV='false'` → Returns `True` (correct)
+- `FLASK_SKIP_DOTENV=' false'` → Returns `False` (incorrect, should be True)
+- `FLASK_SKIP_DOTENV='false '` → Returns `False` (incorrect, should be True)
+- `FLASK_SKIP_DOTENV='\tfalse'` → Returns `False` (incorrect, should be True)
+
+## Root Cause
+The functions directly compare the lowercased environment variable value without stripping whitespace first:
+
+In `get_debug_flag()`:
+```python
+val = os.environ.get("FLASK_DEBUG")
+return bool(val and val.lower() not in {"0", "false", "no"})
+```
+
+When `val` is `" false"`, `val.lower()` becomes `" false"` which is NOT in the set `{"0", "false", "no"}`, so the function returns `True`.
+
+In `get_load_dotenv()`:
+```python
+val = os.environ.get("FLASK_SKIP_DOTENV")
+if not val:
+    return default
+return val.lower() in ("0", "false", "no")
+```
+
+When `val` is `" false"`, `val.lower()` becomes `" false"` which is NOT in the tuple `("0", "false", "no")`, so the function returns `False`.
+
+## Impact
+This bug causes unexpected behavior when users accidentally include whitespace in environment variables, which is common in:
+- Shell scripts with formatting/indentation
+- .env files with accidental spaces
+- Manual export commands with trailing spaces
+- Configuration management tools that may add whitespace
+
+The bug violates the principle of least surprise - most configuration parsers strip whitespace from values.

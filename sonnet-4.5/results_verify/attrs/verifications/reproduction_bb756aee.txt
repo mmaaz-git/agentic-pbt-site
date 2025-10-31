@@ -1,0 +1,39 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### 1. Hypothesis Test Reproduction
+
+The provided Hypothesis-based property test correctly identifies a counterexample:
+- Input: n=1,125,894,277,343,089,729 (approximately 1000 PiB)
+- Output: '1000.00 PiB'
+- Length: 11 characters
+- This violates the assertion that length <= 10
+
+The test fails as expected with the counterexample matching what the bug report claims.
+
+### 2. Manual Test Cases
+
+I ran the manual test cases and confirmed the exact output:
+- 999 * 2^50 bytes → '999.00 PiB' (length=10) ✓
+- 1000 * 2^50 bytes → '1000.00 PiB' (length=11) ✗
+- 1023 * 2^50 bytes → '1023.00 PiB' (length=11) ✗
+
+All test values are confirmed to be less than 2^60 (1,152,921,504,606,846,976).
+
+### 3. Code Analysis
+
+The implementation in `/home/npc/miniconda/lib/python3.13/site-packages/dask/utils.py` (lines 1771-1799) shows:
+- Line 1788 contains the docstring claim: "For all values < 2**60, the output is always <= 10 characters."
+- Line 1798 uses the format string `f"{n / k:.2f} {prefix}B"` which always uses 2 decimal places
+- When n/k >= 1000, the formatted number part alone is 7 characters (e.g., "1000.00")
+- Add the space and unit suffix ("PiB"), total becomes 11 characters
+
+### 4. Bug Confirmation
+
+The bug is real and reproducible:
+- Values in the range [1000 PiB, 1024 PiB) are all < 2^60
+- These values produce 11-character strings
+- This directly violates the documented guarantee in the docstring
+
+The issue occurs because the formatting always uses 2 decimal places (.2f), even when the coefficient becomes 4 digits (1000+), causing the total string length to exceed 10 characters.

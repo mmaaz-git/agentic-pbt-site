@@ -1,0 +1,78 @@
+## Bug Report Triage Analysis
+
+### Considering INVALID
+**Arguments Against:**
+- The bug is real and reproducible - the code crashes with UnicodeDecodeError
+- The bytes type in Python is explicitly designed for arbitrary binary data, not just UTF-8 text
+- Pydantic accepts arbitrary bytes during model creation but fails during JSON serialization
+- The behavior is internally inconsistent (accepts non-UTF-8 bytes but can't serialize them)
+
+**Arguments For:**
+- JSON specification doesn't support binary data natively
+- User could argue that bytes containing non-UTF-8 data shouldn't be expected to work with JSON
+
+**Verdict:** NOT INVALID - The crash is real and the inconsistency is problematic
+
+### Considering WONTFIX
+**Arguments For:**
+- One could argue this is an edge case since many users might only use UTF-8 compatible bytes
+- The workaround is simple - users can add custom JSON encoders
+
+**Arguments Against:**
+- This is not an obscure edge case - binary data is common (images, encrypted data, hashes, etc.)
+- The crash is unpredictable and data-dependent
+- The inconsistency between model creation and serialization is a serious design flaw
+- Other serialization libraries handle this correctly (e.g., using base64)
+
+**Verdict:** NOT WONTFIX - This affects real use cases and causes unexpected crashes
+
+### Considering DOCUMENTATION_FIX
+**Arguments For:**
+- The documentation doesn't warn about this limitation
+- Adding documentation about the UTF-8 requirement would at least inform users
+- The code technically "works as designed" if the design assumes UTF-8 bytes
+
+**Arguments Against:**
+- This isn't just a documentation issue - the code behavior is fundamentally broken
+- Documentation alone won't prevent runtime crashes
+- The bytes type semantics in Python don't match the implementation behavior
+- Fixing only documentation would leave users with a broken feature
+
+**Verdict:** PARTIALLY APPLICABLE - Documentation should be updated, but this alone is insufficient
+
+### Considering FEATURE_REQUEST
+**Arguments For:**
+- Supporting arbitrary binary data in JSON could be seen as a new feature
+- Base64 encoding support could be considered an enhancement
+
+**Arguments Against:**
+- This isn't requesting new functionality - bytes fields already exist and are supposed to work
+- The current implementation is broken, not missing
+- Users reasonably expect that accepted data types can be serialized
+
+**Verdict:** NOT A FEATURE_REQUEST - This is fixing broken existing functionality
+
+### Considering BUG
+**Arguments For:**
+- The code crashes with valid Python bytes objects
+- There's an inconsistency: model accepts bytes but can't serialize them
+- The implementation violates the semantic contract of the bytes type
+- No documentation warns about this limitation
+- The failure is unpredictable and data-dependent
+- Other parts of pydantic (dict()) handle the same data correctly
+- Industry standard practice is to base64 encode binary data in JSON
+
+**Arguments Against:**
+- JSON doesn't natively support binary data (but this is an implementation detail users shouldn't need to know)
+
+**Verdict:** THIS IS A BUG
+
+## Final Assessment
+This is clearly a **BUG**. The pydantic v1 library:
+1. Accepts bytes fields with arbitrary binary data
+2. Crashes during JSON serialization for non-UTF-8 bytes
+3. Provides no documentation about this limitation
+4. Has an inconsistent implementation (dict() works, json() crashes)
+5. Violates reasonable user expectations about data types
+
+The proper fix would be to encode bytes as base64 strings in JSON (industry standard practice) and decode them back when parsing JSON. This would make the behavior consistent and predictable.

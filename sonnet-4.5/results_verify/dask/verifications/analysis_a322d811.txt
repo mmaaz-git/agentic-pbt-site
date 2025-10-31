@@ -1,0 +1,78 @@
+BUG TRIAGE ANALYSIS - dask.utils.key_split
+===========================================
+
+## Evaluation Against Each Category
+
+### 1. INVALID - Why it might be INVALID:
+- The function could be argued to only support "reasonable" inputs
+- One could claim that unhashable types were never intended to be supported
+- Invalid UTF-8 bytes could be considered outside the function's scope
+
+**However, arguments AGAINST INVALID:**
+- The function explicitly has exception handling to return "Other" for problematic inputs
+- The docstring shows bytes as valid input (b'hello-world-1')
+- The exception handler catches ALL exceptions, suggesting it should handle any input
+- The function already handles None by returning "Other", showing it accepts diverse inputs
+
+### 2. WONTFIX - Why it might be WONTFIX:
+- Passing lists/dicts to a key splitting function might be considered obscure
+- Invalid UTF-8 bytes in task keys could be considered an edge case
+- The performance benefit of lru_cache might outweigh handling unhashable types
+
+**However, arguments AGAINST WONTFIX:**
+- This is not an obscure edge case - the function is explicitly designed to handle exceptions
+- The bug defeats the purpose of the exception handler in the code
+- Dask is a distributed computing framework where robustness matters
+- Silent failures are better than crashes for key extraction utilities
+
+### 3. DOCUMENTATION_FIX - Why it might be DOCUMENTATION_FIX:
+- The documentation could be updated to specify that only hashable types are supported
+- Could document that bytes must be valid UTF-8
+- The current behavior might be considered "working as designed"
+
+**However, arguments AGAINST DOCUMENTATION_FIX:**
+- The code clearly intends to catch all exceptions and return "Other"
+- The exception handler is not being reached due to a code structure issue
+- This is a code bug, not a documentation issue
+
+### 4. FEATURE_REQUEST - Why it might be FEATURE_REQUEST:
+- Supporting unhashable types could be seen as a new feature
+- Handling invalid UTF-8 could be considered an enhancement
+
+**However, arguments AGAINST FEATURE_REQUEST:**
+- The exception handler already exists - it's just not working correctly
+- This is fixing existing functionality, not adding new functionality
+- The docstring already shows bytes should work
+
+### 5. BUG - Why this IS a BUG:
+**Strong evidence this is a valid bug:**
+
+1. **Clear Design Intent**: The function has `except Exception: return "Other"` showing it should handle ALL exceptions
+
+2. **Broken Exception Handling**: The exception handler exists but cannot catch:
+   - UnicodeDecodeError from bytes.decode() (happens before try block)
+   - TypeError from lru_cache for unhashable types (happens before function execution)
+
+3. **Documented Support**: The docstring explicitly shows bytes as valid input (line 1964)
+
+4. **Inconsistent Behavior**: The function handles None gracefully but crashes on other unusual inputs
+
+5. **Code Structure Issue**: This is clearly a code organization problem where:
+   - Lines 1978-1979 should be inside the try block
+   - The lru_cache decorator prevents the exception handler from working
+
+6. **Usage Context**: The function is used in optimization and widget code where robustness matters
+
+7. **Fix is Straightforward**: Moving the bytes handling inside the try block would partially fix the issue
+
+## Conclusion
+
+This is a **BUG**. The function has exception handling specifically designed to return "Other" for any problematic input, but due to code structure issues, certain exceptions are raised before the handler can catch them. This violates the clear design intent of the function.
+
+The bug is not about whether lists or invalid UTF-8 should be supported - it's about the fact that the exception handler exists but cannot do its job due to operations occurring before the try block.
+
+Key points:
+- The exception handler proves the function should handle all inputs gracefully
+- The docstring shows bytes are supported
+- The current behavior contradicts the obvious design intent
+- This is a code structure bug, not a feature request or documentation issue

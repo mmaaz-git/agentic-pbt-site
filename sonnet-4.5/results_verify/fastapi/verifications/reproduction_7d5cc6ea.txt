@@ -1,0 +1,23 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the reported bug in FastAPI's `is_body_allowed_for_status_code` function.
+
+### Reproduction Results:
+
+1. **Function Location**: The function is found in `fastapi/utils.py` and accepts `Union[int, str, None]` as its type signature.
+
+2. **Bug Confirmed**: The function crashes with `ValueError` when given string inputs that cannot be converted to integers. Specifically:
+   - `"abc"` raises: `ValueError: invalid literal for int() with base 10: 'abc'`
+   - `"200.0"` raises: `ValueError: invalid literal for int() with base 10: '200.0'`
+   - `""` (empty string) raises: `ValueError: invalid literal for int() with base 10: ''`
+   - `"200 OK"` raises: `ValueError: invalid literal for int() with base 10: '200 OK'`
+
+3. **Hypothesis Test**: The property-based test fails immediately on the empty string `''` and other non-numeric strings, confirming that the function violates its type contract by crashing on valid string inputs.
+
+4. **Current Behavior**:
+   - The function correctly handles: `None`, integers (e.g., 200, 204), numeric strings (e.g., "200"), and special OpenAPI patterns ("default", "1XX", "2XX", etc.)
+   - It crashes on any string that is not in the predefined set and cannot be parsed as an integer
+
+5. **Root Cause**: Line 55 in the function unconditionally calls `int(status_code)` on any string that is not in the predefined set, without error handling for invalid conversions.
+
+The bug is accurately described in the report - the function's type signature promises to accept any string but crashes on non-numeric strings that aren't in the special OpenAPI pattern set.

@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+### Test Results
+
+I successfully reproduced the reported bug. The tests demonstrate clear inconsistent behavior in `check_array_indexer`:
+
+**1. Empty List Handling**
+- Input: `check_array_indexer(array, [])`
+- Result: SUCCESS - Returns `np.array([], dtype=int64)`
+- Code path: The empty list is not considered array-like, so it gets special handling at lines 526-528
+
+**2. Empty Pandas Array Handling (default dtype)**
+- Input: `check_array_indexer(array, pd.array([]))`
+- Result: FAILURE - Raises `IndexError: arrays used as indices must be of integer or boolean type`
+- Issue: `pd.array([])` creates a FloatingArray with Float64 dtype
+- Code path: Since it's already array-like, it skips the special empty handling and fails the dtype check at line 551
+
+**3. Empty Pandas Array Handling (int dtype)**
+- Input: `check_array_indexer(array, pd.array([], dtype='int64'))`
+- Result: SUCCESS - Returns `np.array([], dtype=int64)`
+- Code path: Passes through integer dtype validation
+
+### Key Finding
+
+The bug occurs because:
+1. `pd.array([])` without explicit dtype creates a FloatingArray with Float64 dtype
+2. The special empty array handling (lines 526-528) only applies when `not is_array_like(indexer)`
+3. Since pandas arrays are array-like, empty pandas arrays with Float64 dtype skip this handling
+4. They then fail the dtype validation at line 551 which requires integer or boolean type
+
+### Verification of Inconsistency
+
+The bug report correctly identifies an inconsistency where functionally equivalent empty inputs are treated differently:
+- Empty Python list: Succeeds (special-cased)
+- Empty pandas array (default): Fails (Float64 dtype rejected)
+- Empty pandas array (int/bool): Succeeds (passes dtype check)
+
+This violates the principle that empty arrays should be valid indexers regardless of their container type, especially when the function already has logic to handle empty arrays by converting them to `np.array([], dtype=np.intp)`.

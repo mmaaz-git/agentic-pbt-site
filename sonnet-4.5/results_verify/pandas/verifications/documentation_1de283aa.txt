@@ -1,0 +1,70 @@
+## Documentation Analysis
+
+### hash_tuples Function Documentation
+
+From the source code (lines 183-230), the docstring states:
+```
+Hash an MultiIndex / listlike-of-tuples efficiently.
+
+Parameters
+----------
+vals : MultiIndex or listlike-of-tuples
+encoding : str, default 'utf8'
+hash_key : str, default _default_hash_key
+
+Returns
+-------
+ndarray[np.uint64] of hashed values
+```
+
+**Key observations:**
+1. The docstring does NOT specify what happens with empty inputs
+2. The parameter type is "listlike-of-tuples" which includes empty lists
+3. The return type is "ndarray[np.uint64] of hashed values" with no specification about empty case behavior
+
+### hash_array Function Documentation
+
+From the source code (lines 233-279) and online documentation, the docstring states:
+```
+Given a 1d array, return an array of deterministic integers.
+
+Parameters
+----------
+vals : ndarray or ExtensionArray
+...
+
+Returns
+-------
+ndarray[np.uint64, ndim=1]
+    Hashed values, same length as the vals.
+```
+
+**Key observations:**
+1. States it returns "Hashed values, same length as the vals" - implying empty input returns empty output
+2. hash_array successfully handles empty arrays and returns empty uint64 arrays
+3. No explicit documentation about empty case, but behavior is implied by "same length"
+
+### Implementation Analysis
+
+The issue occurs at line 210 where `MultiIndex.from_tuples(vals)` is called. This function raises the error "Cannot infer number of levels from empty list" when given an empty list.
+
+However, looking at `combine_hash_arrays` (lines 47-80), it explicitly handles empty iterators:
+```python
+try:
+    first = next(arrays)
+except StopIteration:
+    return np.array([], dtype=np.uint64)
+```
+
+This shows the infrastructure exists to handle empty cases properly.
+
+### Documentation Gaps
+
+1. Neither function explicitly documents empty input behavior
+2. hash_tuples doesn't document that it will raise an error on empty input
+3. The type signature accepts empty iterables but the implementation doesn't handle them
+4. No consistency requirement is documented between hash_array and hash_tuples
+
+### Conclusion
+
+The documentation does not specify that empty lists are invalid input for hash_tuples. The function signature accepts `Iterable[tuple[Hashable, ...]]` which includes empty iterables. The lack of documentation about this edge case, combined with the inconsistent behavior compared to hash_array, suggests this is either a BUG or a DOCUMENTATION_FIX rather than INVALID behavior.

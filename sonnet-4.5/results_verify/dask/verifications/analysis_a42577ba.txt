@@ -1,0 +1,50 @@
+BUG TRIAGE ANALYSIS
+====================
+
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The function could be considered working as designed if the expectation is that parquet statistics should always have both valid min and max values when the keys are present. One could argue that malformed statistics (where max is None but min is not) represent invalid input that shouldn't occur in properly formatted parquet files. The crash could be viewed as correctly rejecting malformed data rather than silently handling it.
+
+**Why it might not be INVALID:**
+The crash is clearly unintended - the function already has explicit None checks for min values (lines 427, 430) showing it expects to handle None values gracefully. The function returns an empty list when both min and max are None, demonstrating it should handle missing statistics without crashing. The assertion on line 442 is for verifying sorted order, not for input validation, so the TypeError is an implementation oversight, not intentional behavior.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+This edge case might be considered too obscure - parquet files with partial statistics (min present but max None) are likely rare in practice. Most parquet writers either provide both statistics or neither. The workaround is simple: users can filter out None statistics before calling the function. The bug only affects an internal utility function not part of the public API.
+
+**Why it might not be WONTFIX:**
+Parquet files can legitimately have None statistics in various scenarios (disabled statistics, NULL-only columns, legacy files), making this a real-world concern. The fix is trivial (adding a None check for max) with minimal performance impact. Crashing with TypeError provides poor user experience compared to gracefully skipping unusable statistics. Other parts of Dask already handle missing statistics gracefully.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The function's docstring doesn't specify how None values in statistics should be handled. The documentation could be updated to state that statistics must have non-None min and max values. This would make the current behavior (crashing on None) the documented and expected behavior rather than a bug.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function already handles None values for min correctly, so the inconsistency is in the code, not the documentation. The crash is clearly unintentional - it happens in an assertion meant to verify sorting, not validate input. The proper fix is to handle None max values like None min values are already handled, not to document the crash as expected behavior.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Supporting partial statistics (min without max or vice versa) could be viewed as a new capability rather than fixing a bug. The current implementation might have been designed only for complete statistics. Adding robust None handling throughout could be considered an enhancement to make the function more flexible.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle None values (checks for min being None), so supporting them isn't a new feature but fixing incomplete implementation. The crash is a TypeError, not a deliberate rejection of the input. The fix doesn't add new functionality but prevents an unintended crash in existing functionality.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The function crashes with an unhandled TypeError instead of gracefully handling None values. It already has code to handle None min values but fails to handle None max values consistently. The crash occurs in an assertion meant to verify sorting correctness, not during input validation. The inconsistency (handling None min but not None max) indicates an implementation oversight. The fix is straightforward and makes the behavior consistent.
+
+**Why it might not be BUG:**
+One could argue that parquet statistics should always be complete (both min and max) when present, making partial statistics invalid input. The function might have been designed with the assumption that statistics are either fully present or fully absent. The internal nature of the function might mean it's only called with validated input in practice.
+
+## Overall Consideration
+
+After examining all aspects, this appears to be a legitimate BUG. The function demonstrates clear intent to handle None values through its existing checks for None min values (lines 427, 430-432), but fails to apply the same logic to max values. The crash occurs not during intentional input validation but in an assertion meant to verify sorting order. The TypeError is an unintended consequence of incomplete None handling rather than deliberate input rejection.
+
+The function successfully handles the case where both min and max are None (returns empty list), and where min is None but max is not (returns empty list). However, it crashes when max is None but min is not - this inconsistency strongly indicates a bug rather than intentional design. The proposed fix is minimal and makes the behavior consistent with how None min values are already handled.
+
+While the bug may be rare in practice (partial statistics are unusual), it represents a clear oversight in the implementation that causes the function to crash unexpectedly rather than gracefully handle edge cases as it does for other None patterns. The fact that line 433 uses max in a comparison without checking for None, while similar code for min includes None checks, further supports this being an implementation bug rather than a design choice.

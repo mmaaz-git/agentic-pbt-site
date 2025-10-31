@@ -1,0 +1,50 @@
+## Bug Reproduction Results
+
+I successfully reproduced the bug described in the report. Here are the findings:
+
+### Test Results
+
+1. **Basic Falsy Value Test (builder=0, extension=1)**:
+   - Expected: 0 (builder value)
+   - Actual: 1 (extension value)
+   - Result: BUG CONFIRMED - Builder value of 0 is ignored
+
+2. **Boolean False Test (builder=False, extension=True)**:
+   - Expected: False (builder value)
+   - Actual: True (extension value)
+   - Result: BUG CONFIRMED - Builder value of False is ignored
+
+3. **Empty List Test (builder=[], extension=dict)**:
+   - Expected: [] (builder value)
+   - Actual: {'language_level': 3} (extension value)
+   - Result: BUG CONFIRMED - Empty list is ignored
+
+4. **None Test (builder=None, extension='extension_value')**:
+   - Result: 'extension_value'
+   - This is expected since None typically means "not set"
+
+5. **Truthy Value Test (builder=1, extension=0)**:
+   - Expected: 1 (builder value)
+   - Actual: 1 (builder value)
+   - Result: WORKS CORRECTLY - Truthy builder values work
+
+### Property-Based Testing
+
+The Hypothesis test failed immediately with multiple examples showing that when the builder value is falsy (0, False, [], {}), the extension value is returned instead of the builder value.
+
+### Root Cause
+
+The implementation uses Python's `or` operator:
+```python
+return getattr(self, option_name) or getattr(extension, option_name, default)
+```
+
+This treats all falsy values (0, False, [], {}, etc.) as "not set" and falls back to the extension value. This is problematic for boolean options where False/0 is a valid explicit setting.
+
+### Impact
+
+This bug affects users who try to explicitly disable features via command-line options. For example:
+- Setting `--no-cython-cplus` or `cython_cplus=0` to disable C++ mode would be ignored if an extension has `cython_cplus=1`
+- Setting `cython_gdb=False` to disable debug info would be ignored if an extension has `cython_gdb=True`
+
+The bug violates the established precedence rule that command-line options should override extension settings.

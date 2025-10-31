@@ -1,0 +1,35 @@
+## Documentation Analysis for pandas.cut()
+
+After reviewing the official pandas documentation and source code for pd.cut(), here are the key findings:
+
+### Function Purpose
+The pd.cut() function is designed to bin continuous values into discrete intervals. It's commonly used for converting continuous variables to categorical ones (e.g., converting ages to age ranges).
+
+### Key Parameters Relevant to This Bug
+1. **bins (integer)**: When an integer is provided, pd.cut creates that many equal-width bins. The documentation explicitly states:
+   - "The range of x is extended by .1% on each side to include the minimum and maximum values of x"
+   - This extension is implemented to ensure edge values are included in bins
+
+2. **duplicates parameter**:
+   - Default value: 'raise' (raises ValueError if bin edges are not unique)
+   - Alternative: 'drop' (drops non-unique bin edges)
+   - Documentation states: "If bin edges are not unique, raise ValueError or drop non-uniques"
+
+### Documented Behavior
+The documentation provides examples showing the use of duplicates='drop' when manually specifying duplicate bin edges (e.g., [0, 2, 4, 6, 10, 10]). However, there is NO documentation about:
+- What happens when the automatic binning process (integer bins) creates duplicates
+- Behavior with extremely small value ranges
+- Floating-point precision limitations
+
+### Implementation Details (from source code)
+When bins is an integer, the _nbins_to_bins() function:
+1. Uses np.linspace() to create evenly spaced bin edges
+2. Adjusts the first or last bin by 0.1% of the range to ensure inclusion
+3. The adjustment is calculated as: adj = (max - min) * 0.001
+
+### Critical Finding
+The documentation does NOT specify what should happen when:
+- The data range is so small that np.linspace() cannot create the requested number of distinct bins due to floating-point precision
+- The 0.1% adjustment becomes effectively zero due to floating-point underflow
+
+The error message suggests using duplicates='drop', but this parameter is documented for user-provided bins, not for the automatic binning case. The documentation doesn't clarify whether duplicates='drop' should work with integer bins parameter.

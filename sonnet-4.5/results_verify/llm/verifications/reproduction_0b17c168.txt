@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue exists in the `combine_chunks` function in `/home/npc/pbt/agentic-pbt/envs/llm_env/lib/python3.13/site-packages/llm/default_plugins/openai_models.py`.
+
+### Code Analysis
+The function is located at lines 919-964. The problematic code is on line 943:
+```python
+role = choice.delta.role
+```
+
+This line unconditionally assigns the role from each chunk's delta, overwriting any previously set role value. When subsequent chunks have `delta.role = None` (which is the standard behavior in OpenAI's streaming API), the final role becomes `None`.
+
+### Test Results
+
+1. **Hypothesis Property-Based Test**:
+   - The test failed as expected with the falsifying example `contents=['', '']`
+   - The assertion `assert result["role"] == "assistant"` failed
+   - This confirms that with any list of 2+ elements, the role is lost
+
+2. **Manual Reproduction Test**:
+   - Input: Two chunks - first with role="assistant" and content="Hello", second with role=None and content=" World"
+   - Expected output: `role="assistant"`, `content="Hello World"`
+   - Actual output: `role=None`, `content="Hello World"`
+   - The test failed with: `AssertionError: Expected role='assistant', got role=None`
+
+### Impact
+The bug causes the role field to be lost when combining streaming chunks, which would break any downstream code that depends on knowing the role of the combined message. The content is correctly concatenated, but the role information is incorrectly overwritten with None.
+
+### Root Cause
+The implementation doesn't distinguish between:
+1. A chunk explicitly setting `role=None` (which shouldn't overwrite)
+2. A chunk setting a new role value (which should overwrite)
+
+The fix suggested in the bug report (only updating role when `choice.delta.role is not None`) would correctly preserve the initial role value.

@@ -1,0 +1,45 @@
+## Reproduction Report for pandas.io.formats.printing._justify Bug
+
+### Bug Summary
+The `_justify` function silently truncates data when input sequences have different lengths, causing data loss without any error or warning.
+
+### Reproduction Steps and Results
+
+1. **Simple Reproduction Case**
+   - Input: `head=[['a', 'b', 'c']]`, `tail=[['x']]`
+   - Expected: head should retain 3 elements, tail should have 1 element
+   - Actual Result: `head=[('a',)]`, `tail=[('x',)]`
+   - **Data Loss Confirmed**: 2 elements ('b' and 'c') were silently dropped from head
+
+2. **Edge Case 1**
+   - Input: `head=[['', '']]`, `tail=[['']]`
+   - Expected: head should have 2 elements
+   - Actual Result: `head=[('',)]` - only 1 element
+   - **Data Loss Confirmed**: 1 element was dropped
+
+3. **Edge Case 2**
+   - Input: `head=[['']]`, `tail=[['', '']]`
+   - Expected: tail should have 2 elements
+   - Actual Result: `tail=[('',)]` - only 1 element
+   - **Data Loss Confirmed**: 1 element was dropped
+
+4. **Property-Based Test**
+   - The Hypothesis test failed on both provided examples
+   - Error messages confirm length changes:
+     - "head[0] length changed: 2 -> 1"
+     - "tail[0] length changed: 2 -> 1"
+   - The test correctly identifies that the function is not preserving content
+
+### Root Cause Analysis
+The bug occurs in the implementation at line 484-487 of printing.py:
+```python
+max_length = [0] * len(combined[0])  # Assumes all sequences have same length as first
+for inner_seq in combined:
+    length = [len(item) for item in inner_seq]
+    max_length = [max(x, y) for x, y in zip(max_length, length)]  # zip truncates!
+```
+
+The code incorrectly assumes all sequences have the same length as the first sequence (`combined[0]`). When `zip` is used with sequences of different lengths, it truncates to the shortest, causing data loss.
+
+### Impact
+This is a **severe data integrity issue** where user data is silently discarded without any warning or error. The function's behavior violates the principle of least surprise - a "justify" operation should only add padding (spaces), never remove content.

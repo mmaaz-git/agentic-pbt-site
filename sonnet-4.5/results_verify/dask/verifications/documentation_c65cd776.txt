@@ -1,0 +1,37 @@
+## Documentation Analysis Report
+
+### Function Documentation
+The `apply_filters` function has clear docstring documentation that describes:
+- Purpose: Apply filters onto parts/statistics pairs for partition-level (hive) filtering
+- Parameters: parts (list of tokens), statistics (list of dicts with min/max values), filters (DNF predicates)
+- Returns: Filtered subset of parts and statistics
+
+### Apache Parquet Specification
+According to the Apache Parquet format specification:
+1. **Min/Max values are OPTIONAL** - The format explicitly states that min/max values in statistics are optional
+2. **Partial statistics are valid** - It is possible and valid to have statistics where:
+   - Only min is present (max is None)
+   - Only max is present (min is None)
+   - Both are None
+   - null_count can be present independently of min/max
+3. **Writers and readers responsibilities**:
+   - Writers MAY omit min/max values
+   - Readers MUST handle missing min/max values gracefully
+   - Readers MUST distinguish between missing statistics and actual values
+
+### Dask Documentation Findings
+1. The Dask documentation mentions using row-group statistics for filtering optimizations
+2. There's a known related issue (#9764) where filtering with None statistics caused TypeErrors
+3. The documentation states that filtering should handle "missing" statistics gracefully
+
+### Key Documentation Points
+1. The comment on line 531 states "(main/max cannot be None for remaining checks)" but this is an internal implementation comment, not a specification requirement
+2. The function is supposed to handle "row-groups with 'missing' stats" (line 518 comment)
+3. The Apache Parquet specification explicitly allows partial statistics (one of min/max being None)
+4. The function's docstring doesn't specify that both min and max must be present or both must be None
+
+### Conclusion
+The documentation and specifications clearly indicate that:
+- Partial None values (one of min/max being None) are valid according to the Parquet specification
+- The function claims to handle "missing" stats but fails to properly handle partial None cases
+- This is a violation of the Parquet specification's requirement that readers MUST handle missing min/max values gracefully

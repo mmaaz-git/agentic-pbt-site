@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report is testing an internal function (_resample_bin_and_out_divs) that is not part of the public API. Internal functions are implementation details that can change without notice and their behavior is not guaranteed. The test case uses extremely artificial inputs (two timestamps 1 microsecond apart) that would never occur in real-world usage where divisions represent meaningful partition boundaries. The documentation doesn't specify behavior for internal functions, and testing internal implementation details against unspecified behavior could be considered invalid.
+
+**Why it might not be INVALID:**
+The code does produce duplicate divisions which violates the conceptual model of divisions as unique partition boundaries. Even internal functions should maintain logical consistency. The bug is technically real from a pure code logic perspective - the function does produce incorrect output.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case that requires timestamps to be microseconds apart within the same resampling period. Such inputs make no practical sense for partitioning data. The bug only affects an internal function that users shouldn't be calling directly. The effort to fix this may not be justified given the artificial nature of the test case and the fact that real-world usage would never encounter this scenario.
+
+**Why it might not be WONTFIX:**
+If the function can produce duplicate divisions, it could potentially cause issues in downstream operations that assume divisions are unique. The fix appears relatively simple (handling the setter logic correctly for each array separately), so the cost of fixing is low.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that divisions must be unique, though this is strongly implied. If the function is intended to handle edge cases like microsecond-apart timestamps, the documentation should clarify this. The internal function's behavior and constraints could be documented in code comments.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is an internal function (underscore-prefixed) that isn't meant to be documented publicly. The issue isn't about unclear documentation but about actual code logic producing duplicates. The conceptual documentation about divisions already implies they should be unique.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting edge cases like microsecond-apart timestamps could be seen as a new feature rather than a bug fix. The current implementation wasn't designed for such extreme inputs. Adding robust handling for all edge cases could be considered an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle various cases with its adjustment logic. This isn't about adding new functionality but fixing existing logic that produces incorrect results. The issue is a logic error, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code contains a clear logic error where it reuses the same setter lambda for different arrays (newdivs and outdivs) that may need different operations. Line 99 `setter(outdivs, outdivs[-1])` can append a duplicate value when setter uses append. This produces divisions with duplicate consecutive elements, violating the implicit contract that divisions should be unique and monotonically increasing.
+
+**Why it might not be BUG:**
+This is an internal function not meant for direct use. The test case is extremely artificial (timestamps 1 microsecond apart) and would never occur in real usage. The bug report is testing implementation details against unspecified behavior. Internal functions may have different contracts than public APIs.
+
+## Overall Consideration
+
+After careful analysis, this bug report should likely be closed as INVALID or WONTFIX. Here are the key considerations:
+
+First, the function being tested (_resample_bin_and_out_divs) is clearly an internal implementation detail, marked with an underscore prefix following Python conventions. Testing internal functions against property-based tests is problematic because these functions are not part of the public API contract. They can change without notice and their behavior for edge cases is implementation-defined.
+
+Second, the test case is extremely artificial - using timestamps that are only 1 microsecond apart. In real-world usage, divisions represent partition boundaries with meaningful amounts of data between them. Having divisions microseconds apart defeats the entire purpose of partitioning and would never occur in practice. The function was clearly not designed for such inputs, and it's reasonable for internal functions to have implicit assumptions about reasonable input ranges.
+
+Third, while the code does contain a technical logic error (reusing the setter lambda inappropriately), this error only manifests with unrealistic inputs. The cost-benefit analysis of fixing this is poor - it would add complexity to handle a case that should never occur. Internal functions often prioritize simplicity and performance over handling every conceivable edge case, especially those that violate the intended use patterns.

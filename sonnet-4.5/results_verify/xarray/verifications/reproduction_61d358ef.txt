@@ -1,0 +1,49 @@
+## Bug Reproduction Analysis
+
+### Bug Claim
+The `build_grid_chunks` function returns chunks that sum to more than the specified `size` when `chunk_size > size`.
+
+### Reproduction Results
+
+#### Test Case 1: size=1, chunk_size=2
+- **Expected**: Chunks should sum to 1
+- **Actual Result**: `(2, 1)` with sum = 3
+- **Bug Confirmed**: YES - sum exceeds size by 2
+
+#### Test Case 2: size=5, chunk_size=10
+- **Expected**: Chunks should sum to 5
+- **Actual Result**: `(10, 5)` with sum = 15
+- **Bug Confirmed**: YES - sum exceeds size by 10
+
+#### Additional Test Cases
+- `size=3, chunk_size=10`: Returns `(10, 3)`, sum=13 (expected 3) - BUG
+- `size=7, chunk_size=15`: Returns `(15, 7)`, sum=22 (expected 7) - BUG
+- `size=10, chunk_size=3`: Returns `(3, 3, 3, 1)`, sum=10 - CORRECT
+- `size=10, chunk_size=10`: Returns `(10,)`, sum=10 - CORRECT
+
+### Root Cause Analysis
+
+The bug occurs due to the algorithm's logic when `chunk_size > size`:
+
+1. First chunk is calculated as: `chunk_size - (region_start % chunk_size)`
+   - When `region_start=0`, this equals `chunk_size`
+   - This is always `chunk_size`, even when `size < chunk_size`
+
+2. After the first chunk, remaining becomes negative: `remaining = size - chunk_size`
+
+3. With negative remaining:
+   - `remaining // chunk_size = -1` (no full chunks added)
+   - `remaining % chunk_size` gives a positive value in Python
+   - This positive remainder is added as an extra chunk
+
+4. Result: Two chunks that together sum to more than the original size
+
+### Mathematical Example (size=1, chunk_size=2)
+- First chunk: 2 - (0 % 2) = 2
+- Remaining: 1 - 2 = -1
+- Full chunks: -1 // 2 = -1 (none added)
+- Leftover: -1 % 2 = 1 (added)
+- Final: (2, 1) with sum = 3
+
+### Verification
+The bug is 100% reproducible and the reported behavior matches exactly what the code produces. The fundamental invariant that chunks should partition (not exceed) the data size is violated.

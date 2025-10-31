@@ -1,0 +1,51 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug as described in the bug report.
+
+## Hypothesis Test Results
+
+The property-based test using Hypothesis confirms the issue:
+- Test failed with input '¹' (superscript 1, Unicode character)
+- The regex r"^[\w/:+-]+$" incorrectly accepts this Unicode character
+- The test assertion expected only ASCII word characters plus /:-+ but received Unicode
+
+## Manual Test Cases
+
+All manual test cases confirmed the bug:
+1. 'UTC' - Correctly accepted (valid timezone)
+2. 'America/New_York' - Correctly accepted (valid timezone)
+3. '¹' - INCORRECTLY ACCEPTED (Unicode superscript character)
+4. '中国/北京' - INCORRECTLY ACCEPTED (Chinese characters)
+5. 'Москва' - INCORRECTLY ACCEPTED (Cyrillic characters)
+
+## Code Inspection
+
+Located the actual code in Django source:
+- File: django/db/backends/oracle/operations.py
+- Line 132: `_tzname_re = _lazy_re_compile(r"^[\w/:+-]+$")`
+- Line 131 comment states: "This regexp matches all time zone names from the zoneinfo database"
+- The regex is used in the `_convert_sql_to_tz` method at line 141 to validate timezone names
+
+## IANA Timezone Database Analysis
+
+Verified the actual IANA timezone database character set:
+- Analyzed all 599 available timezone names from Python's zoneinfo module
+- All valid timezone names use ONLY these ASCII characters: +-/0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz
+- NO valid timezone names contain non-ASCII characters
+- Both Django's current regex and an ASCII-only regex match all valid timezone names
+
+## The Bug
+
+The regex uses `\w` which in Python 3 matches ALL Unicode word characters by default, not just ASCII. This includes:
+- Superscript characters (¹²³)
+- Chinese characters (中文)
+- Cyrillic characters (Москва)
+- Greek letters (Ωμέγα)
+- And thousands of other Unicode word characters
+
+This directly contradicts:
+1. The code comment claiming it matches "all time zone names from the zoneinfo database"
+2. The actual IANA timezone database which uses only ASCII characters
+3. Expected validation behavior that should reject invalid timezone names
+
+The bug is confirmed and reproducible.

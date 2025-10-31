@@ -1,0 +1,70 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG
+
+**Arguments for BUG:**
+1. **Clear Inconsistency**: The code treats `local_port` and `remote_port` differently without any justification. One makes syscalls on every access, the other caches the value.
+2. **Performance Impact**: Making unnecessary syscalls on every access to `local_port` is inefficient and wasteful.
+3. **No Documented Reason**: The documentation doesn't explain why these similar attributes should behave differently.
+4. **Principle of Least Surprise**: Users would reasonably expect similar attributes to behave similarly.
+5. **The Fix is Straightforward**: The proposed fix simply makes both attributes behave consistently by caching both values.
+
+**Arguments against BUG:**
+- The code works correctly in terms of returning the right values
+- The documentation doesn't explicitly promise consistency between attributes
+
+### Consideration for INVALID
+
+**Arguments for INVALID:**
+1. The documentation doesn't specify caching behavior, so technically the implementation is not violating any documented contract.
+2. Both attributes return the correct values when called.
+
+**Arguments against INVALID:**
+- The inconsistency appears unintentional and has no justifiable reason
+- Performance issues from unnecessary syscalls are real problems
+- Just because behavior isn't documented doesn't mean obvious inconsistencies are acceptable
+
+### Consideration for WONTFIX
+
+**Arguments for WONTFIX:**
+1. The issue might be considered minor since it only affects performance, not correctness.
+2. Most applications probably don't access these attributes frequently enough for the performance difference to matter.
+
+**Arguments against WONTFIX:**
+- The inconsistency is not obscure - it's in the main code path for socket attributes
+- The performance impact could be significant for applications that frequently check socket attributes
+- The fix is simple and low-risk
+
+### Consideration for FEATURE_REQUEST
+
+**Arguments for FEATURE_REQUEST:**
+1. Could be reframed as "requesting consistent caching behavior across socket attributes"
+2. Since caching isn't specified in docs, consistent caching could be seen as a new feature
+
+**Arguments against FEATURE_REQUEST:**
+- This is fixing an inconsistency in existing code, not adding new functionality
+- The current behavior appears to be a bug/oversight rather than intentional design
+
+### Consideration for DOCUMENTATION_FIX
+
+**Arguments for DOCUMENTATION_FIX:**
+1. The documentation could be updated to explain why `local_port` is dynamic while `remote_port` is cached
+2. Could document the performance implications of accessing these attributes
+
+**Arguments against DOCUMENTATION_FIX:**
+- The inconsistency appears to be a code bug, not a documentation issue
+- Documenting this inconsistency would be acknowledging a design flaw rather than fixing it
+
+## Final Assessment
+
+This is a **BUG**. The key factors are:
+
+1. **Unintentional Inconsistency**: The different treatment of `local_port` vs `remote_port` appears to be an oversight. The code shows `remote_port` is cached simply because it was convenient (the value was already available from `getpeername()`), while `local_port` wasn't cached because the developer directly called `getsockname()` in the lambda.
+
+2. **Real Performance Impact**: Making syscalls on every attribute access is inefficient and goes against good practice for property-like attributes.
+
+3. **No Justifiable Reason**: There's no technical reason why `local_port` needs to be dynamic while `remote_port` is cached. For connected sockets, both values are equally stable.
+
+4. **Simple Fix**: The proposed fix is straightforward, low-risk, and makes the code more consistent and efficient.
+
+This is not a trivial issue (ruling out WONTFIX), not a missing feature (ruling out FEATURE_REQUEST), not a documentation problem (ruling out DOCUMENTATION_FIX), and not invalid just because the docs don't specify caching behavior (ruling out INVALID). It's a legitimate bug in the implementation that should be fixed.

@@ -1,0 +1,53 @@
+BUG REPRODUCTION REPORT
+======================
+
+## Summary
+Successfully reproduced the OverflowError bug in pandas.io.sas.sas7bdat._parse_datetime when handling large SAS datetime values.
+
+## Test Environment
+- Python version: 3.13
+- Pandas version: 2.3.2
+- Function location: /home/npc/miniconda/lib/python3.13/site-packages/pandas/io/sas/sas7bdat.py:67
+
+## Reproduction Results
+
+### 1. Hypothesis Test
+The provided hypothesis test correctly identified multiple failure cases:
+- The test failed on numerous values including the reported sas_datetime=2936550.0
+- Multiple failure patterns observed:
+  - OverflowError: "date value out of range" for large positive values
+  - OverflowError: "date value out of range" for large negative values
+  - OverflowError: "days must have magnitude <= 999999999" for very large values
+  - OverflowError: "Python int too large to convert to C int" for extreme values
+
+### 2. Specific Failing Input
+Confirmed the exact failure case from the bug report:
+- Input: sas_datetime=2936550.0, unit='d'
+- Error: OverflowError: date value out of range
+- This represents adding 2,936,550 days to January 1, 1960, which would result in year 10000
+
+### 3. Edge Case Testing
+Identified the exact boundary:
+- sas_datetime=2936549.0: Successfully returns datetime(9999, 12, 31)
+- sas_datetime=2936550.0: Raises OverflowError
+- This confirms that 2936549 days from 1960-01-01 is the maximum value before overflow
+
+### 4. Code Analysis
+The current implementation in _parse_datetime:
+```python
+def _parse_datetime(sas_datetime: float, unit: str):
+    if isna(sas_datetime):
+        return pd.NaT
+
+    if unit == "s":
+        return datetime(1960, 1, 1) + timedelta(seconds=sas_datetime)
+    elif unit == "d":
+        return datetime(1960, 1, 1) + timedelta(days=sas_datetime)
+    else:
+        raise ValueError("unit must be 'd' or 's'")
+```
+
+The function correctly handles NaN values by returning pd.NaT, but does not handle the OverflowError that occurs when the resulting datetime exceeds Python's datetime.max (year 9999, month 12, day 31).
+
+## Conclusion
+The bug is confirmed and reproducible. The function crashes with OverflowError when processing valid SAS datetime values that would result in dates beyond year 9999, which is a limitation of Python's datetime module but not of SAS date representation.

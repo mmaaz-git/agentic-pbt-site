@@ -1,0 +1,32 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is ACCURATE. The `scipy.differentiate.derivative` function crashes with a `numpy.linalg.LinAlgError: Singular matrix` when `step_factor=1.0`.
+
+### Reproduction Tests
+
+1. **Direct Test with step_factor=1.0**
+   - Tested with both `x**2` and `np.exp(x)` functions
+   - Result: Confirmed crash with "LinAlgError: Singular matrix"
+
+2. **Hypothesis Property Test**
+   - Tested values near 1.0 (0.99 to 1.01 range)
+   - Values very close to 1.0 (but not exactly 1.0) work without error
+   - step_factor=1.0 exactly causes the singular matrix error
+
+3. **Root Cause Analysis**
+   - Traced through the source code in `_derivative_weights` function
+   - When `step_factor=1.0`, the calculation `h = s / fac ** p` produces duplicate values:
+     - For order=8 (default), n=4, we get h = [-1, -1, -1, -1, 0, 1, 1, 1, 1]
+     - These duplicate values create a singular Vandermonde matrix
+     - `np.linalg.solve(A, b)` fails with LinAlgError
+
+### Effect
+The crash occurs deep in the algorithm during weight calculation, not during input validation. This means users get a cryptic error message about a singular matrix instead of a clear message about invalid parameter values.
+
+### Verification
+The bug report's explanation is technically correct:
+- The algorithm requires different step sizes to work properly
+- step_factor=1.0 means no reduction in step size between iterations
+- This causes duplicate abscissae in the finite difference stencil
+- The duplicate values make the Vandermonde matrix singular

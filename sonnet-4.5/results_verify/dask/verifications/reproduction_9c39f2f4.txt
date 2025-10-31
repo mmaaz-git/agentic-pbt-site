@@ -1,0 +1,30 @@
+## Reproduction Analysis
+
+### Bug Confirmed
+The bug report is technically correct. The code does crash with ZeroDivisionError in the following cases:
+
+1. **[1.0, 2.0] with ddof=2**: Crashes with ZeroDivisionError (n - ddof = 2 - 2 = 0)
+2. **Empty sequence [] with ddof=0**: Crashes with ZeroDivisionError (division by n=0 in line 35)
+3. **[1.0, 2.0, 3.0] with ddof=3**: Crashes with ZeroDivisionError (n - ddof = 3 - 3 = 0)
+
+### Interesting Behavior
+When ddof > n (e.g., [1.0, 2.0, 3.0] with ddof=4), Dask returns -2.0, which is mathematically nonsensical (variance cannot be negative). This happens because n - ddof = -1, creating a negative denominator.
+
+### Root Cause
+The var_aggregate function in /home/npc/miniconda/lib/python3.13/site-packages/dask/bag/chunk.py:
+- Line 35: `result = (x2 / n) - (x / n) ** 2` crashes when n=0 (empty bag)
+- Line 36: `return result * n / (n - ddof)` crashes when n - ddof = 0
+
+### Comparison with Other Libraries
+- **NumPy**: Returns `inf` for division by zero cases with RuntimeWarning, `nan` for empty arrays
+- **Pandas**: Returns `nan` for all invalid cases (more consistent behavior)
+- Both handle these edge cases gracefully without crashing
+
+### Statistical Context
+The variance formula requires dividing by (n - ddof). When this denominator is:
+- Zero: The variance is undefined (division by zero)
+- Negative: The result is meaningless (negative variance)
+- These cases represent invalid statistical operations where we have more constraints (ddof) than data points (n)
+
+### Summary
+The bug is real - Dask crashes with ZeroDivisionError while NumPy and Pandas handle these cases gracefully by returning special values (inf/nan). The proposed fix to raise a more informative ValueError is reasonable, though returning nan (like Pandas) would also be acceptable.

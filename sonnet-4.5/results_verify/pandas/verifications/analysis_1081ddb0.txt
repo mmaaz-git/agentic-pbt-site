@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The interchange protocol documentation includes warnings about "severe implementation issues" and recommends using Arrow C Data Interface instead. One could argue that the interchange protocol is known to be problematic and not fully specified regarding edge cases. The comment in the code suggests the modulo was intentionally added to prevent IndexError, implying this might be a known limitation rather than a bug.
+
+**Why it might not be INVALID:**
+The pandas documentation is crystal clear that -1 is the sentinel value for missing categorical codes. The interchange protocol explicitly uses USE_SENTINEL with value -1. The behavior violates fundamental data preservation principles - missing values should never silently become valid data. The protocol's purpose is data interchange, and corrupting data during interchange defeats this purpose entirely.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The pandas documentation already warns about severe implementation issues with the interchange protocol and recommends using Arrow C Data Interface instead (pandas 2.3+). The interchange protocol might be considered legacy or deprecated functionality. The maintainers might argue that effort should go into the Arrow interface rather than fixing the older interchange protocol.
+
+**Why it might not be WONTFIX:**
+Data corruption is not a trivial issue - it silently converts missing values to valid data, which could lead to serious analysis errors. The interchange protocol is still part of the public API and users may rely on it. The fix appears straightforward (preserve -1 values instead of applying modulo). Even if deprecated, data corruption bugs should be fixed while the feature exists.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the documentation should explicitly warn that the interchange protocol doesn't properly handle categorical missing values. The comment in the code about avoiding IndexError could be expanded to explain this limitation. Users should be warned not to use the interchange protocol with categorical data containing missing values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is not a documentation issue - the code behavior is objectively wrong according to pandas' own specifications. The documentation correctly states that -1 is the missing value sentinel. Adding warnings about broken functionality is not a substitute for fixing data corruption. The issue is in the implementation, not in how it's documented.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting support for proper missing value handling in categorical interchange, as if it was never implemented. The current implementation might be considered a placeholder that handles the simple case but not missing values. Adding proper missing value support could be seen as a new feature.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a missing feature - the code explicitly attempts to handle missing values through set_nulls() and USE_SENTINEL. The column metadata correctly identifies -1 as the sentinel value. The feature exists but is broken due to the modulo operation. This is a bug in existing functionality, not a request for new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior clearly violates pandas' documented semantics for categorical missing values. The code silently corrupts data by converting NaN to valid categories. The reproduction tests confirm the exact issue described. The root cause is identified (inappropriate modulo operation). The set_nulls function expects -1 sentinels but never sees them due to the modulo. This is textbook data corruption - the worst kind of bug.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is if the interchange protocol was never intended to properly handle categorical missing values, but the presence of USE_SENTINEL and set_nulls() contradicts this. The comment suggests the modulo was added intentionally, though for the wrong reason (preventing IndexError rather than preserving sentinels).
+
+## Overall Consideration
+
+This is unequivocally a BUG. The evidence is overwhelming: the code violates clearly documented pandas semantics, causes silent data corruption, and fails to preserve the fundamental property that missing values should remain missing. The -1 sentinel value for missing categorical codes is not an implementation detail but a documented part of the pandas API that users rely upon.
+
+The modulo operation at line 254 is the clear culprit. While the comment suggests it was added to prevent IndexError, this is a misguided fix that creates a far worse problem - data corruption. The proper solution would be to handle -1 codes specially, preserving them for set_nulls() to process correctly. The bug report even provides a reasonable fix that addresses the IndexError concern while preserving data integrity.
+
+The fact that pandas recommends the Arrow interface over the interchange protocol does not excuse data corruption in existing functionality. As long as the interchange protocol is part of the public API, it should work correctly or fail explicitly, never silently corrupt data. This bug could cause serious issues in data analysis where missing values have semantic meaning different from any valid category. The severity is high because the corruption is silent - users would have no indication their missing values were converted to valid data.

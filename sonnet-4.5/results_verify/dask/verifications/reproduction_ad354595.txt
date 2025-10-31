@@ -1,0 +1,47 @@
+BUG REPRODUCTION RESULTS
+
+## Test Execution Summary
+
+Successfully reproduced the reported bug using both the simple demonstration and the hypothesis-based property test.
+
+## Key Findings
+
+### 1. Type Mismatch Confirmed
+- Line 261: `pid = current_process()` assigns a Process object to the variable `pid`
+- Line 252: `p.pid != pid` compares an integer (p.pid) with a Process object (pid)
+- This comparison ALWAYS evaluates to True in Python since an integer can never equal a Process object
+
+### 2. Reproduction Results
+
+**Basic Type Comparison Test:**
+- `12345 != <Process object>` evaluates to True (always)
+- `12345 != 228710` evaluates to True (when PIDs differ)
+- Confirmed that current_process() returns a Process object, not an integer
+
+**_Tracker Method Test:**
+When passing a Process object to _update_pids:
+- Mock child with PID 54321: INCLUDED in results (should be included)
+- Mock child with same PID as current process (228710): INCLUDED in results (BUG - should be excluded)
+
+When passing an integer PID to _update_pids:
+- Mock child with PID 54321: INCLUDED in results (correct)
+- Mock child with same PID as current process (228710): EXCLUDED from results (correct behavior)
+
+### 3. Impact Analysis
+
+The bug causes the tracker process to never filter itself out from monitoring, meaning:
+- The ResourceProfiler includes its own CPU and memory usage in measurements
+- This inflates the reported resource usage
+- The inflation is likely small but consistent across all measurements
+
+### 4. Bug Validity
+
+The bug report is technically correct:
+1. There IS a type mismatch bug on line 261
+2. The comparison on line 252 does fail to work as intended
+3. The tracker process is never filtered out as it should be
+4. The suggested fix (changing to `pid = current_process().pid`) would resolve the issue
+
+## Verification
+
+The hypothesis test confirms that with ANY integer PID value, the mock child is always included in the results when a Process object is passed to _update_pids, demonstrating the filter never works correctly.

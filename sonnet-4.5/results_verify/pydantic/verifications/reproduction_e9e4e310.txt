@@ -1,0 +1,45 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I successfully reproduced the bug described in the report. The issue is real and affects all event handlers in the build_wrapper function.
+
+## Test Results
+
+All test cases from the bug report passed, confirming the described behavior:
+
+1. **Test 1 - Handler Exception Masking**: When on_error handler raises RuntimeError, it completely masks the original ValidationError and prevents subsequent handlers from executing.
+   - Expected: ValidationError should be raised after all handlers run
+   - Actual: RuntimeError is raised, second handler never executes
+
+2. **Test 2 - Reproduction Case**: Confirmed that a crashing plugin handler prevents other plugins from running.
+   - Original ValidationError is replaced by RuntimeError from the handler
+   - handler2.on_error was never called
+
+3. **Test 3 - on_success Handler Exception**: When on_success handler raises an exception, the function's return value is lost.
+   - Function correctly computed result (5 * 2 = 10)
+   - Result never returned due to handler exception
+
+4. **Test 4 - on_enter Handler Exception**: When on_enter handler raises an exception, the wrapped function never executes.
+   - Original function was never called due to handler crash
+
+## Code Analysis
+
+The issue is in `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/plugin/_schema_validator.py` lines 107-123.
+
+The current implementation has no exception handling for the event handlers:
+
+```python
+for on_error_handler in on_errors:
+    on_error_handler(error)  # If this raises, loop breaks and original error is lost
+raise  # Never reached if handler raises
+```
+
+## Impact
+
+This bug has serious consequences:
+1. **Error Masking**: Original validation errors are completely hidden by plugin bugs
+2. **Plugin Chain Breaking**: One faulty plugin prevents all subsequent plugins from running
+3. **Silent Failures**: Users lose critical validation error information
+4. **No Error Isolation**: No protection between independent plugins
+
+The bug affects all four event handler types: on_enter, on_error, on_exception, and on_success.

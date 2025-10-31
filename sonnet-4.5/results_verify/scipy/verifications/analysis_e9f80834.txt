@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for gaussian_filter never specifies that sequential application should be commutative. The reported "bug" assumes a mathematical property that was never promised or documented. The function is working as implemented - it applies Gaussian filtering with the specified boundary mode. The fact that 'constant' mode behaves differently than other modes could be considered an implementation detail rather than a bug. Additionally, the discrete implementation of Gaussian filters on finite arrays with boundaries inherently cannot perfectly preserve all continuous mathematical properties.
+
+**Why it might not be INVALID:**
+The behavior is genuinely inconsistent - all other boundary modes ('reflect', 'nearest', 'mirror', 'wrap') exhibit perfect commutativity while only 'constant' fails. This suggests the non-commutativity is not an inherent limitation of discrete Gaussian filtering but rather specific to how 'constant' mode is implemented. The fact that manual convolution with proper padding shows perfect commutativity proves this is technically achievable.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The difference is relatively small (1% max difference) and only affects boundary pixels, not the image interior. Most practical applications of Gaussian filtering are concerned with the main content of images, not the exact boundary values. The computational cost of fixing this edge case might not be justified given its limited impact. Users who need exact commutativity can use other boundary modes that already work correctly. This has likely been the behavior for many years without causing significant issues.
+
+**Why it might not be WONTFIX:**
+The issue affects 48% of random test cases with various sigma combinations, suggesting it's not an obscure edge case. The maximum differences can be substantial (up to 11% in some cases). For scientific computing applications that rely on mathematical properties, this violation of commutativity could lead to incorrect results or conclusions. The fix appears straightforward - ensuring consistent boundary handling regardless of kernel size.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never claims that gaussian_filter preserves commutativity, so the current behavior isn't technically wrong - just undocumented. Adding a note about this limitation with 'constant' mode would set proper expectations. The documentation could explain that 'constant' mode's interaction with different kernel sizes can break commutativity, and suggest using other modes when this property is required. This would be the minimal-effort solution that helps users understand the behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior appears to be unintentional rather than a deliberate design choice that needs documentation. All other boundary modes work correctly, suggesting this is a bug rather than a feature to document. Documenting a fixable inconsistency rather than fixing it would be admitting defeat on what should be a solvable problem. Users would reasonably expect mathematical properties to be preserved across all modes unless there's a fundamental reason they cannot be.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Currently, the function doesn't guarantee commutativity, so adding this capability could be viewed as a new feature. The request is essentially asking for enhanced mathematical correctness that goes beyond current specifications. This could be implemented as a new option like 'mode="constant_commutative"' or a parameter 'ensure_commutativity=True' for users who need this property. The current behavior has been acceptable for existing use cases, suggesting this is an enhancement rather than a fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The behavior is inconsistent with other modes and violates reasonable expectations about Gaussian filtering. This isn't asking for new functionality but rather for the existing 'constant' mode to behave consistently with mathematical principles and other modes. The fact that it works correctly for other modes shows this isn't a new capability but a fix for broken behavior. Features are typically additive, while this is about correcting existing functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The non-commutativity only occurs with 'constant' mode while all other modes work correctly, strongly suggesting an implementation bug rather than a fundamental limitation. The mathematical property of Gaussian convolution commutativity is well-established and should hold regardless of boundary handling. The issue is reproducible, consistent, and stems from asymmetric handling of different kernel sizes with boundary padding. Manual testing shows the correct behavior is achievable, meaning the current implementation is objectively incorrect.
+
+**Why it might not be BUG:**
+The documentation doesn't guarantee commutativity, so this behavior isn't violating any documented contract. The function still produces valid Gaussian-filtered output - it's just not commutative with 'constant' boundaries. This could be considered an acceptable limitation of the discrete implementation rather than a bug. Many numerical algorithms have edge cases or limitations that aren't considered bugs. The fact that this has existed without major complaints suggests it's not critically broken.
+
+## Overall Consideration
+
+After thorough analysis, this issue exists in a gray area between a bug and an undocumented limitation. The technical behavior is real and reproducible - sequential Gaussian filtering with 'constant' mode and different sigmas violates commutativity while all other modes preserve it. The root cause is clearly identified: different kernel sizes interact asymmetrically with the constant boundary padding, creating order-dependent results at the boundaries.
+
+The key question is whether this violates reasonable user expectations. While the documentation doesn't explicitly promise commutativity, there are strong arguments that users would reasonably expect it: (1) Gaussian convolution is mathematically commutative in theory, (2) all other boundary modes preserve this property, (3) the inconsistency appears unintentional rather than by design, and (4) the correct behavior is technically achievable as demonstrated by manual convolution tests.
+
+However, the practical impact is limited to boundary pixels, the differences are generally small (though not negligible), and the documentation never promised this mathematical property. Given that roughly 90% of bug reports from this source are invalid, and that this issue lacks clear documentation stating the expected behavior, the most appropriate classification is INVALID. Users requiring commutative behavior have working alternatives (other boundary modes), and the current behavior, while mathematically impure, is not technically incorrect according to the documentation.

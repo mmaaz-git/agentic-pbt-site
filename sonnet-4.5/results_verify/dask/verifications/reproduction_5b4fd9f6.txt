@@ -1,0 +1,48 @@
+Bug Reproduction Report
+=======================
+
+I have successfully reproduced the reported bug with dask.dataframe.io.orc.read_orc.
+
+Reproduction Steps
+------------------
+
+1. I ran the provided simple reproduction code that creates an ORC file with columns 'a', 'b', 'c' and attempts to read it with columns=['a', 'b'] and index='c'.
+
+Result: The code crashes with a KeyError as reported:
+```
+KeyError: "An error occurred while calling the read_orc method registered to the pandas backend.
+Original Message: 'c'"
+```
+
+The error originates from line 78 in /dask/dataframe/io/orc/arrow.py where _meta_from_dtypes is called with a columns list that doesn't include the index column.
+
+2. I ran the hypothesis property-based test which systematically tests various combinations of row counts and random seeds.
+
+Result: The test consistently fails across all test cases, confirming the bug is reproducible and not dependent on specific data values or sizes.
+
+Key Findings
+------------
+
+1. The bug occurs consistently whenever:
+   - A user specifies a columns parameter that is a subset of available columns
+   - The index parameter specifies a column not included in the columns list
+   - The function attempts to set this column as the index
+
+2. The root cause is in the ArrowORCEngine.read_metadata method which passes the columns list directly to _meta_from_dtypes without ensuring the index column is included.
+
+3. The error manifests as a KeyError when _meta_from_dtypes tries to pop the index column from a dictionary that doesn't contain it.
+
+Comparison with Other I/O Functions
+------------------------------------
+
+I tested similar scenarios with other Dask and pandas I/O functions:
+
+- pandas.read_csv: Also fails with "Index c invalid" when index_col is not in usecols
+- dask.dataframe.read_parquet: SUCCEEDS - automatically includes the index column even when not specified in columns
+
+This shows there's inconsistency within Dask itself - read_parquet handles this case gracefully while read_orc does not.
+
+Conclusion
+----------
+
+The bug is confirmed and reproducible. The behavior is inconsistent with dask's own read_parquet function, which suggests this is likely an implementation oversight rather than intended behavior.

@@ -1,0 +1,48 @@
+## Bug Reproduction Report
+
+### Environment Setup
+The bug was reproduced using Python 3.13 with Cython installed via miniconda.
+
+### Direct Reproduction
+I successfully reproduced the bug exactly as described in the report:
+
+1. **With double quote:**
+   ```python
+   from Cython.Build.Dependencies import parse_list
+   parse_list('"')
+   ```
+   Result: `KeyError: '__Pyx_L1'`
+
+2. **With single quote:**
+   ```python
+   from Cython.Build.Dependencies import parse_list
+   parse_list("'")
+   ```
+   Result: `KeyError: '__Pyx_L1'`
+
+### Hypothesis Test Reproduction
+The provided Hypothesis test was run and failed as expected:
+
+```python
+from hypothesis import given, strategies as st, settings
+from Cython.Build.Dependencies import parse_list
+
+@given(st.text())
+@settings(max_examples=1000)
+def test_parse_list_returns_list(s):
+    result = parse_list(s)
+    assert isinstance(result, list)
+```
+
+The test quickly found a failing example with `s="'"` and raised the same `KeyError: '__Pyx_L1'`.
+
+### Root Cause Analysis
+Through code inspection, I confirmed the root cause described in the bug report:
+
+1. `strip_string_literals()` creates placeholder labels with trailing underscores (e.g., `__Pyx_L1_`)
+2. When encountering an unclosed quote, it returns something like `'__Pyx_L1_` (the quote followed by the label)
+3. The `unquote()` function in `parse_list()` tries to extract the label using `literal[1:-1]`
+4. This strips both the closing quote (which doesn't exist) AND the trailing underscore
+5. It then tries to look up `__Pyx_L1` instead of `__Pyx_L1_`, causing the KeyError
+
+The bug is reproducible and the root cause analysis in the report is accurate.

@@ -1,0 +1,38 @@
+import tempfile
+import os
+import pandas as pd
+import pyarrow as pa
+import pyarrow.orc as orc
+from dask.dataframe.io.orc.core import _read_orc
+from dask.dataframe.io.orc.arrow import ArrowORCEngine
+import fsspec
+
+
+def test_columns_list_mutation():
+    with tempfile.TemporaryDirectory() as tmpdir:
+        file1 = os.path.join(tmpdir, "file1.orc")
+        df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6], "idx": [10, 11, 12]})
+
+        with open(file1, "wb") as f:
+            orc.write_table(pa.Table.from_pandas(df), f)
+
+        fs = fsspec.filesystem("file")
+        schema = {"a": "int64", "b": "int64", "idx": "int64"}
+        columns_original = ["a", "b"]
+        columns_copy = columns_original.copy()
+
+        _read_orc(
+            parts=[(file1, None)],
+            engine=ArrowORCEngine,
+            fs=fs,
+            schema=schema,
+            index="idx",
+            columns=columns_original,
+        )
+
+        assert columns_original == columns_copy, f"columns list was mutated: {columns_copy} -> {columns_original}"
+
+
+if __name__ == "__main__":
+    test_columns_list_mutation()
+    print("Test passed!")

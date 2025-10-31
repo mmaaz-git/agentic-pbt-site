@@ -1,0 +1,32 @@
+DOCUMENTATION FINDINGS FOR MIGRATION OPERATIONS IMMUTABILITY
+============================================================
+
+1. SOURCE CODE DOCUMENTATION (django/db/migrations/operations/base.py):
+
+The base Operation class includes explicit documentation about immutability at line 27-28:
+"Due to the way this class deals with deconstruction, it should be considered immutable."
+
+This is a clear statement in the docstring of the base Operation class that all migration operations extending from it should be treated as immutable objects. The reason given relates to how the deconstruct() method works, which captures constructor arguments for serialization and replay.
+
+2. OFFICIAL DJANGO DOCUMENTATION:
+
+The public Django documentation (https://docs.djangoproject.com/en/stable/ref/migration-operations/) does not explicitly state that migration operations must be immutable. However, it does mention for field operations:
+- "You must never change the attributes on these instances"
+- If mutation is needed, you should "remove the old instance... and add a new instance in its place"
+
+This suggests a general principle of immutability for migration-related objects.
+
+3. IMPLEMENTATION PATTERN ANALYSIS:
+
+The deconstruct() method in the base Operation class (lines 55-65) returns the constructor arguments stored at initialization time. If an operation mutates its own state after construction, the deconstruct() method would return incorrect information, breaking the ability to serialize and recreate the operation.
+
+4. DATABASE_BACKWARDS METHOD CONTRACT:
+
+The base class defines database_backwards() as an abstract method that subclasses must implement. There is no explicit documentation stating that this method must not mutate the operation's state. However, given the overall immutability requirement stated in the class docstring, it's reasonable to expect that no methods should mutate the operation's state.
+
+5. COMPARISON WITH OTHER OPERATIONS:
+
+Looking at other operations in the same file, most do not mutate their state in database_backwards(). For example, AlterModelTable.database_backwards() simply calls database_forwards() without any state mutation. This suggests the swap-mutate-swap-back pattern used by RenameModel and RenameIndex is an anti-pattern.
+
+CONCLUSION:
+The source code explicitly documents that Operation instances "should be considered immutable" due to how deconstruction works. This is a clear requirement that all operations, including RenameModel and RenameIndex, must follow.

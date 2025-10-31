@@ -1,0 +1,49 @@
+## Documentation Analysis for Cython.Plex Begin Action and Scanner
+
+### Scanner Class Documentation (from Scanners.py docstring)
+
+The Scanner class documentation explicitly lists the following methods:
+- `read()` --> (value, text): Reads the next lexical token from the stream
+- `position()` --> (name, line, col): Returns the position of the last token read
+- **`begin(state_name)`**: Causes scanner to change state
+- **`produce(value [, text])`**: Causes return of a token value to the caller
+
+The documentation clearly states that `begin()` and `produce()` are public methods of the Scanner class.
+
+### Lexicon Class Documentation (from Lexicons.py)
+
+The Lexicon documentation describes states and how to change them:
+1. "Using Begin(state_name) as the action of a token" - This is the Begin action class
+2. "Calling the begin(state_name) method of the Scanner" - Direct method call
+
+This confirms that `scanner.begin()` should be a callable method.
+
+### Begin Action Class Documentation (from Actions.py)
+
+The Begin action class docstring states:
+"Begin(state_name) is a Plex action which causes the Scanner to enter the state |state_name|."
+
+The implementation at line 82 calls `token_stream.begin(self.state_name)`, expecting the Scanner instance (passed as token_stream) to have a `begin()` method.
+
+### Source Code vs Compiled Module Discrepancy
+
+Critical finding: There is a mismatch between the source code and the compiled module:
+
+1. **In Scanners.py** (Python source):
+   - `begin()` is defined as a regular Python method (def) at line 331
+   - `produce()` is defined as a regular Python method (def) at line 337
+   - Both are intended to be public, callable methods
+
+2. **In Scanners.pxd** (Cython declaration file):
+   - `begin()` is declared as `cdef inline` at line 45
+   - `produce()` is declared as `cdef inline` at line 46
+   - `cdef inline` methods are C-only and NOT accessible from Python
+
+3. **In the compiled .so module** (what actually runs):
+   - The compiled module follows the .pxd declaration
+   - Neither `begin()` nor `produce()` are exposed as Python-callable methods
+   - This is why the AttributeError occurs
+
+### Conclusion
+
+The documentation and Python source code clearly indicate that `begin()` and `produce()` should be public, Python-callable methods on the Scanner class. The bug is caused by a mismatch between the Python implementation and the Cython declaration file (.pxd), which marks these methods as C-only.

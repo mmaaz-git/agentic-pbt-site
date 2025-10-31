@@ -1,0 +1,34 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in scipy.signal.deconvolve.
+
+TEST RESULTS:
+-------------
+
+1. Property-based test with Hypothesis:
+   - The test failed as reported
+   - Found the exact failing case: signal_arr=[0.0, 0.0], divisor=[0.0, 1.0]
+   - Error message: "ValueError: BUG: filter coefficient a[0] == 0 not supported yet"
+
+2. Specific example from bug report:
+   - signal_arr = [1.0, 2.0, 3.0], divisor = [0.0, 1.0]
+   - Confirmed ValueError with message "BUG: filter coefficient a[0] == 0 not supported yet"
+   - This matches exactly what the bug report states
+
+3. Control test:
+   - When using divisor=[1.0, 0.0] (polynomial x), deconvolve works correctly
+   - When manually stripping the leading zero from [0.0, 1.0] to get [1.0], deconvolve works correctly
+   - This proves the function works when the leading coefficient is non-zero
+
+EFFECT OF THE BUG:
+-----------------
+
+The bug prevents deconvolution when the divisor polynomial has leading zeros, even though such polynomials are mathematically valid. For example:
+- [0, 1] represents the constant polynomial 1
+- [0, 0, 1] also represents the constant polynomial 1
+- Both should be valid divisors for deconvolution
+
+The error message "BUG: filter coefficient a[0] == 0 not supported yet" comes from the underlying C extension (_sigtools._linear_filter) when scipy.signal.deconvolve calls lfilter() with a divisor having a[0] == 0.
+
+The function fails to normalize the polynomial representation before passing it to the underlying filter function, causing an unnecessary failure for mathematically valid inputs.

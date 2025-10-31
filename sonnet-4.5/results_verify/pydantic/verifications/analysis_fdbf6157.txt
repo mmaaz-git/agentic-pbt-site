@@ -1,0 +1,74 @@
+## Bug Report Analysis
+
+### Considerations for Each Category
+
+#### BUG (Valid Bug)
+**Arguments For:**
+1. **Violates dictionary contract**: The fundamental expectation of `dict[key] = value; dict[key] == value` is broken
+2. **Asymmetric behavior**: Django encodes on set but doesn't decode on get
+3. **No documentation**: Users aren't warned that values will be transformed
+4. **RFC 2047 guidance**: The RFC states applications should work with decoded content, not encoded forms
+5. **Practical impact**: Developers setting custom headers with international characters will get unexpected encoded values back
+6. **Inconsistent with other frameworks**: Most web frameworks either reject non-ASCII or handle round-trips properly
+
+**Arguments Against:**
+- Django is correctly encoding headers for HTTP transmission as per standards
+- The encoded form is technically the "correct" stored value
+
+#### INVALID
+**Arguments For:**
+- HTTP headers should be ASCII/latin-1 per RFC 7230
+- Django is doing the right thing by encoding non-compliant values
+- Users shouldn't expect non-ASCII to work seamlessly
+
+**Arguments Against:**
+- Django accepts the non-ASCII input without error, creating an expectation it will work
+- The asymmetry is unexpected even if encoding is necessary
+- Other characters (within latin-1) do round-trip correctly
+
+#### WONTFIX
+**Arguments For:**
+- Edge case: Most headers are ASCII in practice
+- The current behavior ensures HTTP compliance
+- Changing it might break existing code that relies on getting encoded values
+
+**Arguments Against:**
+- This affects internationalization, which is important
+- The fix is straightforward (decode on get)
+- It's not that obscure - custom headers with user data are common
+
+#### DOCUMENTATION_FIX
+**Arguments For:**
+- The code works as designed for HTTP compliance
+- Just needs documentation about the encoding behavior
+- Users can work around it if they know about it
+
+**Arguments Against:**
+- The behavior violates basic expectations of a dictionary-like interface
+- Documentation alone doesn't fix the surprising asymmetry
+- Users shouldn't need to manually decode values
+
+#### FEATURE_REQUEST
+**Arguments For:**
+- Supporting full Unicode round-trips could be seen as a new feature
+- The current implementation focuses on HTTP compliance
+
+**Arguments Against:**
+- This is fixing broken behavior, not adding new functionality
+- The interface already accepts Unicode, so supporting it properly isn't new
+
+### Conclusion
+
+This is a **BUG**. The key factors are:
+
+1. **Interface Contract Violation**: A dictionary-like interface where `obj[key] = value` followed by `obj[key]` returns something different than `value` is fundamentally broken
+
+2. **Undocumented Transformation**: Nothing in the documentation warns users that their values will be transformed
+
+3. **Inconsistent Behavior**: Values within latin-1 round-trip correctly, but others don't, creating confusion
+
+4. **RFC Compliance**: RFC 2047 indicates applications should see decoded values, not encoded forms
+
+5. **Practical Impact**: This affects real-world internationalization use cases
+
+The fact that Django needs to MIME-encode for HTTP transmission is an implementation detail that shouldn't leak to the user interface. The proper behavior would be to encode for transmission (in `serialize_headers()`) but decode for user access (in `__getitem__()`), maintaining the expected symmetry.

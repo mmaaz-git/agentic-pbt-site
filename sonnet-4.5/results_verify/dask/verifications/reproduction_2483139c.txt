@@ -1,0 +1,47 @@
+REPRODUCTION REPORT
+===================
+
+Bug: dask.array.slicing.normalize_slice incorrectly handles empty slices with negative step
+
+## Reproduction Verification
+
+### 1. Hypothesis Test Verification
+The provided Hypothesis test was executed successfully and correctly identified the bug:
+- Test case: start=-2, stop=-2, step=-1, dim=1
+- Expected behavior: Should return an empty array (same as NumPy)
+- Actual behavior: normalize_slice returns slice(-1, None, -1) which produces [0] instead of []
+- The test correctly fails with an AssertionError
+
+### 2. Manual Test Verification
+The manual reproduction code was executed and confirms the bug:
+- NumPy: arr[slice(-2, -2, -1)] = [] (empty array)
+- Dask: darr[slice(-2, -2, -1)].compute() = [0] (non-empty array)
+- This demonstrates that Dask arrays behave differently from NumPy arrays for the same slice
+
+### 3. Root Cause Analysis
+The bug occurs in the normalize_slice function at lines 791-795:
+```python
+elif step < 0:
+    if start >= dim - 1:
+        start = None
+    if stop < 0:
+        stop = None
+```
+
+When slice(-2, -2, -1) is processed:
+1. idx.indices(1) returns (-1, -1, -1)
+2. The function enters the negative step branch
+3. Since stop=-1 < 0, it sets stop=None
+4. This transforms slice(-1, -1, -1) to slice(-1, None, -1)
+5. slice(-1, None, -1) selects everything from the last element backwards (the entire array reversed)
+6. This is incorrect - slice(-1, -1, -1) should be empty since start equals stop
+
+### 4. Standard Python/NumPy Behavior
+Testing confirms that both Python lists and NumPy arrays consistently return empty results when start equals stop, regardless of step value:
+- Python list: [0][-2:-2:-1] = []
+- NumPy array: np.array([0])[-2:-2:-1] = []
+
+This is the expected behavior per Python's slicing semantics where a slice with start==stop always produces an empty result.
+
+## Conclusion
+The bug is confirmed and reproducible. The normalize_slice function incorrectly transforms empty slices with negative steps into non-empty slices by setting stop=None when stop < 0, without checking if the slice was originally empty (start == stop).

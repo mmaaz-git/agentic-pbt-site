@@ -1,0 +1,38 @@
+## Reproduction of format_bytes Bug Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `format_bytes` function in `dask.utils` (which is imported and re-exported by `dask.widgets.widgets`) does indeed violate its documented contract for certain input values.
+
+### Reproduction Details
+
+1. **Hypothesis Test Reproduction**
+   - Ran the provided Hypothesis test with the property: "For all n where 0 <= n < 2**60, len(format_bytes(n)) <= 10"
+   - The test failed with the exact example mentioned in the bug report: n = 1,125,894,277,343,089,729
+   - The output was '1000.00 PiB' which has length 11, violating the 10-character guarantee
+
+2. **Manual Test Reproduction**
+   - Confirmed n = 1,125,894,277,343,089,729 is indeed less than 2**60 (True)
+   - Confirmed format_bytes(n) produces '1000.00 PiB'
+   - Confirmed the length is 11 characters
+
+3. **Edge Case Testing**
+   Additional testing revealed the pattern of violations:
+   - Values < 1000 PiB: Output is <= 10 characters (e.g., '999.99 PiB' = 10 chars)
+   - Values >= 1000 PiB but < 2**60: Output is 11 characters
+   - Examples of violations:
+     * 1000.00 PiB → '1000.00 PiB' (11 chars)
+     * 1023.00 PiB → '1023.00 PiB' (11 chars)
+     * 1024.00 PiB → '1024.00 PiB' (11 chars)
+
+### Root Cause
+The issue occurs because the formatting pattern "%.2f %sB" can produce outputs where:
+- The numeric part before the decimal can be 4 digits (1000-1024)
+- Plus 3 characters for the decimal point and 2 decimal places (.00)
+- Plus 1 space
+- Plus 3 characters for the unit (PiB)
+- Total: 4 + 3 + 1 + 3 = 11 characters
+
+The function correctly handles all values below 1000 PiB (where the numeric part is at most 3 digits), but fails for values >= 1000 PiB that are still less than 2**60.
+
+### Verification
+The bug is real and reproducible. The function's implementation does not match its documented guarantee that "For all values < 2**60, the output is always <= 10 characters."

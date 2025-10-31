@@ -1,0 +1,61 @@
+BUG REPRODUCTION RESULTS
+
+1. ORIGINAL BUG REPORT TEST CASE:
+   Input: SparseArray([1.0, np.nan, 0.0], fill_value=0.0)
+
+   Actual behavior:
+   - arr.max(skipna=False) returns: 1.0
+   - arr.min(skipna=False) returns: 0.0
+
+   Expected behavior (per bug report):
+   - arr.max(skipna=False) should return: nan
+   - arr.min(skipna=False) should return: nan
+
+   CONFIRMED: The bug report is accurate. SparseArray incorrectly returns numeric values
+   instead of NaN when skipna=False and the array contains NaN values.
+
+2. COMPARISON WITH NUMPY:
+   For the same values [1.0, nan, 0.0]:
+   - np.max() returns: nan (correct behavior)
+   - np.nanmax() returns: 1.0 (equivalent to skipna=True)
+
+   SparseArray behavior diverges from NumPy's established behavior.
+
+3. COMPARISON WITH DENSE PANDAS SERIES:
+   For Series([1.0, np.nan, 0.0]):
+   - Series.max(skipna=False) returns: nan (correct)
+   - Series.max(skipna=True) returns: 1.0
+   - Series.min(skipna=False) returns: nan (correct)
+   - Series.min(skipna=True) returns: 0.0
+
+   SparseArray behavior is inconsistent with dense pandas Series.
+
+4. HYPOTHESIS TEST RESULTS:
+   The hypothesis test systematically generates arrays with NaN values and verifies behavior.
+
+   Failed examples found:
+   - [0.0, nan] with fill_value=0.0 -> max returns 0.0 instead of nan
+   - [3422406658.0, nan] with fill_value=0.0 -> max returns 3422406658.0 instead of nan
+   - Multiple other cases with non-null fill_value and NaN in data
+
+   Pattern: The bug occurs specifically when:
+   - The SparseArray has a non-null fill_value (like 0.0)
+   - The array contains NaN values
+   - skipna=False is specified
+
+5. EDGE CASES TESTED:
+   - Array with NaN fill_value: Works correctly (returns nan)
+   - Array without any NaN values: Works correctly (returns numeric max/min)
+   - Array with all NaN values and non-null fill_value: Incorrectly returns fill_value
+
+6. ROOT CAUSE ANALYSIS:
+   Looking at the code in _min_max method:
+   - Line 1626 uses self._valid_sp_values which ALWAYS filters out NaN values
+   - This happens regardless of the skipna parameter value
+   - When has_nonnull_fill_vals is True (non-null fill_value), it returns the max/min
+     without checking if NaN values were present in the original data
+
+CONCLUSION:
+The bug is 100% reproducible and behaves exactly as described in the bug report.
+The SparseArray implementation incorrectly ignores the skipna=False parameter when
+computing max/min values for arrays with non-null fill_values.

@@ -1,0 +1,28 @@
+## Reproduction Analysis
+
+I successfully reproduced the bug reported in the issue. Here are my findings:
+
+### Hypothesis Test Reproduction
+The Hypothesis test provided in the bug report failed as expected when run with the specific input `lists_of_ints=[[0]], index=1`. The test expects that accessing an out-of-bounds index should return NaN/NA for lists that don't have that index, but instead it raises an ArrowInvalid exception.
+
+Error: `ArrowInvalid: Index 1 is out of bounds: should be in [0, 1)`
+
+### Manual Example Reproduction
+The manual example also reproduced the issue:
+
+```python
+s = pd.Series([[1, 2, 3], [4]], dtype=pd.ArrowDtype(pa.list_(pa.int64())))
+s.list[0]  # Works: returns [1, 4]
+s.list[1]  # Fails: ArrowInvalid: Index 1 is out of bounds: should be in [0, 1)
+```
+
+The error occurs because the second list [4] only has one element (at index 0), and attempting to access index 1 fails.
+
+### Root Cause
+The underlying issue is that `pandas.core.arrays.arrow.accessors.ListAccessor.__getitem__()` directly calls `pyarrow.compute.list_element()`, which requires the index to be valid for ALL lists in the array. When any list is shorter than the requested index, PyArrow raises an ArrowInvalid exception.
+
+### Expected vs Actual Behavior
+- **Expected**: For lists that don't have the requested index, return NA/null (similar to how Series.str accessor works)
+- **Actual**: Raises an ArrowInvalid exception if ANY list is too short for the requested index
+
+The behavior is inconsistent with how pandas typically handles out-of-bounds access in other similar contexts (e.g., string accessor returns NaN for out-of-bounds indices).

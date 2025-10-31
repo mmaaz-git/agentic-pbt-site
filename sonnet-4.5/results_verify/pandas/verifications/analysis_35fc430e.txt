@@ -1,0 +1,45 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The functions is_subperiod and is_superperiod are internal pandas functions without public documentation. There is no formal specification that these functions must be symmetric. The functions work as implemented - is_subperiod checks if downsampling is possible, and is_superperiod checks if upsampling is possible. The lack of explicit documentation about symmetry requirements means the current behavior might be intentional for internal use cases. Additionally, GitHub issue #18553 shows maintainers are aware of these inconsistencies but haven't agreed they're bugs.
+
+**Why it might not be INVALID:**
+The docstrings clearly state that is_subperiod checks if "downsampling is possible" and is_superperiod checks if "upsampling is possible." By fundamental logic, if you can downsample from A to B, you should be able to upsample from B to A - these are inverse operations. The symmetry property is a natural expectation from the semantic meaning of these functions. The violation of this property indicates incorrect implementation, not just undefined behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+These are internal functions not part of the public API, used primarily for pandas' internal resampling operations. The functions have existed with these inconsistencies for years (issue #18553 from 2017 is still open), suggesting they work adequately for their internal purpose. The edge cases (like Y->Y or D->B) may not matter in practice for how pandas uses these functions internally. Fixing this might risk breaking existing internal pandas behavior that depends on these quirks.
+
+**Why it might not be WONTFIX:**
+The inconsistency affects basic frequency comparisons that could impact resampling operations. The bug is not trivial - it violates fundamental mathematical properties of inverse operations. The fix is simple and localized (adding a check for annual-to-annual in is_subperiod). Other frequencies like 'D', 'h', 'min' already handle same-frequency comparisons correctly, suggesting the annual frequency case is an oversight rather than intentional design.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The functions lack clear documentation about expected behavior when source equals target. There's no specification about whether symmetry should hold. The docstrings could be updated to clarify that these functions may not be symmetric and explain the special cases. This would set correct expectations without changing potentially relied-upon behavior. The internal nature of these functions means documentation updates would mainly benefit pandas developers.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not a documentation problem but a logic error in the code. The docstrings accurately describe what the functions should do - check if down/upsampling is possible. The problem is that the implementation doesn't correctly fulfill this contract. Documenting buggy behavior doesn't fix the underlying logical inconsistency. The symmetry violation contradicts the natural interpretation of upsampling and downsampling being inverse operations.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding symmetric behavior could be seen as a new feature rather than fixing a bug, especially since the functions have worked this way for years. The request is essentially asking for these internal functions to have more consistent, predictable behavior. This could be implemented as new functions or with a parameter to control symmetry behavior. The enhancement would improve the logical consistency of the frequency comparison system.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out that existing functionality is broken. The functions already claim to check if up/downsampling is possible - they just do it incorrectly for certain cases. The symmetry property is not a new feature but a fundamental requirement for functions that represent inverse operations. Other frequency pairs already exhibit correct symmetric behavior, so this is about fixing inconsistencies, not adding features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The functions violate a fundamental mathematical property - if downsampling from A to B is possible, then upsampling from B to A must be possible. This is the definition of inverse operations. The implementation is demonstrably inconsistent: is_superperiod correctly handles annual-to-annual comparison while is_subperiod doesn't. The bug is reproducible, well-defined, and has a clear fix. The inconsistency could lead to incorrect behavior in resampling operations. Similar frequencies (D, h, min) handle same-frequency cases correctly, indicating the annual case is a bug, not intentional design.
+
+**Why it might not be BUG:**
+These are internal, undocumented functions that might have special requirements for pandas' internal use. The open GitHub issue #18553 from 2017 suggests maintainers aren't convinced this is a bug worth fixing. One maintainer explicitly mentioned the internal usage might require not returning True for equal frequencies. The functions might be working as intended for their specific internal purposes, even if the behavior seems illogical from an external perspective.
+
+## Overall Consideration
+
+After thorough analysis, this appears to be a borderline case between WONTFIX and BUG. The technical merits of the bug report are sound - there is indeed a logical inconsistency in how these functions handle certain frequency comparisons, particularly for annual frequencies. The symmetry property violation is real and the proposed fix is correct from a mathematical perspective.
+
+However, several factors suggest this should be classified as WONTFIX rather than BUG. First, these are internal pandas functions not part of the public API, as evidenced by the lack of documentation and the use of underscore-prefixed helper functions. Second, GitHub issue #18553 has been open since 2017 with maintainer awareness but no resolution, suggesting the pandas team doesn't consider this a priority issue worth fixing. Third, one maintainer explicitly noted that the internal resampling usage might require the current behavior.
+
+The fact that the functions work adequately for pandas' internal purposes, combined with the risk of breaking existing internal behavior by changing long-standing function semantics, strongly suggests this is a WONTFIX situation. While the bug reporter is technically correct about the logical inconsistency, the practical impact appears minimal given these functions' internal nature and the years of successful operation despite the inconsistency.

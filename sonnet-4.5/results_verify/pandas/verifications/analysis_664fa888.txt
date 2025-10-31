@@ -1,0 +1,47 @@
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The JSON RFC 8259 explicitly states that implementations may set limits on number range and precision, and that numbers outside [-(2^53)+1, (2^53)-1] "may indicate potential interoperability problems." Since pandas uses ujson internally which has int64 limitations, one could argue this is expected behavior based on implementation constraints that are allowed by the JSON specification.
+
+**Why it might not be INVALID:**
+The bug demonstrates genuine asymmetric behavior where positive integers beyond int64 max are accepted but negative integers beyond int64 min are rejected. This asymmetry is not documented and violates the principle of least surprise. Additionally, pandas can write JSON it cannot read back, which is a clear round-trip failure that users would reasonably expect to work.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+Integers outside the int64 range are extremely rare in practice, and the JSON RFC itself warns about interoperability issues with such values. The fix would require significant changes to the underlying ujson parser or switching parsers for edge cases, which could impact performance for the vast majority of use cases that don't need this capability.
+
+**Why it might not be WONTFIX:**
+The asymmetric behavior is clearly incorrect - if the library accepts positive values beyond int64, it should accept negative values beyond int64 as well. The round-trip failure where pandas writes JSON it cannot read is a serious data integrity issue that could cause data loss in production systems.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The pandas documentation makes no mention of integer size limitations in read_json(), and this is a clear gap. Users have no way to know from the documentation that integers below -2^63 will fail. Adding documentation about this limitation would at least inform users of the constraint and suggest the workaround of using Python's json module directly.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The asymmetric behavior itself is incorrect and not just a documentation issue. Simply documenting that "negative integers below -2^63 fail but positive integers above 2^63-1 work" would be documenting a bug rather than intended behavior. The round-trip failure is also a functional issue, not just a documentation problem.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrary precision integers could be seen as a new feature request, especially since the JSON RFC acknowledges that implementations may set limits. Adding support for integers outside int64 range would be extending pandas' capabilities beyond what ujson currently provides.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but rather fixing existing asymmetric and incorrect behavior. The library already attempts to handle large integers (and succeeds for positive ones), so this is about fixing a bug in the existing functionality rather than adding something new.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The asymmetric behavior is objectively incorrect - accepting integers > 2^63-1 while rejecting integers < -2^63 has no logical justification. The round-trip failure where pandas can write JSON it cannot read back is a clear violation of data integrity expectations. Python's json module handles these values correctly, proving it's technically feasible.
+
+**Why it might not be BUG:**
+The JSON RFC allows implementations to set limits on numeric ranges, and ujson (the underlying parser) has known int64 limitations. One could argue this is a limitation of the chosen implementation rather than a bug, especially since extreme integer values are rare in practice.
+
+## Overall Consideration
+
+The bug report identifies a genuine asymmetric behavior in pandas' JSON parsing where negative integers below -2^63 are rejected while positive integers above 2^63-1 are accepted. This asymmetry is confirmed through testing and represents inconsistent behavior that violates user expectations. The round-trip failure where pandas writes JSON it cannot read back is particularly problematic for data integrity.
+
+However, the JSON RFC 8259 explicitly acknowledges that implementations may set limits on numeric ranges and warns about interoperability issues for numbers outside [-(2^53)+1, (2^53)-1]. The underlying ujson library has int64 limitations that are somewhat expected for C-based JSON parsers optimized for performance. Integers outside the int64 range are extremely rare in real-world data.
+
+The most appropriate classification depends on whether we view the asymmetric behavior as a bug or an acceptable implementation limitation. While the asymmetry itself seems incorrect, the practical impact is minimal since such extreme values are rare. The lack of documentation about this limitation is clear, making DOCUMENTATION_FIX a strong candidate. Given that pandas already accepts some values outside int64 range (positive ones), the asymmetric rejection of negative values appears to be unintended behavior rather than a deliberate design choice, which leans toward this being a BUG rather than just a documentation issue.

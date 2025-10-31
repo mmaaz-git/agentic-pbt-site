@@ -1,0 +1,42 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are the findings:
+
+### Bug Confirmation
+The bug is **CONFIRMED**. When an `on_error` handler raises an exception while handling a `ValidationError`, the handler's exception completely replaces the original `ValidationError`.
+
+### Test Results
+
+1. **Property-Based Test (Hypothesis)**:
+   - The test failed as expected, confirming that handler exceptions suppress the original ValidationError
+   - The test fails on ANY input values, indicating this is a consistent bug
+   - Error message: "AssertionError: Original ValidationError was suppressed by handler exception"
+
+2. **Simple Reproduction Case**:
+   - Executed the provided reproduction code
+   - Output confirms the bug:
+     ```
+     BUG: Caught RuntimeError from handler: Handler raised an exception
+     The original ValidationError was suppressed!
+     ```
+   - Expected behavior: Should have caught the original ValidationError
+   - Actual behavior: Caught RuntimeError from the handler instead
+
+### Code Analysis
+Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/plugin/_schema_validator.py`, lines 112-115:
+
+```python
+except ValidationError as error:
+    for on_error_handler in on_errors:
+        on_error_handler(error)
+    raise
+```
+
+The problem is clear: if `on_error_handler(error)` raises an exception, it will propagate out of the wrapper function before the original ValidationError can be re-raised. This violates the principle that validation errors should always be propagated to the caller.
+
+### Impact
+This is a significant bug because:
+1. It breaks the contract that ValidationErrors are always propagated
+2. A misbehaving plugin can mask actual validation errors
+3. It makes debugging extremely difficult as the original error context is lost
+4. It violates the expected behavior where plugin handlers should be observational and not affect control flow

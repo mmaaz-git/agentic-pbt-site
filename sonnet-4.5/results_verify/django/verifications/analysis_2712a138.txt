@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Variable class is an internal implementation detail of Django's template system, not a public API. There's no official documentation specifying how Variable("10.") should behave. The user might be making assumptions about undocumented behavior. Additionally, template authors typically don't instantiate Variable objects directly - they write template syntax like {{ variable }}, and Django's template parser creates Variable instances. The behavior for edge cases like trailing periods in numeric literals might be considered undefined.
+
+**Why it might not be INVALID:**
+The code contains an explicit comment "# '2.' is invalid" and attempts to raise ValueError for this case, clearly showing intent to reject such inputs. The current behavior violates the apparent design that literal and lookups should be mutually exclusive - having both set creates an inconsistent state. The resolve() method's implementation assumes only one of literal/lookups is set, and the current bug causes resolve() to fail when it should return the literal value.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an obscure edge case that would rarely occur in practice. Template authors don't typically write {{ 10. }} in templates - they would write {{ 10 }} or {{ 10.0 }}. The Variable class is internal to Django and not meant for direct use by developers. The impact is minimal since it only affects numeric literals with trailing periods, which is poor style anyway. Fixing this might risk breaking existing code that somehow depends on this behavior.
+
+**Why it might not be WONTFIX:**
+The bug causes an inconsistent internal state that violates the class's design invariants. The code explicitly tries to reject this case with a comment and ValueError, showing it's not intended behavior. The bug makes resolve() fail in a confusing way - raising VariableDoesNotExist instead of returning the literal value or raising a clear syntax error. This violates the principle of least surprise and could cause debugging difficulties.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The Variable class has no public documentation, so perhaps the solution is to document that numeric literals with trailing periods are undefined behavior. The template language documentation could be updated to explicitly state that numeric literals must not end with periods. This would clarify the expected behavior without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly shows this is a bug, not a documentation issue. The comment "# '2.' is invalid" and the ValueError logic demonstrate the code's intent to reject these inputs. The problem isn't that the behavior is undocumented - it's that the implementation doesn't match the intended behavior shown in the code comments. Documenting broken behavior doesn't fix the underlying logic error.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting trailing periods in numeric literals would be a new feature, making Django's template language more compatible with Python's float() behavior. Python accepts float("10."), so perhaps Django templates should too. The bug report suggests either properly rejecting these inputs or properly supporting them, which could be seen as requesting enhanced validation.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's reporting that existing code doesn't work as intended. The code already tries to handle this case by raising ValueError, but fails due to a logic error. The issue is about fixing broken behavior, not adding new capabilities. The mutual exclusivity of literal/lookups is an existing design principle being violated.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code contains a clear logic error: self.literal is set before checking for the invalid trailing period, and when ValueError is raised and caught, literal remains set while lookups also gets set. This violates the design invariant that literal and lookups are mutually exclusive. The comment "# '2.' is invalid" proves the current behavior is unintended. The resolve() method fails because it assumes only one of literal/lookups is set, but both are set due to this bug. The implementation demonstrably doesn't match the code's intent.
+
+**Why it might not be BUG:**
+The Variable class is an internal Django implementation detail without public documentation. What constitutes "correct" behavior for undocumented edge cases is debatable. The class is not meant for direct instantiation by users. The impact is limited to an obscure edge case that rarely occurs in practice.
+
+## Overall consideration
+
+Looking at all considerations, this appears to be a valid BUG. The code contains an explicit comment stating "# '2.' is invalid" followed by logic intended to raise ValueError for trailing periods. However, due to a logic error, self.literal gets set before the ValueError is raised, and when the exception is caught, execution continues with literal already set, eventually also setting lookups. This creates an inconsistent state where both attributes are set, violating the mutual exclusivity assumed by the resolve() method.
+
+The bug is not about undefined behavior or missing features - it's about code that demonstrably doesn't work as intended. The comment in the source code proves the developers intended to reject numeric literals with trailing periods, but the implementation fails to properly handle this case. While the Variable class is internal and the edge case is obscure, the presence of explicit handling code that doesn't work correctly makes this a legitimate bug rather than undefined behavior.
+
+The fix is straightforward: either clear self.literal when raising the ValueError, or check for trailing period before setting self.literal, or return early after successfully setting literal to prevent lookups from also being set. The bug report even provides reasonable fix suggestions. This is a clear case where the implementation doesn't match the documented intent in the code comments, making it a valid bug report.

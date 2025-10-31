@@ -1,0 +1,28 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue occurs consistently when attempting to invert FFT results from size-1 arrays.
+
+### Property-Based Test Results
+The hypothesis test failed as expected, finding the exact issue described:
+- Size-1 arrays (e.g., array([0.])) cause a ValueError: "Invalid number of FFT data points (0) specified."
+- The error occurs in _raw_fft at line 60 in _pocketfft.py
+
+### Manual Test Results
+All three manual test cases reproduce the bug:
+
+1. **1D size-1 array**: np.array([5.0])
+   - rfftn succeeds: produces [5.+0.j] with shape (1,)
+   - irfftn fails with ValueError about 0 FFT data points
+
+2. **2D array with size-1**: np.array([[5.0]])
+   - rfftn succeeds: produces [[5.+0.j]] with shape (1, 1)
+   - irfftn fails with the same ValueError
+
+3. **Direct rfft/irfft test**:
+   - rfft succeeds on size-1 input
+   - irfft fails with the same ValueError
+
+### Key Observation
+The forward transforms (rfftn, rfft) handle size-1 arrays correctly, producing valid FFT results. However, the inverse transforms (irfftn, irfft) crash when trying to process these valid FFT outputs. This confirms the round-trip property is broken for size-1 arrays.
+
+The error message "Invalid number of FFT data points (0) specified" indicates that irfft is incorrectly calculating n=0 for size-1 inputs, when it should be n=1.

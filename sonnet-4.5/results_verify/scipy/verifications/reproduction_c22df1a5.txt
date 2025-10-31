@@ -1,0 +1,44 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the reported bug in scipy.sparse.linalg.expm. Here's what I found:
+
+### 1. Hypothesis Test Reproduction
+The provided Hypothesis test fails immediately on the first example (n=1):
+- Created a sparse CSC array from a dense numpy array
+- Called scipy.sparse.linalg.expm(A) with the sparse input
+- The test assertion failed: `assert isinstance(result, np.ndarray)`
+- Actual return type: scipy.sparse._csc.csc_array
+
+### 2. Manual Test Reproduction
+Ran the manual reproduction code with both sparse and dense inputs:
+
+**Sparse Input:**
+- Input: csc_array([[1.0, 0.0], [0.0, 2.0]])
+- Output type: csc_array (NOT ndarray as documented)
+- isinstance(result, np.ndarray): False
+- sp.issparse(result): True
+
+**Dense Input:**
+- Input: ndarray([[1.0, 0.0], [0.0, 2.0]])
+- Output type: ndarray
+- isinstance(result, np.ndarray): True
+
+### 3. Root Cause Analysis
+By examining the source code in scipy/sparse/linalg/_matfuncs.py:
+
+1. The expm function calls _expm internally
+2. _expm performs Pade approximation and calls _solve_P_Q
+3. _solve_P_Q (line 706-707) specifically checks if the input is sparse:
+   ```python
+   if issparse(U) or is_pydata_spmatrix(U):
+       return spsolve(Q, P)
+   ```
+4. When both Q and P are 2D sparse arrays, spsolve returns a sparse array
+5. This sparse array is propagated all the way back as the final result
+
+### Effect
+The function returns different types based on input:
+- Dense input → ndarray output
+- Sparse input → sparse array output
+
+This directly contradicts the documentation which states "Returns: expA : (M,M) ndarray".

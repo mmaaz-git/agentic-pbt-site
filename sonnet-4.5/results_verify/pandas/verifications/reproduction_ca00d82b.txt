@@ -1,0 +1,49 @@
+## Bug Reproduction Results
+
+### Code Examination
+I examined the actual source code in /home/npc/miniconda/lib/python3.13/site-packages/pandas/compat/numpy/function.py and confirmed the duplicate key assignment exists exactly as reported:
+
+Lines 136-141:
+```python
+ARGSORT_DEFAULTS: dict[str, int | str | None] = {}
+ARGSORT_DEFAULTS["axis"] = -1
+ARGSORT_DEFAULTS["kind"] = "quicksort"  # Line 138
+ARGSORT_DEFAULTS["order"] = None        # Line 139
+ARGSORT_DEFAULTS["kind"] = None         # Line 140 - overwrites line 138!
+ARGSORT_DEFAULTS["stable"] = None       # Line 141
+```
+
+### Test Execution
+I ran the reproduction code provided in the bug report:
+
+```python
+from pandas.compat.numpy.function import ARGSORT_DEFAULTS
+
+print(ARGSORT_DEFAULTS)
+# Output: {'axis': -1, 'kind': None, 'order': None, 'stable': None}
+
+print(f"\nActual 'kind' value: {ARGSORT_DEFAULTS['kind']!r}")
+# Output: Actual 'kind' value: None
+
+print(f"Expected: 'quicksort'")
+# Output: Expected: 'quicksort'
+```
+
+### Test Result
+The test failed as expected:
+- Expected: ARGSORT_DEFAULTS["kind"] == "quicksort"
+- Actual: ARGSORT_DEFAULTS["kind"] == None
+
+The assertion `assert ARGSORT_DEFAULTS["kind"] == "quicksort"` fails with:
+`AssertionError: Expected kind='quicksort', got kind=None`
+
+### Technical Analysis
+The duplicate assignment is clearly visible in the code. This is not a case of intentional overwriting or complex logic - it's simply the same dictionary key being assigned twice in consecutive lines with different values. The second assignment (None) overwrites the first assignment ("quicksort").
+
+### Context of Usage
+I found that there's a second validator called `validate_argsort_kind` (defined on lines 154-156) that uses `ARGSORT_DEFAULTS_KIND` which notably does NOT include the 'kind' parameter at all. This suggests there might have been confusion during development about which dictionary should contain which parameters.
+
+The comment on lines 148-149 states: "two different signatures of argsort, this second validation for when the `kind` param is supported" - which ironically is the opposite of what's implemented (the second one doesn't have 'kind' at all).
+
+### Impact
+This bug would affect validation of numpy compatibility parameters. If pandas code uses `validate_argsort` to check parameters, it would incorrectly reject kind="quicksort" as non-default, even though "quicksort" is numpy's actual default value.

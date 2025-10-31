@@ -1,0 +1,46 @@
+## Reproduction Results
+
+### Bug Confirmation
+The bug report is technically accurate. The reproduction tests confirm the reported issue with `get_exception_info` in Django's Jinja2 backend.
+
+### Technical Details
+
+1. **The Bug Exists**:
+   - When template source contains leading newlines, `get_exception_info` strips them using `source.strip()` at line 105
+   - Jinja2 reports line numbers based on the original source (including empty lines)
+   - After stripping, the line numbers no longer correspond to the original source
+
+2. **Reproduction Results**:
+
+   a) **IndexError Case**: With source `"\n\nline 3 content\nline 4 content"` and error at line 3:
+      - Original source has 4 lines (2 empty, then 2 with content)
+      - After strip(), only 2 lines remain
+      - Attempting to access line 3 causes IndexError
+
+   b) **Wrong Line Display**: With source `"\n\nActual line 3\nActual line 4\nActual line 5"` and error at line 3:
+      - Original line 3 contains "Actual line 3"
+      - After strip(), what was line 3 becomes line 1
+      - The function displays line 3 of the stripped source, which is "Actual line 5"
+      - This shows the wrong line content to developers
+
+3. **Impact Assessment**:
+   - The bug can cause crashes (IndexError) when debugging templates with many leading newlines
+   - More commonly, it displays incorrect line content in error messages
+   - This affects debugging experience when templates have leading/trailing whitespace
+
+4. **Real-World Scenarios**:
+   - Templates with heredocs or multiline strings often have leading newlines
+   - Generated templates might have whitespace for formatting
+   - Templates included from other templates might have extra newlines
+
+### The Proposed Fix
+The bug report suggests removing `.strip()` from line 105, changing:
+```python
+lines = list(enumerate(source.strip().split("\n"), start=1))
+```
+to:
+```python
+lines = list(enumerate(source.split("\n"), start=1))
+```
+
+This fix would preserve the original line numbering and ensure the correct line is displayed.

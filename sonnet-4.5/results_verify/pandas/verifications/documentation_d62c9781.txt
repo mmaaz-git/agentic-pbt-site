@@ -1,0 +1,49 @@
+## Documentation Analysis
+
+### Public API Documentation
+1. The functions `_parse_datetime` and `_convert_datetimes` are **internal functions** (prefixed with underscore), not part of pandas' public API
+2. No public documentation exists for these internal functions
+3. The public `pandas.read_sas()` function documentation does not specify how datetime precision is handled
+
+### SAS Format Standards (from external sources)
+Based on SAS documentation and standards:
+
+1. **SAS Date Values**: Stored as number of days since January 1, 1960
+   - Can be fractional (e.g., 0.5 = noon on January 1, 1960)
+   - Floating-point representation supports fractional days
+
+2. **SAS Datetime Values**: Stored as number of seconds since January 1, 1960
+   - Supports fractional seconds with up to microsecond precision
+   - Uses 8-byte floating-point for maximum precision
+
+3. **Precision Requirements**:
+   - SAS supports fractional components in both date and datetime values
+   - Maximum precision limited by 15-digit floating-point representation
+   - Industry standard is to preserve fractional components when converting
+
+### Function Docstrings
+
+From the source code examination:
+
+`_parse_datetime` (lines 67-78):
+- No docstring, but code clearly preserves fractional components
+- Uses `timedelta(days=sas_datetime)` which accepts floats
+
+`_convert_datetimes` (lines 81-108):
+- Docstring states: "Convert to Timestamp if possible, otherwise to datetime.datetime"
+- Notes: "SAS float64 lacks precision for more than ms resolution"
+- **Does NOT mention truncation of fractional days**
+- Parameter documentation says unit 'd' is for "dates" but doesn't specify precision handling
+
+### Key Finding
+The docstring for `_convert_datetimes` acknowledges that SAS uses float64 and mentions millisecond resolution, but:
+1. Does not document that fractional days will be truncated when unit='d'
+2. Does not warn users about potential data loss
+3. Creates an inconsistency with `_parse_datetime` which is not documented
+
+### Conclusion
+The documentation does not specify that fractional days should be truncated. The behavior appears to be an implementation oversight rather than intentional design, as:
+1. SAS standard supports fractional days
+2. The sister function `_parse_datetime` preserves them
+3. No documentation warns about truncation
+4. The 's' (seconds) path in the same function preserves fractional components

@@ -1,0 +1,45 @@
+REPRODUCTION OF BUG REPORT
+===========================
+
+## Bug Confirmation
+
+I have successfully reproduced the reported bug. The issue occurs exactly as described when using scipy.stats.binom.pmf with extremely small probability values near the machine epsilon.
+
+## Test Results
+
+### Hypothesis Test
+- The property-based test using Hypothesis confirmed the failure with the exact same input: n=3, p=1.1125369292536007e-308
+- The test failed with: OverflowError: Error in function ibeta_derivative<d>(%1%,%1%,%1%): Overflow Error
+
+### Direct Reproduction
+- Confirmed that scipy.stats.binom.pmf(0, 3, 1.1125369292536007e-308) raises an OverflowError
+- The error message matches exactly: "Error in function ibeta_derivative<d>(%1%,%1%,%1%): Overflow Error"
+
+### Boundary Analysis
+Testing revealed the following pattern:
+- p=1e-308: Fails for n≥3, works for n=1,2
+- p=5e-309: Works for all n values tested
+- p=2.225e-308 (close to sys.float_info.min): Works for all n values
+- p=1e-309: Works for all n values
+- p=5e-324 (smallest denormalized float): Works for all n values
+
+The critical boundary appears to be around p=1e-308, specifically when n≥3.
+
+## Expected vs Actual Behavior
+
+### Expected
+For extremely small p values, pmf(0, n, p) should return approximately 1.0, since:
+- Mathematically: P(X=0) = (1-p)^n ≈ 1 when p ≈ 0
+- The calculation (1-1.1125369292536007e-308)^3 = 1.0 in Python
+
+### Actual
+The function raises an OverflowError instead of returning the mathematically correct value.
+
+## Impact Assessment
+
+The bug is real and reproducible. It affects:
+1. Valid inputs within the documented parameter range (0 ≤ p ≤ 1)
+2. Mathematically well-defined calculations
+3. Edge cases that, while extreme, are still legitimate floating-point values
+
+The issue appears to be in the underlying Boost Math library's ibeta_derivative function, which cannot handle these extremely small probability values when n≥3.

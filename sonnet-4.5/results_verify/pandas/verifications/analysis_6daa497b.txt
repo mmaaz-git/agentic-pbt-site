@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The comment in the code explicitly states "Do not hash on the name, an identical string source should be the same object (name is often defaulted in other places)" which suggests this was an intentional design decision. The developers may have intended that StringSourceDescriptor instances should only be considered identical when they are the exact same object instance, not just when they have the same name. The class is an internal implementation detail of the Cython compiler and may never have been intended to be used in sets or dictionaries in a way that relies on value-based equality.
+
+**Why it might not be INVALID:**
+Python's hash-equality contract is a fundamental requirement that is clearly documented in the Python data model. Any class that implements both __eq__ and __hash__ must follow this contract, regardless of internal design intentions. The current implementation does cause actual incorrect behavior in sets and dictionaries. The fact that FileSourceDescriptor in the same file follows the contract correctly shows that the developers understand this requirement.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+StringSourceDescriptor is an internal class used by the Cython compiler for parsing and might never be used in contexts where set/dict membership matters. The comment suggests the current behavior is intentional to ensure object identity for caching or other internal reasons. Changing this behavior might break existing code that relies on identity-based comparison. The class is not part of Cython's public API and users shouldn't be directly instantiating it.
+
+**Why it might not be WONTFIX:**
+Violating Python's fundamental contracts can lead to subtle bugs that are hard to debug. Even if this is currently not causing issues, future code changes might start using StringSourceDescriptor in sets or dicts. The fix is simple and matches the pattern already used in FileSourceDescriptor. Other parts of the Cython codebase might already be affected by this bug in ways that haven't been discovered yet.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The class has minimal documentation and doesn't explicitly state that it violates the hash-equality contract. If the current behavior is intentional, the documentation should clearly warn users that StringSourceDescriptor objects cannot be safely used in sets or dictionaries. The comment in the code could be expanded to explain why this design choice was made and what the implications are.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is not a documentation issue but a clear violation of Python's core contract. Adding documentation that says "this class violates Python's hash-equality contract" doesn't make the violation acceptable. The code behavior itself is incorrect, not just the documentation about it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Making StringSourceDescriptor work correctly in sets and dictionaries could be seen as adding new functionality that wasn't previously supported. The current implementation might be considered "working as designed" with the new request being to support set/dict operations. This would be adding a capability rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not about adding new functionality but about fixing incorrect behavior. The class already implements __eq__ and __hash__, so it's already claiming to support these operations. The fact that these methods don't work correctly together is a bug, not a missing feature. Python's hash-equality contract is not optional.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code clearly violates Python's documented hash-equality contract which states that objects that compare equal must have the same hash value. This violation causes demonstrable incorrect behavior in sets and dictionaries. The bug report provides reproducible test cases showing the problem. FileSourceDescriptor in the same file implements the contract correctly, showing this is not a systematic design choice. The proposed fix is simple and follows established patterns.
+
+**Why it might not be BUG:**
+The comment in the code strongly suggests this was an intentional design decision rather than an oversight. The class is internal to Cython and may not be intended for general use. There's no evidence that this causes actual problems in Cython's operation. The comment mentions that "name is often defaulted in other places" which might mean changing this could break existing assumptions in the codebase.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a case where the developers made an intentional design choice that conflicts with Python's fundamental contracts. The comment "Do not hash on the name, an identical string source should be the same object" reveals a misunderstanding: the developers wanted to ensure that identical string sources are cached and reused (same object), but they implemented this by breaking the hash-equality contract rather than using proper caching mechanisms.
+
+The key issue is that StringSourceDescriptor is an internal class of the Cython compiler, not part of the public API. Looking at how it's used, it appears to be created once per code fragment during parsing and isn't typically stored in sets or dictionaries where the hash-equality violation would matter. The test file TestScanning.py shows it's used for creating scanners but never in hash-based collections. The comment about "name is often defaulted in other places" suggests that many StringSourceDescriptor objects might have the same default name, and the developers wanted to avoid them being considered equal just because of this default naming.
+
+While the bug report is technically correct that this violates Python's hash-equality contract, this appears to be an intentional design choice for an internal class where the violation doesn't cause practical problems in actual usage. The class works correctly for its intended purpose within the Cython compiler. This makes it a WONTFIX issue - the behavior is intentional and changing it could potentially break assumptions in other parts of the codebase without providing real benefit, since the class isn't used in ways where the violation matters.

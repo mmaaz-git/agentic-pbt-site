@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for SparseArray doesn't explicitly specify the expected behavior for argmin/argmax when all values equal the fill value. One could argue that since sparse arrays are designed to efficiently store arrays with many repeated values, and the internal sparse values array is empty in this case, raising an error might be intentional design. The error message "attempt to get argmin of an empty sequence" accurately describes what's happening internally - there are no sparse values to find the min/max of.
+
+**Why it might not be INVALID:**
+The behavior is inconsistent with numpy arrays, pandas Series, and even SparseArray's own min/max methods. All of these handle arrays with identical values gracefully. A SparseArray with all fill values is still a valid, non-empty array from the user's perspective - it has a defined length and indexable values. Users would reasonably expect argmin/argmax to work on any non-empty array.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only occurs when every single value in the array equals the fill value. In typical sparse array use cases (like sparse matrices in scientific computing), this situation is extremely rare. The workaround is simple - users can convert to a dense array first. The fix would add complexity to handle an uncommon scenario that might not justify the maintenance burden.
+
+**Why it might not be WONTFIX:**
+The bug causes a crash rather than returning a sensible value or raising a more informative error. The inconsistency with min/max methods (which work fine) suggests this is an oversight rather than intentional. The fix is straightforward and improves robustness. Other pandas data structures handle this case properly, so SparseArray should too for consistency.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what should happen in this edge case. If the current behavior is intentional, the documentation should explicitly state that argmin/argmax will raise ValueError when all values equal the fill value. This would set proper expectations and help users understand this limitation of sparse arrays.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior appears to be unintentional - it's simply hitting an unhandled edge case in the implementation. The error message comes from numpy's internal behavior when called on an empty array, not from pandas intentionally raising an error. Documenting a bug doesn't make it correct behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting argmin/argmax on arrays with all fill values could be seen as adding new functionality that wasn't originally designed. The current implementation only considers sparse values, and extending it to handle the all-fill-value case might be viewed as a new feature. The proposed fix essentially adds logic to handle a case that the original implementation didn't consider.
+
+**Why it might not be FEATURE_REQUEST:**
+argmin and argmax are already implemented methods that should work on any valid SparseArray. This isn't adding new functionality but fixing existing methods to handle all valid inputs. The methods already exist and work for most cases - they just fail on this edge case. Users expect these standard array operations to work consistently.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is clearly inconsistent with numpy, pandas Series, and standard array conventions. When you have an array [0, 0, 0], argmin should return 0 (the first index), not crash. The min() and max() methods work correctly on the same arrays, showing that SparseArray can handle all-fill-value arrays. The error occurs deep in the implementation due to an unhandled edge case, not from an intentional design choice. The fix is simple and makes the behavior consistent with user expectations.
+
+**Why it might not be BUG:**
+The methods are working as implemented - they search through sparse values for the min/max, and when there are no sparse values, they correctly identify that they can't find a min/max in an empty sequence. One could argue this is working as designed for the internal sparse representation, even if it's not ideal from a user perspective.
+
+## Overall Consideration
+
+After analyzing all aspects, this appears to be a legitimate bug. The key evidence supporting this classification:
+
+First, the behavior is inconsistent both internally and externally. Internally, SparseArray's min() and max() methods handle arrays with all fill values correctly, returning the fill value. Externally, numpy arrays and pandas Series return index 0 for argmin/argmax on arrays with identical values, which is the standard behavior users would expect. The current SparseArray behavior breaks this convention without good reason.
+
+Second, the error appears to be an unintended consequence of the implementation rather than a design choice. The code attempts to find the argmin/argmax among sparse values without checking if there are any sparse values to examine. The error message "attempt to get argmin of an empty sequence" comes from numpy's internal behavior, not from pandas deliberately raising an exception. The implementation already has logic to handle fill values (lines 1661-1672) but never gets there when npoints=0.
+
+Third, from a user perspective, a SparseArray with all fill values is still a valid, non-empty array. It has a defined length, indexable values, and other operations work on it. There's no logical reason why argmin/argmax should fail when min/max succeed. Users working with sparse data would reasonably expect these standard array operations to work consistently, especially since the fix is straightforward and doesn't compromise the sparse array's efficiency benefits.

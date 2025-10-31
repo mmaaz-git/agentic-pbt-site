@@ -1,0 +1,37 @@
+BUG REPRODUCTION RESULTS
+
+I have successfully reproduced the bug as described in the report.
+
+TEST EXECUTION:
+
+1. BASIC REPRODUCTION TEST:
+   - Created Extension with pyrex_include_dirs=["/legacy/path"] and cython_gdb=True
+   - Expected: cython_gdb should be True
+   - Actual: cython_gdb is False
+   - Result: BUG CONFIRMED
+
+2. HYPOTHESIS TEST:
+   - Ran property-based test with various combinations
+   - Failed immediately on first example
+   - Failure case: name='A', cython_value=True, pyrex_param='pyrex_include_dirs'
+   - Result: BUG CONFIRMED
+
+3. ROOT CAUSE ANALYSIS:
+   Looking at the source code (lines 40-64), the issue is clear:
+   - When pyrex_* parameters are detected, the code converts them to cython_* in the kw dict
+   - It then makes a recursive call to Extension.__init__()
+   - However, it only passes explicitly named parameters and **kw to the recursive call
+   - The cython_* parameters (like cython_gdb) are NOT included in the recursive call
+   - They are not in kw (they were passed as named parameters)
+   - They are not in the explicit parameter list (only no_c_in_traceback is)
+   - Therefore, they get their default values in the recursive call
+
+4. IMPACT:
+   - Any user trying to migrate from pyrex to cython gradually by mixing parameters will lose their cython_* settings
+   - This silently ignores user-specified configuration
+   - The bug affects ALL cython_* specific parameters when ANY pyrex_* parameter is present
+
+5. BUG VALIDITY:
+   - The bug is technically correct and reproducible
+   - The code behaves exactly as the bug report describes
+   - The proposed fix would address the issue by ensuring cython_* parameters are passed through

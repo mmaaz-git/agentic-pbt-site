@@ -1,0 +1,54 @@
+## Reproduction Results for numpy.strings.slice Bug
+
+### Bug Confirmed
+The bug report is technically accurate. When `numpy.strings.slice` is called with `stop=None` explicitly, it behaves incorrectly compared to Python's standard slicing semantics.
+
+### Test Results
+
+1. **Basic reproduction case**:
+   - Input: `np.array(['hello'], dtype='U')` with `nps.slice(arr, 0, None)`
+   - Expected: `['hello']` (like Python's `'hello'[0:None]` = `'hello'`)
+   - Actual: `['']` (empty string)
+   - **CONFIRMED**: Bug exists
+
+2. **Specific failing case from bug report**:
+   - Input: `np.array(['0'], dtype='<U1')` with `nps.slice(arr, 0, None)`
+   - Expected: `['0']`
+   - Actual: `['']`
+   - **CONFIRMED**: Bug exists
+
+3. **Systematic testing**:
+   - `nps.slice(test_str, 2)` returns `['ab']` - CORRECT (interpreted as [:2])
+   - `nps.slice(test_str, 2, None)` returns `['ab']` - INCORRECT (should be [2:] = 'cdef')
+   - The function cannot distinguish between these two calls
+
+4. **Hypothesis test**:
+   - The property-based test systematically found hundreds of failures
+   - Pattern is consistent: when `stop=None` is explicitly passed, the function incorrectly swaps start and stop
+
+### Root Cause Analysis
+
+The implementation has this code:
+```python
+if stop is None:
+    stop = start
+    start = None
+```
+
+This logic incorrectly handles two distinct cases:
+1. `slice(arr, 2)` - Only one argument provided, should become `arr[:2]`
+2. `slice(arr, 2, None)` - Two arguments provided, should become `arr[2:]`
+
+Due to Python's default parameter mechanism, both cases result in `start=2, stop=None` inside the function, making them indistinguishable.
+
+### Comparison with Python's slice object
+
+Python's built-in slice object correctly handles this:
+- `slice(2)` creates `slice(None, 2, None)`
+- `slice(2, None)` creates `slice(2, None, None)`
+
+The numpy function documentation claims to behave "like the regular Python slice object" but fails to do so.
+
+### Severity Assessment
+
+This is a real logic bug that causes incorrect behavior when users explicitly pass `None` as the stop parameter. The function does not match Python's standard slicing semantics nor its own documentation's promise to behave like Python's slice object.

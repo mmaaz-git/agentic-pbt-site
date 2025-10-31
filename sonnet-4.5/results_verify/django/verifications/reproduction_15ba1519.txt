@@ -1,0 +1,42 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug as reported. The issue is confirmed to exist in Django's Q class implementation.
+
+### Property-Based Test Results
+
+The property-based tests fail as expected:
+- **Commutativity test**: Failed with message "Expected (AND: ('name', '0'), ('name', 0)) == (AND: ('name', 0), ('name', '0'))"
+- **Idempotence test**: Failed with message "Expected (AND: ('name', '0'), ('name', '0')) == (AND: ('name', '0'))"
+
+### Manual Reproduction Results
+
+The manual test case provided in the bug report produces the exact output claimed:
+
+```
+q1 & q2 = (AND: ('name', 'Alice'), ('age', 30))
+q2 & q1 = (AND: ('age', 30), ('name', 'Alice'))
+Equal? False
+Same hash? False
+Set contains 2 items (expected 1)
+
+--- Idempotence test ---
+q = (AND: ('name', 'Alice'))
+q & q = (AND: ('name', 'Alice'), ('name', 'Alice'))
+Equal? False
+```
+
+### Key Findings
+
+1. **Commutativity violation confirmed**: `Q(name='Alice') & Q(age=30)` produces a different result than `Q(age=30) & Q(name='Alice')`, even though these represent the same logical condition.
+
+2. **Idempotence violation confirmed**: `q & q` does not equal `q`, instead creating a duplicate condition.
+
+3. **Hash inconsistency confirmed**: Logically equivalent Q objects have different hash values, which would break their use in sets and as dictionary keys.
+
+4. **Set deduplication failure confirmed**: When adding logically equivalent Q objects to a set, they are treated as distinct items rather than being deduplicated.
+
+### Root Cause
+
+The issue stems from the Q class's `identity` property (line 204-215 in query_utils.py) which constructs a tuple representation of the Q object without normalizing the order of children. This causes structurally different but logically equivalent Q objects to have different identity tuples, leading to inequality and different hash values.
+
+The Q class overrides `__eq__` and `__hash__` (lines 217-223) to use this `identity` property, so the structural differences in how the Q objects are constructed directly impact equality comparisons.

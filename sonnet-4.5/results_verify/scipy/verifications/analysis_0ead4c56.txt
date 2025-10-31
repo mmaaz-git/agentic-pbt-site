@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The scipy.ndimage documentation never explicitly guarantees that the mathematical relationship correlate(x, w) = convolve(x, w[::-1]) must hold for all modes and kernel configurations. The functions are documented as separate filtering operations, not as mathematical duals. The user might be incorrectly assuming that scipy.ndimage should behave identically to NumPy's correlate/convolve, when they are fundamentally different implementations with different design goals. The documentation does not promise this relationship, so expecting it to hold could be considered an incorrect assumption.
+
+**Why it might not be INVALID:**
+The mathematical relationship between correlation and convolution is fundamental in signal processing theory. It's not just a NumPy convention - it's a mathematical definition. The fact that the relationship DOES hold for all other modes (reflect, nearest, wrap, mirror) and for odd-length kernels even in constant mode strongly suggests this is intended behavior that's broken in one specific case. Users have a reasonable expectation that mathematical operations should follow their mathematical definitions.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This issue only affects even-length kernels with mode='constant', which might be considered an edge case. Users can work around it by using odd-length kernels or different boundary modes. The current behavior has existed for a long time, and changing it might break existing code that depends on the current implementation. The performance impact or implementation complexity of fixing this corner case might not be worth the benefit.
+
+**Why it might not be WONTFIX:**
+This violates a fundamental mathematical property that many users would reasonably expect to hold. The inconsistency between odd and even-length kernels is confusing and error-prone. The fact that it works correctly in NumPy and in all other modes suggests this is a fixable bug, not an inherent limitation. Silent violations of mathematical properties can lead to incorrect scientific results.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never explicitly states that the mathematical relationship should hold, so perhaps the documentation should be updated to clarify that scipy.ndimage's implementation differs from the mathematical definition for even-length kernels with constant boundaries. Users should be warned that these functions don't always maintain the expected mathematical duality, especially for even-length kernels.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The relationship works correctly in all other cases (other modes, odd-length kernels), suggesting this is a bug in the implementation rather than an intentional design choice that needs documentation. Documenting a bug as expected behavior rather than fixing it would be misleading. The inconsistency between odd and even kernel behavior is illogical and appears to be an implementation error.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that maintaining the mathematical relationship for even-length kernels with constant mode is a new feature that scipy.ndimage never claimed to support. The user is requesting behavior that goes beyond what's currently documented, essentially asking for a new guarantee about mathematical properties that wasn't previously promised.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but asking for correct mathematical behavior. The relationship already works in all other cases, so this is about fixing inconsistent behavior, not adding a new feature. Basic mathematical correctness is not a feature - it's a requirement for scientific computing libraries.
+
+## BUG Considerations
+**Why it might be BUG:**
+The mathematical relationship between correlation and convolution is violated specifically for even-length kernels with mode='constant', while it holds for: (1) all odd-length kernels, (2) all other boundary modes, (3) NumPy's implementation. This inconsistency strongly suggests an implementation error. The off-by-one pattern in the origin parameter for even kernels points to a specific bug in boundary handling. The relationship is so fundamental that its violation would produce incorrect results in signal processing applications. The fact that scipy's own implementation is internally inconsistent (works for odd kernels but not even) indicates this is unintended behavior.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly guarantee this mathematical relationship must hold. Different implementations might make different design choices about boundary handling. The functions still produce deterministic, consistent results - they just don't maintain a particular mathematical property that wasn't explicitly promised. Users who need the mathematical relationship can use NumPy or adjust their usage patterns.
+
+**Overall consideration**
+
+This appears to be a legitimate bug in scipy.ndimage's implementation. The evidence is compelling: the mathematical relationship between correlation and convolution is fundamental to signal processing, not just a nice-to-have property. The relationship holds correctly in every other tested scenario - all other boundary modes work correctly, odd-length kernels work correctly even with mode='constant', and NumPy's implementation maintains the relationship properly. The specific failure pattern (only even-length kernels with constant mode) and the off-by-one origin behavior strongly suggest an implementation error in boundary handling rather than an intentional design choice.
+
+The inconsistency within scipy itself is particularly telling - there's no logical reason why odd-length kernels should maintain the mathematical relationship while even-length kernels don't. This inconsistency would be extremely confusing for users and could lead to subtle errors in scientific computations. The fact that a simple origin offset (-o-1 instead of -o) can restore the relationship for even kernels further supports that this is a bug in the origin calculation logic.
+
+While the documentation doesn't explicitly promise this mathematical relationship, it's such a fundamental property that users reasonably expect it to hold, especially given that it works in most cases. The bug is reproducible, well-defined, and affects a core mathematical property that could impact scientific results. This should be reported as a BUG rather than dismissed or reclassified.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for var_chunk and var_aggregate is essentially non-existent - there are no docstrings and no explicit specification of numerical stability requirements. One could argue that without explicit documentation guaranteeing numerical stability, the user's expectation of perfect numerical precision for all inputs is unreasonable, especially for extreme values like 1e15.
+
+**Why it might not be INVALID:**
+Variance has a well-defined mathematical meaning that transcends documentation. Producing negative variance values is mathematically impossible and violates the fundamental definition of variance as the average of squared deviations. This is not a case of unspecified behavior - it's a violation of mathematical law that any variance implementation must respect.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Numerical instability in floating-point arithmetic is a well-known issue in computer science, and the formula E[X²] - E[X]² is a classic example taught in numerical analysis courses. Some might argue that users working with extreme values should understand these limitations and use specialized numerical libraries or arbitrary precision arithmetic if needed.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - it affects common scenarios like computing variance of identical values (which should always be zero) and moderately large values around 1e6 (well within normal data ranges). The bug produces fundamentally wrong results (negative variances) that break downstream calculations and statistical validity. Welford's algorithm, a well-established solution, exists and is straightforward to implement.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The functions lack any documentation about numerical stability limitations. One could add documentation warning users that the variance calculation may be numerically unstable for large values or small variances, and that negative results are possible due to floating-point precision issues.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Documenting that "variance might be negative" would be documenting a bug, not expected behavior. Variance being non-negative is a mathematical invariant, not an implementation detail. The correct fix is to implement a numerically stable algorithm, not to document the instability. No reasonable user would expect or accept negative variance as documented behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting a new feature: "Add numerically stable variance calculation using Welford's algorithm." The current implementation works for many common cases, and adding numerical stability could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality - it's fixing existing functionality that produces mathematically impossible results. The variance function already exists; it just doesn't work correctly. Producing negative variance is not a missing feature, it's broken behavior that needs correction.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation violates fundamental mathematical properties of variance: it produces negative values (mathematically impossible), gives non-zero variance for identical values (mathematically incorrect), and fails catastrophically for large but reasonable values. The bug is reproducible, well-defined, and has a known solution (Welford's algorithm). The issue affects core statistical functionality that users rely on for data analysis.
+
+**Why it might not be BUG:**
+There's essentially no reasonable argument against this being a bug. The only possible argument might be that numerical instability is "expected" in naive implementations, but this is a weak argument when better algorithms exist and are widely known.
+
+## Overall Consideration
+
+This is unequivocally a BUG. The implementation produces results that are not just inaccurate but mathematically impossible - negative variance values. This violates the fundamental mathematical definition of variance as the expected value of squared deviations, which cannot be negative by definition.
+
+The bug is not limited to extreme edge cases but affects common scenarios: identical values (which should have exactly zero variance) and moderately large values (around 1e6) that are well within typical data ranges. The fact that the implementation uses a numerically unstable formula (E[X²] - E[X]²) when a stable alternative (Welford's algorithm) is well-known and straightforward to implement makes this a clear implementation deficiency rather than a documentation issue or missing feature.
+
+While the functions lack documentation, the mathematical definition of variance is universal and well-established. No amount of documentation could make negative variance acceptable - it would be like documenting that a square root function might return imaginary numbers for positive inputs. This is a correctness issue that affects the reliability of statistical computations in Dask, making it a legitimate bug that should be fixed.

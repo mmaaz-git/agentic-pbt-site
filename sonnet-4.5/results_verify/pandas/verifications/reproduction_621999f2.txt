@@ -1,0 +1,45 @@
+## Bug Reproduction Results
+
+### Summary
+The bug report is technically accurate - the function `safe_sort_index` does return an unsorted index when given mixed types that cannot be compared.
+
+### Reproduction Test 1: Direct Call to safe_sort_index
+**Input:** `pd.Index([0, 'a'], dtype='object')`
+**Result:** `Index([0, 'a'], dtype='object')`
+**Expected per docstring:** A sorted index
+**Actual behavior:** Returns the original unsorted index
+**Is sorted:** False
+
+The function returned the exact same unsorted index without any error or warning.
+
+### Reproduction Test 2: Understanding Why
+When attempting to sort `[0, 'a']` directly using Python's `sorted()`:
+- Result: `TypeError: '<' not supported between instances of 'str' and 'int'`
+- This confirms that integers and strings cannot be compared in Python 3
+
+### Reproduction Test 3: Other Mixed Type Scenarios
+- `[1, 2, 3]` → Sorted correctly (all integers)
+- `['a', 'b', 'c']` → Sorted correctly (all strings)
+- `[1, 'a']` → NOT sorted (mixed int/string)
+- `[1.0, 'a']` → NOT sorted (mixed float/string)
+- `[True, 'a']` → NOT sorted (mixed bool/string)
+- `[None, 1]` → Returns `[1, nan]`, NOT sorted
+
+### Reproduction Test 4: Hypothesis Test
+The provided Hypothesis test correctly identifies the issue:
+- Input: `idx1=Index([0])`, `idx2=Index(['a'])`
+- Combined index with `sort=True`: `Index([0, 'a'])`
+- The result is NOT monotonic despite `sort=True` being specified
+
+### Technical Analysis
+Looking at the source code of `safe_sort_index`:
+1. It attempts to call `safe_sort(index)`
+2. If a `TypeError` is raised (as it would be for mixed int/string), it catches the exception
+3. In the except clause, it simply `pass`es and falls through to return the original index
+
+### Conclusion
+The bug report's claim is **technically correct**:
+- The docstring states "Returns the sorted index" without qualification
+- The function actually returns an unsorted index when elements are incomparable
+- There is no documentation about this fallback behavior
+- The function silently fails to sort and returns unsorted data

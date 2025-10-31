@@ -1,0 +1,40 @@
+## Bug Reproduction Analysis
+
+### Bug Report Summary
+The bug report claims that `FixedForwardWindowIndexer.get_window_bounds()` produces invalid window bounds where start > end when initialized with negative `window_size` values.
+
+### Reproduction Results
+
+#### 1. Hypothesis Test Reproduction
+The Hypothesis property-based test successfully identified the bug with the exact failing input specified in the report:
+- Test input: `num_values=2, window_size=-1`
+- Result: AssertionError at index 1 where `start[1]=1 > end[1]=0`
+
+This confirms the bug report's claim that the invariant `start[i] <= end[i]` is violated.
+
+#### 2. Manual Reproduction
+Running the manual reproduction code confirmed the bug exactly as described:
+- With `window_size=-1` and `num_values=2`:
+  - start: [0, 1]
+  - end: [0, 0]
+  - Violation: start[1]=1 > end[1]=0
+
+#### 3. Extended Testing
+Additional tests with various negative window sizes showed consistent violations:
+- `window_size=-2`: Multiple violations where start > end
+- `window_size=-5`: All indices except 0 showed violations
+- `window_size=-10`: All indices except 0 showed violations
+
+The pattern shows that when `window_size` is negative:
+1. The end values are computed as `start + window_size`
+2. Negative end values are clipped to 0
+3. This causes start values to exceed end values for indices > 0
+
+### Effect of the Bug
+The bug produces mathematically invalid window boundaries that violate the fundamental invariant of window indexers. This would lead to:
+1. Invalid slice operations (trying to slice from a higher index to a lower index)
+2. Empty windows where data was expected
+3. Incorrect results in rolling window operations (likely producing NaN values)
+
+### Conclusion
+The bug is successfully reproduced and behaves exactly as described in the bug report. The issue occurs consistently when negative `window_size` values are provided to `FixedForwardWindowIndexer`.

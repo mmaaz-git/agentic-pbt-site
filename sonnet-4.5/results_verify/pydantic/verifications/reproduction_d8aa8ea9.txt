@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Successfully Reproduced: YES
+
+I have successfully reproduced the bug described in the report. The code crashes with `TypeError` exactly as described.
+
+### Test Results:
+
+1. **String input 'HELLO'**:
+   - Expected: Should fail the integer pipeline's `ge(0)` constraint and fall back to the string pipeline, returning 'hello'
+   - Actual: Crashes with `TypeError: '>=' not supported between instances of 'str' and 'int'`
+
+2. **Negative integer -1**:
+   - Expected: Should fail the integer pipeline's `ge(0)` constraint and fall back to the string pipeline
+   - Actual: Crashes with `TypeError: descriptor 'lower' for 'str' objects doesn't apply to a 'int' object`
+
+3. **Positive integer 5**:
+   - Expected: Should pass the integer pipeline and return 5
+   - Actual: Works correctly, returns 5
+
+4. **Lowercase string 'hello'**:
+   - Expected: Should fail the integer pipeline and fall back to the string pipeline, returning 'hello'
+   - Actual: Crashes with `TypeError: '>=' not supported between instances of 'str' and 'int'`
+
+### Hypothesis Testing:
+
+The property-based test with Hypothesis confirmed the bug systematically:
+- Found 2 distinct failure modes across 300 test cases
+- String inputs consistently fail with the `>=` TypeError
+- Negative integers consistently fail with the `str.lower()` TypeError
+
+### Root Cause Analysis:
+
+The issue is in the `_check_func` function at line 366-369 of pipeline.py:
+
+```python
+def handler(v: Any) -> Any:
+    if func(v):  # This line can raise TypeError
+        return v
+    raise ValueError(...)
+```
+
+When the `func` (e.g., lambda checking `v >= 0`) receives an incompatible type (e.g., a string), it raises a `TypeError` that propagates uncaught. Since this is a TypeError and not a ValidationError, the union schema's fallback mechanism doesn't trigger, causing the entire validation to crash.
+
+The bug report's diagnosis is accurate.

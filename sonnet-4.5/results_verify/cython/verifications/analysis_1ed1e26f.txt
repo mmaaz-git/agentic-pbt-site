@@ -1,0 +1,44 @@
+BUG REPORT ANALYSIS
+===================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that defining only make_setup_args without make_ext is a supported use case. The example in the docstring shows both functions together, and one could argue that the "and" in "Extension instance and setup() args" implies both should be provided together. If the documentation never promised this would work, then the crash could be considered expected behavior for unsupported usage.
+
+**Why it might not be INVALID:**
+The assertion at line 129 explicitly checks "assert ext or setup_args", which clearly indicates the code was designed to handle cases where only one of these is provided. This assertion wouldn't make sense if both were always required - it would instead be "assert ext and setup_args". The code's own logic contradicts any claim that this usage is invalid.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an edge case that rarely occurs in practice. Most users who create .pyxbld files likely need to customize the Extension object (via make_ext) and wouldn't have a use case for only setting setup arguments without also customizing the extension. The maintainers might consider this too obscure to fix, especially if it hasn't been reported in years of the code existing.
+
+**Why it might not be WONTFIX:**
+The crash is severe (AttributeError that completely prevents the code from working), the fix is trivial (2-line change), and the assertion clearly shows this was intended behavior. It's not a minor inconvenience but a complete failure of functionality that the code explicitly tries to support via the assertion.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about whether both functions are required or optional. Adding explicit documentation stating that both make_ext and make_setup_args must be defined when using a .pyxbld file would prevent users from encountering this crash. The current documentation example shows both but doesn't explicitly state the requirement.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The assertion at line 129 proves this was intended to work with only one function defined. Changing the documentation to require both would be documenting a bug rather than fixing it. The code logic explicitly supports having only setup_args, so this is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting .pyxbld files with only make_setup_args (without make_ext) is a new feature that was never fully implemented. The crash could be seen as the absence of this feature rather than a bug in existing functionality. Adding support for this would be implementing a new capability.
+
+**Why it might not be FEATURE_REQUEST:**
+The assertion clearly shows this was already intended to be a supported feature. The code explicitly checks for "ext or setup_args" and has logic branches for when only one is present. This isn't asking for new functionality but fixing broken existing functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code contains an clear internal inconsistency: line 129 explicitly allows ext to be None with the assertion "ext or setup_args", but line 131 immediately dereferences ext.sources without checking if ext is None. This is a textbook null pointer dereference bug. The assertion proves the developers intended to support this use case, but the implementation is broken. The fix is trivial and obvious.
+
+**Why it might not be BUG:**
+There's very little argument against this being a bug. The only possible argument would be if the code was never meant to work this way, but the assertion directly contradicts that interpretation.
+
+**Overall consideration**
+This is unquestionably a BUG. The code has a clear logical inconsistency between its assertion that validates the input (line 129) and its subsequent usage of that input (line 131). The assertion explicitly allows ext to be None when setup_args is provided, demonstrating clear intent to support this use case. However, the very next executable line unconditionally dereferences ext, causing a crash.
+
+The bug is not a matter of interpretation or missing documentation - it's a straightforward programming error where the code fails to check for null before dereferencing. The developers clearly intended to support .pyxbld files with only make_setup_args (as evidenced by the assertion), but failed to implement this correctly. The fix is trivial, correct, and maintains backward compatibility while fixing a crash.
+
+This is exactly the type of bug that should be reported and fixed: it's objectively wrong, causes a crash rather than graceful handling, has a clear fix, and represents a failure to implement the intended design as evidenced by the code's own assertions.

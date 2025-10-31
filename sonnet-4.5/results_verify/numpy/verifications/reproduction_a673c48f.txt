@@ -1,0 +1,29 @@
+REPRODUCTION OF BUG: numpy.ma.default_fill_value Type Object Crash
+
+I successfully reproduced the bug using both methods provided in the bug report.
+
+1. HYPOTHESIS TEST REPRODUCTION:
+   - Ran the provided hypothesis test with numpy type objects (np.float32, np.float64, np.int32, np.int64)
+   - Test failed immediately on the first draw with np.float32
+   - Error: AttributeError: 'getset_descriptor' object has no attribute 'names'
+   - The error occurs at numpy/ma/core.py:233 in _recursive_fill_value when it tries to access dtype.names
+
+2. DIRECT REPRODUCTION:
+   - Confirmed that ma.default_fill_value(np.float32) crashes with AttributeError
+   - Confirmed that ma.default_fill_value(np.dtype(np.float32)) works correctly and returns 1e+20
+   - Tested with multiple type objects (np.int64, np.float64, np.int32) - all crash with the same error
+
+3. ROOT CAUSE ANALYSIS:
+   The issue occurs because:
+   - numpy type objects like np.float32 have a 'dtype' attribute (checked with hasattr)
+   - However, accessing np.float32.dtype returns a getset_descriptor object, not a dtype instance
+   - The _get_dtype_of function incorrectly assumes that if an object has a 'dtype' attribute,
+     accessing obj.dtype will return a valid numpy dtype
+   - The code then tries to access dtype.names on the descriptor object, which causes the AttributeError
+
+4. EXPECTED vs ACTUAL BEHAVIOR:
+   - Expected: The function should either accept np.float32 and treat it like np.dtype(np.float32),
+     or raise a clear error about invalid input type
+   - Actual: The function crashes with an obscure AttributeError about getset_descriptor
+
+The bug is confirmed and reproducible exactly as described in the bug report.

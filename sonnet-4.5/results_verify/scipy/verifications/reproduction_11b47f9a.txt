@@ -1,0 +1,44 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug reported in scipy.stats.percentileofscore.
+
+1. HYPOTHESIS TEST REPRODUCTION
+--------------------------------
+The Hypothesis test provided in the bug report runs correctly and finds the exact failing case:
+- Input array: [-1., -1., -1., -1., -1., -1., -1., -1., -1., -1., -1.]
+- Score: 0.0
+- Result: AssertionError - percentile value is 100.00000000000001, which exceeds 100
+
+The test fails as expected with the message:
+"AssertionError: Percentile should be in [0, 100], got 100.00000000000001"
+
+2. DIRECT REPRODUCTION
+-----------------------
+Running the direct reproduction code confirms the bug:
+- Percentile returned: 100.00000000000001 (as np.float64)
+- This value is greater than 100: True
+- The bug affects all 'kind' parameters ('rank', 'weak', 'strict', 'mean')
+- All return the same value: 100.00000000000001
+
+3. ROOT CAUSE ANALYSIS
+-----------------------
+Looking at the source code (scipy/stats/_stats_py.py), the issue occurs in the calculation:
+- For 'rank': perct = (left + right + plus1) * (50.0 / n)
+- For 'weak': perct = count(a <= score) * (100.0 / n)
+- For 'strict': perct = count(a < score) * (100.0 / n)
+- For 'mean': perct = (left + right) * (50.0 / n)
+
+When score (0.0) is greater than all values in the array (all -1.0):
+- count(a <= score) returns 11 (all elements)
+- The calculation becomes: 11 * (100.0 / 11) = 100.0
+- Due to floating point arithmetic, this results in 100.00000000000001
+
+4. IMPACT
+----------
+The bug violates the documented contract that percentiles should be in [0, 100]. While the error is tiny (floating point precision), it could cause:
+- Failures in downstream code that validates percentiles are ≤ 100
+- Issues with visualization libraries expecting strict [0, 100] bounds
+- Contract violations in APIs that depend on this function
+
+CONCLUSION: The bug is reproducible and confirmed. The function returns a value slightly greater than 100 due to floating point arithmetic, which violates the documented constraint.

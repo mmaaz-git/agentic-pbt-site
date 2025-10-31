@@ -1,0 +1,42 @@
+## Bug Reproduction Analysis
+
+### Hypothesis Test Results
+The Hypothesis test successfully reproduced the bug. When running the property-based test with 300 examples, it found a failing case with the input:
+```
+array([[False, False],
+       [False, False]])
+```
+
+This matches the failing input reported in the bug report. The test raised:
+```
+TypeError: strided arrays not supported
+```
+
+### Manual Reproduction Results
+The manual reproduction code confirmed the issue:
+
+1. **C-contiguous array (row-major order)**: Successfully converts to ctypes
+   - The array has flags: C-contiguous=True, F-contiguous=False
+   - __array_interface__['strides'] = None
+   - as_ctypes() succeeds, returning a c_int_Array_2_Array_2 type
+
+2. **F-contiguous array (column-major order)**: Fails to convert to ctypes
+   - The array has flags: C-contiguous=False, F-contiguous=True
+   - __array_interface__['strides'] = (4, 8)
+   - as_ctypes() fails with "TypeError: strided arrays not supported"
+
+### Root Cause Verification
+Examining the source code at numpy/ctypeslib/_ctypeslib.py:589-590:
+```python
+if ai["strides"]:
+    raise TypeError("strided arrays not supported")
+```
+
+The bug report's analysis is correct:
+- C-contiguous arrays have strides=None in their __array_interface__ (as an optimization)
+- F-contiguous arrays explicitly report their strides (e.g., (4, 8) for a 2x2 int32 array)
+- The code incorrectly treats any non-None strides as indicating a non-contiguous "strided" array
+- Both C-contiguous and F-contiguous arrays are actually contiguous in memory, just with different layouts
+
+### Effect
+Users cannot convert Fortran-ordered (column-major) arrays to ctypes, even though these arrays are contiguous in memory and should be valid for ctypes conversion. This affects interoperability with Fortran libraries and any code that works with column-major arrays.

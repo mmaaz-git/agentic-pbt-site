@@ -1,0 +1,36 @@
+REPRODUCTION REPORT
+==================
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+1. BUG REPRODUCTION:
+   - The provided Hypothesis test FAILS when run
+   - The specific test case from the report (http_range="bytes=100-199,400-499,150-450" with file_size=1000) reproduces the bug exactly as described
+   - The actual output is [(100, 451), (400, 500)] which contains overlapping ranges
+   - The expected output should be [(100, 500)] with all ranges merged
+
+2. ALGORITHM ANALYSIS:
+   The bug is in the merge algorithm in FileResponse._parse_range_header. The issue occurs when:
+   a) A new range is processed that overlaps with an earlier range in the result list
+   b) The ranges are merged, creating a new larger range
+   c) The algorithm breaks after the merge without checking if the newly merged range overlaps with subsequent ranges in the result list
+
+   In the failing case:
+   - (100, 200) is added to result: [(100, 200)]
+   - (400, 500) is added to result: [(100, 200), (400, 500)]
+   - (150, 451) merges with (100, 200) creating (100, 451)
+   - The algorithm breaks and doesn't check that (100, 451) now overlaps with (400, 500)
+   - Final result: [(100, 451), (400, 500)] - which are overlapping!
+
+3. ADDITIONAL TEST CASES:
+   I created additional test cases that confirm the bug pattern:
+   - "bytes=0-100,200-300,50-250" produces [(0, 251), (200, 301)] (overlapping)
+   - The bug consistently occurs when a merge creates a range that overlaps with a later range
+
+4. CODE INSPECTION:
+   The problematic code is in lines 494-506 of starlette/responses.py:
+   - When a merge happens at line 503, the algorithm breaks immediately
+   - It doesn't continue checking if the merged range overlaps with other ranges
+   - The "elif end < p_start" branch (line 499-501) is never reached as noted in the comment
+
+CONCLUSION: The bug is confirmed and reproducible. The merge algorithm has a logic flaw that causes it to produce overlapping ranges when it should fully merge them.

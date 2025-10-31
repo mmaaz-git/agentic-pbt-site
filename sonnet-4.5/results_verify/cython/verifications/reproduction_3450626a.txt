@@ -1,0 +1,34 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+TEST RESULTS:
+1. Simple Reproduction Test:
+   - Created two Python modules: first.py and second.py
+   - When using pyximport.install(pyimport=True)
+   - Result: first.py was compiled to a .so file (Cython-compiled)
+   - Result: second.py remained as a .py file (NOT compiled)
+   - This confirms the bug: only the first module gets compiled
+
+2. Hypothesis Property-Based Test:
+   - Tested with 2-5 modules
+   - Consistently only the first module (mod0) was compiled
+   - All subsequent modules (mod1, mod2, etc.) remained uncompiled
+   - The test correctly failed with assertion errors
+
+BUG MECHANISM:
+The bug is caused by the self.found flag in PyImportMetaFinder class:
+- Line 267: self.found is initialized as False
+- Lines 270-271: If self.found is True, find_spec returns None immediately
+- Line 296: self.found is set to True when first module is found
+- The flag is NEVER reset back to False
+
+This means after the first .py module is processed, all subsequent calls to find_spec()
+immediately return None, preventing any further .py modules from being compiled.
+
+IMPACT:
+The pyimport=True feature is effectively broken for any use case involving
+multiple .py modules. Only the very first .py module imported gets compiled,
+defeating the documented purpose of "automatically run Cython on every .pyx
+and .py module that Python imports".

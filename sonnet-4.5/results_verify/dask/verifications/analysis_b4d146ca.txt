@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function name is `sorted_division_locations` and its docstring clearly states "Find division locations and values in sorted list". The word "sorted" appears in both the function name and documentation. When a function explicitly states its precondition (sorted input), passing unsorted input is a violation of the contract. The function never promised to validate this precondition or handle unsorted input gracefully. This is similar to many standard library functions that assume certain preconditions without validation - for example, binary search algorithms that assume sorted input.
+
+**Why it might not be INVALID:**
+The function produces objectively incorrect results that violate fundamental invariants. The locations array should always be strictly monotonically increasing (representing indices into the sequence), but with unsorted input it produces duplicate values like [0, 4, 4]. This is not just "undefined behavior" but actively wrong output that could cause downstream errors. The function is importable and callable, even if not officially part of the public API.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function (not in the public API namespace) that is only called by other internal Dask code which properly ensures sorted input. The function name and docstring clearly indicate it expects sorted input. Adding validation would add unnecessary overhead for the normal use case where input is guaranteed to be sorted by the calling code. The bug only manifests when someone improperly imports and misuses an internal function.
+
+**Why it might not be WONTFIX:**
+The function can be imported and used directly, and when misused it produces silently incorrect results rather than failing loudly. Silent data corruption is generally considered worse than explicit failures. The overhead of adding a simple sorted check would be minimal compared to the rest of the function's complexity.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about what happens with unsorted input. While it says "sorted list", it doesn't explicitly state that unsorted input leads to undefined behavior or incorrect results. Adding a note like "Warning: Unsorted input will produce incorrect results" would make the precondition violation consequences explicit.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function name literally includes "sorted" and the docstring says "sorted list". This is already quite clear documentation of the precondition. The real issue isn't documentation but the fact that the function produces incorrect results rather than raising an error.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding input validation would be a new feature - the ability to detect and report precondition violations. This would improve the developer experience by catching misuse early. The validation could be optional (controlled by a parameter or environment variable) to avoid overhead in production.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but pointing out that the current implementation produces incorrect results. The function already has a clear contract (sorted input) and fails to handle violations of that contract safely.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces objectively incorrect output that violates a fundamental invariant (monotonically increasing locations). While the precondition is documented, silently producing wrong results is worse than undefined behavior. Many robust libraries validate preconditions to prevent silent data corruption. The proposed fix is simple and would prevent potential downstream errors.
+
+**Why it might not be BUG:**
+The function explicitly requires sorted input in both its name and documentation. It's an internal function not meant for direct use. The calling code ensures the precondition is met. This is user error - passing invalid input to a function with clear requirements. Many performance-critical functions skip validation for efficiency.
+
+## Overall Consideration
+
+This is a classic case of a function with a clear precondition (sorted input) that produces incorrect results when that precondition is violated. The key questions are: (1) Should internal functions validate preconditions? (2) Is silent incorrect output worse than no validation? (3) Does the function name and docstring provide sufficient warning?
+
+The function is clearly documented as expecting sorted input - both the name and docstring state this. It's an internal function (not in public API) that is only called by code that ensures sorted input. Adding validation would add overhead to every call for a case that should never happen in normal usage. The bug report essentially asks for defensive programming in an internal function.
+
+However, the counter-argument is that the function can be imported and produces silently incorrect results rather than failing loudly. The incorrect output (non-monotonic locations) violates fundamental invariants and could cause hard-to-debug downstream errors. Many would argue that data corruption is worse than performance overhead. Given that this is an internal function with clear preconditions that is properly used by all internal callers, this appears to be a case of misuse rather than a bug. The function works correctly when used as intended.

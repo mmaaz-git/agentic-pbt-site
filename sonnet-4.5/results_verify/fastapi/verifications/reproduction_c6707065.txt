@@ -1,0 +1,44 @@
+Bug Reproduction and Technical Analysis
+
+1. Bug Reproduction - CONFIRMED:
+   The bug report's test case executes successfully and demonstrates the claimed behavior:
+
+   - When creating CORSMiddleware with allow_headers=['custom-header']:
+     Internal state: ['accept', 'accept-language', 'content-language', 'content-type', 'custom-header']
+
+   - When creating CORSMiddleware with allow_headers=['CUSTOM-HEADER']:
+     Internal state: ['accept', 'accept-language', 'custom-header', 'content-language', 'content-type']
+
+   - The assertion `middleware_lower.allow_headers == middleware_upper.allow_headers` fails.
+
+2. Root Cause Analysis:
+   The issue occurs in the constructor at lines 58 and 67:
+
+   Line 58: `allow_headers = sorted(SAFELISTED_HEADERS | set(allow_headers))`
+   - At this point, headers are still in their original case
+   - SAFELISTED_HEADERS contains: {'Accept', 'Accept-Language', 'Content-Language', 'Content-Type'}
+   - Sorting happens with mixed case, where uppercase letters sort before lowercase (ASCII ordering)
+
+   Line 67: `self.allow_headers = [h.lower() for h in allow_headers]`
+   - Headers are lowercased AFTER sorting
+   - This preserves the incorrect sort order from line 58
+
+3. Functional Impact - NONE:
+   Despite the different internal state, the CORS validation works correctly:
+
+   - Preflight validation (line 128-129) lowercases incoming headers before comparison
+   - Both middleware instances correctly validate the same headers regardless of case
+   - The actual CORS behavior is identical for both instances
+
+   Tested scenarios all work correctly:
+   - 'x-custom-header' is allowed by both middlewares
+   - 'X-Custom-Header' is allowed by both middlewares
+   - 'X-CUSTOM-HEADER' is allowed by both middlewares
+
+4. What's Actually Different:
+   - The internal `self.allow_headers` list has different ordering
+   - The preflight response header "Access-Control-Allow-Headers" shows headers in different order
+   - These are cosmetic differences that don't affect CORS functionality
+
+5. Conclusion:
+   The bug report is technically accurate - two middleware instances with headers differing only in case DO have different internal state. However, this difference has no functional impact on CORS validation or security. The actual CORS behavior is correct and compliant with HTTP standards.

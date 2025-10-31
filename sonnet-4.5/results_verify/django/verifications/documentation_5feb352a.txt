@@ -1,0 +1,56 @@
+## Documentation Analysis
+
+### Django Serialization Architecture
+
+Based on the source code analysis, Django has a two-layer architecture for serialization:
+
+1. **Base Python Deserializer** (`django.core.serializers.python.Deserializer`):
+   - This is the core deserialization logic that works with Python objects
+   - It directly accesses dictionary keys without error handling
+   - It will raise KeyError if required keys are missing
+
+2. **Format-Specific Deserializers** (JSON, YAML, JSONL):
+   - These inherit from the Python deserializer
+   - They parse the format-specific input into Python objects
+   - They wrap the Python deserializer's `_handle_object` method with error handling
+
+### Error Handling Documentation
+
+From `django/core/serializers/base.py`:
+- `DeserializationError` is defined as: "Something bad happened during deserialization."
+- It provides a `WithData` factory method for creating more explanatory error messages
+- This is the standard exception for deserialization problems
+
+### Observed Behavior in Different Formats
+
+1. **JSON Deserializer** (`django/core/serializers/json.py`):
+   - Overrides `_handle_object` method
+   - Catches all exceptions except `GeneratorExit` and `DeserializationError`
+   - Re-raises them as `DeserializationError` with message: "Error deserializing object: {original_exception}"
+
+2. **YAML Deserializer** (`django/core/serializers/pyyaml.py`):
+   - Follows the same pattern as JSON
+   - Wraps exceptions in `DeserializationError`
+
+3. **JSONL Deserializer** (`django/core/serializers/jsonl.py`):
+   - Also follows the same pattern
+   - Wraps exceptions in `DeserializationError`
+
+### API Contract
+
+The consistent pattern across all format-specific deserializers shows that:
+
+1. **The API contract is that deserialization errors should raise `DeserializationError`**
+2. The Python deserializer is an internal implementation detail
+3. End users should only interact with format-specific deserializers (JSON, YAML, etc.)
+4. These format-specific deserializers are responsible for converting internal exceptions to `DeserializationError`
+
+### Documentation Implications
+
+The bug report's claim that "The API contract states that deserialization errors should raise DeserializationError" is correct. However, the current implementation already fulfills this contract:
+
+- When using `serializers.deserialize('json', ...)`, users get `DeserializationError`
+- When using `serializers.deserialize('yaml', ...)`, users get `DeserializationError`
+- The Python deserializer raising `KeyError` is an implementation detail that users don't see
+
+The bug reporter appears to be looking at the Python deserializer code in isolation, but missing that it's always wrapped by format-specific deserializers that handle the error conversion.

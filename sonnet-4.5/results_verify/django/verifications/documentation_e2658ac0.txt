@@ -1,0 +1,36 @@
+## Documentation Analysis for date_extract_sql
+
+### Django Documentation
+Based on the Django source code and documentation analysis:
+
+1. **Base Class Documentation (BaseDatabaseOperations)**:
+   - The docstring states: "Given a lookup_type of 'year', 'month', or 'day', return the SQL that extracts a value from the given date field field_name."
+   - The base class raises NotImplementedError, requiring database backends to implement their own version.
+
+2. **PostgreSQL Implementation**:
+   - Located in django/db/backends/postgresql/operations.py
+   - The function has special handling for three lowercase field names:
+     - "week_day" → converts to "EXTRACT(DOW FROM {sql}) + 1"
+     - "iso_week_day" → converts to "EXTRACT(ISODOW FROM {sql})"
+     - "iso_year" → converts to "EXTRACT(ISOYEAR FROM {sql})"
+   - After checking these special cases, it converts lookup_type to uppercase
+   - Uses regex validation: `_extract_format_re = _lazy_re_compile(r"[A-Z_]+")` to check format
+   - If regex matches, generates: `EXTRACT({lookup_type} FROM {sql})`
+
+3. **PostgreSQL EXTRACT Documentation**:
+   - According to PostgreSQL official docs, valid EXTRACT fields are:
+     CENTURY, DAY, DECADE, DOW, DOY, EPOCH, HOUR, ISODOW, ISOYEAR, JULIAN,
+     MICROSECONDS, MILLENNIUM, MILLISECONDS, MINUTE, MONTH, QUARTER, SECOND,
+     TIMEZONE, TIMEZONE_HOUR, TIMEZONE_MINUTE, WEEK, YEAR
+   - Note: PostgreSQL does NOT support "WEEK_DAY", "ISO_WEEK_DAY", or "ISO_YEAR" as EXTRACT fields
+   - These are Django-specific mappings that need translation to valid PostgreSQL fields
+
+4. **Django's Intent**:
+   - The special case handling for lowercase "week_day", "iso_week_day", "iso_year" indicates Django intends to provide cross-database compatibility
+   - These special fields are meant to be Django abstractions that get translated to database-specific syntax
+   - The regex validation `[A-Z_]+` is meant to prevent SQL injection, not validate field names
+
+5. **Documentation Gap**:
+   - There is no explicit documentation about what happens when uppercase versions of special fields are passed
+   - There is no documentation stating that only PostgreSQL-valid EXTRACT fields should be used
+   - The function does not document whether it validates against PostgreSQL's allowed EXTRACT fields or just prevents SQL injection

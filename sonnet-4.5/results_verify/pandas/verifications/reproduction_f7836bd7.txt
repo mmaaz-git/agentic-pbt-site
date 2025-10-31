@@ -1,0 +1,41 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the bug reported in pandas.io.excel._util._excel2num.
+
+Test Results:
+------------
+1. The function _excel2num returns -1 for whitespace-only or empty strings instead of raising ValueError
+2. Confirmed failing inputs:
+   - ' ' (single space) -> returns -1
+   - '' (empty string) -> returns -1
+   - '\t' (tab) -> returns -1
+   - '\n' (newline) -> returns -1
+   - '   ' (multiple spaces) -> returns -1
+
+3. For comparison, the function correctly raises ValueError for other invalid inputs:
+   - 'A B' (contains space in middle) -> raises ValueError: "Invalid column name: A B"
+   - '123' (numeric characters) -> raises ValueError: "Invalid column name: 123"
+
+4. Valid inputs work correctly:
+   - 'A' -> returns 0
+   - 'AB' -> returns 27
+
+Root Cause Analysis:
+-------------------
+The issue occurs because the function calls .strip() on the input before validating:
+- Line 119: for c in x.upper().strip():
+
+When the input is whitespace-only:
+1. x.upper().strip() returns an empty string
+2. The for loop never executes (empty string has no characters to iterate over)
+3. The variable 'index' remains at its initial value of 0
+4. The function returns index - 1 = -1
+
+This is problematic because:
+1. It violates the function's documented contract (should raise ValueError for invalid input)
+2. Returns -1 which is an invalid column index
+3. Could cause silent failures in downstream code that uses this value
+4. Inconsistent with how other invalid inputs are handled
+
+The bug report's proposed fix is correct: check for empty string after stripping and raise ValueError if empty.

@@ -1,0 +1,62 @@
+Bug Reproduction Results
+========================
+
+## Test Execution
+
+I successfully ran the reproduction code provided in the bug report. The tests confirm the technical details are accurate.
+
+## Key Findings
+
+### 1. The Bug Behavior Is Real
+When command-level option is set to 0 and extension-level option is set to 1, the extension-level value wins:
+- Command-level (builder.cython_gen_pxi): 0
+- Extension-level (ext.cython_gen_pxi): 1
+- Computed value: 1 (extension wins)
+
+### 2. Root Cause Confirmed
+The issue is in lines 223-234 of old_build_ext.py, which use patterns like:
+```python
+option_value = self.option or getattr(extension, 'option', 0)
+```
+
+With Python's `or` operator:
+- `0 or 1` evaluates to `1`
+- `False or True` evaluates to `True`
+- The first "truthy" value wins, regardless of source
+
+### 3. Affected Options
+All these options exhibit the same behavior:
+- cython_create_listing (line 223-224)
+- cython_line_directives (line 225-226)
+- no_c_in_traceback (line 227-228)
+- cython_cplus (line 229-230)
+- cython_gen_pxi (line 231)
+- cython_gdb (line 232)
+
+### 4. Modern build_ext Has Same Pattern
+The current (non-deprecated) build_ext.py has the identical issue in get_extension_attr (line 81):
+```python
+return getattr(self, option_name) or getattr(extension, option_name, default)
+```
+
+### 5. Test Results Summary
+- Property-based test: Correctly demonstrates the issue
+- Reproduction code: Works as described, showing extension=1 overrides command=0
+- All 6 affected options: Confirmed to have the same behavior
+- Modern build_ext: Confirmed to have the same pattern
+
+## Technical Accuracy
+
+The bug report is **technically accurate**:
+1. The code pattern does prevent command-level 0/False from overriding extension-level 1/True
+2. The line numbers and code references are correct
+3. The reproduction code runs and demonstrates the issue
+4. The affected options list is complete and accurate
+
+## Behavioral Interpretation
+
+However, whether this is a "bug" or "intended behavior" is debatable:
+- The code comments suggest command-line should take precedence
+- But the implementation has used `or` operators since inception
+- Both old and new implementations have the same pattern
+- This might be intentional "any True wins" semantics for boolean flags

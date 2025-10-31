@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that "/" should be rejected as a prefix. One could argue that the function is working as designed - it strips leading slashes and creates a pattern based on what remains. If a user passes "/" and gets a broad pattern, that's technically what they asked for. The validation only checks for empty strings, not for strings that become empty after processing.
+
+**Why it might not be INVALID:**
+The function explicitly validates and rejects empty prefixes with the error "Empty static prefix not permitted", showing clear design intent that overly-broad patterns should not be allowed. A prefix of "/" effectively becomes empty after lstrip("/") and creates the exact same problem that the empty string validation was meant to prevent. The inconsistency between rejecting "" but allowing "/" is a logical flaw.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an edge case that rarely occurs in practice. Most Django developers know to use meaningful prefixes like "/static/" or "/media/" for serving files. The documentation examples all show proper prefixes, and anyone using "/" as a prefix is likely making a configuration error that would be immediately obvious when their entire application breaks.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it completely breaks URL routing for the entire application. The bug creates a serious vulnerability where all URLs get captured by the static file handler, potentially exposing the application to security issues or making it completely non-functional. The fix is simple (one line change) and prevents a catastrophic misconfiguration.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly warn against using "/" as a prefix or explain that leading slashes are stripped. One could argue that the code is working as designed but the documentation should be clearer about what constitutes a valid prefix and how prefixes are processed. Adding a warning about slash-only prefixes would help developers avoid this pitfall.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The validation code explicitly rejects empty prefixes, showing that the intended behavior is to prevent overly-broad patterns. The bug is not a documentation issue but a validation gap where "/" bypasses the empty check but still creates the same problematic pattern. The code's intent is clear from the existing validation - it just needs to be applied consistently.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as a request for enhanced validation rather than a bug fix. The current code validates for empty strings but not for strings that become empty after processing. Adding validation for slash-only prefixes could be seen as a new feature to improve error handling and developer experience.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out that existing validation is incomplete. The function already tries to prevent this exact scenario (overly-broad patterns) by rejecting empty prefixes. The fact that "/" bypasses this check while creating the same problem is a bug in the validation logic, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function has explicit validation to reject empty prefixes because they would create overly-broad patterns. A prefix of "/" creates exactly the same overly-broad pattern `^(?P<path>.*)$` that the empty string check was designed to prevent. This is a clear validation gap where the intent (prevent broad patterns) is not properly implemented. The bug causes serious problems by breaking URL routing for the entire application.
+
+**Why it might not be BUG:**
+The function technically works as documented - it strips leading slashes and creates a pattern. The validation only checks for empty input strings, not for strings that become empty after processing. One could argue this is working as designed, just with an unfortunate edge case that developers should avoid.
+
+## Overall Consideration
+This appears to be a legitimate bug in Django's `static()` function. The code contains explicit validation (line 21-22) that raises `ImproperlyConfigured("Empty static prefix not permitted")` for empty prefixes, demonstrating clear design intent to prevent overly-broad URL patterns. However, this validation has a gap: prefixes consisting only of slashes ("/" ,"//" , etc.) bypass the empty check but still produce the exact same problematic pattern (`^(?P<path>.*)$`) after `lstrip("/")` processing on line 28.
+
+The impact is severe - using `static("/")` creates a URL pattern that matches every single URL in the application, completely breaking normal Django routing. This would cause the static file handler to intercept all requests meant for admin interfaces, API endpoints, and regular views. This is clearly unintended behavior that violates the principle of least surprise and could lead to serious application failures or security issues.
+
+The fix is straightforward and minimal - simply extend the validation to check both for empty prefixes and prefixes that become empty after stripping slashes. This maintains backward compatibility while closing a dangerous validation gap. Given that the existing code already tries to prevent this exact scenario but fails due to incomplete validation logic, this should be classified as a BUG rather than a documentation issue or feature request.

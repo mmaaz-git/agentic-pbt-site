@@ -1,0 +1,40 @@
+## Reproduction Analysis
+
+I successfully reproduced the bug reported in `pandas.io.json._normalize.nested_to_record`.
+
+### Test Results:
+
+1. **Simple nested dict with integer keys `{1: {2: 'value'}}`**: FAILS with `KeyError: '1'`
+2. **Mixed dict `{1: 'a', 2: 'b', 3: {4: 'c', 5: 'd'}}`**: FAILS with `KeyError: '3'`
+3. **Dict with string keys `{'a': {'b': 'value'}}`**: SUCCEEDS (returns `{'a.b': 'value'}`)
+4. **Flat dict with integer keys `{1: 'a', 2: 'b', 3: 'c'}`**: SUCCEEDS (returns `{1: 'a', 2: 'b', 3: 'c'}`)
+5. **Property-based test**: Multiple failures with integer keys when values are nested dicts
+
+### Root Cause Analysis:
+
+The bug is exactly as described in the report. Looking at the code:
+
+1. At line 96-99, when iterating through dictionary items, if a key `k` is not a string, it gets converted to a string: `k = str(k)`
+2. Later at lines 113 and 117, the code tries to pop the value using `new_d.pop(k)`
+3. However, `k` is now the stringified version (e.g., `"1"`), but `new_d` still contains the original integer key (e.g., `1`)
+4. This causes a `KeyError` because `new_d` doesn't have the stringified key
+
+### Observed Pattern:
+
+- The bug ONLY occurs when:
+  1. The dictionary has non-string keys (e.g., integers)
+  2. AND the value associated with that key is a nested dictionary
+- The bug does NOT occur when:
+  1. All keys are strings
+  2. OR when non-string keys have non-dict values (flat structure)
+
+### Technical Validity:
+
+The reported bug is technically correct. The code has a logic error where it:
+1. Modifies the key variable `k` to be a string
+2. But then uses this modified key to access the original dictionary which still has the non-string key
+3. The proposed fix (preserving the original key for dictionary operations) would resolve this issue
+
+### Documentation vs Implementation:
+
+The documentation says the function accepts "dict or list of dicts" without any restriction on key types. The code even has explicit logic to handle non-string keys (lines 98-99), indicating this was intended functionality. Therefore, the crash represents a failure to implement the intended behavior correctly.

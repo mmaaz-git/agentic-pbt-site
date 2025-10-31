@@ -1,0 +1,39 @@
+## Reproduction Analysis
+
+I have successfully reproduced the issue described in the bug report.
+
+### Test Results:
+
+1. **Basic Test Results:**
+   - `gray=True` -> Returns shape (768, 1024) [grayscale] ✓
+   - `gray=False` -> Returns shape (768, 1024, 3) [color] ✓
+   - `gray=1` -> Returns shape (768, 1024, 3) [color] - Expected grayscale
+   - `gray=0` -> Returns shape (768, 1024, 3) [color] ✓
+   - `gray=np.bool_(True)` -> Returns shape (768, 1024, 3) [color] - Expected grayscale
+   - `gray=np.bool_(False)` -> Returns shape (768, 1024, 3) [color] ✓
+
+2. **Property-Based Test:**
+   The hypothesis test failed as reported. When passing truthy values other than literal `True`:
+   - `gray=1` produces color image instead of grayscale
+   - `gray=np.bool_(True)` produces color image instead of grayscale
+   - `gray="true"` produces color image instead of grayscale
+
+3. **Root Cause Confirmed:**
+   The implementation uses `if gray is True:` on line 222 of _fetchers.py, which performs an identity check rather than a truthiness check. This means:
+   - Only the literal Python `True` will trigger grayscale conversion
+   - Other truthy values (1, np.bool_(True), etc.) fail the identity check and return color images
+
+### Technical Details:
+The identity check `is True` only accepts the exact Python boolean True object, rejecting:
+- Integer 1 (commonly used as True in many contexts)
+- NumPy boolean types like np.bool_(True)
+- Any other truthy values
+
+The bug report's technical analysis is correct: the function silently returns a color image for truthy values that aren't exactly True, rather than either:
+1. Converting to grayscale for all truthy values, or
+2. Raising an error for non-boolean types
+
+### Behavior Summary:
+- The function DOES work correctly for literal `True` and `False`
+- The function DOES NOT work as users might expect for truthy values like 1 or np.bool_(True)
+- The function fails silently (returns wrong output type) rather than raising an error

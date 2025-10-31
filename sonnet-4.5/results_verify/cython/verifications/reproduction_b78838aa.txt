@@ -1,0 +1,50 @@
+Bug Reproduction Report
+========================
+
+I have successfully reproduced the bug reported in normalise_float_repr.
+
+REPRODUCTION RESULTS:
+
+1. The Specific Test Case from Bug Report:
+   Input: "6.103515625e-05"
+   Expected output value: 6.103515625e-05
+   Actual output: "610351.00005625"
+   Actual output value: 610351.00005625
+
+   CONFIRMED: The output is wrong by a factor of ~10^10
+
+2. Running the Hypothesis Test:
+   The hypothesis test FAILS with various inputs, confirming systematic issues.
+
+3. Pattern Analysis:
+   The bug occurs when:
+   - Input is in scientific notation with negative exponent
+   - The mantissa has enough decimal places relative to the exponent magnitude
+
+   Specific pattern discovered:
+   - Works: mantissa with <= |exp| - num_int_digits decimal places
+   - Fails: mantissa with > |exp| - num_int_digits decimal places
+
+   Examples:
+   - "1.123e-5" (3 decimals, exp=-5) → WORKS
+   - "1.1234e-5" (4 decimals, exp=-5) → FAILS (off by 8.90e+04)
+   - "1.12345e-5" (5 decimals, exp=-5) → FAILS (off by 9.79e+05)
+
+4. Algorithm Analysis:
+   The bug is in lines 672-677 of Utils.py:
+   - The algorithm incorrectly adjusts the exponent after removing the decimal point
+   - For "6.103515625e-05":
+     * Original exp = -5
+     * After removing decimal from "6.103515625", it becomes "6103515625"
+     * num_int_digits = 1 (position of decimal in original)
+     * exp gets adjusted to -4 (exp + num_int_digits)
+     * This causes the decimal to be placed incorrectly
+
+5. Test Suite Verification:
+   - ALL existing test cases pass
+   - BUT: The test suite only tests mantissas with up to 3 decimal places
+   - The bug appears at 4+ decimal places for small negative exponents
+   - This is a clear gap in test coverage
+
+CONCLUSION:
+The bug is REAL and REPRODUCIBLE. The function fails to preserve numeric values for scientific notation numbers with many decimal places in the mantissa and negative exponents. The magnitude error can be extreme (off by factors of 10^10 or more).

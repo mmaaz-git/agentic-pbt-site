@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for to_snake never claims the function should be idempotent. It explicitly states it converts FROM PascalCase, camelCase, or kebab-case TO snake_case. There's no mention that it should handle already-snake_case strings specially or that multiple applications should produce the same result. The function is designed as a one-way transformer for use in Pydantic's alias generation system where it would typically only be applied once to field names during model configuration. Expecting idempotence is an assumption not supported by the documentation.
+
+**Why it might not be INVALID:**
+The behavior is genuinely inconsistent - the function produces 'a0' on first application but 'a_0' on second application for the same logical transformation (uppercase letter followed by digit). This suggests the function's logic is incomplete, as it should either consistently insert underscores between letters and digits or consistently not insert them. The fact that 'Ab0' becomes 'ab_0' on first application while 'A0' becomes 'a0' shows an inconsistency in how the function handles letter-digit transitions.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that occurs with very specific inputs (single uppercase letters followed by digits). In practical use as an alias_generator in Pydantic models, the function would only be applied once during field name transformation, making idempotence irrelevant. The function achieves stability after the second application, and the issue only affects a narrow set of inputs. Most real-world field names like 'HTTPResponse', 'myVariable', or existing snake_case strings work correctly.
+
+**Why it might not be WONTFIX:**
+The inconsistency represents a genuine logic flaw in the implementation. The function treats 'A0' and 'Ab0' differently on first application ('a0' vs 'ab_0'), which is counterintuitive. This could cause confusion for users who expect consistent behavior for similar input patterns. The fix would be straightforward - ensure uppercase-to-digit transitions are handled consistently on the first pass.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about the function's behavior and limitations. It doesn't specify that the function is not idempotent or that it may produce different results when applied multiple times. Adding a note that the function is designed for single-pass transformation and may not be idempotent would set proper expectations. The documentation could also clarify how letter-digit boundaries are handled.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation accurately describes what the function does - convert from specific formats to snake_case. It makes no claims about idempotence or round-trip behavior. The current documentation is not wrong; it simply doesn't address this particular edge case. The issue is more about the implementation's inconsistency than documentation accuracy.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Idempotence is not currently a supported feature of to_snake, but it could be a useful addition. The user is essentially requesting that the function be enhanced to detect when a string is already in snake_case and preserve it unchanged, similar to how to_camel already detects camelCase strings. This would be a new feature that improves the function's robustness and predictability.
+
+**Why it might not be FEATURE_REQUEST:**
+The user frames this as a bug ("idempotence violation") rather than requesting a new feature. The inconsistent handling of letter-digit transitions between first and second applications suggests a logic error rather than a missing feature. The function already attempts to handle these transitions but does so inconsistently.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits genuinely inconsistent behavior. For uppercase letter followed by digit patterns, it fails to insert underscores on the first pass but does insert them on the second pass. This is clearly a logic error - the regex pattern ([a-z])([0-9]) correctly identifies letter-digit boundaries but only after the uppercase letters have been converted to lowercase. The function should consistently handle these boundaries regardless of the original case. The fact that 'Ab0' correctly becomes 'ab_0' while 'A0' incorrectly becomes 'a0' on first application demonstrates the bug.
+
+**Why it might not be BUG:**
+The function works as documented for its intended use case - converting PascalCase, camelCase, and kebab-case to snake_case in a single pass. Idempotence is not a documented requirement. The function is typically used as an alias_generator where it's only applied once. The specific failing case ('A0') is an edge case that doesn't represent typical field naming conventions in real code.
+
+**Overall consideration**
+After careful analysis, this issue sits on the boundary between WONTFIX and INVALID. The core issue is that the bug report assumes idempotence is a required property of the to_snake function, but the documentation makes no such claim. The function is documented as converting FROM specific formats (PascalCase, camelCase, kebab-case) TO snake_case, not as a general-purpose idempotent transformer.
+
+The technical behavior observed is real - the function does produce different outputs when applied twice to certain inputs. However, this is more of an artifact of the implementation approach than a bug. The function uses regex patterns that naturally work differently on uppercase vs lowercase input. When 'A0' is first converted to 'a0', the lowercase-to-digit pattern can then match on the second pass. This is logically consistent with the implementation, even if the result seems counterintuitive.
+
+The most compelling argument against this being a bug is the intended use case. As an alias_generator in Pydantic models, this function would only be applied once during model configuration. Users wouldn't typically apply it multiple times to the same string. The example given ('A0') is also not a typical field name one would encounter in real code. While the behavior could be improved for consistency, the current implementation fulfills its documented purpose adequately. Given that the documentation doesn't promise idempotence and the practical impact is minimal, this should be closed as INVALID rather than accepted as a bug.

@@ -1,0 +1,36 @@
+# Bug Reproduction Analysis
+
+## Summary
+I have successfully reproduced the bug reported in the parse_list function. The function crashes with a KeyError when given strings containing unclosed quotes.
+
+## Test Results
+
+### Manual Tests
+All the reported failing cases were confirmed:
+- Input: `'"'` (single double-quote) → `KeyError: '__Pyx_L1'`
+- Input: `"'"` (single quote) → `KeyError: '__Pyx_L1'`
+- Input: `'""'` (two double-quotes) → `KeyError: ''`
+- Input: `"''"` (two single quotes) → `KeyError: ''`
+
+### Hypothesis Test
+The property-based test from the report runs but crashes on inputs with unclosed quotes, as reported. The test expects parse_list to always return a list, but instead it raises a KeyError on certain inputs.
+
+## Root Cause Analysis
+
+The bug occurs due to an interaction between two functions:
+
+1. `strip_string_literals()`: When it encounters an unclosed quote, it creates a label like `"__Pyx_L1_"` (with trailing underscore) and stores the unclosed string fragment in a dictionary with this label as the key.
+
+2. `parse_list()`: The inner `unquote()` function assumes that quoted strings in the processed text are complete and tries to extract the label by doing `literal[1:-1]`, which strips both the first AND last character. This incorrectly removes the trailing underscore from labels like `"__Pyx_L1_"`, resulting in a lookup for `"__Pyx_L1"` which doesn't exist in the dictionary.
+
+## Technical Details
+
+When parse_list receives `'"'`:
+1. strip_string_literals detects an unclosed quote at position 0
+2. It creates label `"__Pyx_L1_"` and stores `'"'` in the literals dict
+3. The processed string becomes `"__Pyx_L1_"`
+4. unquote() sees this starts with a quote and does `literal[1:-1]`
+5. This yields `"__Pyx_L1"` (missing the underscore)
+6. Dictionary lookup fails with KeyError
+
+The bug is confirmed and reproducible exactly as described in the report.

@@ -1,0 +1,43 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug reported for `Cython.Utils.strip_py2_long_suffix`.
+
+### Bug Reproduction Test
+
+The function `strip_py2_long_suffix` crashes with an `IndexError` when given an empty string as input.
+
+Test code:
+```python
+from Cython.Utils import strip_py2_long_suffix
+strip_py2_long_suffix('')
+```
+
+Result:
+```
+IndexError: string index out of range
+```
+
+### Code Analysis
+
+Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Utils.py` at lines 463-470:
+
+```python
+def strip_py2_long_suffix(value_str):
+    """
+    Python 2 likes to append 'L' to stringified numbers
+    which in then can't process when converting them to numbers.
+    """
+    if value_str[-1] in 'lL':  # Line 468 - crashes here on empty string
+        return value_str[:-1]
+    return value_str
+```
+
+The bug occurs at line 468 where `value_str[-1]` is accessed without checking if the string is non-empty. When an empty string is passed, attempting to access index `-1` raises an `IndexError`.
+
+### Current Usage Context
+
+The function is currently only called once in the codebase, at line 447 within the `str_to_number` function. In that context, the function is called with a hex notation string that has at least 3 characters (e.g., "0x1AF"), so it won't be empty. However, `strip_py2_long_suffix` is a public function (not prefixed with underscore) and could be called from other contexts.
+
+### Impact
+
+The bug causes a crash when the function receives an empty string input. While the current internal usage doesn't trigger this bug (since it's only called with hex strings), the function is public and could be used by external code or future internal code that might pass an empty string.

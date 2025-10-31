@@ -1,0 +1,37 @@
+## Bug Reproduction Analysis
+
+### Confirmation of Bug
+
+I have successfully reproduced the bug described in the report. The `build_grid_chunks` function in xarray.backends.chunks does indeed violate its core invariant when `size < chunk_size`.
+
+### Test Results
+
+1. **Hypothesis Test**: Failed as expected. The property-based test quickly found counterexamples where the sum of chunks does not equal the input size.
+
+2. **Specific Failing Case (size=1, chunk_size=2)**:
+   - Input: size=1, chunk_size=2
+   - Output: (2, 1)
+   - Sum of chunks: 3
+   - Expected sum: 1
+   - Result: FAILS - Sum is 3 instead of 1
+
+3. **Root Cause Analysis**:
+   The bug occurs in the logic at lines 145-149 of the function:
+   - First chunk is calculated as: `chunk_size - (region_start % chunk_size)` = 2
+   - This gives 2 when size is only 1
+   - The remaining calculation becomes: `(1 - 2) % 2 = 1`
+   - Due to Python's modulo behavior with negative numbers, this adds another chunk of size 1
+   - Final result: (2, 1) with sum 3 instead of expected 1
+
+4. **Additional Edge Cases Tested**:
+   - size=1, chunk_size=3: FAILS (chunks=(3,1), sum=4 vs expected 1)
+   - size=2, chunk_size=3: FAILS (chunks=(3,2), sum=5 vs expected 2)
+   - size=10, chunk_size=20: FAILS (chunks=(20,10), sum=30 vs expected 10)
+
+### Impact
+
+The bug systematically occurs whenever `size < chunk_size`, causing the function to return chunks that sum to more than the requested size. This is a clear violation of the function's contract, as evidenced by its usage in `grid_rechunk` at line 164 where it's called with `sum(var_chunks)` as the size parameter.
+
+### Conclusion
+
+The bug is CONFIRMED and REPRODUCIBLE. The function fails its fundamental invariant that returned chunks must sum to exactly the input size parameter.

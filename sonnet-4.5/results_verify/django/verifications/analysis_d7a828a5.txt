@@ -1,0 +1,43 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Django documentation never explicitly promises that string and iterable inputs will produce identical HTTP headers. The documentation simply states both formats are supported, without making any guarantees about their exact equivalence. Since the behavior for each format is consistent with how it's documented to work (strings get split and trimmed, iterables are used as-is), this could be considered working as designed rather than a bug.
+
+**Why it might not be INVALID:**
+The HTTP specification clearly indicates that policy tokens should not contain whitespace, and the current implementation can produce invalid HTTP headers when using list inputs with whitespace. Additionally, users have a reasonable expectation that two different input formats for the same setting would produce functionally equivalent results, especially when both are presented as alternatives for achieving the same goal.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a low-severity issue that only affects edge cases where users accidentally include whitespace in their policy values when using list format. Most users would naturally provide clean policy tokens without extra whitespace, and those who do encounter issues would quickly learn to remove the whitespace. The inconsistency has likely existed for a long time without causing significant problems.
+
+**Why it might not be WONTFIX:**
+The issue can produce invalid HTTP headers that may be rejected by browsers or security scanners. This violates the principle of least surprise and could cause subtle bugs that are difficult to debug. The fix is simple and non-breaking - it would only improve the handling of edge cases without affecting correctly formatted inputs.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about how whitespace is handled differently between string and iterable inputs. Adding a note that iterables should contain pre-trimmed values would help users avoid this issue. The code is working as implemented, and the real problem is that users don't understand the difference in behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the inconsistency doesn't solve the underlying problem that invalid HTTP headers can be generated. The HTTP specification requires valid policy tokens, and Django should ensure it produces valid headers regardless of input format. Documentation alone won't prevent accidental whitespace from causing issues.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Currently, the code doesn't validate or sanitize list inputs for the Referrer-Policy header. Adding whitespace trimming for list inputs could be seen as a new feature that makes the API more forgiving and user-friendly. This would be an enhancement to handle edge cases better rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather consistency in existing functionality. Both input formats already exist and are meant to achieve the same goal - setting the Referrer-Policy header. Making them behave consistently is a bug fix, not a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The inconsistent handling of whitespace between string and iterable inputs violates the principle of least surprise and can produce invalid HTTP headers. The HTTP specification requires valid policy tokens without surrounding whitespace. When Django accepts list inputs with whitespace and passes them through unchanged, it creates headers that don't conform to the specification. This is a clear correctness issue where the implementation fails to ensure valid output.
+
+**Why it might not be BUG:**
+The behavior is consistent with a literal interpretation of the code - strings get processed (split and trimmed), while iterables are used directly. The documentation doesn't explicitly promise identical behavior, and developers using lists are arguably responsible for providing clean values. This could be seen as user error rather than a code defect.
+
+## Overall Consideration
+After analyzing all aspects of this issue, I believe this represents a legitimate bug, though of low severity. The key factors are:
+
+First, the HTTP Referrer-Policy specification is clear that policy tokens are specific strings like "no-referrer" and "strict-origin" without surrounding whitespace. When Django generates headers with whitespace-padded tokens from list inputs, it's producing invalid HTTP headers that may not work correctly in browsers. This is a correctness issue where Django fails to ensure its output conforms to the relevant web standard.
+
+Second, while the Django documentation doesn't explicitly promise identical handling, there's a strong implicit expectation that two alternative input formats for the same setting would produce functionally equivalent results. Users naturally expect that `["no-referrer", "strict-origin"]` and `"no-referrer, strict-origin"` would generate the same header, especially if one accidentally includes whitespace. The current inconsistency violates this reasonable expectation and creates a subtle trap for developers.
+
+Third, the proposed fix is simple, non-breaking, and improves the robustness of the code. It would only affect cases where list inputs contain whitespace, making those cases work correctly instead of producing invalid headers. There's no downside to ensuring consistent, valid output regardless of input format. This moves Django toward being more forgiving of minor input variations while ensuring spec-compliant output.

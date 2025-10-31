@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function technically works as intended for sending emails - it doesn't send any emails when given an empty list. One could argue that returning None vs 0 is a minor implementation detail that doesn't affect the core functionality of the email backend. The code has been this way for a long time and likely hasn't caused issues in practice since most code checks truthiness rather than exact type.
+
+**Why it might not be INVALID:**
+The base class documentation explicitly states the method should "return the number of email messages sent," which clearly implies an integer return value. The contract is unambiguous, and other backends follow it correctly. This is not undefined behavior - the documentation specifically defines what should be returned.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a minor inconsistency that likely doesn't affect real-world usage. Most Django applications would check if messages were sent using truthiness (`if result:`) rather than checking for exact integer values. The bug only manifests when explicitly checking the type or comparing to 0, which is uncommon. Fixing it might break backward compatibility for code that relies on the None return value.
+
+**Why it might not be WONTFIX:**
+This violates a clearly documented API contract and breaks consistency across Django's own email backends. The fix is trivial (changing `return` to `return 0`), and the inconsistency could cause subtle bugs in code that expects all backends to behave uniformly. Other backends already return 0, so this is fixing an outlier.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the documentation should be updated to clarify that some backends might return None for empty lists, making the actual behavior match the documentation. The console backend's own docstring doesn't specify the return value for empty lists.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The base class documentation is already clear and correct - it states the method returns "the number of email messages sent." The number 0 is a valid count for zero messages. Changing documentation to accommodate a bug would be backwards - we should fix the implementation to match the documented contract, not the other way around.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Strictly returning integers for all cases could be seen as a new feature to improve API consistency. The current behavior has existed for a long time, so ensuring all backends return consistent types might be viewed as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but asking for existing functionality to work as documented. The base class already defines the expected behavior, and most backends already implement it correctly. This is about fixing non-compliance with an existing contract, not adding new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The Console backend violates the explicit contract defined in the base class documentation, which states the method returns "the number of email messages sent." Returning None instead of 0 breaks this contract. Other backends (SMTP, Dummy, Locmem) correctly return 0 for empty lists, making Console an inconsistent outlier. The fix is trivial and the violation is clear and objective.
+
+**Why it might not be BUG:**
+The bug is relatively minor and unlikely to cause issues in typical usage patterns. Many would consider this a pedantic issue since None and 0 are both falsy in Python. The code has functioned this way for years without causing major problems, suggesting it's not a critical bug.
+
+## Overall Consideration
+This issue represents a clear violation of the documented API contract. The base class explicitly states that `send_messages()` should "return the number of email messages sent," which unambiguously means an integer value. When no messages are sent, that number is 0, not None. The Console backend's current behavior of returning None breaks this contract.
+
+The inconsistency is particularly problematic because other Django email backends (SMTP, Dummy, Locmem) correctly return 0 for empty lists, making Console and File-based backends outliers. This inconsistency could lead to subtle bugs in code that switches between backends or expects uniform behavior across all email backends. Code that works with one backend might fail with another due to this type mismatch.
+
+While the practical impact may be limited (since both None and 0 are falsy in Python), this is still an objective contract violation with a trivial fix. The proposed solution (changing `return` to `return 0`) is minimal, correct, and brings the Console backend in line with both the documentation and other implementations. This is a valid bug that should be fixed to maintain API consistency and contract compliance.

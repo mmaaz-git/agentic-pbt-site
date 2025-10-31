@@ -1,0 +1,29 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are the findings:
+
+### Bug Reproduction
+1. **Float division by zero fails**: When parsing `'1.5 / 0'` or any float divided by zero (e.g., `'2.0 / 0'`), the parser crashes with `ZeroDivisionError: float division by zero`.
+
+2. **Integer division by zero succeeds**: When parsing `'1 / 0'`, the parser successfully creates a symbolic expression `ArithOp.DIV(1, 0)` without crashing.
+
+### Exact Error Location
+The error occurs at line 870 in `/home/npc/miniconda/lib/python3.13/site-packages/numpy/f2py/symbolic.py`:
+```python
+c1, c2 = c1 / c2, 1
+```
+
+This line attempts to perform actual float division when `c1` and `c2` are not both integers. When `c2` is 0 and either `c1` or `c2` is a float, Python raises a `ZeroDivisionError`.
+
+### Inconsistency Confirmed
+The bug report is correct about the inconsistency:
+- Integer division by zero (e.g., `'1 / 0'`) is handled correctly because line 866-868 handles integer cases separately using `//` (integer division) after computing GCD.
+- Float division by zero (e.g., `'1.5 / 0'`) crashes because line 870 performs actual float division without checking for zero.
+
+### Stack Trace Matches
+The stack trace in the bug report exactly matches what I observed:
+- The error originates from `Expr.parse()`
+- Goes through `fromstring()`, `_FromStringWorker.parse()`, `process()`
+- Eventually reaches `normalize()` where the actual division occurs at line 870
+
+The bug is reproducible and the report accurately describes the issue.

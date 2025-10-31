@@ -1,0 +1,83 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## Official Documentation Review
+
+### 1. Function Docstring (lines 372-420)
+The `install()` function's docstring states:
+- "Main entry point for pyxinstall"
+- "Call this to install the `.pyx` import hook in your meta-path for a single Python process"
+- Describes various parameters but makes NO explicit statement about:
+  - Whether the function is idempotent
+  - What happens if called multiple times
+  - Whether duplicate installations are prevented
+
+### 2. Module Docstring (lines 1-46)
+The module documentation suggests typical usage:
+```python
+import pyximport
+pyximport.install()
+```
+It mentions adding this to `sitecustomize.py` for automatic installation but doesn't discuss multiple calls.
+
+### 3. Cython Official Documentation
+The official Cython documentation (checked via WebFetch) also does not explicitly state:
+- Whether `install()` can be called multiple times safely
+- Whether the function is designed to be idempotent
+- Any warnings about duplicate installations
+
+## Code Intent Analysis
+
+### Evidence of Intended Idempotence:
+
+1. **The `_have_importers()` function exists** (lines 355-365)
+   - Purpose: Check if importers are already installed
+   - Returns: `(has_py_importer, has_pyx_importer)`
+   - Clear intent: Avoid duplicate installations
+
+2. **The `install()` function uses these checks** (lines 434-447)
+   ```python
+   has_py_importer, has_pyx_importer = _have_importers()
+   ...
+   if pyimport and not has_py_importer:  # Only install if not present
+       py_importer = PyImportMetaFinder(...)
+       sys.meta_path.insert(0, py_importer)
+
+   if pyximport and not has_pyx_importer:  # Only install if not present
+       pyx_importer = PyxImportMetaFinder(...)
+       sys.meta_path.append(pyx_importer)
+   ```
+
+3. **The implementation pattern**
+   - Checks for existing importers before installation
+   - Only installs if the corresponding importer is not found
+   - This is a classic idempotence pattern
+
+### Common Expectations:
+
+1. **Install functions are typically idempotent**
+   - Most Python package installation functions (e.g., logging handlers, import hooks) are designed to be idempotent
+   - Users reasonably expect calling `install()` multiple times to be safe
+   - This is especially important in complex applications where modules might independently call `pyximport.install()`
+
+2. **The function name implies idempotence**
+   - "install" suggests setting up something once
+   - Not named "add_hook" or "append_importer" which would imply additive behavior
+
+3. **Use case in `sitecustomize.py`**
+   - The documentation suggests putting `pyximport.install()` in `sitecustomize.py`
+   - This file might be sourced multiple times in complex environments
+   - Idempotence would be crucial for this use case
+
+## Documentation Gap
+
+While the documentation doesn't explicitly promise idempotence, the code structure clearly attempts to implement it through the `_have_importers()` check. The bug prevents this intended behavior from working correctly.
+
+## Conclusion
+
+1. **The code INTENDS to be idempotent** - evidenced by the existence and use of `_have_importers()`
+2. **Users would reasonably expect idempotence** - based on common patterns and the function name
+3. **The documentation doesn't explicitly promise it** - but also doesn't warn against multiple calls
+4. **The bug breaks the intended idempotent behavior** - due to incorrect logic in `_have_importers()`
+
+This is a legitimate bug that breaks the code's intended behavior, not a documentation issue or feature request.

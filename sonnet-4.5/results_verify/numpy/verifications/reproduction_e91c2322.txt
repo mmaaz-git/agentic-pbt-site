@@ -1,0 +1,43 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. The issue occurs when NumPy's char.upper() and char.lower() functions handle Unicode characters that change length during case transformation.
+
+### Reproduction Results:
+
+1. **Hypothesis Test**: The property-based test immediately found a failure case with the German eszett ('ß'), which should uppercase to 'SS' and then lowercase to 'ss', but NumPy produces only 's'.
+
+2. **Manual Testing of Reported Case**:
+   - Input: 'ῂ' (Greek eta with iota subscript)
+   - Python behavior: 'ῂ' → upper: 'ῊΙ' (2 chars) → lower: 'ὴι' (2 chars)
+   - NumPy behavior: 'ῂ' → upper: 'Ὴ' (1 char) → lower: 'ὴ' (1 char)
+   - Result: Data loss - the iota character is completely lost
+
+3. **Additional Test Cases Found**:
+   - German eszett 'ß': Should become 'SS'/'ss', NumPy produces 'S'/'s'
+   - Turkish capital İ: When lowercased should become 'i̇' (i with dot), NumPy produces just 'i'
+
+### Root Cause Identified:
+
+The bug is related to NumPy's string dtype system. When char.array() creates an array from a single character string, it defaults to dtype 'U1' (1-character Unicode string). When char.upper() is called:
+
+- If the array dtype is U1, the result is truncated to 1 character
+- If the array dtype is U10 (or larger), the full 'SS' is preserved
+
+Example:
+```python
+arr = np.array(['ß'], dtype='U1')
+char.upper(arr)  # Returns 'S' (truncated)
+
+arr = np.array(['ß'], dtype='U10')
+char.upper(arr)  # Returns 'SS' (correct)
+```
+
+### Impact:
+
+This causes **silent data loss** for any Unicode characters that expand during case transformation. The bug affects:
+- German text (ß → SS)
+- Greek text with iota subscripts
+- Turkish text with dotted/dotless i
+- Any other Unicode characters with complex case mappings
+
+The bug is reproducible and consistent across multiple test cases.

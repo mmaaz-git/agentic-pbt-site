@@ -1,0 +1,32 @@
+=== Bug Reproduction Results ===
+
+I successfully reproduced the bug as described in the report. The test results confirm the behavior:
+
+1. Initial State:
+   - The matplotlib units registry starts with 1 converter (for decimal.Decimal)
+
+2. After register_matplotlib_converters():
+   - The registry contains 7 converters (added pandas converters for Timestamp, Period, datetime, date, time, datetime64)
+
+3. After deregister_matplotlib_converters():
+   - The registry contains 4 converters instead of the original 1
+   - Three extra converters remain: datetime.date, datetime.datetime, numpy.datetime64
+
+The property-based test fails with the exact behavior described in the bug report:
+- Initial keys: ["<class 'decimal.Decimal'>"]
+- After deregister keys: ["<class 'decimal.Decimal'>", "<class 'datetime.date'>", "<class 'datetime.datetime'>", "<class 'numpy.datetime64'>"]
+
+The bug is reproducible and consistent. Multiple register/deregister cycles show the same pattern - 3 converters are left behind after each deregister.
+
+Technical Analysis:
+The issue occurs because when pandas registers its converters, matplotlib hasn't yet registered its default converters for datetime types. However, the act of checking/accessing the registry triggers matplotlib's lazy initialization, which creates default converters. These get cached by pandas in _mpl_units, and then restored during deregister, even though they weren't there initially.
+
+The code flow is:
+1. Initial registry is nearly empty
+2. pandas.register() checks if converters exist for datetime types
+3. This check triggers matplotlib to lazily create default converters
+4. pandas caches these newly-created converters in _mpl_units
+5. pandas.deregister() restores everything from _mpl_units
+6. Result: converters that didn't exist initially are now in the registry
+
+This violates the documented behavior that deregister "attempts to set the state of the registry back to the state before pandas registered its own units."

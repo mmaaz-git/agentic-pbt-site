@@ -1,0 +1,15 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The bug occurs exactly as described:
+
+1. **Direct reproduction**: When manually creating a NominalAttribute instance with empty values using `__new__()` and setting `values = ()`, calling `str()` on the object raises an `IndexError: tuple index out of range` at line 165 in `_arffread.py`.
+
+2. **Hypothesis test**: The provided hypothesis test fails with the same IndexError when attempting to convert a NominalAttribute with empty values to string.
+
+3. **Root cause confirmed**: The `__str__` method in lines 161-167 attempts to access `self.values[-1]` without checking if the values tuple is empty. When values is an empty tuple, this causes an IndexError.
+
+4. **Additional finding**: The normal constructor `NominalAttribute.__init__()` also cannot handle empty values - it crashes with `max() iterable argument is empty` at line 103 when trying to compute `self.dtype = (np.bytes_, max(len(i) for i in values))`.
+
+5. **ARFF parsing limitation**: The ARFF parser cannot even parse nominal attributes with empty values from files. The regex pattern `r'{(.+)}'` requires at least one character between braces, so `{}` is rejected with "This does not look like a nominal string".
+
+The bug is real and occurs exactly as described. While it's impossible to create a NominalAttribute with empty values through normal means (parsing or constructor), the `__str__` method should still handle this edge case gracefully if an object is created through other means (like `__new__()`).

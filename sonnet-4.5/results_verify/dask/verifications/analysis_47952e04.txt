@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `_read_orc` is a private internal function (indicated by the underscore prefix) that is not part of the public API. Users should not be calling this function directly. The behavior of internal functions is not guaranteed and may change without notice. Additionally, there is no documentation specifying that this function should not mutate its parameters.
+
+**Why it might not be INVALID:**
+Even internal functions should follow Python best practices and conventions. The principle that functions should not mutate their input parameters unless explicitly documented applies to all functions, not just public APIs. The function is called by the public `read_orc` function through `dd.from_map`, making its behavior impact the public API. The accumulation of mutations across multiple partition reads could cause real bugs.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal implementation detail in a private function that users should never call directly. The public `read_orc` function already handles this by creating a defensive copy (filtering out the index from columns). The mutation only affects internal processing and doesn't leak to the user's code when using the public API properly. The fix would add minimal value since it's an internal function.
+
+**Why it might not be WONTFIX:**
+The mutation can accumulate when processing multiple partitions if the same columns list is reused (as demonstrated in testing). This could lead to unexpected behavior and potential performance issues. The fix is trivial (one line change) and would make the code more maintainable and follow Python best practices. Even internal code should be written correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks any documentation about its behavior, including the fact that it mutates the columns parameter. If this mutation is intentional behavior, it should be documented. Adding a docstring warning about the parameter mutation would alert future maintainers to this side effect.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is clearly a code bug, not a documentation issue. The mutation is not an intended feature but rather an implementation oversight. The proper fix is to change the code to not mutate the parameter, not to document the problematic behavior. Documentation should not be used to excuse bad coding practices in internal functions.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially requesting that the internal function follow better coding practices by not mutating input parameters. This could be seen as a code quality improvement or enhancement request rather than fixing a bug. The current code works for the public API use case.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out incorrect behavior in existing code. Parameter mutation without documentation violates Python conventions and is a bug, not a missing feature. The function already has the functionality to handle columns and index; it just implements it incorrectly by mutating the input.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the fundamental Python convention that functions should not mutate their input parameters unless explicitly documented. The mutation accumulates across multiple calls when processing multiple partitions, potentially causing incorrect behavior. The bug is reproducible and has a clear fix. Even though it's an internal function, it's called by the public API and its behavior matters for correctness.
+
+**Why it might not be BUG:**
+The function is private/internal (starts with underscore) and not part of the public API. Users should never call this directly. The public `read_orc` function already works around this issue by creating a defensive copy. There's no documentation claiming the function won't mutate parameters. Internal implementation details are not typically considered bugs unless they affect the public API behavior.
+
+## Overall Consideration
+
+After careful analysis, this bug report presents a technically valid issue but in a private/internal function that users should not be directly calling. The `_read_orc` function does indeed mutate its `columns` parameter by appending the `index` value to it, which violates Python best practices about not mutating input parameters without clear documentation.
+
+However, several factors diminish the severity and relevance of this issue. First, the function is clearly marked as private/internal by its leading underscore, indicating it's not part of the public API. Second, the public-facing `read_orc` function that calls `_read_orc` already implements a defensive workaround by creating a filtered copy of the columns list before passing it. Third, there is no documentation or contract stating that internal functions must not mutate their parameters.
+
+While the mutation could theoretically cause issues if the same columns list were reused across multiple partition reads (as demonstrated in testing), in practice the public API appears to handle this correctly. The issue is more about code quality and following best practices in internal code rather than a user-facing bug. Given that approximately 90% of bug reports from this user are expected to be invalid, and this issue affects only internal implementation details that don't impact the public API's correctness, this should likely be closed as WONTFIX or INVALID.

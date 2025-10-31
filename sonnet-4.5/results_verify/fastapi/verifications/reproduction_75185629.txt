@@ -1,0 +1,32 @@
+Bug Reproduction Analysis
+=========================
+
+I successfully reproduced the bug described in the report. Here's what I found:
+
+1. Hypothesis Test Reproduction:
+   - Ran the property-based test provided in the bug report
+   - The test FAILED with the exact input mentioned: ['accept']
+   - Error message confirmed: "Duplicate headers found! Input: ['accept'], Output: ['accept', 'accept-language', 'content-language', 'content-type', 'accept']"
+
+2. Simple Reproduction Test:
+   - Created a simple test case with CORSMiddleware(dummy_app, allow_headers=["accept"])
+   - Confirmed the output: ['accept', 'accept-language', 'content-language', 'content-type', 'accept']
+   - The header 'accept' appears twice in the list (at positions 0 and 4)
+
+3. Root Cause Verification:
+   - Examined the source code at /home/npc/pbt/agentic-pbt/envs/fastapi_env/lib/python3.13/site-packages/starlette/middleware/cors.py
+   - Confirmed the issue occurs at lines 58 and 67 as stated in the bug report:
+     * Line 58: `allow_headers = sorted(SAFELISTED_HEADERS | set(allow_headers))`
+       - SAFELISTED_HEADERS contains {'Accept', 'Accept-Language', 'Content-Language', 'Content-Type'}
+       - When user provides ["accept"], the set union produces both "Accept" and "accept"
+     * Line 67: `self.allow_headers = [h.lower() for h in allow_headers]`
+       - This converts all headers to lowercase, creating the duplicate "accept"
+
+4. Impact:
+   - The resulting allow_headers list contains duplicates when user-provided headers differ only in case from safelisted headers
+   - This affects the internal state of the middleware and could lead to:
+     * Inefficient header checking (checking "accept" twice)
+     * Potential issues in CORS preflight responses
+     * Unexpected behavior in header validation logic
+
+The bug is reproducible and behaves exactly as described in the report.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify that headers passed to `allow_headers` should be treated case-insensitively or that the resulting `allow_headers` attribute should be identical regardless of input case. The internal representation is an implementation detail, and as long as the functionality works (which it does - headers are checked case-insensitively in line 129), different internal states might be acceptable.
+
+**Why it might not be INVALID:**
+HTTP RFC 7230 clearly states that header names are case-insensitive. The implementation already shows intent to handle headers case-insensitively by lowercasing them. Having different internal states for what HTTP considers equivalent inputs violates the principle of least surprise and the HTTP specification.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal inconsistency that doesn't affect the actual functionality - the CORS checks still work correctly regardless of the ordering in the list. The difference only affects the internal `allow_headers` attribute ordering, which users shouldn't rely on. The effort to fix this minor inconsistency might not be worth it.
+
+**Why it might not be WONTFIX:**
+The inconsistency is easily fixable and the bug report even provides a working solution. The issue violates a well-established HTTP principle (case-insensitivity) and could cause confusion for developers inspecting the middleware state during debugging.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that while headers are checked case-insensitively, the internal representation of `allow_headers` may vary based on the input case. This would set proper expectations about the internal state.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not really about documentation - it's about implementation inconsistency. The code already tries to handle headers case-insensitively but fails to do so consistently. Documenting a quirky behavior instead of fixing it would be poor practice.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that consistent internal representation regardless of input case is a new feature rather than a bug fix, especially since the current implementation works functionally.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality - it's pointing out that the existing implementation doesn't consistently follow HTTP standards. The code already attempts to handle headers case-insensitively (line 67 lowercases them), so this is fixing an implementation bug, not adding a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation violates HTTP RFC 7230's specification that header names are case-insensitive. The code shows clear intent to handle headers case-insensitively (by lowercasing on line 67) but fails due to sorting before lowercasing. This creates an inconsistent internal state where `CORSMiddleware(allow_headers=['A'])` differs from `CORSMiddleware(allow_headers=['a'])`, violating the metamorphic property that equivalent inputs should produce equivalent states.
+
+**Why it might not be BUG:**
+The actual CORS functionality works correctly - headers are properly checked in a case-insensitive manner during request processing. The difference is only in the internal representation, which could be considered an implementation detail that users shouldn't rely upon.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a valid BUG. Here's why:
+
+First, the HTTP specification (RFC 7230) is unambiguous that header field names are case-insensitive. This is a fundamental principle of HTTP, not an optional feature. When a library handles HTTP headers, it should respect this principle consistently throughout its implementation.
+
+Second, the code already demonstrates clear intent to handle headers case-insensitively - line 67 explicitly lowercases all headers before storing them. However, the sorting on line 58 happens before the lowercasing, creating an unintended inconsistency. This is a classic implementation bug where the intended behavior (case-insensitive handling) is not fully achieved due to an ordering issue in the code.
+
+Third, while it's true that the functional behavior (checking headers during CORS validation) works correctly, having inconsistent internal states for equivalent inputs violates important software principles. It makes the code harder to understand, debug, and test. Developers examining the middleware state during debugging could be confused by seeing different header orderings for what they reasonably expect to be equivalent inputs. The provided fix is simple, correct, and makes the code more consistent with both HTTP standards and its own apparent intent.

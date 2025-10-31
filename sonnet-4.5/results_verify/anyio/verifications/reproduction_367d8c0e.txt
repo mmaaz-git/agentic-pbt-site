@@ -1,0 +1,61 @@
+## Bug Reproduction Report
+
+### Test Environment
+- Python environment with anyio installed
+- Location: `/home/npc/miniconda/lib/python3.13/site-packages/anyio/`
+
+### Reproduction Code
+I ran the exact reproduction code from the bug report:
+
+```python
+from anyio.streams.stapled import MultiListener
+
+class MockListener:
+    @property
+    def extra_attributes(self):
+        return {}
+
+listener = MockListener()
+nested = MultiListener(listeners=[listener])
+print(f"Before: nested.listeners = {nested.listeners}")
+
+flat = MultiListener(listeners=[nested])
+print(f"After: nested.listeners = {nested.listeners}")
+```
+
+### Actual Output
+```
+Before: nested.listeners = [<__main__.MockListener object at 0x71022926f230>]
+After: nested.listeners = []
+```
+
+### Expected vs Actual Behavior
+- **Expected**: After creating `flat`, the `nested` MultiListener should still contain its original listener
+- **Actual**: After creating `flat`, the `nested` MultiListener's `listeners` list is empty
+
+### Verification of the Issue
+1. The bug report's claim is confirmed: creating a new MultiListener with a nested MultiListener as input does indeed clear the nested MultiListener's listeners list.
+
+2. I also verified with a manual test that confirms the behavior:
+   - Created a MultiListener with 1 MockListener
+   - Verified it had 1 listener
+   - Created a new MultiListener with the first one as input
+   - The original MultiListener's listeners list was cleared to empty
+
+### Source Code Analysis
+Looking at the source code at line 116 in `/home/npc/miniconda/lib/python3.13/site-packages/anyio/streams/stapled.py`:
+
+```python
+if isinstance(listener, MultiListener):
+    listeners.extend(listener.listeners)
+    del listener.listeners[:]  # type: ignore[attr-defined]
+```
+
+The `del listener.listeners[:]` line explicitly clears the contents of the passed-in MultiListener's listeners list. This is destructive mutation of the input object.
+
+### Technical Assessment
+The bug report is technically accurate:
+1. The code does destructively mutate nested MultiListener objects
+2. This happens as a side effect of creating a new MultiListener
+3. The mutation makes the original MultiListener unusable after being passed to another MultiListener
+4. The proposed fix (removing the `del` line) would indeed prevent the mutation while still achieving the flattening behavior

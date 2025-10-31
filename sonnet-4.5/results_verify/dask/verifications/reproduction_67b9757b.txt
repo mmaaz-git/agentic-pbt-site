@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue occurs in the `dask.diagnostics.profile_visualize.unquote` function when processing task expressions that result in sets containing unhashable elements.
+
+### Confirmed Failing Cases:
+
+1. **Basic failing case**: `(set, [(list, [])])`
+   - Error: `TypeError: unhashable type: 'list'`
+   - The function attempts to create a set containing an empty list, which is unhashable
+
+2. **Set with plain lists**: `(set, [[1, 2], [3, 4]])`
+   - Error: `TypeError: unhashable type: 'list'`
+   - Attempts to create a set from plain lists
+
+3. **Set with dict constructor**: `(set, [(dict, [['a', 1]])])`
+   - Error: `TypeError: unhashable type: 'dict'`
+   - The dict constructor returns a dict, which is unhashable
+
+4. **Set with nested set constructor**: `(set, [(set, [1, 2])])`
+   - Error: `TypeError: unhashable type: 'set'`
+   - The nested set returns a set, which is itself unhashable
+
+### Confirmed Working Cases:
+
+1. `(list, [(list, [])])` → Returns `[[]]`
+2. `(tuple, [(list, [])])` → Returns `([],)`
+3. `(set, [1, 2, 3])` → Returns `{1, 2, 3}`
+
+### Hypothesis Test Results:
+
+The property-based test using Hypothesis quickly found multiple failing examples, with the simplest being `(set, [(list, [])])`. This confirms that the bug is systematic and not an edge case.
+
+### Root Cause:
+
+The issue is in line 29 of `profile_visualize.py`:
+```python
+if expr[0] in (tuple, list, set):
+    return expr[0](map(unquote, expr[1]))
+```
+
+The function treats `set` the same as `tuple` and `list`, but Python sets have a fundamental constraint: they can only contain hashable elements. When `unquote` recursively processes nested expressions that evaluate to unhashable types (lists, dicts, or sets), the attempt to construct a set fails with a TypeError.
+
+The bug is confirmed and reproducible across multiple test cases.

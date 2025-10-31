@@ -1,0 +1,54 @@
+## Bug Reproduction Results
+
+I successfully reproduced the bug reported about anyio.CapacityLimiter's type contract violation.
+
+### Hypothesis Test Results
+
+The property-based test from the bug report fails as expected:
+- Test generates non-integer float values between 1.0 and 100.0
+- Failed immediately on value 1.5 (or similar non-integer float)
+- Error message: `TypeError: total_tokens must be an int or math.inf`
+
+### Manual Test Results
+
+1. **Creating limiter with float 2.5**: FAILED
+   - Expected: Create limiter with 2.5 tokens (as type annotation suggests)
+   - Actual: `TypeError: total_tokens must be an int or math.inf`
+
+2. **Setting property to float 3.7**: FAILED
+   - Created limiter with integer 1 successfully
+   - Failed when setting `total_tokens = 3.7`
+   - Error: `TypeError: total_tokens must be an int or math.inf`
+
+3. **Creating limiter with integer 5**: SUCCESS
+   - Works as expected
+
+4. **Creating limiter with math.inf**: SUCCESS
+   - Works as expected
+
+### Source Code Verification
+
+Verified the type annotations and runtime validation in the source code:
+
+1. **Type Annotations** (lines 494, 613, 644):
+   - `__new__(cls, total_tokens: float) -> CapacityLimiter`
+   - `__init__(self, total_tokens: float) -> None`
+   - `total_tokens.setter(self, value: float) -> None`
+
+   All declare the parameter as `float` type.
+
+2. **Runtime Validation** (lines 645-646):
+   ```python
+   if not isinstance(value, int) and value is not math.inf:
+       raise TypeError("total_tokens must be an int or math.inf")
+   ```
+
+   Only accepts `int` or `math.inf`, rejects other float values.
+
+### Conclusion
+
+The bug report is accurate. There is a clear mismatch between:
+- The type annotations (which promise to accept any `float`)
+- The runtime validation (which only accepts `int` or `math.inf`)
+
+This violates the contract established by the type hints, causing TypeErrors for valid float inputs according to the declared API.

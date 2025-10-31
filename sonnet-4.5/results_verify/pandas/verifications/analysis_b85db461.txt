@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that accessor names must be valid Python identifiers, but the documentation never explicitly states this requirement. The parameter is simply documented as "str" without additional constraints. The function works as documented - it accepts a string name and registers an accessor under that name. The fact that some names can only be accessed via getattr() rather than dot notation doesn't make it a bug if the documentation doesn't promise dot notation compatibility for all names.
+
+**Why it might not be INVALID:**
+All documentation examples use valid Python identifiers and demonstrate dot notation access (e.g., `df.geo.center`), strongly implying this is the intended usage pattern. The entire accessor pattern is designed to extend pandas objects with attribute-like access, which requires valid identifiers. Accepting invalid identifiers creates unusable APIs that contradict the feature's purpose.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that likely affects very few users in practice. Developers naturally use valid Python identifiers when registering accessors because that's the obvious and intended use case. The current behavior doesn't cause crashes or data corruption - it just allows something unusual that most users would never attempt. Adding validation would add overhead to every accessor registration for minimal practical benefit.
+
+**Why it might not be WONTFIX:**
+This represents a basic input validation failure that violates the principle of least surprise. The API accepts inputs that create unusable accessors, which is poor design. The fix is trivial (a single if-statement checking `name.isidentifier()`) and would prevent confusion and potential bugs. Good APIs should validate inputs and fail fast with clear error messages rather than silently accepting invalid data.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about what constitutes a valid accessor name. Currently, it just says "str" without specifying that it should be a valid Python identifier. If the current behavior is intentional (allowing any string for flexibility, with getattr() access as a fallback), then the documentation should explicitly state this and show examples of both dot notation and getattr() usage.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation examples consistently show valid identifiers used with dot notation, which correctly represents the intended use case. The problem isn't that the documentation is wrong or unclear - it's that the code doesn't validate inputs according to the obvious intended behavior. Documenting that "you can register invalid identifiers but can't use them normally" would be documenting a defect rather than fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding validation for accessor names would be a new feature - input validation that doesn't currently exist. The current implementation works as coded (accepts any string), and the request is to add new functionality (identifier validation) to make the API more robust. This could be framed as an enhancement request to improve the developer experience.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but rather asking for proper validation of existing functionality. The accessor pattern inherently requires valid identifiers to work as intended (dot notation access). The lack of validation is a bug, not a missing feature. Users reasonably expect that an API for registering accessors would only accept valid accessor names.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function accepts invalid inputs that create unusable accessors, violating the implicit contract that accessor names should be valid Python identifiers usable with dot notation. All documentation examples use valid identifiers with dot notation, establishing the expected behavior. The lack of input validation allows nonsensical usage that serves no purpose and can only cause confusion. The API fails to enforce basic invariants about what constitutes a valid accessor name.
+
+**Why it might not be BUG:**
+The documentation never explicitly requires valid Python identifiers, only stating the parameter should be a string. The function technically works - it registers the accessor successfully, and you can access it via getattr(). The behavior is consistent and deterministic, not crashing or corrupting data. Without explicit documentation stating identifier validation is required, this could be considered working as designed, just with a permissive design.
+
+## Overall Consideration
+
+After careful analysis, this issue sits in a gray area between a documentation problem and a genuine bug. The core question is whether we should infer requirements from usage patterns and common sense, or strictly follow only what's explicitly documented.
+
+The accessor pattern's entire purpose is to provide attribute-like access to custom functionality on pandas objects. Every example shows dot notation usage (e.g., `df.geo.center`), which requires valid Python identifiers. Accepting invalid identifiers that can't be used with dot notation undermines the feature's core purpose and creates a confusing API where some registered accessors work normally while others require getattr().
+
+However, the counterargument is strong: the documentation never explicitly states that names must be valid identifiers. The parameter is simply "str" with no documented validation requirements. The function works as coded - it accepts strings and registers accessors. That some accessors can only be accessed via getattr() could be seen as a flexibility feature rather than a bug. Given that this unreliable user has a ~90% false positive rate, and this issue exists in a gray area without explicit documentation violations, I lean toward rejecting this as INVALID or at most treating it as a DOCUMENTATION_FIX to clarify the expected input constraints.

@@ -1,0 +1,63 @@
+Bug Reproduction Results
+========================
+
+I successfully reproduced the reported bug. Here are the findings:
+
+1. Bug Confirmation:
+   ✓ The bug exists exactly as reported
+   ✓ When include((patterns, ''), namespace='my_namespace') is called, it raises ImproperlyConfigured
+   ✓ The error message is: "Specifying a namespace in include() without providing an app_name is not supported."
+
+2. Test Results:
+
+   a) Empty string app_name WITH namespace (THE BUG):
+      - Input: include((patterns, ''), namespace='my_namespace')
+      - Result: ImproperlyConfigured exception raised
+      - Expected: Should accept empty string as a valid app_name
+      - Status: BUG CONFIRMED
+
+   b) None app_name WITH namespace (correct behavior):
+      - Input: include((patterns, None), namespace='my_namespace')
+      - Result: ImproperlyConfigured exception raised
+      - Expected: Should raise exception
+      - Status: Working as expected
+
+   c) Non-empty app_name WITH namespace:
+      - Input: include((patterns, 'myapp'), namespace='my_namespace')
+      - Result: Returns successfully with app_name='myapp', namespace='my_namespace'
+      - Status: Working as expected
+
+   d) Empty string app_name WITHOUT namespace:
+      - Input: include((patterns, ''))
+      - Result: Returns successfully with app_name='', namespace=''
+      - Status: Working as expected (empty string is accepted when no namespace)
+
+3. Hypothesis Test:
+   - Ran property-based test with various namespace strings
+   - ALL tests failed with ImproperlyConfigured exception
+   - This confirms the bug is consistent across all non-empty namespace values
+
+4. Root Cause Analysis:
+   The bug is on line 42 of django/urls/conf.py:
+   ```python
+   if namespace and not app_name:
+   ```
+
+   This uses Python's truthiness check where:
+   - not '' evaluates to True (empty string is falsy)
+   - not None evaluates to True (None is falsy)
+
+   Therefore, both empty string and None are treated identically, even though:
+   - '' is an explicitly provided value (albeit empty)
+   - None represents the absence of a value
+
+5. The Fix:
+   The suggested fix is correct:
+   ```python
+   if namespace and app_name is None:
+   ```
+   This would properly distinguish between:
+   - No app_name provided (None) - should raise error with namespace
+   - Empty app_name provided ('') - should be allowed
+
+Conclusion: The bug is real and reproducible. The issue is that Django's include() function incorrectly treats an empty string app_name as if no app_name was provided at all, due to using a truthiness check instead of an identity check for None.

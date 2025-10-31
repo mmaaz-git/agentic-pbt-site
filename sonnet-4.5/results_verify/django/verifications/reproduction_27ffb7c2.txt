@@ -1,0 +1,44 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug as described in the report.
+
+Test Results:
+-------------
+
+1. Property-Based Test: PASSED
+   - The test correctly expects and catches a TypeError when creating an empty WhereNode with XOR connector on a database without native XOR support
+   - Error message: "TypeError: reduce() of empty iterable with no initial value"
+
+2. Direct Reproduction: CONFIRMED
+   - Running the exact code from the bug report produces the same error
+   - The error occurs at line 138-140 in where.py where reduce() is called on an empty iterable
+
+3. Control Test (Native XOR Support): EXPECTED BEHAVIOR
+   - When the database supports XOR natively, an empty WhereNode with XOR correctly raises FullResultSet
+   - This shows the expected behavior is to raise FullResultSet for empty WHERE nodes
+
+4. Proposed Fix Test: VALIDATED
+   - Testing a patched version that checks for self.children before XOR emulation
+   - With the fix, empty XOR WhereNode correctly raises FullResultSet instead of TypeError
+
+Error Location:
+--------------
+The error occurs in /django/db/models/sql/where.py at lines 138-140:
+```python
+rhs_sum = reduce(
+    operator.add,
+    (Case(When(c, then=1), default=0) for c in self.children),
+)
+```
+
+When self.children is empty, the generator produces no values, and reduce() without an initial value raises TypeError.
+
+Impact:
+-------
+The bug causes an unhandled exception (TypeError) instead of the expected behavior (FullResultSet exception) when:
+1. Creating an empty WhereNode with XOR connector
+2. The database doesn't support native XOR operations
+3. The as_sql() method is called
+
+This is a legitimate crash that disrupts the normal exception flow of Django's query system.

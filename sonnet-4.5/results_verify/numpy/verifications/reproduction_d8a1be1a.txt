@@ -1,0 +1,27 @@
+## Bug Reproduction and Validation
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+### Bug Confirmation
+The bug is real and occurs exactly as described. When `numpy.strings.partition()` is called with a separator that is longer than the input string's dtype width, the separator gets silently truncated.
+
+### Test Results
+
+1. **Specific failing case**: `s='0', sep='00'`
+   - Python result: `('0', '', '')`  (correct - separator not found)
+   - NumPy result: `('', '0', '')`   (incorrect - acts as if separator '0' was found)
+
+2. **Pattern confirmed across multiple cases**:
+   - All cases where separator length > input dtype width show the same bug
+   - Examples: ('a', 'ab'), ('12', '123'), ('abc', 'abcd') all fail
+   - Cases where separator fits in dtype work correctly
+
+3. **Root cause verified**:
+   - When separator '00' (dtype <U2) is cast to input dtype <U1, it becomes '0'
+   - This truncated '0' is then found in the input string '0'
+   - Results in incorrect partition: `('', '0', '')` instead of `('0', '', '')`
+
+### Effect
+The bug causes incorrect behavior that violates the expected semantics of the partition function. When a separator is not found (because it's longer than what could possibly be in the input), the function should return `(string, '', '')`. Instead, due to silent truncation, it may incorrectly "find" a truncated version of the separator and return wrong results.
+
+This is a significant logic error that produces incorrect results silently without any warning to the user.

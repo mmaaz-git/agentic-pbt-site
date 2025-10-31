@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+### Bug Confirmed
+I have successfully reproduced the bug as described in the report. The issue occurs exactly as stated when calling `pd.qcut()` with very small floating-point numbers.
+
+### Test Results
+
+1. **Minimal Reproduction Code**: The provided reproduction code produces the exact error message:
+   ```
+   ValueError: missing values must be missing in the same location both left and right sides
+   ```
+
+2. **Input Values**: `[0.0, 1.0, 2.0, 2.2250738585072014e-308]` with `n_quantiles=4`
+   - All values are finite, non-NaN floats
+   - The series has 4 unique values, which meets the requirement for 4 quantiles
+
+3. **Root Cause Verification**:
+   - The bug is indeed in the `_round_frac()` function at line 624 of `pandas/core/reshape/tile.py`
+   - For the value `2.2250738585072014e-308`:
+     - With default precision=3, it calculates `digits=310`
+     - `np.around(2.2250738585072014e-308, 310)` returns `NaN`
+   - Testing shows that `np.around()` returns NaN for any precision >= 309 with this value
+
+4. **Impact Chain**:
+   - `_round_frac()` returns NaN for the small float
+   - This NaN propagates to the bin edges array
+   - When `IntervalArray.from_arrays()` tries to validate the arrays, it detects NaN in one array but not the other
+   - This triggers the misleading error message about "missing values"
+
+5. **Additional Findings**:
+   - The warning "RuntimeWarning: invalid value encountered in divide" appears during execution
+   - The issue affects any float value near the minimum representable float (~1e-308)
+   - The problem occurs because NumPy's `around()` function cannot handle rounding to 309+ decimal places
+
+### Conclusion
+The bug is fully reproducible and the root cause analysis in the bug report is accurate. The issue stems from attempting to round extremely small floats with excessive decimal precision, which causes NumPy to return NaN values that break the interval creation logic.

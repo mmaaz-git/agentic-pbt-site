@@ -1,0 +1,27 @@
+## Bug Reproduction Results
+
+### Hypothesis Test Reproduction
+The Hypothesis test provided in the bug report ran successfully and immediately found the failing case with `exponents=[-1]`. The test correctly identified that `pd.array([1], dtype="Int64") ** pd.array([-1], dtype="Int64")` raises a ValueError with the message "Integers to negative integer powers are not allowed."
+
+### Simple Example Reproduction
+The simple reproduction case also confirmed the bug:
+- `pd.array([1], dtype="Int64") ** pd.array([-1], dtype="Int64")` raises ValueError
+- The error occurs before any special case handling can be applied
+
+### Comparison with Standard Behavior
+1. **NumPy behavior**: NumPy also raises ValueError for integer arrays with negative exponents (as documented in numpy.power documentation)
+2. **Python behavior**: Regular Python correctly computes `1 ** -1 = 1.0` (returns float)
+3. **Float arrays**: Using float dtype arrays, the operation works correctly: `np.array([1.0]) ** np.array([-1]) = [1.0]`
+
+### Source Code Verification
+Examining pandas/core/arrays/masked.py lines 800-830 confirms the bug report's claim:
+- Line 807: `result = pd_op(self._data, other)` - This is where the ValueError is raised
+- Line 811: `mask = np.where((self._data == 1) & ~self._mask, False, mask)` - Special case for 1**x = 1
+- The special case handling occurs AFTER the computation, so it never gets reached when the computation fails
+
+### Mathematical Correctness
+Mathematically, 1 raised to any power (including negative integers) equals 1:
+- 1^(-1) = 1/1 = 1
+- 1^(-n) = 1/(1^n) = 1/1 = 1 for any integer n
+
+The bug report accurately describes a situation where pandas fails to compute a mathematically well-defined operation that has an exact integer result.

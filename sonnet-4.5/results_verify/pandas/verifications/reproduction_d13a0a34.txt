@@ -1,0 +1,54 @@
+## Bug Reproduction Analysis
+
+### Summary
+I successfully reproduced the bug reported in `pandas.core.indexers.length_of_indexer`. The function returns incorrect negative values for certain slice configurations that produce empty sequences.
+
+### Reproduction Results
+
+#### Hypothesis Test
+The property-based test failed on multiple inputs, confirming systematic issues with the function:
+- `slice(None, None, -1)`: Returns -50, actual length is 50
+- `slice(0, -1, -2)`: Returns -24, actual length is 0
+- `slice(-1, 9, None)`: Returns -40, actual length is 0
+- `slice(1, 0, None)`: Returns -1, actual length is 0
+- `slice(0, 1, -1)`: Returns -1, actual length is 0
+
+#### Manual Reproduction
+Confirmed the specific cases from the bug report:
+
+1. **slice(1, 0, None)** (start > stop with positive step):
+   - `length_of_indexer` returns: -1
+   - Actual NumPy slice length: 0
+   - This represents an empty slice that should have length 0
+
+2. **slice(0, 1, -1)** (start < stop with negative step):
+   - `length_of_indexer` returns: -1
+   - Actual NumPy slice length: 0
+   - This represents an empty slice that should have length 0
+
+### Root Cause Analysis
+Looking at the implementation (lines 290-316 in utils.py):
+
+The function calculates slice length using the formula:
+```python
+return (stop - start + step - 1) // step
+```
+
+For negative steps, it transforms the slice:
+```python
+if step < 0:
+    start, stop = stop + 1, start + 1
+    step = -step
+```
+
+However, the function doesn't check if the resulting slice would be empty. When:
+- For positive step: start >= stop results in negative length
+- For negative step: after transformation, if new start >= new stop, results in negative length
+
+### Impact
+The bug causes `length_of_indexer` to return negative lengths for valid but empty slices. This violates:
+1. The mathematical property that lengths are non-negative
+2. The consistency with NumPy's actual slicing behavior
+3. The function's documented purpose to "Return the expected length of target[indexer]"
+
+The bug is consistently reproducible and affects multiple slice configurations that produce empty sequences.

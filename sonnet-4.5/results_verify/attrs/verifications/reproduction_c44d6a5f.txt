@@ -1,0 +1,49 @@
+BUG REPRODUCTION REPORT
+======================
+
+I have successfully reproduced the bug described in the report. The issue occurs in the `attr.filters._split_what` function when it receives a generator as input.
+
+## Verification Steps Performed
+
+1. **Hypothesis Test Reproduction**
+   - Ran the provided Hypothesis test
+   - Test fails immediately with input `items=['0']`
+   - The test correctly identifies that when _split_what receives a generator, it produces different results than when it receives a list
+   - Confirmed: Generator exhaustion causes empty frozensets for names and attrs
+
+2. **Manual Example Reproduction**
+   - Tested with mixed input: [int, str, "name1", "name2", float]
+   - When passed as generator: Classes are correctly identified, but Names and Attrs are empty frozensets
+   - When passed as list: All three categories (Classes, Names, Attrs) are correctly populated
+   - The bug is confirmed: generator exhaustion after first iteration
+
+## Root Cause Analysis
+
+The function `_split_what` iterates over the `what` parameter three times:
+1. Line 15: `frozenset(cls for cls in what if isinstance(cls, type))`
+2. Line 16: `frozenset(cls for cls in what if isinstance(cls, str))`
+3. Line 17: `frozenset(cls for cls in what if isinstance(cls, Attribute))`
+
+When `what` is a generator:
+- The first iteration exhausts the generator
+- The second and third iterations receive an empty generator
+- This results in empty frozensets for names and attributes
+
+## Impact Assessment
+
+The bug is real but has limited practical impact:
+1. The function `_split_what` is a private function (starts with underscore)
+2. The public functions `include()` and `exclude()` work correctly because they pass arguments as tuples, not generators
+3. However, if someone directly calls `_split_what` with a generator (which is possible since it's importable), they will encounter this bug
+
+## Test Results
+
+Generator input to _split_what([int, str, "field1", "field2", float]):
+- Classes: frozenset({int, str, float})  ✓ Correct
+- Names: frozenset()                     ✗ Should be {"field1", "field2"}
+- Attrs: frozenset()                     ✓ Correct (no Attribute objects)
+
+List input to _split_what([int, str, "field1", "field2", float]):
+- Classes: frozenset({int, str, float})  ✓ Correct
+- Names: frozenset({"field1", "field2"}) ✓ Correct
+- Attrs: frozenset()                     ✓ Correct

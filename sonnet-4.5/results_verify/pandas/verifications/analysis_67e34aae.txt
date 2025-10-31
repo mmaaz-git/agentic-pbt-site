@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report tests behavior that is not documented or specified. The documentation never states what should happen with negative window sizes, and semantically, a negative window size doesn't make logical sense (you cannot have a negative number of observations). The user is testing undefined behavior - passing invalid input that the API never promised to handle. Since the documentation doesn't specify behavior for negative values, the current behavior could be considered "correct" in the sense that undefined input leads to undefined output.
+
+**Why it might not be INVALID:**
+The API accepts negative values without any error or warning, which implies they might be intended to work. The resulting behavior (start > end) violates a fundamental invariant of array slicing that any reasonable developer would expect to hold. Even if the input is nonsensical, producing mathematically invalid bounds that silently cause incorrect results is problematic.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Negative window sizes are nonsensical inputs that would never occur in real-world usage. No reasonable user would intentionally use a negative window size for rolling window operations. The effort to add validation for this edge case might not be worth it, especially since the primary issue is that someone is passing obviously invalid input. The maintainers might argue that users should know not to pass negative values for a count of observations.
+
+**Why it might not be WONTFIX:**
+The issue causes silent data corruption (all zeros in results) rather than failing loudly, which could lead to hard-to-debug problems if someone accidentally passes a negative value. The fix is trivial (a single if statement to validate the input), and the cost of not fixing it is potential data integrity issues. Silent failures are generally more serious than edge cases that raise errors.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify that window_size must be non-negative, which is the root cause of the confusion. If the documentation clearly stated "window_size must be a non-negative integer representing the number of observations," users would know not to pass negative values. The code might be working as designed for the documented use cases, and the real issue is incomplete documentation about parameter constraints.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting that negative values produce undefined behavior doesn't fix the underlying issue that the code accepts invalid input and produces invalid output. Good API design includes input validation, not just documentation. The fact that invalid bounds (start > end) are produced is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current code doesn't validate input parameters, and adding such validation would be a new feature - input sanitization. The user is essentially asking for the API to be more robust by adding parameter validation that doesn't currently exist. This could be framed as a request to enhance the API with better error handling for edge cases.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather fixing broken behavior. When window bounds have start > end, that's not a missing feature - it's incorrect behavior that violates the basic contract of what window bounds should be. The user isn't asking for negative window sizes to do something special; they're pointing out that the current behavior is mathematically invalid.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code produces objectively invalid output where start indices are greater than end indices, violating the fundamental invariant of array slicing. This causes silent data corruption in rolling window operations (returning all zeros). The API accepts the input without error but produces mathematically invalid results. Any code that produces start > end for array bounds is broken, regardless of whether the input "should" be validated.
+
+**Why it might not be BUG:**
+The input (negative window size) is semantically meaningless and represents a user error. The documentation examples only show positive values, implying that's the expected usage. Many functions in programming produce undefined behavior with invalid input, and it's the caller's responsibility to provide valid input. The issue only occurs with input that makes no logical sense in the context of the function's purpose.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a case where the code accepts invalid input and produces invalid output that violates fundamental invariants. While negative window sizes are semantically meaningless, the fact that the API accepts them without validation and then produces window bounds where start > end is problematic. This violates the basic mathematical properties that any array slicing operation depends on.
+
+The strongest argument against this being a bug is that negative window sizes make no logical sense - you cannot have a negative number of observations in a statistical window. However, good API design dictates that functions should either handle edge cases gracefully or reject them explicitly, not produce silently incorrect results. The current behavior leads to data corruption (all zeros) without any indication of what went wrong.
+
+Given that the fix is trivial (adding a single validation check), the impact is data corruption (albeit with nonsensical input), and the behavior violates mathematical invariants that downstream code relies on, this should be classified as a FEATURE_REQUEST to add input validation rather than a BUG. The core functionality works correctly for all valid inputs; what's missing is protection against invalid inputs.

@@ -1,0 +1,44 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## FastAPI Documentation
+
+The get_authorization_scheme_param function is an internal utility function in FastAPI's security module. While there is no explicit public documentation for this specific utility function, it is used internally by FastAPI's OAuth2 and HTTP Bearer authentication implementations.
+
+The function's behavior is not explicitly documented in the public FastAPI documentation, but its usage can be inferred from the OAuth2PasswordBearer and HTTPBearer security schemes which rely on it.
+
+## RFC 7235 Specification
+
+According to RFC 7235 (HTTP Authentication), the Authorization header format is:
+
+```
+Authorization = credentials
+credentials = auth-scheme [ 1*SP ( token68 / [ ( "," / auth-param ) *( OWS "," [ OWS auth-param ] ) ] ) ]
+```
+
+**Critical Finding**: The specification uses "1*SP" which means **one or more spaces** are allowed between the auth-scheme and the credentials/parameters.
+
+The RFC explicitly allows for multiple spaces:
+- "1*SP" in ABNF notation means "one or more spaces"
+- This is not "1SP" (exactly one space) but "1*SP" (one or more)
+- The specification intentionally provides flexibility in whitespace handling
+
+## Documentation vs Implementation
+
+1. **RFC Compliance**: The current FastAPI implementation does NOT comply with RFC 7235 because it fails to properly handle multiple spaces between the scheme and credentials.
+
+2. **Expected Behavior**: According to RFC 7235, these should all be equivalent:
+   - "Bearer token123" (1 space)
+   - "Bearer  token123" (2 spaces)
+   - "Bearer   token123" (3 spaces)
+
+   All should return scheme="Bearer" and param="token123"
+
+3. **Actual Behavior**: The function preserves extra spaces in the parameter:
+   - "Bearer token123" → param="token123" ✓
+   - "Bearer  token123" → param=" token123" ✗
+   - "Bearer   token123" → param="  token123" ✗
+
+## Conclusion
+
+The bug report correctly identifies a violation of the HTTP specification. The function should normalize multiple spaces between the scheme and parameter to comply with RFC 7235. The documentation (RFC 7235) clearly specifies that multiple spaces are allowed and should be handled correctly.

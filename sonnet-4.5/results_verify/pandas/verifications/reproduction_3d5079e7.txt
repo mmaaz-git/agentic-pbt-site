@@ -1,0 +1,40 @@
+## Bug Reproduction Results
+
+### Hypothesis Tests
+All three hypothesis tests failed as reported:
+- test_median_defaults_match_numpy failed on 'dtype' parameter
+- test_mean_defaults_match_numpy failed on 'initial' parameter
+- test_minmax_defaults_match_numpy failed on 'dtype' parameter
+
+### Manual Reproduction
+
+Confirmed numpy signatures:
+- numpy.median: (a, axis=None, out=None, overwrite_input=False, keepdims=False) - NO dtype parameter
+- numpy.mean: (a, axis=None, dtype=None, out=None, keepdims=<no value>, *, where=<no value>) - HAS dtype, NO initial
+- numpy.min/max: (a, axis=None, out=None, keepdims=<no value>, initial=<no value>, where=<no value>) - HAS initial, NO dtype
+
+Current behavior with None values:
+- series.median(dtype=None) silently accepts and returns 2.0
+- series.mean(initial=None) silently accepts and returns 2.0
+- series.min(dtype=None) silently accepts and returns 1
+- series.max(dtype=None) silently accepts and returns 3
+
+Current behavior with non-None values:
+- series.median(dtype=float) raises ValueError: "the 'dtype' parameter is not supported"
+- series.mean(initial=1.0) raises ValueError: "the 'initial' parameter is not supported"
+- series.min(dtype=float) raises ValueError: "the 'dtype' parameter is not supported"
+
+### Technical Analysis
+
+The bug report is technically correct:
+1. MEDIAN_DEFAULTS includes 'dtype' but numpy.median has no dtype parameter
+2. MEAN_DEFAULTS includes 'initial' but numpy.mean has no initial parameter
+3. MINMAX_DEFAULTS includes 'dtype' but numpy.min/max have no dtype parameter
+
+The current implementation incorrectly validates against parameters that don't exist in numpy. When None is passed, it's silently accepted (should raise TypeError for unexpected keyword). When non-None is passed, it raises ValueError saying "not supported" (should raise TypeError).
+
+### Effect on Users
+The current incorrect behavior:
+- Allows invalid parameters with None values to pass silently
+- Gives misleading error messages (ValueError instead of TypeError) for non-None values
+- Violates the stated contract of the validation module to only accept numpy-compatible parameters

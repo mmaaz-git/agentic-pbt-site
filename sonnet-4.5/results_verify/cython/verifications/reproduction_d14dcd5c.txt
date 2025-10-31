@@ -1,0 +1,42 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report has been successfully reproduced. The `get_chunks` method in both `PandasDataFrameXchg` and `PandasColumn` produces empty chunks when the requested number of chunks cannot evenly divide the DataFrame/Column size.
+
+### Reproduction Steps
+
+1. **Hypothesis Test**:
+   - Ran the provided property-based test with hypothesis
+   - The test immediately failed on the first example: `size=1, n_chunks=2`
+   - This produced chunks of sizes `[1, 0]`, where the second chunk is empty
+   - The test correctly identified this as an assertion error
+
+2. **Manual Reproduction**:
+   - Created a DataFrame with 11 rows
+   - Called `get_chunks(5)` which should divide 11 rows into 5 chunks
+   - Expected behavior: All chunks should have some data (e.g., `[3, 3, 3, 2]` or `[3, 2, 2, 2, 2]`)
+   - Actual behavior: Chunk sizes were `[3, 3, 3, 2, 0]` - the last chunk is empty
+
+3. **Column Version**:
+   - Also tested `PandasColumn.get_chunks` with the same parameters
+   - Got the same problematic result: `[3, 3, 3, 2, 0]`
+
+### Root Cause
+The bug occurs in the loop iteration logic:
+```python
+for start in range(0, step * n_chunks, step):
+```
+
+When `size % n_chunks != 0`, the step is incremented by 1. This causes `step * n_chunks` to exceed the actual size of the DataFrame, resulting in empty chunks at the end.
+
+Example with size=11, n_chunks=5:
+- step = 11 // 5 = 2
+- Since 11 % 5 != 0, step becomes 3
+- Loop iterates: range(0, 3*5, 3) = range(0, 15, 3) = [0, 3, 6, 9, 12]
+- The slice `[12:15]` on a 11-row DataFrame returns an empty chunk
+
+### Impact
+This bug affects data processing pipelines that rely on chunking for parallel processing or batching. Empty chunks can cause:
+- Wasted computation resources
+- Potential errors in downstream processing that expect non-empty data
+- Incorrect assumptions about data distribution across chunks

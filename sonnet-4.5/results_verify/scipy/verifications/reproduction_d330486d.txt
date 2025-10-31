@@ -1,0 +1,60 @@
+Reproduction and Test Results
+=============================
+
+I successfully reproduced the bug using both the provided test case and the hypothesis property-based test. Here are the detailed results:
+
+1. BASIC REPRODUCTION TEST
+
+Test Setup:
+- Function: f(x) = x³ - 1.0
+- Interval: [2.0, 3.0]
+- f(2.0) = 7.0 (positive)
+- f(3.0) = 26.0 (positive)
+- No sign change present (both values are positive)
+
+Results for Python API:
+- scipy.optimize.bisect: Correctly raises ValueError "f(a) and f(b) must have different signs"
+- scipy.optimize.brentq: Correctly raises ValueError "f(a) and f(b) must have different signs"
+- scipy.optimize.brenth: Correctly raises ValueError "f(a) and f(b) must have different signs"
+- scipy.optimize.ridder: Correctly raises ValueError "f(a) and f(b) must have different signs"
+
+Results for Cython API (_zeros.loop_example):
+- bisect: Returns [0.0]
+  - 0.0 is NOT in the interval [2.0, 3.0]
+  - f(0.0) = -1.0, which is NOT close to 0
+  - This is an invalid result
+- brentq: Returns [0.0] (same invalid result)
+- brenth: Returns [0.0] (same invalid result)
+- ridder: Returns [0.0] (same invalid result)
+
+2. HYPOTHESIS PROPERTY-BASED TEST
+
+The hypothesis test failed immediately on the first generated test case, confirming the bug is consistently reproducible. The test generates various values of a0 and offset that ensure f(xa) and f(xb) have the same sign, and all methods consistently return the invalid value 0.0.
+
+3. VERIFICATION WITH VALID BRACKET
+
+To confirm the functions work correctly with valid input:
+- Valid bracket: [0.5, 1.5] where f(0.5) = -0.875 and f(1.5) = 2.375
+- Python API (bisect): Correctly returns 1.0 with f(1.0) = 0.0
+- Cython API (bisect): Correctly returns [1.0] with f(1.0) = 0.0
+
+This shows the Cython API works correctly when given valid input with a sign change.
+
+4. TECHNICAL CORRECTNESS OF BUG REPORT
+
+The bug report's technical claims are all verified:
+✓ The Cython API does not validate sign changes
+✓ It returns 0.0 when both function values have the same sign
+✓ The returned value (0.0) is outside the search bracket
+✓ The returned value is not a root (f(0.0) = -1.0 ≠ 0)
+✓ The Python API correctly raises ValueError in the same situation
+✓ The behavior is consistent across all four methods (bisect, brentq, brenth, ridder)
+
+5. MATHEMATICAL VALIDITY
+
+The mathematical requirement for bracketing methods is fundamental:
+- These algorithms work by iteratively narrowing an interval containing a sign change
+- Without a sign change, there is no mathematical basis for the algorithm to proceed
+- The algorithms cannot function correctly without this precondition
+
+The bug report is technically accurate in all its claims.

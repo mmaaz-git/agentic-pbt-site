@@ -1,0 +1,61 @@
+BUG REPRODUCTION ANALYSIS
+
+## Test Results Summary
+
+I successfully reproduced the reported bug. The tests confirm the inconsistent behavior described in the bug report.
+
+### Key Findings:
+
+1. **Fully Masked Arrays (Bug Confirmed)**:
+   - Input: 2D array with shape (2, 3) where ALL elements are masked
+   - compress_rows result: Shape (0,), ndim=1 - Returns 1D array
+   - compress_cols result: Shape (0,), ndim=1 - Returns 1D array
+   - Expected by bug report: Shape (0, 3) and (2, 0) respectively
+
+2. **Partially Masked Arrays (Works as Expected)**:
+   - When all rows have at least one masked element but not all elements are masked:
+     - compress_rows returns Shape (0, 3), ndim=2 - Correctly maintains 2D
+   - When some columns are fully masked:
+     - compress_cols returns Shape (2, 1), ndim=2 - Correctly maintains 2D
+
+3. **Pattern Observed**:
+   - The functions maintain 2D structure EXCEPT when the entire array is fully masked
+   - When m.all() is True (all elements masked), the code returns nxarray([]) which creates a 1D array
+   - When some but not all rows/columns are suppressed, the result maintains 2D structure
+
+4. **Hypothesis Tests**:
+   - Both property-based tests fail with assertion errors
+   - compress_rows fails: "Expected 2D array, got 1D with shape (0,)"
+   - compress_cols fails: "Expected 2D array, got 1D with shape (0,)"
+
+### Edge Cases Tested:
+
+1. **Empty Input Arrays**:
+   - Empty array (0, 3) passed to compress_rows returns (0, 3) - maintains shape correctly
+
+2. **Invalid Inputs**:
+   - 1D arrays: Raises error "compress_rows works for 2D arrays only."
+   - 3D arrays: Raises error "compress_rows works for 2D arrays only."
+
+3. **Direct compress_rowcols calls**:
+   - With fully masked array, all axis options (None, 0, 1) return shape (0,) - 1D array
+
+### Root Cause Identified:
+
+The issue is in the compress_nd function at this line:
+```python
+# All is masked: return empty
+if m.all():
+    return nxarray([])
+```
+
+This explicitly returns a 1D empty array when all elements are masked, regardless of the input dimensions or axis parameter.
+
+### Behavioral Inconsistency Confirmed:
+
+The bug report is correct about the inconsistency:
+- When SOME rows/columns are suppressed: Result maintains 2D structure
+- When ALL rows/columns are suppressed (fully masked): Result becomes 1D
+- This inconsistency can cause downstream code failures when expecting result.shape[1] to exist
+
+The reproduction confirms the bug report's technical accuracy regarding the shape inconsistency.

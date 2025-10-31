@@ -1,0 +1,88 @@
+## Bug Report Triage Analysis
+
+### Considering Each Category
+
+#### 1. BUG (Valid Bug)
+**Arguments FOR:**
+- The implementation clearly doesn't respect timeout values ≤ 0.01s
+- timeout=0 is a common pattern meaning "don't wait" or "check once immediately"
+- Users setting timeout=0.001 expect 1ms timeout, not 10ms
+- The fix is straightforward (move timeout check before sleep)
+- This affects real use cases (fine-grained timing control, immediate timeout needs)
+- The behavior is counterintuitive and violates principle of least surprise
+
+**Arguments AGAINST:**
+- Documentation doesn't explicitly promise immediate timeout for timeout=0
+- The 10ms polling interval could be considered an implementation detail
+- Could argue that any positive work requires some minimum time
+
+#### 2. INVALID
+**Arguments FOR:**
+- Documentation doesn't explicitly define behavior for timeout≤0
+- Could argue negative timeouts are undefined behavior
+- The functions technically work, just with different precision than expected
+
+**Arguments AGAINST:**
+- The bug is real and reproducible
+- timeout=0 has well-established meaning in programming (immediate/no wait)
+- Users have reasonable expectations that aren't met
+- The implementation accepts these values without error
+
+#### 3. WONTFIX
+**Arguments FOR:**
+- 10ms precision might be "good enough" for clipboard monitoring
+- Very few users likely need sub-10ms clipboard timeout precision
+- The polling interval of 10ms might be intentional to avoid CPU spinning
+
+**Arguments AGAINST:**
+- The fix is trivial (move one if statement)
+- This isn't about obscure edge cases - timeout=0 is common
+- Users explicitly setting small timeouts clearly care about precision
+- No performance impact from fixing this
+
+#### 4. FEATURE_REQUEST
+**Arguments FOR:**
+- Could frame as "add support for immediate timeout (timeout=0)"
+- Could frame as "add fine-grained timeout precision support"
+- Documentation doesn't promise this behavior currently
+
+**Arguments AGAINST:**
+- This is fixing broken behavior, not adding new functionality
+- The function already accepts these timeout values
+- The current behavior is a bug in the implementation logic
+- timeout=0 should already work correctly
+
+#### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- Could document that minimum timeout is 10ms
+- Could document that timeout≤0 behaves same as timeout=0.01
+- Could add note about polling interval affecting precision
+
+**Arguments AGAINST:**
+- This would be documenting a bug rather than fixing it
+- The fix is simple and makes more sense than documenting limitations
+- Users shouldn't have to accept a 10ms minimum timeout
+- Would be admitting defeat rather than fixing the problem
+
+### Analysis Summary
+
+The issue is clearly a logic bug in the implementation where the timeout check occurs after the sleep instead of before it. This causes all timeouts ≤ 0.01s to take at least 0.01s.
+
+Key factors:
+1. **Intent**: timeout=0 universally means "immediate" in programming
+2. **Expectations**: Users expect timeout values to be respected
+3. **Impact**: Real use cases are affected (immediate timeout, fine-grained control)
+4. **Fix**: Trivial to fix by reordering the timeout check
+5. **Severity**: Low severity but clear correctness issue
+
+### Recommendation: BUG
+
+This should be categorized as a **BUG** because:
+
+1. The implementation contains a clear logic error (checking timeout after sleep)
+2. It violates reasonable and common programming expectations (timeout=0 = immediate)
+3. The function accepts these values but doesn't handle them correctly
+4. The fix is straightforward and improves correctness
+5. While the severity is low, it's still incorrect behavior that should be fixed
+
+This is not merely a documentation issue or feature request - it's a bug in the implementation logic that causes incorrect timing behavior.

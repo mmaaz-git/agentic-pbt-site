@@ -1,0 +1,42 @@
+# Reproduction of Bug Report
+
+## Summary
+I have successfully reproduced the bug reported for `dask.utils.key_split` function. The function crashes with a `UnicodeDecodeError` when passed bytes that are not valid UTF-8.
+
+## Steps Taken
+
+### 1. Hypothesis Test Reproduction
+I ran the property-based test provided in the bug report:
+```python
+@given(st.binary(min_size=1, max_size=50))
+def test_key_split_with_bytes(b):
+    result = key_split(b)
+    assert isinstance(result, str)
+```
+
+**Result**: The test failed with the exact same input mentioned in the bug report: `b'\x80'`
+**Error**: `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+
+### 2. Direct Reproduction
+I also ran the direct reproduction code:
+```python
+print(key_split(b'hello-world-1'))  # Works fine, outputs 'hello-world'
+print(key_split(b'\x80'))           # Crashes with UnicodeDecodeError
+```
+
+**Result**: Confirmed that valid UTF-8 bytes work correctly, but invalid UTF-8 bytes cause a crash.
+
+## Effect of the Bug
+The bug causes the function to crash completely with a `UnicodeDecodeError` when it encounters bytes that cannot be decoded as UTF-8. This is problematic because:
+
+1. The function's docstring explicitly shows bytes as a valid input type with the example `key_split(b'hello-world-1')`
+2. The function has a generic exception handler (`except Exception: return "Other"`) that suggests it should handle unexpected inputs gracefully
+3. The crash occurs on line 1979 (`return key_split(s.decode())`) which is outside the try-except block that's meant to catch exceptions
+
+## Verification of Code Structure
+I examined the source code and confirmed:
+- Line 1978-1979: Bytes handling is outside the try-except block
+- Line 1982-2002: The try-except block that returns "Other" for exceptions
+- The bytes decoding happens before the exception handler can catch errors
+
+The bug is real and reproducible exactly as described in the report.

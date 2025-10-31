@@ -1,0 +1,33 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported in pandas.core.array_algos.putmask.putmask_without_repeat.
+
+### Test Results
+
+1. **Hypothesis Test**: The provided hypothesis test fails as expected. When values_size=10 and new_size=1, the function does NOT raise a ValueError as the test expects. Instead, it silently repeats the single value.
+
+2. **Direct Reproduction**: Running the exact example from the bug report confirms the behavior:
+   - Input: values=[0,1,2,3,4,5,6,7,8,9], mask=all True, new=[999]
+   - Output: [999,999,999,999,999,999,999,999,999,999]
+   - Expected: ValueError("cannot assign mismatch length to masked array")
+   - Actual: No error raised, value 999 is repeated across all 10 positions
+
+### Root Cause Analysis
+
+The bug occurs at line 93 of putmask.py:
+```python
+elif mask.shape[-1] == shape[-1] or shape[-1] == 1:
+    np.putmask(values, mask, new)
+```
+
+The condition `shape[-1] == 1` creates a special case that allows single-element arrays to be passed to np.putmask, which by design will repeat that single value across all masked positions. This directly contradicts the function's documented purpose.
+
+### What Actually Happens
+
+When new has shape (1,) and mask has 10 True values:
+- nlocs = 10 (number of positions to fill)
+- shape[-1] = 1 (length of new array)
+- The condition `shape[-1] == 1` evaluates to True
+- np.putmask is called, which repeats the single value 10 times
+
+The function should have raised a ValueError because nlocs (10) != len(new) (1), enforcing the "exact match" requirement stated in the documentation.

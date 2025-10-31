@@ -1,0 +1,47 @@
+## Bug Reproduction Report
+
+### Bug Claim
+The bug report claims that `read_clipboard()` and `to_clipboard()` perform identical encoding validation but raise different exception types:
+- `read_clipboard()` raises `NotImplementedError` for non-UTF-8 encodings
+- `to_clipboard()` raises `ValueError` for non-UTF-8 encodings
+
+### Reproduction Results
+
+I successfully reproduced the bug exactly as described. The test results show:
+
+1. **Basic Reproduction Test:**
+   - `read_clipboard('ascii')` raises: `NotImplementedError` with message "reading from clipboard only supports utf-8 encoding"
+   - `to_clipboard('ascii')` raises: `ValueError` with message "clipboard only supports utf-8 encoding"
+
+2. **Multiple Encoding Test:**
+   All non-UTF-8 encodings tested (ascii, latin-1, iso-8859-1, cp1252, utf-16) exhibited the same behavior:
+   - `read_clipboard`: NotImplementedError
+   - `to_clipboard`: ValueError
+
+3. **UTF-8 Variants Test:**
+   Both functions correctly accept UTF-8 in various forms (utf-8, UTF-8, utf8, UTF8)
+
+### Source Code Verification
+
+I examined the source code at `/home/npc/miniconda/lib/python3.13/site-packages/pandas/io/clipboards.py`:
+
+**Line 78-79 (read_clipboard):**
+```python
+if encoding is not None and encoding.lower().replace("-", "") != "utf8":
+    raise NotImplementedError("reading from clipboard only supports utf-8 encoding")
+```
+
+**Line 160-161 (to_clipboard):**
+```python
+if encoding is not None and encoding.lower().replace("-", "") != "utf8":
+    raise ValueError("clipboard only supports utf-8 encoding")
+```
+
+### Conclusion
+
+The bug is **CONFIRMED**. Both functions:
+1. Perform the identical validation check: `encoding.lower().replace("-", "") != "utf8"`
+2. Reject the same set of encodings
+3. But raise different exception types for the exact same validation failure
+
+This creates an inconsistent API where users must handle different exception types for what is conceptually the same error condition.

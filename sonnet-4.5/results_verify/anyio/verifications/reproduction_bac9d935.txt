@@ -1,0 +1,38 @@
+## Reproduction Analysis
+
+I successfully reproduced the reported behavior using both the simple test case and the hypothesis-based property test provided in the bug report.
+
+### Test Results:
+
+1. **Address caching behavior (confirmed)**:
+   - `local_address` calls `getsockname()` on every access (not cached)
+   - `remote_address` calls `getpeername()` only once during initialization (cached)
+   - The bug report's claim is technically correct about this inconsistency
+
+2. **Port caching behavior (also confirmed)**:
+   - `local_port` calls `getsockname()` on every access (not cached)
+   - `remote_port` uses the cached `peername` value (cached)
+   - This exhibits the same pattern as the address attributes
+
+### Technical Details Verified:
+
+Looking at the source code (lines 148-176 in _sockets.py):
+- `local_address` lambda: `lambda: convert(self._raw_socket.getsockname())` - calls getsockname() each time
+- `remote_address` lambda: `lambda: peername` - uses pre-computed peername value
+- `local_port` lambda: `lambda: self._raw_socket.getsockname()[1]` - calls getsockname() each time
+- `remote_port` lambda: `lambda: remote_port` - uses pre-computed remote_port value
+
+### Performance Impact:
+
+The bug report correctly identifies that:
+- Multiple accesses to `local_address` or `local_port` result in multiple system calls
+- Multiple accesses to `remote_address` or `remote_port` use cached values with no additional system calls
+- This creates an inconsistency where "local" attributes are more expensive to access than "remote" attributes
+
+### Accuracy of Bug Report:
+
+The bug report is technically accurate in its claims:
+- The code behaves exactly as described
+- The inconsistency exists between local and remote attribute caching
+- The hypothesis test passes, confirming the behavior
+- The suggested fix would make the behavior consistent

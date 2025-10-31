@@ -1,0 +1,41 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I have successfully reproduced the reported bug. The issue occurs when serializing an empty DataFrame with columns using `orient='records'`.
+
+## Test Results
+
+1. **Property-Based Test**: FAILED
+   - The hypothesis test fails on empty DataFrames with columns
+   - Error: "DataFrame shape mismatch [left]: (0, 3) [right]: (0, 0)"
+   - Confirms that column information is lost during round-trip
+
+2. **Manual Reproduction**: CONFIRMED
+   - Created empty DataFrame with columns: ['int_col', 'float_col', 'str_col']
+   - Original shape: (0, 3)
+   - JSON output with orient='records': []
+   - Result after read_json: Empty DataFrame with NO columns
+   - Result shape: (0, 0)
+
+## The Problem
+
+When `orient='records'` is used:
+- Each row becomes a dictionary {column -> value}
+- The entire DataFrame becomes a list of these dictionaries
+- For an empty DataFrame (0 rows), this produces an empty list: []
+- When reading back [], pandas has no way to infer the column names
+- Result: Complete loss of column metadata
+
+## Testing Other Orient Options
+
+I tested all available orient options with an empty DataFrame:
+- `orient='records'`: Columns LOST (produces [])
+- `orient='split'`: Columns PRESERVED (includes explicit "columns" field)
+- `orient='table'`: Columns PRESERVED (includes schema information)
+- `orient='columns'`: Columns PRESERVED (keys are column names)
+- `orient='index'`: Columns LOST (produces {})
+- `orient='values'`: Columns LOST (produces [])
+
+## Conclusion
+
+The bug is real and reproducible. The `orient='records'` format inherently cannot preserve column information for empty DataFrames because it relies on row data to convey column names. This is a fundamental limitation of the JSON records format, not a coding error.

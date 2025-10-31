@@ -1,0 +1,42 @@
+Bug Reproduction Analysis
+==========================
+
+1. REPRODUCTION RESULTS:
+
+I successfully reproduced the exact bug as described in the report:
+- When calling set_iprint(init=0, so_init=1) with a rptfile specified, the code crashes with: "ValueError: [0, 1] is not in list"
+- When calling set_iprint(init=0, so_init=2) with a rptfile specified, the code crashes with: "ValueError: [0, 2] is not in list"
+
+2. TESTING MATRIX:
+
+Tested combinations with rptfile='test.txt':
+- init=0, so_init=0: ✓ Works (no output anywhere)
+- init=1, so_init=0: ✓ Works (short to file only)
+- init=2, so_init=0: ✓ Works (long to file only)
+- init=0, so_init=1: ✗ ValueError: [0, 1] is not in list
+- init=0, so_init=2: ✗ ValueError: [0, 2] is not in list
+- init=1, so_init=1: ✓ Works (short to both)
+- init=2, so_init=2: ✓ Works (long to both)
+
+3. ERROR BEHAVIOR:
+
+The error occurs exactly as described:
+- Line 1079 in _odrpack.py attempts: ip[0] = ip2arg.index(iprint_l[0:2])
+- The combination [0, 1] is not in the ip2arg list
+- This causes a generic Python ValueError rather than a meaningful error message
+
+4. EXISTING ERROR HANDLING:
+
+There IS error handling for the reverse case (lines 1053-1058):
+- When rptfile is None and so_* arguments are provided, it raises a clear OdrError: "no rptfile specified, cannot output to stdout twice"
+- This error correctly fired when I tested with no rptfile and so_init=1
+
+5. DESIGN INTENT vs IMPLEMENTATION:
+
+The code clearly intends to prohibit printing to stdout without file when rptfile is specified. The ip2arg lookup table deliberately excludes [0,1] and [0,2] combinations. However:
+- The error handling for this constraint is incomplete
+- The code crashes with an unhelpful ValueError instead of raising a meaningful OdrError
+- The existing check (lines 1053-1058) only catches the case when rptfile is None, not when rptfile exists but init=0
+
+TECHNICAL ACCURACY:
+The bug report is technically accurate - the code does crash with a ValueError when these parameter combinations are used. The hypothesis test correctly identifies the failing inputs.

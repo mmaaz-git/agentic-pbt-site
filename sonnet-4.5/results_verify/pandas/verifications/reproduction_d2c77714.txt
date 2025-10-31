@@ -1,0 +1,39 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in the pandas.io.sas.sasreader.read_sas function.
+
+### Source Code Verification
+
+The source code at `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/io/sas/sasreader.py` lines 140-148 contains the exact issue described:
+
+```python
+fname = filepath_or_buffer.lower()
+if ".xpt" in fname:
+    format = "xport"
+elif ".sas7bdat" in fname:
+    format = "sas7bdat"
+```
+
+This code uses the `in` operator to check if the substrings ".xpt" or ".sas7bdat" appear anywhere in the filename, rather than checking if the file actually ends with these extensions.
+
+### Test Results
+
+Running the test cases provided in the bug report confirms the incorrect behavior:
+
+1. **Files with substrings in the middle are incorrectly accepted:**
+   - "archive.xpt.backup" → Detected as xport format (should reject as .backup file)
+   - "data.sas7bdat.old" → Detected as sas7bdat format (should reject as .old file)
+   - "my.xpt_notes.txt" → Detected as xport format (should reject as .txt file)
+
+2. **Ambiguous files with both substrings:**
+   - "test.xpt.sas7bdat" → Detected as xport (first match wins, but actual extension is .sas7bdat)
+   - "data.sas7bdat.xpt" → Detected as xport (actual extension is .xpt but contains .sas7bdat)
+
+3. **Correct behavior for files without these substrings:**
+   - "test.txt" → Correctly raises ValueError "unable to infer format"
+
+4. **Edge cases also work incorrectly:**
+   - ".xpt" → Accepted as xport (technically has no filename, just extension)
+   - ".sas7bdat" → Accepted as sas7bdat
+
+The bug is real and reproducible. The function accepts files as valid SAS formats when they merely contain the substrings ".xpt" or ".sas7bdat" anywhere in their filename, regardless of the actual file extension.

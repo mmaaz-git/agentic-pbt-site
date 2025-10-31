@@ -1,0 +1,75 @@
+REPRODUCTION OF BUG REPORT FOR scipy.special.boxcox/inv_boxcox
+================================================================
+
+1. BUG REPORT VERIFICATION:
+
+The bug report claims that boxcox and inv_boxcox fail to correctly round-trip when lambda is extremely small (at the subnormal float level, around 5e-324).
+
+2. REPRODUCTION RESULTS:
+
+Test Case 1: Basic Reproduction (x=2.0, lambda=5e-324)
+--------------------------------------------------------
+- Input: x = 2.0, lambda = 5e-324 (subnormal value)
+- boxcox(2.0, 5e-324) = 0.6931471805599453
+- This equals log(2.0) = 0.6931471805599453 ✓
+- inv_boxcox(0.6931471805599453, 5e-324) = 2.718281828459045
+- Expected: 2.0
+- Actual error: 0.718282
+- Relative error: 35.91%
+- Round-trip FAILED ✗
+
+Test Case 2: Inverse Direction (y=0.5, lambda=5e-324)
+------------------------------------------------------
+- Input: y = 0.5, lambda = 5e-324
+- inv_boxcox(0.5, 5e-324) = 1.0
+- boxcox(1.0, 5e-324) = 0.0
+- Expected y after round-trip: 0.5
+- Actual: 0.0
+- Error: 0.5 (100% relative error)
+- Round-trip FAILED ✗
+
+3. THRESHOLD ANALYSIS:
+
+Testing various lambda values to identify the issue:
+- lambda = 0.0 (exact): Round-trip SUCCESS ✓
+- lambda = 5e-324 (subnormal): Round-trip FAILED ✗
+- lambda = 1e-323 (subnormal): Round-trip FAILED ✗
+- lambda = 1e-308 (near normal boundary): Round-trip SUCCESS ✓
+- lambda = 2.225e-308 (smallest normal): Round-trip SUCCESS ✓
+- lambda = 1e-300 and above: Round-trip SUCCESS ✓
+
+Key Finding: The issue occurs specifically with subnormal lambda values (< 2.225e-308).
+
+4. MATHEMATICAL ANALYSIS:
+
+boxcox behavior with subnormal lambda:
+- boxcox(2.0, 5e-324) returns 0.6931471805599453
+- This exactly equals log(2.0)
+- Conclusion: boxcox treats subnormal lambda as 0
+
+inv_boxcox behavior with subnormal lambda:
+- inv_boxcox(log(2), 5e-324) returns 2.718281828459045
+- Expected if lambda treated as 0: exp(log(2)) = 2.0
+- Actual result: e ≈ 2.71828...
+- Conclusion: inv_boxcox does NOT treat subnormal lambda as 0
+
+5. ROOT CAUSE:
+
+The issue is an inconsistency in threshold handling:
+- boxcox appears to check if lambda is effectively zero (including subnormal values) and uses log(x)
+- inv_boxcox attempts to compute (lambda*y + 1)^(1/lambda) even for subnormal values
+- When lambda is subnormal, 1/lambda = infinity
+- Computing 1.0^infinity produces indeterminate/incorrect results
+
+6. VERIFICATION OF BUG REPORT CLAIMS:
+
+All claims in the bug report have been verified:
+✓ Round-trip fails with lambda=5e-324
+✓ boxcox returns log(x) for subnormal lambda
+✓ inv_boxcox does not return exp(y) for subnormal lambda
+✓ The functions use inconsistent thresholds
+✓ The mathematical analysis about L'Hôpital's rule and limits is correct
+
+CONCLUSION:
+
+The bug report is technically correct. There is an inconsistency between boxcox and inv_boxcox in how they handle subnormal lambda values, which breaks the expected round-trip property. The boxcox function treats subnormal values as zero and returns log(x), while inv_boxcox attempts the direct calculation which fails due to numerical instability when computing (1)^(1/subnormal).

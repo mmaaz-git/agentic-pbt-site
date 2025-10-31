@@ -1,0 +1,54 @@
+Bug Reproduction Report
+======================
+
+I have successfully reproduced the reported bug with dask.array.ravel() on empty arrays with non-zero dimensions.
+
+Test Case Results:
+------------------
+
+1. SPECIFIC FAILING CASE: np.empty((3, 0), dtype=np.float64)
+   - NumPy behavior: Successfully ravels from shape (3, 0) to shape (0,)
+   - Dask behavior: Crashes with "TypeError: reduce() of empty iterable with no initial value"
+   - Error location: /home/npc/miniconda/lib/python3.13/site-packages/dask/array/reshape.py, line 105
+   - The exact error message matches what was reported in the bug report
+
+2. PROPERTY-BASED TEST:
+   - The provided Hypothesis test failed on multiple examples
+   - 12 failures were encountered out of 100 test examples
+   - Failed shapes included: (7, 0), (4, 0), (0, 6), (10, 0), (0, 7), etc.
+   - All failures were on arrays with at least one zero dimension but not all zeros
+
+3. ADDITIONAL EDGE CASES TESTED:
+   - Shape (0,): SUCCESS - Both NumPy and Dask handle this correctly
+   - Shape (0, 0): SUCCESS - Both NumPy and Dask handle this correctly
+   - Shape (3, 0): FAILURE - TypeError in Dask (same as reported)
+   - Shape (0, 3): FAILURE - NotImplementedError in Dask
+   - Shape (5, 0, 2): FAILURE - NotImplementedError in Dask
+
+NumPy Baseline Behavior:
+------------------------
+I verified that NumPy successfully handles ALL empty array configurations:
+- 1D empty: (0,) -> (0,)
+- 2D fully empty: (0, 0) -> (0,)
+- 2D partially empty: (3, 0) -> (0,) and (0, 3) -> (0,)
+- 3D with zeros: (5, 0, 2) -> (0,), (2, 3, 0) -> (0,), (0, 0, 0) -> (0,)
+
+All empty arrays, regardless of dimension configuration, are correctly raveled to shape (0,) by NumPy.
+
+Root Cause Analysis:
+-------------------
+The bug occurs exactly where reported, in reshape.py line 105:
+```python
+if reduce(mul, outshape[oleft : oi + 1]) != din:
+```
+
+When the slice `outshape[oleft : oi + 1]` is empty (which happens with certain empty array shapes), Python's `reduce()` function raises TypeError because no initial value is provided. The multiplication identity (1) should be provided as the initial value.
+
+The same issue exists at line 68:
+```python
+if reduce(mul, inshape[ileft : ii + 1]) != dout:
+```
+
+Conclusion:
+-----------
+The bug is CONFIRMED and occurs exactly as described in the bug report. The error message, line numbers, and behavior all match the report. The suggested fix (adding initial value of 1 to reduce() calls) appears to be the correct solution.

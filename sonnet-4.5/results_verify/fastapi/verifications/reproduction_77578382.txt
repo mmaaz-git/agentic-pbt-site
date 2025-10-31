@@ -1,0 +1,45 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug reported in FastAPI's `generate_operation_summary` function. The bug occurs when an empty string is explicitly set as the summary value.
+
+## Hypothesis Test Reproduction
+The provided Hypothesis test fails as described:
+- Test: `test_generate_operation_summary_uses_provided_summary` with input `summary=''`
+- Expected: Function should return `''` (empty string)
+- Actual: Function returns `'Some Name'` (auto-generated from route name)
+- Result: AssertionError - test fails
+
+## FastAPI Integration Test
+Using the provided FastAPI example code:
+```python
+@app.get("/items", summary="")
+def read_items():
+    return {"items": []}
+```
+
+- Expected: OpenAPI schema should have `summary: ''`
+- Actual: OpenAPI schema has `summary: 'Read Items'`
+- The function incorrectly auto-generates a summary instead of respecting the explicit empty string
+
+## Root Cause Analysis
+Examining the source code of `generate_operation_summary`:
+```python
+def generate_operation_summary(*, route: routing.APIRoute, method: str) -> str:
+    if route.summary:
+        return route.summary
+    return route.name.replace("_", " ").title()
+```
+
+The bug is in line 2: `if route.summary:`
+- This uses a truthy check, which treats empty strings as falsy (False)
+- When `route.summary = ""`, the condition evaluates to False
+- The function then falls back to auto-generating from the route name
+
+## Type Annotations
+- `APIRoute.summary` is typed as `Optional[str]` with default `None`
+- Empty strings are valid string values and should be distinguished from None
+- The current implementation conflates empty strings with None/unset values
+
+## Conclusion
+The bug is confirmed and reproducible. The function incorrectly treats an explicitly set empty string as if no summary was provided, leading to unexpected auto-generation of the summary field.

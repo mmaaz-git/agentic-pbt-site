@@ -1,0 +1,49 @@
+# Reproduction of Bug Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The issue is that when a plugin's `new_schema_validator` method returns a tuple with the wrong number of elements, a `ValueError` is raised but not caught by the error handling code, resulting in an unhelpful error message.
+
+## Steps Taken
+
+### 1. Property-Based Test
+I ran the provided property-based test that uses Hypothesis to test various tuple sizes (0-10, excluding 3). The test confirms that when a plugin returns a tuple with any size other than 3, a ValueError is raised with a generic message that doesn't identify which plugin caused the problem.
+
+Result: The test failed as expected with the error:
+```
+AssertionError: BUG: Exception doesn't identify which plugin failed!
+Tuple size: 0
+Exception type: ValueError
+Message: not enough values to unpack (expected 3, got 0)
+```
+
+### 2. Simple Reproduction
+I ran the simpler reproduction example that creates a BadPlugin returning only 2 elements instead of 3. The output confirms:
+```
+ValueError caught: not enough values to unpack (expected 3, got 2)
+Error type: ValueError
+Does error identify plugin? False
+```
+
+### 3. Source Code Examination
+I examined the source code at `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/plugin/_schema_validator.py`, lines 75-80:
+
+```python
+try:
+    p, j, s = plugin.new_schema_validator(
+        schema, schema_type, schema_type_path, schema_kind, config, plugin_settings
+    )
+except TypeError as e:  # pragma: no cover
+    raise TypeError(f'Error using plugin `{plugin.__module__}:{plugin.__class__.__name__}`: {e}') from e
+```
+
+The issue is clear: the code only catches `TypeError`, but tuple unpacking operations raise `ValueError` when:
+- Too few elements: `ValueError: not enough values to unpack (expected 3, got N)`
+- Too many elements: `ValueError: too many values to unpack (expected 3)`
+
+## Verification
+Both the property-based test and simple reproduction demonstrate that:
+1. The ValueError is raised when a plugin returns the wrong number of elements
+2. The error message doesn't include any information about which plugin failed
+3. This makes debugging difficult for plugin authors who may have multiple plugins
+
+The bug report accurately describes a real issue in the code where ValueError exceptions from tuple unpacking are not being caught and enhanced with plugin information.

@@ -1,0 +1,37 @@
+# Reproduction of Bug Report
+
+## Summary
+I have successfully reproduced the bug as reported. The issue occurs when dealing with extremely small (subnormal) values that cause the default tolerance calculation to underflow to exactly 0.0.
+
+## Reproduction Results
+
+### 1. Property-Based Test Failure
+The hypothesis test with the specific failing input confirms the violation of the mathematical property:
+- Matrix A has rank 1
+- Matrix B has rank 1
+- Their product AB has rank 2
+- This violates the fundamental property: rank(AB) ≤ min(rank(A), rank(B))
+
+### 2. Tolerance Underflow Demonstration
+The reproduction code confirms:
+- For a matrix with singular values [2e-323, 5e-324]
+- The default tolerance calculation: 2 * 2e-323 * 2.22e-16 = 0.0 (underflow)
+- With default tolerance (0.0): rank = 2 (counts all non-zero values)
+- With explicit tolerance 1e-15: rank = 0 (correctly identifies near-zero matrix)
+- With explicit tolerance 1e-300: rank = 0 (correctly identifies near-zero matrix)
+
+### 3. Root Cause
+The issue occurs because:
+1. When dealing with subnormal values (like 5e-324, which is the smallest positive float64), the default tolerance calculation can underflow
+2. The formula: S.max() * max(M, N) * eps multiplies very small numbers
+3. When this underflows to exactly 0.0, the comparison S > tol becomes S > 0.0
+4. This causes any non-zero value (even 5e-324) to be counted as significant
+
+### 4. Impact
+The bug causes mathematically incorrect results by:
+- Violating the rank product theorem: rank(AB) ≤ min(rank(A), rank(B))
+- Treating numerically zero matrices as having full rank
+- Providing inconsistent results between default and explicit tolerances
+- Silently producing incorrect results without warning about underflow
+
+The bug is confirmed and reproducible exactly as described in the report.

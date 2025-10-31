@@ -1,0 +1,33 @@
+## Bug Reproduction Report
+
+### Test Execution
+
+I successfully reproduced the reported bug using both the Hypothesis test and the minimal example.
+
+### Hypothesis Test
+The property-based test with Hypothesis failed as expected when it generated the specific case of `values=[None]` and `fill_value=0`. This confirms that the test correctly identifies the bug.
+
+### Minimal Reproduction
+When running the specific failing case:
+- Created an ArrowExtensionArray with `pa.array([None])`
+- This creates an array with PyArrow null type
+- Calling `fillna(0)` raises `pyarrow.lib.ArrowInvalid: Invalid null value`
+
+### Stack Trace Analysis
+The error occurs at:
+1. `array.py:1160` - `fill_value = self._box_pa(value, pa_type=self._pa_array.type)`
+2. `array.py:407` - `return cls._box_pa_scalar(value, pa_type)`
+3. `array.py:443` - `pa.scalar(value, type=pa_type, from_pandas=True)`
+4. PyArrow raises `ArrowInvalid` when trying to convert integer 0 to null type
+
+### Code Inspection
+Examining the source code at `array.py:1159-1163`:
+- Line 1159: `try:` block starts
+- Line 1160: Attempts to box the fill value using `self._box_pa`
+- Line 1161: Only catches `pa.ArrowTypeError`
+- Line 1162-1163: Raises a user-friendly TypeError
+
+The issue is clear: the code only catches `pa.ArrowTypeError` but PyArrow raises `pa.ArrowInvalid` when trying to convert a non-null value to the null type. This exception is not caught, resulting in the raw PyArrow error propagating to the user.
+
+### Confirmation
+The bug is reproducible and the behavior matches exactly what was described in the bug report.

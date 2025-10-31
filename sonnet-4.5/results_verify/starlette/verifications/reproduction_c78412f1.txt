@@ -1,0 +1,52 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the reported bug. Here are the technical details:
+
+### Reproduction Results
+
+1. **Exact Case from Bug Report**: CONFIRMED
+   - Configuration: `allow_methods=["GET "]` (with trailing space)
+   - Request: `access-control-request-method: "GET"` (no space)
+   - Result: Returns 400 instead of expected 200
+   - The bug exists exactly as reported
+
+2. **Comprehensive Testing Results**:
+   - Only exact string matches work (no whitespace tolerance)
+   - Any whitespace mismatch causes failure (400 response):
+     - Config "GET " vs Request "GET" → 400 ✗
+     - Config " GET" vs Request "GET" → 400 ✗
+     - Config "GET" vs Request " GET" → 400 ✗
+   - The middleware does NO normalization on either side
+
+3. **Property-Based Testing**:
+   - The hypothesis test fails as expected
+   - Any amount of leading/trailing whitespace in the config causes matching to fail
+
+### Technical Analysis
+
+The bug is real and occurs at line 120 of cors.py:
+```python
+if requested_method not in self.allow_methods:
+    failures.append("method")
+```
+
+This is a simple string membership test. When the config has "GET " and the request has "GET", they don't match.
+
+### Comparison with Headers Handling
+
+Interestingly, the same middleware DOES normalize headers:
+- Line 67: `self.allow_headers = [h.lower() for h in allow_headers]` (lowercases)
+- Line 129: `if header.strip() not in self.allow_headers` (strips whitespace)
+
+But for methods:
+- Line 66: `self.allow_methods = allow_methods` (no normalization)
+- Line 120: Direct membership test (no stripping)
+
+### Impact Assessment
+
+This bug would affect any user who:
+1. Accidentally includes whitespace in their allow_methods configuration
+2. Uses configuration from files/environment where trailing spaces might be present
+3. Copy-pastes configuration with unintended whitespace
+
+The request side (from browsers) will always send clean method names without whitespace, so the mismatch will cause valid CORS preflight requests to be rejected.

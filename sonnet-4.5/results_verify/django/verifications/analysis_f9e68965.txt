@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The check function could be argued to be working as designed - it checks for the presence of "://" which is what the error message says ("must start with a scheme"). One could argue that "://" technically contains the scheme separator, so the check is doing what it says. The documentation doesn't explicitly state that the check must validate the full URL format.
+
+**Why it might not be INVALID:**
+The bug is clearly valid because the check function's purpose is to ensure CSRF_TRUSTED_ORIGINS values are usable by the middleware. When malformed URLs like "://" pass the check but produce empty scheme/netloc values that break the middleware's functionality, this is a clear violation of the intended contract. The error message says values must "start with a scheme" not just contain "://".
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue that this is an obscure edge case - why would anyone configure CSRF_TRUSTED_ORIGINS with values like "://" or "http://"? These are obviously malformed and any reasonable developer would notice them. The impact might be considered low since it requires misconfiguration.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue. Silent configuration failures in security-critical features like CSRF protection are serious. When a check function exists specifically to validate configuration, it should properly validate it. Users rely on these checks to catch their mistakes, and failing silently could lead to security vulnerabilities.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One might argue the documentation should be clearer about what constitutes a valid origin format. The current documentation shows examples but doesn't explicitly state that both scheme and netloc are required. The error message could be more specific about requiring both components.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation and examples clearly show proper origin formats like 'https://example.com'. The issue isn't that the documentation is wrong - it's that the code doesn't properly validate against what the documentation describes. The code behavior doesn't match the documented requirements.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as a request for enhanced validation - adding more comprehensive URL validation to the check function. This could be seen as adding a new feature of "strict URL validation" rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a new feature request. The check function already exists with the specific purpose of validating CSRF_TRUSTED_ORIGINS values. It's simply not doing its job correctly. Fixing broken validation is a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The check function fails to properly validate CSRF_TRUSTED_ORIGINS values, allowing malformed URLs that break the middleware. The function's purpose is to catch configuration errors, but it misses obvious cases like "://" that have no usable scheme or netloc. This creates a silent failure in CSRF protection, which is a security feature. The contract between the check and middleware is broken.
+
+**Why it might not be BUG:**
+It's difficult to argue this isn't a bug. The only argument might be that the current implementation matches some very literal interpretation of "contains ://", but this clearly violates the intent and purpose of the validation.
+
+**Overall consideration**
+This is clearly a BUG. The check_csrf_trusted_origins function exists specifically to validate that CSRF_TRUSTED_ORIGINS values are properly formatted for use by the CSRF middleware. The current implementation uses a naive string search for "://" which allows malformed URLs to pass validation. These malformed URLs, when parsed by urlsplit() in the middleware, produce empty or invalid components that prevent CSRF protection from working correctly.
+
+The bug report correctly identifies that URLs like "://", "://example.com", and "http://" pass the check despite being unusable by the middleware. The property-based test demonstrates this is not just a theoretical issue but a real contract violation between the check function and the middleware that depends on its validation. The suggested fix of using urlsplit() to validate both scheme and netloc is appropriate and aligns with how the middleware actually uses these values.
+
+While one might argue this is an edge case since developers are unlikely to use such malformed URLs, the whole purpose of validation checks is to catch these exact types of configuration errors. Silent failures in security features are particularly concerning, making this a valid bug that should be fixed rather than dismissed.

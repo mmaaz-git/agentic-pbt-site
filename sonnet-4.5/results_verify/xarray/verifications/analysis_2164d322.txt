@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The CombineKwargDefault class appears to be designed for internal use as default parameter values in function signatures, not as general-purpose hashable objects meant to be used as dictionary keys or in sets. The class documentation only mentions it "handles deprecation cycle for kwarg default values," with no promise about hash stability. The actual usage in xarray shows these objects are used as function parameter defaults and are compared with strings using equality checks, not as dictionary keys. The bug report assumes requirements that were never documented or intended.
+
+**Why it might not be INVALID:**
+Python's data model documentation explicitly states that if a class defines `__hash__()`, it must maintain the hash invariant - the hash value must remain constant during the object's lifetime. This is a fundamental Python requirement, not something that needs to be explicitly documented per class. The fact that the class implements `__hash__()` means it claims to be hashable and should follow Python's rules for hashable objects.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility class used only for managing deprecation warnings in function signatures. The instances (_DATA_VARS_DEFAULT, _COORDS_DEFAULT, etc.) are never actually used as dictionary keys or set members in the xarray codebase - they're only used as default parameter values and compared with strings. The bug would only manifest if someone inappropriately used these internal objects as dictionary keys, which is not their intended use case. Fixing this would add complexity for a scenario that doesn't occur in practice.
+
+**Why it might not be WONTFIX:**
+The bug violates a fundamental Python invariant and could cause silent, hard-to-debug failures if these objects are ever used as dictionary keys. Even if current code doesn't trigger the bug, future code or external users of the library might reasonably expect hashable objects to behave correctly. The fix is simple and wouldn't impact performance or functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The class lacks documentation warning users not to use these objects as dictionary keys or in sets. If the intended design is that the hash changes based on global state, this unusual behavior should be explicitly documented. Adding a warning to the docstring about the hash instability would prevent misuse without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The violation of Python's hash invariant is a code bug, not a documentation issue. Python's data model is clear about hash requirements, and implementing `__hash__()` incorrectly is a bug regardless of documentation. The proper fix is to make the hash stable, not to document broken behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting stable hashing for these objects could be seen as a new feature since the current implementation wasn't designed with dictionary key usage in mind. The request is essentially asking for the class to support a use case it wasn't originally intended for - being used as immutable, hashable keys in collections.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but fixing broken existing functionality. The class already implements `__hash__()` and claims to be hashable - it just does it incorrectly. Making the hash work properly according to Python's requirements is a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation clearly violates Python's documented hash invariant that "the hash value should remain constant during an object's lifetime." This is an objective, verifiable violation of Python's data model requirements. The reproduction shows concrete failures including KeyError when accessing dictionary items and the object becoming "lost" in hash-based collections. The fix is straightforward - base the hash on immutable attributes (_name, _old, _new) rather than the dynamic _value property.
+
+**Why it might not be BUG:**
+The class appears to work correctly for its intended use case as function parameter defaults in xarray's API. The bug only manifests in scenarios that don't occur in the actual codebase. The objects are compared with strings and used for their values, never as dictionary keys. This could be considered working as designed for the specific deprecation management purpose.
+
+## Overall consideration
+After thorough analysis, this appears to be a valid bug that violates Python's fundamental hash invariant. The Python documentation is unambiguous: if an object implements `__hash__()`, its hash value must remain constant during its lifetime. The CombineKwargDefault class violates this requirement by having its hash depend on a global setting that can change.
+
+While it's true that the current xarray codebase doesn't use these objects as dictionary keys, this doesn't excuse the violation of Python's data model. Any hashable object should behave correctly according to Python's rules, regardless of current usage patterns. Future code, third-party extensions, or even debugging tools might reasonably expect hashable objects to maintain stable hashes. The fact that the bug doesn't currently cause problems in production is fortunate but doesn't make the implementation correct.
+
+The proposed fix is simple, correct, and maintains all existing functionality while fixing the hash invariant violation. Basing the hash on the immutable attributes (_name, _old, _new) ensures stability while still allowing the object's value to change based on the global setting. This is the proper pattern for objects whose equality might change but whose identity remains constant. Given that this is an objective violation of documented Python behavior with a clear fix, this should be classified as a BUG.

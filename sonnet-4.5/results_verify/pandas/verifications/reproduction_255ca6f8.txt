@@ -1,0 +1,39 @@
+BUG REPRODUCTION RESULTS
+
+I successfully reproduced the bug described in the report. The technical details are confirmed as follows:
+
+1. TEST CASE REPRODUCTION:
+   - Created two masked arrays with identical data and identical masks
+   - x = ma.array([1.0, 2.0, 3.0], mask=[False, True, False])
+   - y = ma.array([1.0, 999.0, 3.0], mask=[False, True, False])
+   - The unmasked values (positions 0 and 2) are identical: [1.0, 3.0]
+   - The masked value (position 1) differs (2.0 vs 999.0) but should be irrelevant
+
+   RESULTS:
+   - ma.allequal(x, y, fill_value=True) returns True (CORRECT - masked values treated as equal)
+   - ma.allequal(x, y, fill_value=False) returns False (UNEXPECTED - unmasked values ARE equal)
+
+2. HYPOTHESIS TEST:
+   The provided hypothesis test generates random arrays with identical data and masks, then tests if allequal with fill_value=False correctly compares them. The test FAILS consistently, confirming the bug. The test failures show that whenever there are ANY masked values, allequal(fill_value=False) returns False regardless of whether the unmasked values are equal.
+
+3. SOURCE CODE ANALYSIS:
+   Looking at the actual implementation in numpy/ma/core.py:
+   ```python
+   elif fill_value:
+       # ... proper comparison logic ...
+   else:
+       return False  # This line is the bug!
+   ```
+
+   When fill_value=False and there are any masks, the function simply returns False without checking if the unmasked values are equal. This is clearly incorrect behavior.
+
+4. EXPECTED VS ACTUAL BEHAVIOR:
+   EXPECTED: When fill_value=False, the function should:
+   - Compare all unmasked values for equality
+   - Treat masked positions as NOT equal
+   - Return True only if all unmasked values match AND masks are identical
+
+   ACTUAL: When fill_value=False and any masks exist:
+   - Returns False immediately without any comparison
+
+The bug is 100% reproducible and the technical details in the bug report are accurate.

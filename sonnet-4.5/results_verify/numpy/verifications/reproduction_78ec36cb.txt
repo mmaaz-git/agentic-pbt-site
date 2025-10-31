@@ -1,0 +1,53 @@
+## Bug Reproduction Results
+
+### Summary
+The bug report has been successfully reproduced. The reported behavior is confirmed.
+
+### Key Findings
+
+1. **Primary Issue Confirmed**: For the matrix `[[0.0, 1.52474291e-300], [1.0, 1.0]]`, numpy.linalg.eig returns eigenvector/eigenvalue pairs that violate the fundamental eigenvalue equation with an error magnitude of 1.0.
+
+2. **Specific Results**:
+   - For eigenvalue λ=0, eigenvector v=[1, 0]
+   - A @ v = [0, 1] but λ * v = [0, 0]
+   - Error magnitude: ||A @ v - λ * v|| = 1.0
+   - This is NOT a small numerical precision issue
+
+3. **Additional Cases Confirmed**:
+   - Matrix with 1e-100: Same 1.0 error magnitude
+   - Matrix with 1e-200: Same 1.0 error magnitude
+   - Matrix with exact zeros: Works correctly (0.0 error)
+
+4. **Pattern Identified**: The issue occurs specifically when:
+   - Matrix contains very small but non-zero values (< ~1e-16)
+   - These values are treated as zero during eigenvalue computation
+   - But are NOT zero when computing A @ v for verification
+
+5. **Mathematical Analysis**:
+   - The characteristic polynomial for the test matrix is λ² - λ + (-1.52474291e-300) ≈ λ² - λ
+   - This gives eigenvalues λ=0 and λ=1
+   - For λ=0, the eigenvector should satisfy Av = 0
+   - The computed eigenvector v=[1, 0] gives Av = [0, 1] ≠ [0, 0]
+
+6. **Root Cause**: The algorithm appears to:
+   - Round very small values to zero when computing eigenvalues
+   - Use the original (non-zero) values when verifying A @ v
+   - This inconsistency causes the large error
+
+7. **Condition Number**: The test matrix has infinite condition number, indicating severe ill-conditioning.
+
+### Technical Details
+
+The bug is NOT about:
+- Small rounding errors or tolerance issues
+- Expected numerical precision limitations
+- Edge cases that are ambiguous
+
+The bug IS about:
+- Complete violation of the eigenvalue equation (100% error)
+- Inconsistent treatment of denormalized/tiny floating point values
+- Returning mathematically incorrect results
+
+### Comparison with Documentation
+
+The documentation states that eigenvectors should satisfy `A @ eigenvectors[:,i] = eigenvalues[i] * eigenvectors[:,i]`. With an error of 1.0, this equation is fundamentally violated, not just within numerical tolerance.

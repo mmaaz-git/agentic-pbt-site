@@ -1,0 +1,48 @@
+## Bug Reproduction Results
+
+### Test Environment:
+- Django version: Tested in django_env with Python 3.13
+- Module: django.core.checks.security.base
+- Function: check_cross_origin_opener_policy
+
+### Reproduction Test Results:
+
+1. **Basic Reproduction Test**:
+   - Without whitespace: 'unsafe-none' → PASS (returns empty list [])
+   - With trailing space: 'unsafe-none ' → FAIL (returns Error E024)
+   - With leading space: ' unsafe-none' → FAIL (returns Error E024)
+   - With both spaces: ' unsafe-none ' → FAIL (returns Error E024)
+   - With tabs: '\tunsafe-none\t' → FAIL (returns Error E024)
+
+   All valid values ('same-origin', 'same-origin-allow-popups', 'unsafe-none') fail when any whitespace is added.
+
+2. **Hypothesis Property-Based Test**:
+   - Test systematically checks all valid COOP values with various whitespace combinations
+   - Test FAILED on first example with whitespace
+   - Generated 50 failing examples showing consistent failure pattern
+   - Every single test case with non-empty whitespace failed the assertion
+   - The function consistently rejects valid values when they contain any form of whitespace (spaces, tabs, newlines)
+
+3. **Error Message Analysis**:
+   - The error message states: "You have set the SECURE_CROSS_ORIGIN_OPENER_POLICY setting to an invalid value."
+   - The hint shows: "Valid values are: same-origin, same-origin-allow-popups, unsafe-none."
+   - The error is misleading because the core value IS valid; it just has whitespace
+
+4. **Code Behavior Verification**:
+   The function performs a direct string membership check:
+   ```python
+   settings.SECURE_CROSS_ORIGIN_OPENER_POLICY not in CROSS_ORIGIN_OPENER_POLICY_VALUES
+   ```
+   This check fails for "unsafe-none " because it's looking for exact string match, not the trimmed value.
+
+5. **Comparison with Related Function**:
+   - check_referrer_policy (line 266) explicitly calls .strip() on values
+   - check_cross_origin_opener_policy does NOT strip whitespace
+   - This creates inconsistent behavior between similar security header checks
+
+### Technical Impact:
+The bug is confirmed and reproducible. Any configuration value with leading or trailing whitespace will be incorrectly rejected as invalid, even though:
+1. The underlying value is semantically correct
+2. HTTP specifications allow trimming of header value whitespace
+3. Similar Django functions already handle whitespace correctly
+4. Common configuration scenarios (copy-paste, multi-line configs) often introduce whitespace

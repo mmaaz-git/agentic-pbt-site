@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The bug is confirmed to exist.
+
+### Hypothesis Test Results
+The hypothesis test failed with the simplest case:
+- Input: `size=0, chunk_size=1`
+- Expected: chunks that sum to 0
+- Actual: `(1,)` which sums to 1
+
+### Specific Test Case Reproduction
+For the reported case of `size=0, chunk_size=5, region=None`:
+- Expected result: An empty tuple `()` or chunks that sum to 0
+- Actual result: `(5,)`
+- Sum of chunks: 5 (should be 0)
+
+### Code Trace Analysis
+I traced through the function logic step by step for `size=0, chunk_size=5`:
+
+1. Line 142: `region = slice(0, 0, None)` (since size=0)
+2. Line 144: `region_start = 0`
+3. Line 146: `chunks_on_region = [5]` (computed as `chunk_size - (0 % chunk_size) = 5`)
+4. Line 147: Extending with `[5] * (-1)` results in no change (empty list extension)
+   - `(0 - 5) // 5 = -1`, so no chunks are added
+5. Line 148-149: No remainder chunk is added since `(0 - 5) % 5 = 0`
+6. Line 150: Returns `(5,)`
+
+### The Problem
+The fundamental issue is that the function blindly creates an initial chunk of size `chunk_size - (region_start % chunk_size)` without considering that this might be larger than the total `size` parameter. When `size=0`, the function should return an empty tuple `()` since there's no data to chunk.
+
+The invariant that `sum(chunks) == size` is violated when `size=0` because the function returns a non-empty tuple with a positive chunk size.
+
+### Impact
+This bug affects any caller of `build_grid_chunks` that passes `size=0`. The function `grid_rechunk` at line 164 passes `sum(var_chunks)` as the size, which could be 0 for empty arrays, leading to incorrect chunking behavior.

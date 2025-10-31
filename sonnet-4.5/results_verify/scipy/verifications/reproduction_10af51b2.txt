@@ -1,0 +1,38 @@
+## Bug Reproduction Report
+
+### Bug Summary
+The bug report claims that line 276 in scipy.io.arff._arffread.DateAttribute._get_date_format has a logic error where `elif "yy":` is used instead of `elif "yy" in pattern:`.
+
+### Reproduction Steps
+
+1. **Verified the source code**:
+   - Located the file at `/home/npc/pbt/agentic-pbt/envs/scipy_env/lib/python3.13/site-packages/scipy/io/arff/_arffread.py`
+   - Confirmed that line 276 indeed contains `elif "yy":` instead of `elif "yy" in pattern:`
+   - This is a clear logic error as the string "yy" always evaluates to True
+
+2. **Ran the simple reproduction case**:
+   ```python
+   from scipy.io.arff._arffread import DateAttribute
+   pattern, unit = DateAttribute._get_date_format("date 'just text'")
+   print(f'Pattern: {pattern}, Unit: {unit}')
+   ```
+
+   **Result**: `Pattern: just text, Unit: Y`
+
+   **Expected**: Should raise ValueError because the pattern contains no date/time components
+
+3. **Ran the Hypothesis property-based test**:
+   - Created a test that generates random text without any date/time components (no yyyy, yy, MM, dd, HH, ss)
+   - The test expects ValueError to be raised for such inputs
+   - The test failed on multiple inputs, confirming the bug
+   - Example failing inputs: "date 0", "date 'just text'", and many random strings
+
+### Bug Effect
+
+The bug causes the following incorrect behavior:
+1. When a date pattern contains no "yyyy" string (checked at line 273), execution falls through to line 276
+2. The condition `elif "yy":` always evaluates to True (non-empty string literal)
+3. This causes the code to always set `datetime_unit = "Y"` even when "yy" is not in the pattern
+4. As a result, patterns with no date components incorrectly return with `datetime_unit="Y"` instead of raising ValueError
+
+The bug allows invalid date patterns to be accepted when they should be rejected. This violates the function's contract, as evidenced by lines 298-299 which are supposed to raise ValueError when no valid datetime_unit is set.

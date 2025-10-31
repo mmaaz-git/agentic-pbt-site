@@ -1,0 +1,49 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Here are the findings:
+
+### Test Results
+
+1. **Property-based test with Hypothesis**:
+   - The test fails as reported
+   - With `initial_categories=['z', 'y', 'x']` and `new_categories=['a']`
+   - After adding 'a' then removing it, the categories change from ['z', 'y', 'x'] to ['x', 'y', 'z']
+   - This violates the round-trip property
+
+2. **Simple reproduction case**:
+   ```python
+   cat = pd.Categorical([], categories=['z', 'y', 'x'])
+   cat_removed = cat.remove_categories(['x'])
+   ```
+   - Initial categories: ['z', 'y', 'x']
+   - After removing 'x': ['y', 'z'] (sorted alphabetically)
+   - Expected: ['z', 'y'] (preserving original order)
+
+3. **Behavior with ordered=True**:
+   - When `ordered=True`, the method correctly preserves order
+   - Removing 'x' from ['z', 'y', 'x'] gives ['z', 'y'] as expected
+
+4. **Additional test - removing middle category**:
+   - Removing 'y' from ['z', 'y', 'x'] results in ['x', 'z'] (sorted)
+   - Expected: ['z', 'x'] (preserving positions)
+
+### Source Code Analysis
+
+The bug is exactly where the report indicates, in the source code:
+```python
+new_categories = (
+    self.dtype.categories.difference(removals, sort=False)
+    if self.dtype.ordered is True
+    else self.dtype.categories.difference(removals)  # defaults to sort=True
+)
+```
+
+The logic is indeed backwards:
+- For ordered categoricals (ordered=True): Uses `sort=False`, preserving order
+- For unordered categoricals (ordered=False): Uses default `sort=True`, alphabetically sorting
+
+This is counterintuitive because unordered categoricals still maintain an insertion order that can be semantically meaningful, even if comparison operations don't use that order.
+
+### Conclusion
+
+The bug is confirmed and reproduces exactly as described in the report. The behavior is inconsistent and unexpected, where unordered categoricals have their category order changed during removal operations.

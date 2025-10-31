@@ -1,0 +1,68 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The pandas `slice_replace` method incorrectly handles cases where `start > stop`.
+
+## Reproduction Steps
+
+1. Ran the provided property-based test with Hypothesis
+2. Confirmed the specific failing input: `strings=['0'], start=1, stop=0, repl=''`
+3. Tested additional examples provided in the bug report
+
+## Confirmed Results
+
+### Primary test case:
+- Input: `pd.Series(['0']).str.slice_replace(start=1, stop=0, repl='')`
+- Actual output: `'0'`
+- Expected output: `'00'` (based on `'0'[:1] + '' + '0'[0:]`)
+- **Bug confirmed**: The output is incorrect
+
+### Additional test cases:
+1. `'hello'.slice_replace(3, 1, 'X')`:
+   - Pandas returns: `'helXlo'`
+   - Expected: `'helXello'`
+   - **Bug confirmed**
+
+2. `'abc'.slice_replace(2, 1, '')`:
+   - Pandas returns: `'abc'`
+   - Expected: `'abbc'`
+   - **Bug confirmed**
+
+3. `'test'.slice_replace(4, 2, 'XX')`:
+   - Pandas returns: `'testXX'`
+   - Expected: `'testXXst'`
+   - **Bug confirmed**
+
+## Code Analysis
+
+I examined the source code in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/strings/object_array.py` at lines 347-364.
+
+The bug is in the `_str_slice_replace` method:
+```python
+def f(x):
+    if x[start:stop] == "":  # This is True when start > stop
+        local_stop = start    # BUG: Sets local_stop to start
+    else:
+        local_stop = stop
+    y = ""
+    if start is not None:
+        y += x[:start]
+    y += repl
+    if stop is not None:
+        y += x[local_stop:]  # BUG: Uses local_stop instead of stop
+    return y
+```
+
+When `start > stop`, the slice `x[start:stop]` evaluates to an empty string, triggering the first condition. The code then incorrectly sets `local_stop = start`, which causes `x[local_stop:]` to become `x[start:]`, thereby omitting the substring from position `stop` to position `start`.
+
+## Expected Behavior
+
+Based on Python's slicing semantics, when replacing a slice `[start:stop]`:
+- The result should be: `original[:start] + replacement + original[stop:]`
+- This holds true even when `start > stop` (which creates an empty slice)
+- The replacement text should be inserted at position `start`
+- Both `original[:start]` and `original[stop:]` should be preserved
+
+## Conclusion
+
+The bug is valid and reproducible. The current implementation incorrectly handles the empty slice case when `start > stop`, leading to loss of data between indices `stop` and `start`.

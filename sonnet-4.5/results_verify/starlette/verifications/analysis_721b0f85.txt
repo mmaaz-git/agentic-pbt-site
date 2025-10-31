@@ -1,0 +1,61 @@
+## Bug Triage Analysis
+
+### Consideration for BUG
+**Arguments FOR:**
+1. **Inconsistent Behavior**: The middleware strips whitespace when checking incoming headers (line 129) but doesn't strip when storing configured headers (line 67). This inconsistency is clearly a logic error.
+2. **Violates Principle of Least Surprise**: Users would expect that if they configure `allow_headers=["X-Custom "]`, it would either:
+   - Work for requests with "X-Custom" header
+   - Fail immediately with a clear error about invalid header name
+   Instead, it silently accepts the configuration and then mysteriously rejects valid requests.
+3. **Real-World Impact**: This could cause production issues where developers accidentally include whitespace (e.g., from copy-paste or configuration files) and experience hard-to-debug CORS failures.
+4. **Clear Fix Available**: The solution is straightforward - strip whitespace consistently in both places.
+
+**Arguments AGAINST:**
+- None. This is clearly inconsistent behavior that should be fixed.
+
+### Consideration for INVALID
+**Arguments FOR:**
+- HTTP specifications state that header names cannot contain whitespace, so technically the configuration is invalid.
+
+**Arguments AGAINST:**
+- The middleware accepts the invalid configuration without error, creating an expectation that it will work.
+- The bug is not about accepting invalid headers, but about inconsistent handling of whitespace.
+- The middleware already strips whitespace in one place but not the other - this is clearly unintended.
+
+### Consideration for WONTFIX
+**Arguments FOR:**
+- Could argue that developers shouldn't put whitespace in header names.
+- Might be considered an edge case.
+
+**Arguments AGAINST:**
+- This is not an obscure edge case - whitespace issues are common in configuration.
+- The fix is trivial (add `.strip()` to one line).
+- The current behavior causes silent failures that are hard to debug.
+- The middleware already attempts to handle this by stripping in one place.
+
+### Consideration for FEATURE_REQUEST
+**Arguments FOR:**
+- Could argue that supporting whitespace-tolerant configuration is a new feature.
+
+**Arguments AGAINST:**
+- The code already partially handles whitespace (strips on checking but not on storing).
+- This is fixing inconsistent behavior, not adding new functionality.
+- The middleware should either consistently strip or consistently not strip - the current mixed approach is a bug.
+
+### Consideration for DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation doesn't specify how whitespace is handled.
+- Could document that header names must not contain whitespace.
+
+**Arguments AGAINST:**
+- This is not just a documentation issue - the code behavior is inconsistent.
+- Even if documented, the current behavior is confusing and error-prone.
+- The code should be fixed to handle this consistently, not just documented.
+
+### Final Assessment
+This is clearly a **BUG**. The middleware has inconsistent whitespace handling:
+1. It accepts headers with whitespace in configuration (line 67: no strip)
+2. It strips whitespace when checking incoming headers (line 129: with strip)
+3. This causes valid requests to be incorrectly rejected
+
+The fix is simple and correct: strip whitespace consistently in both places. This aligns with HTTP specifications and prevents confusing failures.

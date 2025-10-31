@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The functions clearly document that "Only one of these may be None", establishing a precondition that users must follow. The bug report shows a test case that violates this documented precondition by passing both masks as None. Since the documentation explicitly states this is not allowed, calling the functions with both masks as None constitutes invalid usage, not a bug. The functions are working as documented - they simply don't support the use case being tested.
+
+**Why it might not be INVALID:**
+Even though the precondition is documented, when a user violates it, they get an unhelpful RecursionError instead of a clear error message. The functions should validate their inputs and fail gracefully with an informative error rather than crashing. The bug report isn't claiming the functions should work with both masks as None, but rather that they should handle this invalid input more gracefully. This is a legitimate concern about error handling.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+These are internal pandas functions in pandas.core.ops, not part of the public API. Internal functions often have less robust error checking since they're only called by other pandas code that should respect the preconditions. The RecursionError, while not ideal, does prevent the invalid operation. Since these aren't user-facing functions, improving the error message for a precondition violation in internal code might be considered low priority or unnecessary overhead.
+
+**Why it might not be WONTFIX:**
+RecursionError is one of the worst possible ways to handle invalid input - it's confusing, provides no useful information about what went wrong, and can even crash the Python interpreter in some cases. The fix is trivial (3-4 lines of code per function) and would make debugging much easier for anyone who encounters this issue. Even internal functions benefit from clear error messages, especially when the fix is so simple.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation already states the precondition clearly, so this isn't really a documentation issue. However, one could argue that the documentation should explicitly state what happens when the precondition is violated (e.g., "behavior is undefined if both masks are None"). This would make it clearer that violating the precondition leads to unspecified behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation is already correct and clear - it states "Only one of these may be None". The issue isn't with the documentation but with how the code handles violations of the documented precondition. The code behavior (infinite recursion) is clearly a bug, not a documentation problem. Updating docs to say "crashes with RecursionError if both are None" would be documenting a bug, not fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that adding input validation is a new feature - the functions were designed with the assumption that callers would respect the preconditions. Adding validation code could be seen as a feature enhancement to make the functions more robust and user-friendly. The request is essentially asking for better error handling, which could be classified as a new feature rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+Input validation isn't a feature, it's basic defensive programming. When functions have preconditions, they should validate them and fail gracefully when violated. The current behavior (infinite recursion) is clearly broken - no reasonable developer would intentionally design a function to crash with RecursionError on invalid input. This is fixing a bug in error handling, not adding a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The functions crash with RecursionError when given invalid input, which is objectively poor behavior. Any function that can be called with invalid parameters should validate those parameters and raise an appropriate error. The infinite recursion is clearly unintentional - the code tries to normalize inputs by swapping arguments, but doesn't account for the case where both masks are None. This is a classic logic bug that causes a crash, and the proposed fix is correct and minimal.
+
+**Why it might not be BUG:**
+These are internal functions with documented preconditions. The bug report tests a case that explicitly violates the documented contract. Internal functions often assume their preconditions are met to avoid validation overhead. The functions work correctly when used as documented, and the crash only occurs when misused. One could argue this is user error, not a bug in the code.
+
+## Overall consideration
+
+After careful analysis, this appears to be a case of internal functions that lack proper input validation. While the functions do document their precondition ("Only one of these may be None"), they fail to validate this precondition and instead crash with an unhelpful RecursionError when it's violated. The key question is whether internal functions should validate their inputs or can assume preconditions are met.
+
+The strongest argument for INVALID is that these are internal functions (pandas.core.ops) with clearly documented preconditions, and the test case violates those preconditions. Internal functions often skip validation for performance reasons and assume callers respect the contract. The fact that misuse causes a crash doesn't make it a bug if the misuse itself is documented as invalid. Many internal functions in various libraries will crash if misused, and that's considered acceptable for non-public APIs.
+
+However, the RecursionError is particularly problematic because it's not just any error - it's an infinite recursion that provides no useful debugging information and can potentially crash the Python interpreter. The fix is also trivial (adding 3-4 lines to check if both masks are None) and would have essentially no performance impact. Even for internal functions, crashing with RecursionError when a simple ValueError would suffice seems like poor practice. The effort to fix this is minimal compared to the potential confusion it could cause.

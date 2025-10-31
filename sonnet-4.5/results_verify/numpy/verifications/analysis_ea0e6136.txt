@@ -1,0 +1,45 @@
+Bug Triage Analysis
+====================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The NumPy documentation never explicitly guarantees that the mathematical property det(AB) = det(A) * det(B) will hold exactly in floating-point arithmetic. Numerical linear algebra is inherently subject to floating-point precision limitations, and expecting exact mathematical properties to hold for ill-conditioned matrices could be considered unreasonable. The matrices in question have extremely high condition numbers (up to 1e32), indicating severe numerical instability where traditional mathematical properties may not hold due to rounding errors.
+
+**Why it might not be INVALID:**
+The property det(AB) = det(A) * det(B) is a fundamental theorem in linear algebra that should hold for all square matrices. While some numerical error is expected, the magnitude of error here (1e6 times the tolerance) is extreme. More importantly, NumPy correctly identifies det(A) = 0 and det(B) = 0 for the singular matrices, showing it can detect singularity, but then inconsistently returns non-zero for det(AB). This inconsistency within NumPy's own computations suggests a genuine issue rather than expected floating-point behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This issue only occurs with extremely ill-conditioned, singular matrices that are rare in practical applications. The errors, while mathematically incorrect, are still very small in absolute terms (typically 1e-6 or smaller). Fixing this would likely require additional computational overhead to check for singularity after every determinant computation, which could slow down the function for all users to handle an edge case. The underlying LAPACK routines are well-established and changing their behavior might introduce other issues.
+
+**Why it might not be WONTFIX:**
+The determinant is often used specifically to detect singularity in matrices, so incorrect results for singular matrices defeat one of its primary purposes. The inconsistency where det(A)=0, det(B)=0, but det(AB)≠0 could lead to logical errors in programs that rely on determinant properties. The fact that NumPy can correctly identify the individual matrices as singular but fails for their product suggests this could be fixed with better numerical handling rather than fundamental limitations.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to warn users that the mathematical property det(AB) = det(A) * det(B) may not hold exactly due to floating-point arithmetic, especially for ill-conditioned matrices. Adding a note about numerical instability with singular matrices and recommending the use of matrix_rank() for singularity detection instead of checking if det=0 would help users avoid this issue. The documentation currently lacks any discussion of numerical precision limitations specific to determinant computation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting this behavior doesn't address the underlying inconsistency where NumPy correctly computes det(A)=0 and det(B)=0 but then gives det(AB)≠0. This isn't just a general floating-point limitation but a specific inconsistency in how NumPy handles singular matrices. Users would reasonably expect that if NumPy can detect that A and B are singular, it should also detect that AB is singular.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding a post-processing step to clamp near-zero determinants to exactly zero when the matrix is detected as rank-deficient would be a new feature rather than a bug fix. This would involve additional computation (rank checking) that isn't currently part of the determinant calculation. Implementing better numerical stability for singular matrix products could be seen as an enhancement request rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The mathematical property det(AB) = det(A) * det(B) is not a new feature but a fundamental requirement that the current implementation fails to satisfy. This isn't asking for new functionality but for the existing function to behave correctly according to established mathematical principles. The fact that NumPy already correctly handles the individual determinants shows the capability exists; it just needs to be applied consistently.
+
+## BUG Considerations
+**Why it might be BUG:**
+This represents a clear violation of a fundamental mathematical property that should hold for all square matrices. The inconsistency where NumPy correctly computes det(A)=0 and det(B)=0 but returns det(AB)≠0 is logically contradictory and could cause serious issues in applications that rely on determinant properties. The error magnitude (1e6 times tolerance) is far beyond acceptable floating-point error. This could affect scientific computations, numerical analysis, and any code that uses determinants to check matrix properties.
+
+**Why it might not be BUG:**
+Numerical linear algebra inherently involves approximations, and perfect mathematical properties rarely hold exactly in floating-point arithmetic. The matrices involved are severely ill-conditioned (condition numbers up to 1e32), placing them far outside the range of numerically stable computation. The errors, while large relative to zero, are still small in absolute terms (typically 1e-6). This could be considered expected behavior for numerically unstable operations rather than a bug.
+
+## Overall Consideration
+
+After careful analysis, this issue represents a genuine inconsistency in NumPy's determinant computation that goes beyond typical floating-point limitations. The core problem is not just that det(AB) ≠ det(A) * det(B) due to rounding errors, but that NumPy demonstrates it can correctly identify singular matrices (returning det=0 for A and B individually) yet fails to maintain this consistency for their product. This creates a logical contradiction where 0 * 0 ≠ 0 in NumPy's determinant arithmetic.
+
+However, the issue only manifests with severely ill-conditioned matrices (condition numbers reaching 1e32), which are at the extreme edge of numerical stability. While the mathematical property should theoretically hold, expecting numerically stable results for matrices with condition numbers this high may be unrealistic. The underlying LAPACK routines that NumPy uses are industry-standard and have these limitations baked in. Fixing this would likely require significant changes to how determinants are computed, potentially adding overhead for all users to handle these edge cases.
+
+The most practical resolution would be to document this limitation clearly, warning users that determinant computation may be inconsistent for singular or near-singular matrices and that the property det(AB) = det(A) * det(B) may not hold numerically for ill-conditioned matrices. Users should be directed to use np.linalg.matrix_rank() or condition number checks for reliable singularity detection rather than relying on determinant values. While this is technically a deviation from mathematical correctness, it reflects the inherent limitations of floating-point arithmetic in numerical linear algebra, particularly for extremely ill-conditioned problems.

@@ -1,0 +1,42 @@
+REPRODUCTION OF BUG: Cython.Tempita Parser Accepts Duplicate else Clauses
+
+I have successfully reproduced the bug reported. Here's my analysis:
+
+1. PROPERTY-BASED TEST REPRODUCTION:
+   - The property-based test attempts to create a Template with duplicate else clauses
+   - Expected behavior: Should raise TemplateError with message containing "duplicate" or "multiple"
+   - Actual behavior: Template is created successfully without raising any error
+   - The test FAILS because no exception is raised
+
+2. MANUAL REPRODUCTION:
+   - Created template with structure:
+     {{if False}}
+       A
+     {{else}}
+       B
+     {{else}}
+       C
+     {{endif}}
+
+   - Expected behavior: Should raise an error about duplicate else clauses
+   - Actual behavior: Template parses successfully without error
+   - Output when substituted: Only outputs "B" (the first else clause)
+   - The second else clause "C" is silently ignored
+
+3. SOURCE CODE EXAMINATION:
+   - Found the parse_cond function in /home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Tempita/_tempita.py
+   - Line 291 contains a comment: "# @@: if/else/else gets through"
+   - This comment confirms the author was aware of this issue
+   - The parse_cond function (lines 800-813) loops through tokens and calls parse_one_cond
+   - It never checks if an else clause has already been seen
+   - The _interpret_if function (lines 289-301) processes parts sequentially and stops at first truthy condition
+   - When it encounters 'else', it automatically treats it as True (line 296)
+   - This explains why only the first else clause is executed
+
+4. BEHAVIOR CONFIRMATION:
+   - The bug is confirmed: Tempita accepts multiple else clauses in a single if/elif/else block
+   - Only the first else clause is executed
+   - Subsequent else clauses are parsed but ignored during execution
+   - No error or warning is generated
+
+The bug report accurately describes the issue. The parser does accept duplicate else clauses when it should reject them as a syntax error.

@@ -1,0 +1,45 @@
+BUG REPRODUCTION REPORT
+=======================
+
+1. Hypothesis Test Execution:
+The provided Hypothesis test was successfully executed and immediately found the bug. The test failed with:
+- Input: u=[0], v=[0] (both arrays are all-False)
+- Result: dice returned nan
+- Expected: Value between 0.0 and 1.0
+- Error: "AssertionError: Distance nan outside valid range for u=[0], v=[0]"
+
+The test correctly identifies that dice returns nan for all-False arrays, which violates the expected range [0.0, 1.0] for a dissimilarity metric.
+
+2. Manual Test Case Execution:
+The manual test case confirmed the bug:
+- Input: u=[False, False, False], v=[False, False, False]
+- Result: dice returned nan with a RuntimeWarning about "invalid value encountered in divide"
+- Expected: 0.0 (as these are identical vectors)
+
+Additional testing showed:
+- dice([True, False, True], [True, False, True]) = 0.0 (correct for identical vectors with some True values)
+- dice([True, True, True], [False, False, False]) = 1.0 (correct for completely different vectors)
+
+3. Root Cause Analysis:
+The bug occurs in line 1503 of distance.py:
+return float((ntf + nft) / np.array(2.0 * ntt + ntf + nft))
+
+When both arrays are all-False:
+- ntt = 0 (no True-True matches)
+- ntf = 0 (no True-False matches)
+- nft = 0 (no False-True matches)
+- Denominator = 2.0 * 0 + 0 + 0 = 0
+- Result = 0/0 = nan
+
+4. Impact:
+The bug violates the fundamental property of dissimilarity metrics that identical vectors should have dissimilarity 0. This makes the dice metric unreliable for datasets that may contain all-False vectors.
+
+5. Comparison with Other Metrics:
+Testing other scipy dissimilarity metrics with all-False identical vectors:
+- jaccard: 0.0 (correctly handles this case)
+- hamming: 0.0 (correctly handles this case)
+- rogerstanimoto: 0.0 (correctly handles this case)
+- sokalsneath: Raises explicit error "not defined for vectors that are entirely false"
+- dice: nan (the bug)
+
+The dice function is inconsistent with most other metrics which correctly return 0.0 for identical all-False vectors.

@@ -1,0 +1,92 @@
+=== Bug Report Analysis ===
+
+## Consideration for Each Category
+
+### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function does crash with certain inputs (IndexError or infinite loop depending on input)
+- The code contains a clear logic error in the fallback calculation that can produce negative or non-advancing values
+- The function should be robust enough to handle any positive integer limit value
+- The bug is in production code that could theoretically be called with small limits
+- The proposed fix is reasonable and would prevent the crash
+
+**Arguments AGAINST:**
+- The crash only occurs with unreasonably small limit values (< 6)
+- No real-world use case would use limit=2 when the purpose is MSVC compatibility (MSVC limit is ~2048)
+- The function works correctly for all reasonable limit values (>= 6)
+
+### INVALID (Incorrect Bug Report)
+**Arguments FOR:**
+- The specific test case (`s='\\\\\\\\', limit=2`) produces an IndexError, NOT an infinite loop as claimed
+- The bug report's analysis is partially incorrect about the exact failure mode
+- The function was never intended to work with such small limits
+
+**Arguments AGAINST:**
+- Other combinations (e.g., 8 backslashes with limit=5) DO cause infinite loops
+- The core issue identified (negative/non-advancing end values) is correct
+- The fact that it fails differently doesn't invalidate the bug
+
+### WONTFIX (Trivial/Uninteresting)
+**Arguments FOR:**
+- Using limit < 6 is completely unrealistic for the function's purpose
+- No one would ever use this function with limit=2 in production
+- The default is 2000 and any reasonable use would be in the hundreds or thousands
+- Fixing this would add complexity for zero practical benefit
+- The function is internal to Cython, not a public API
+
+**Arguments AGAINST:**
+- Any function that can crash should be fixed if the fix is simple
+- The proposed fix is minimal and doesn't add significant complexity
+- Robust code should handle edge cases gracefully
+
+### FEATURE_REQUEST (Enhancement)
+**Arguments FOR:**
+- Adding input validation (e.g., require limit >= 10) would be a new feature
+- Handling extremely small limits gracefully could be seen as an enhancement
+- The current code works for its intended use case
+
+**Arguments AGAINST:**
+- This is clearly a crash/bug, not a missing feature
+- The function already tries to handle edge cases (the problematic code is attempting to handle them)
+
+### DOCUMENTATION_FIX
+**Arguments FOR:**
+- The function lacks documentation about valid limit ranges
+- Adding documentation that limit must be >= 6 would prevent misuse
+- The issue stems from using the function outside its intended parameters
+
+**Arguments AGAINST:**
+- The code is actually broken, not just poorly documented
+- Even if documented, the crash is still a bug
+- Internal functions don't always need extensive documentation
+
+## Detailed Analysis
+
+The core issue is that `split_string_literal` has a logic error when handling small `limit` values with strings containing backslashes. The calculation `end = start + limit - (limit % 2) - 4` can produce:
+- For limit=2: end = start - 2 (negative offset)
+- For limit=3: end = start - 2 (negative offset)
+- For limit=4: end = start + 0 (no progress)
+- For limit=5: end = start + 0 (no progress)
+
+This causes either:
+1. An IndexError when trying to access `s[end-1]` with end <= 0
+2. An infinite loop when end doesn't advance past start
+
+While the bug report incorrectly states the specific case causes an infinite loop (it actually causes IndexError), the fundamental issue is real and the analysis is mostly correct.
+
+## Key Considerations
+
+1. **Purpose**: The function exists solely for MSVC compatibility with its ~2048 byte string literal limit
+2. **Reasonable Use**: Any reasonable use would have limit in hundreds or thousands, not single digits
+3. **Internal vs Public**: This appears to be internal Cython compiler code, not a public API
+4. **Severity**: The bug only manifests with pathologically small, unrealistic limit values
+5. **Fix Complexity**: The proposed fix is simple and wouldn't harm normal operation
+
+## Final Assessment
+
+This is a **WONTFIX** issue because:
+1. The bug only occurs with limit values that are completely unrealistic for the function's purpose (MSVC string splitting)
+2. No reasonable use case would ever set limit < 6 when the goal is staying under MSVC's 2048-byte limit
+3. The function is internal compiler code, not a public API that needs to handle arbitrary inputs
+4. The effort to fix and test this edge case provides zero practical value
+5. Adding validation or fixing the calculation for tiny limits would be fixing a problem that doesn't exist in practice

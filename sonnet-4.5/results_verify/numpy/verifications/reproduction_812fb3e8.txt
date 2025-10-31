@@ -1,0 +1,29 @@
+## Bug Reproduction Summary
+
+I have successfully reproduced the bug described in the report.
+
+### Hypothesis Test Results
+The provided Hypothesis test failed exactly as described, with the falsifying example being `array([0.])`. The test crashed with:
+```
+ValueError: Invalid number of FFT data points (0) specified.
+```
+
+### Minimal Example Results
+The minimal reproduction code also crashed with the same error:
+- Input: `np.array([0.])` - a single-element array
+- `rfft` output: `[0.+0.j]` - also a single-element array (complex)
+- `irfft` without n parameter: Crashes with ValueError about 0 FFT data points
+
+### Root Cause Analysis
+The bug occurs because:
+1. When `irfft` is called without the `n` parameter, it calculates `n = 2*(m-1)` where `m` is the input length
+2. For a single-element input (m=1), this gives `n = 2*(1-1) = 0`
+3. The function then tries to perform an FFT with 0 data points, which is invalid
+
+### Proposed Fix Validation
+When explicitly passing `n=1` to `irfft`, the function works correctly:
+- `np.fft.irfft(rfft_result, n=1)` returns `[0.]`
+- This successfully round-trips: the original array `[0.]` equals the result
+- The proposed fix of using `max(1, 2*(m-1))` would achieve this behavior automatically
+
+The bug is confirmed: `irfft` crashes on single-element arrays when `n` is not specified, even though there's a valid interpretation (returning a 1-element array) that would maintain round-trip consistency with `rfft`.

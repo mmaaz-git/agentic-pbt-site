@@ -1,0 +1,43 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying what type of input it expects. One could argue that since the function name is generic "not_nulls" and not "not_nulls_dict", it might have been designed to work with iterables of (key, value) tuples rather than dictionaries directly. The lack of documentation means the behavior is technically unspecified.
+
+**Why it might not be INVALID:**
+The function is clearly being used with `prompt.options` which is definitively a dictionary (initialized as `options or {}` in the Prompt class). The function's return type annotation is `-> dict`, suggesting dictionary operations. Most importantly, the usage context at line 658 wraps the result in `dict()`, which would be redundant if the function expected tuples - it only makes sense if `not_nulls` is meant to return dictionary-like data that needs conversion.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue this is an internal utility function (not exposed in the public API) that's only called in one place. If the maintainers never pass options to the models, they might never encounter this bug in practice. The function is at the bottom of a 900+ line file, suggesting it's a minor utility.
+
+**Why it might not be WONTFIX:**
+This completely breaks a core feature - passing options to OpenAI models. The `build_kwargs` method is called for every single model execution (chat, async, and completion), making this a critical path bug. Any user attempting to use options with OpenAI models will immediately encounter this error, making it impossible to ignore.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+There's no documentation for the function at all. One could argue the real problem is that the documentation doesn't specify that `not_nulls` expects an iterable of tuples, and developers should be passing `prompt.options.items()` instead of `prompt.options`.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code's usage pattern makes it crystal clear that dictionaries are expected - `prompt.options` is always a dictionary, and the calling code expects to work with dictionaries. This isn't a documentation problem; it's a clear implementation bug where `.items()` was accidentally omitted.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting support for dictionary inputs in addition to the currently supported iterable-of-tuples format. The function could be enhanced to detect the input type and handle both cases.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the function is already being called with dictionaries and is expected to work with them based on its usage context. The bug prevents existing, intended functionality from working. The fix is trivial and obvious (add `.items()`), not a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The evidence is overwhelming: (1) The function is called with `prompt.options` which is always a dictionary, (2) The function crashes immediately with any non-empty dictionary input, (3) The fix is trivial and obvious - adding `.items()` to the iteration, (4) The current code makes the entire OpenAI plugin unusable when options are provided, (5) The intended behavior is clear from context - filter None values from a dictionary.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the function was intentionally designed for a different input type and is being misused. However, given it's only called in one place with dictionary input, this seems highly unlikely.
+
+## Overall Consideration
+This is unequivocally a BUG. The function `not_nulls` is attempting to iterate over a dictionary with tuple unpacking syntax but fails to call `.items()` to get the key-value pairs. The evidence is conclusive:
+
+First, the usage context proves dictionaries are expected. The function is called exactly once at line 658 with `prompt.options`, which is guaranteed to be a dictionary by the Prompt class constructor (`self.options = options or {}`). The result is wrapped in `dict()`, which would be nonsensical if the function was meant to work with tuple iterables - you'd already have the right format.
+
+Second, the bug is reproducible with 100% consistency. Any non-empty dictionary input causes an immediate ValueError due to unpacking failure. The function only "works" with empty dictionaries because the iteration never executes. When tested with the correct input format (dict.items() or list of tuples), the function works perfectly and filters None values as intended.
+
+Third, the impact is severe. This bug completely breaks the OpenAI plugin's ability to accept options, affecting all model types (chat, async chat, and completion). This is core functionality, not an edge case. Users cannot pass any configuration options to OpenAI models, severely limiting the plugin's utility. The fact that this bug exists suggests either insufficient testing or that options are rarely used, but neither changes the fact that it's a clear implementation error that prevents intended functionality from working.

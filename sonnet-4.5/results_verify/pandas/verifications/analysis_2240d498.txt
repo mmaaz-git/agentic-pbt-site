@@ -1,0 +1,45 @@
+Triage Analysis for is_re_compilable Bug Report
+================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function could be interpreted as only needing to handle the specific cases shown in the documentation examples (valid regex patterns and non-string types). Since the documentation doesn't explicitly show what happens with invalid regex patterns, one could argue the behavior is undefined and therefore not a bug.
+
+**Why it might not be INVALID:**
+The documentation clearly states the function should "check if the object can be compiled" and return a boolean. The word "check" strongly implies a predicate function that returns True/False, not one that raises exceptions. The function signature explicitly declares a bool return type. A function named "is_*" is universally understood in programming to be a predicate that returns a boolean for all inputs.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Invalid regex patterns like '?', '*', '+' are edge cases that might rarely occur in practice. Most users would pass either valid regex patterns or non-string objects. The maintainers might consider this an obscure corner case not worth fixing, especially if existing code relies on the current exception-raising behavior.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - invalid regex patterns are common when users are dynamically constructing patterns or accepting user input. The function's entire purpose is to safely check if something can be compiled as regex, which is exactly when you'd want to handle invalid patterns gracefully. The fix is trivial (adding re.error to the exception handler) with minimal risk.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior could be considered correct if the function is only meant to check type compatibility (can this type be passed to re.compile), not validity. The documentation could be updated to clarify that the function raises PatternError for invalid regex patterns and only returns False for type incompatibilities.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function name "is_re_compilable" explicitly asks if something is compilable, not just if it's the right type. The documentation says it checks if the object "can be compiled into a regex pattern instance" - invalid patterns cannot be compiled. Changing the documentation to match the current behavior would make the function less useful and violate user expectations for an "is_*" predicate function.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that gracefully handling invalid regex patterns is a new feature, not a bug fix. The original implementation might have only intended to handle type checking, and adding regex validity checking would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality - the function already attempts to compile the regex. The request is simply to handle the predictable exception that occurs during that compilation attempt. The function's documented purpose already encompasses this behavior; it's just not implemented correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function's name, documentation, and return type all indicate it should be a predicate function returning bool for all inputs. The function explicitly promises to "check if the object can be compiled" and return a boolean result. Invalid regex patterns cannot be compiled, so the function should return False for them. The current implementation violates the documented contract by raising exceptions instead of returning False. This is a clear discrepancy between documented behavior and actual behavior.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the documentation was intentionally vague about invalid regex handling, or if there was some other documentation stating that exceptions are expected. However, no such documentation exists, and the function signature explicitly promises a bool return type.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate BUG. The function pandas.api.types.is_re_compilable has a clear, documented contract: it should check if an object can be compiled into a regex pattern and return a boolean result. The function signature explicitly declares a bool return type, and the documentation makes no mention of exceptions being raised for invalid patterns.
+
+The current implementation fails to fulfill this contract by raising PatternError exceptions for invalid regex patterns instead of returning False. This violates the principle of least surprise for a predicate function (one starting with "is_"). Users reasonably expect that a function designed to check compilability would handle both valid and invalid cases gracefully, especially since the entire point of such a checking function is often to validate input before attempting compilation.
+
+The proposed fix is minimal and correct: simply adding re.error to the caught exceptions. This would make the function behave exactly as documented without any breaking changes for valid use cases. The function would then correctly return True for valid patterns, False for invalid patterns, and False for non-string types, fulfilling its documented purpose as a safe predicate for regex compilability.

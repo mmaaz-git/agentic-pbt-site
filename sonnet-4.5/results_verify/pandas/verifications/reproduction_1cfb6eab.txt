@@ -1,0 +1,53 @@
+## Bug Reproduction Analysis
+
+### Summary
+I have successfully reproduced the reported bug in pandas.io.clipboard.waitForPaste() and waitForNewPaste() functions. The bug report is accurate.
+
+### Reproduction Steps
+1. Created a test script to verify the bug using both direct tests and property-based testing
+2. Mocked the paste() function to return empty string (for waitForPaste) or constant string (for waitForNewPaste)
+3. Tested with various timeout values: 0, -1, 0.001, and random negative values
+
+### Results
+All tests confirm the bug:
+
+1. **Direct tests with waitForPaste():**
+   - timeout=0: Takes 0.0101s instead of immediate timeout
+   - timeout=-1: Takes 0.0101s instead of immediate timeout
+   - timeout=0.001: Takes 0.0101s instead of timing out after 0.001s
+
+2. **Tests with waitForNewPaste():**
+   - timeout=0: Takes 0.0101s instead of immediate timeout
+   - timeout=-1: Takes 0.0101s instead of immediate timeout
+
+3. **Property-based testing:**
+   - All tested values between -100 and 0.005 consistently take ~0.0101s to timeout
+   - This confirms the bug is systematic, not sporadic
+
+### Root Cause Confirmed
+Looking at the source code (lines 694-733 in /home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/io/clipboard/__init__.py):
+
+Both functions follow this pattern:
+```python
+while True:
+    clipboardText = paste()  # or check for new text
+    if clipboardText != "":  # or if different
+        return clipboardText
+    time.sleep(0.01)  # ALWAYS sleeps first
+
+    if timeout is not None and time.time() > startTime + timeout:
+        raise PyperclipTimeoutException(...)
+```
+
+The bug occurs because:
+1. The functions ALWAYS execute time.sleep(0.01) before checking the timeout
+2. Even with timeout=0 or negative values, the first sleep happens before any timeout check
+3. This guarantees a minimum wait of ~0.01 seconds regardless of timeout value
+
+### Impact
+Users who:
+- Expect timeout=0 to mean "check once and return immediately"
+- Want fine-grained timeout control (e.g., timeout=0.001 for 1ms timeout)
+- Use negative timeouts expecting immediate failure
+
+All get unexpected behavior where the function waits at least 10ms.

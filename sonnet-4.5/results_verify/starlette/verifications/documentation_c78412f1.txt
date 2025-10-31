@@ -1,0 +1,35 @@
+## Documentation Analysis for CORSMiddleware
+
+After reviewing the Starlette documentation and source code, here are my findings:
+
+### Official Documentation
+The Starlette documentation for CORSMiddleware provides minimal information about the `allow_methods` parameter:
+- It accepts a sequence of HTTP method strings
+- Default value is `['GET']`
+- Can use `['*']` to allow all standard methods
+- **No mention of whitespace handling or normalization requirements**
+
+### Source Code Observations
+Looking at the implementation in `/home/npc/pbt/agentic-pbt/envs/mcp_env/lib/python3.13/site-packages/starlette/middleware/cors.py`:
+
+1. Line 66 shows `self.allow_methods = allow_methods` - methods are stored as-is without any normalization
+2. Line 120 shows the check: `if requested_method not in self.allow_methods` - a simple membership test
+3. In contrast, line 67 shows `self.allow_headers = [h.lower() for h in allow_headers]` - headers ARE normalized (lowercased)
+4. Line 65 shows origins are NOT normalized either: `self.allow_origins = allow_origins`
+
+### Inconsistent Normalization Pattern
+The code shows inconsistent normalization:
+- `allow_headers`: Normalized (lowercased) at line 67
+- `allow_methods`: NOT normalized at line 66
+- `allow_origins`: NOT normalized at line 65
+
+Notably, in the preflight_response method (line 129), requested headers are stripped: `if header.strip() not in self.allow_headers`, but this stripping is NOT applied to methods.
+
+### HTTP Specifications
+While I couldn't fully access the CORS specification due to rate limits, standard HTTP practice indicates that:
+- HTTP method names are case-sensitive tokens
+- Leading/trailing whitespace is not part of the method name itself
+- Headers values may have whitespace that should typically be trimmed
+
+### Key Finding
+The documentation does not specify whether whitespace in `allow_methods` configuration should be preserved or normalized. There is no explicit statement about how method matching should work with respect to whitespace. This creates ambiguity about expected behavior.

@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+### Summary
+Successfully reproduced the bug reported in scipy.io.hb_write where round-trip operations fail when writing and reading sparse matrices in Harwell-Boeing format.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Execution**
+   - Ran the property-based test provided in the bug report
+   - The test failed with the exact same input mentioned: rows=1, cols=2, values=[0.0, -0.0]
+   - Error: "ValueError: string or file could not be read to its end due to unmatched data"
+
+2. **Minimal Example Reproduction**
+   - Ran the minimal example code provided
+   - Confirmed the exact same error and output as reported
+   - The written file contains: `0.0000000000000000E+00-0.0000000000000000E+00`
+   - No space exists between the two exponential values, making it unparseable
+
+3. **Additional Testing**
+   Created three test cases to understand the pattern:
+   - Test 1 (positive values [1.0, 2.0]): ✓ Works correctly, 48 chars total (2 x 24)
+   - Test 2 (mixed [1.0, -2.0]): ✓ Works correctly, 48 chars total (2 x 24)
+   - Test 3 (zeros [0.0, -0.0]): ✗ Fails, only 46 chars, values concatenated without space
+
+### Root Cause Confirmed
+The bug is in the Fortran format to Python format conversion:
+- File: scipy/io/_harwell_boeing/_fortran_format_parser.py, line 166
+- The code uses `width-1` instead of `width` when converting Fortran E24.16 to Python format
+- This produces %23.16E instead of %24.16E
+- When Python formats with %23.16E:
+  - Positive numbers: ` 0.0000000000000000E+00` (23 chars with leading space)
+  - Negative numbers: `-0.0000000000000000E+00` (23 chars with leading minus)
+- When these are concatenated without explicit spacing, adjacent positive-negative pairs merge
+
+### Effect
+This is a critical bug that breaks the fundamental round-trip property of the Harwell-Boeing I/O functions. Any sparse matrix containing specific patterns of positive and negative values cannot be written and read back successfully, despite the documentation and test suite suggesting this should work.

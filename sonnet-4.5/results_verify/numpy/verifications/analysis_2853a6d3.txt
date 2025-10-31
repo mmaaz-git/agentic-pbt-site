@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly promises that output dimensionality will be preserved. It only states that it returns an "ndarray" without specifying the dimensionality. The function's purpose is to "compress" the array by removing masked rows/columns, and returning an empty 1D array when everything is masked could be considered a valid interpretation of "compression." The documentation doesn't specify the behavior for the edge case where all data is masked, so the current behavior isn't technically violating any documented contract.
+
+**Why it might not be INVALID:**
+The function explicitly requires a 2D input array and is designed to suppress rows and/or columns, which are inherently 2D concepts. The inconsistent behavior (returning 2D when some rows remain but 1D when no rows remain) is demonstrably present and creates a real inconsistency. The name "compress_rowcols" strongly implies operations on rows and columns, maintaining the 2D structure.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This edge case (all data being masked) is likely rare in practice. Most users probably never encounter fully masked arrays, and those who do might have already worked around this behavior. The impact is limited to a specific edge case that doesn't affect the common use patterns. Changing this behavior now could break existing code that relies on the current behavior of returning a 1D empty array.
+
+**Why it might not be WONTFIX:**
+The inconsistency can cause real bugs in production code that expects consistent array shapes. This isn't just a cosmetic issue but affects the fundamental property of shape consistency that many NumPy operations rely on. The fix is straightforward and would make the function more predictable and easier to use correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is consistent within the codebase (the implementation explicitly returns `nxarray([])` for fully masked arrays), suggesting it might be intentional. The documentation could be updated to explicitly state that fully masked arrays return 1D empty arrays as a special case. This would clarify the existing behavior without changing any code, avoiding potential backward compatibility issues.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The inconsistent dimensionality appears to be an implementation oversight rather than an intentional design choice. Simply documenting this quirky behavior doesn't address the underlying inconsistency that makes the function harder to use correctly. Users would still need to add special case handling for fully masked arrays, which defeats the purpose of having a utility function.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that preserving dimensionality for empty results is a new feature rather than a bug fix. The current function works as implemented, and adding dimensionality preservation could be seen as an enhancement. A new parameter could be added to control whether dimensionality should be preserved in edge cases.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for consistent behavior of existing functionality. The function already preserves dimensionality in all cases except one edge case. Making the behavior consistent across all cases is fixing an inconsistency, not adding a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits objectively inconsistent behavior: it returns 2D arrays when some rows/columns remain but 1D arrays when none remain. This violates the principle of least surprise and the general NumPy convention that operations preserve array dimensionality structure. The function requires 2D input and logically should return 2D output. The inconsistency can cause downstream code to fail unexpectedly when it encounters the edge case.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly guarantee dimensionality preservation, so this isn't a clear violation of documented behavior. The implementation explicitly chooses to return `nxarray([])` for fully masked cases, suggesting this might be intentional. The function has likely behaved this way for a long time without being reported as a bug by the NumPy maintainers.
+
+## Overall Consideration
+
+After careful analysis, this issue presents a genuine inconsistency in the behavior of `numpy.ma.compress_rowcols`. The function demonstrably returns arrays of different dimensionality depending on whether all or some elements are masked. When removing some rows, it returns shape (n, cols) as expected, but when removing all rows, it returns shape (0,) instead of (0, cols). This breaks the reasonable expectation that array operations preserve structural dimensionality.
+
+However, the documentation never explicitly promises dimensionality preservation. The function simply states it returns an "ndarray" without specifying dimensions. The implementation explicitly returns `nxarray([])` for the all-masked case, which could indicate intentional behavior rather than an oversight. This edge case likely affects very few users in practice, as fully masked arrays are uncommon.
+
+Given that this is an edge case with ambiguous documentation and explicit implementation, and considering the user's track record of incorrect bug reports (90% invalid), this appears to be a case where the documentation should be clarified rather than the code changed. The behavior, while inconsistent, is deliberate in the implementation and changing it could break existing code that depends on this behavior.

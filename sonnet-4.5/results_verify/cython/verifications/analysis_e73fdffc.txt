@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that inline comments should be supported in distutils directives. The examples in the documentation show simple directive lines without inline comments. The current behavior could be argued as "working as designed" since strip_string_literals is doing exactly what it was designed to do - normalize string literals and comments in code. Users could simply avoid using inline comments.
+
+**Why it might not be INVALID:**
+Python users universally expect # to start a comment that is ignored. This is fundamental Python syntax. When users write "# distutils: libraries = foo # comment", they reasonably expect standard Python comment semantics. The fact that placeholder labels like "#__Pyx_L1_" appear in the output is clearly not intentional or useful behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered a minor issue since users can easily work around it by not using inline comments in distutils directives. The fix might require significant refactoring of how parse_list works, potentially breaking other code that relies on strip_string_literals behavior. The issue only affects a small subset of users who use inline comments in their directives.
+
+**Why it might not be WONTFIX:**
+The bug causes actual build failures when the linker tries to find libraries named "#__Pyx_L1_". This is not just a cosmetic issue but a functional problem that breaks builds. The fix is straightforward (strip comments before parsing) and would align the behavior with user expectations. Many users likely expect to be able to add clarifying comments to their configuration.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that inline comments are not supported in distutils directives and that users should use separate comment lines instead. This would clarify the expected behavior without changing any code. The current implementation could be considered correct if documented properly.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is objectively wrong - it includes nonsensical placeholder labels in configuration values. Documenting this as intended behavior would be documenting a bug. Users expect Python comment conventions to work consistently, and requiring special documentation for this case indicates the implementation is faulty, not the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting inline comments in distutils directives could be seen as a new feature that was never intended. The current implementation might have been designed to only handle simple values without comments. Adding proper comment stripping would be enhancing the parser with new capability.
+
+**Why it might not be FEATURE_REQUEST:**
+Inline comments are standard Python syntax, not a new feature. The fact that # creates problems shows the current implementation is broken, not lacking a feature. Users aren't asking for something new - they're expecting standard Python comment behavior to work. The placeholder labels prove the code already tries to handle comments, just incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is clearly incorrect - when a user writes "libraries = foo # comment", they expect to get ['foo'], not ['foo', '#__Pyx_L1_']. The placeholder label is meaningless in this context and causes build failures. The code is using strip_string_literals for a purpose it wasn't designed for (parsing config values vs normalizing code). This is a logic error that produces wrong output.
+
+**Why it might not be BUG:**
+The strip_string_literals function is working exactly as designed - it's meant to normalize code including comments. The parse_list function never claimed to handle comments properly. If this behavior was never specified or intended, it might be considered undefined behavior rather than a bug.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be a genuine BUG. The key evidence is that the current implementation produces objectively incorrect output - placeholder labels like "#__Pyx_L1_" that serve no purpose and break builds. This isn't undefined behavior or a missing feature, but rather a clear logic error where strip_string_literals is being misused for parsing configuration values.
+
+The bug report correctly identifies that users expect standard Python comment semantics to apply to distutils directive lines. When writing "# distutils: libraries = foo # comment", any Python programmer would expect the inline comment to be ignored, not transformed into a nonsensical placeholder that gets passed to the linker. The fact that this causes actual build failures when tools try to link against a library named "#__Pyx_L1_" confirms this is a functional bug, not a cosmetic issue.
+
+While the fix suggested in the bug report (stripping comments before parsing) might not be the only solution, the current behavior is demonstrably wrong and needs to be corrected. This is a valid bug that should be fixed, not worked around through documentation or dismissed as a feature request.

@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report claims that Django's JSON deserializer raises `KeyError` instead of `DeserializationError` when deserializing malformed JSON that is missing required keys like "model" or "fields".
+
+### Reproduction Results
+
+1. **Simple Test with Missing 'model' Key**:
+   - Input: `[{"fields": {}}]`
+   - Expected (per bug report): KeyError with message 'model'
+   - Actual Result: DeserializationError with message "Error deserializing object: 'model'"
+
+2. **Simple Test with Missing 'fields' Key**:
+   - Input: `[{"model": "auth.User"}]`
+   - Expected (per bug report): KeyError with message 'fields'
+   - Actual Result: DeserializationError with message "Error deserializing object: 'fields'"
+
+3. **Property-Based Test**:
+   - The property-based test generates various malformed dictionaries missing either 'model' or 'fields' keys
+   - All test cases properly raise DeserializationError, not KeyError
+
+### Source Code Analysis
+
+The analysis of the Django source code reveals:
+
+1. In `django/core/serializers/python.py`:
+   - Line 137: `Model = self._get_model_from_node(obj["model"])` - directly accesses 'model' key
+   - Line 155: `for field_name, field_value in obj["fields"].items():` - directly accesses 'fields' key
+   - These would indeed raise KeyError if the keys are missing
+
+2. However, in `django/core/serializers/json.py`:
+   - Lines 76-82: The JSON deserializer overrides `_handle_object` method
+   - It wraps the parent's `_handle_object` in a try-except block
+   - Any Exception (except GeneratorExit and DeserializationError) is caught and re-raised as DeserializationError
+   - The error message format is: "Error deserializing object: {original_exception}"
+
+### Conclusion
+
+The bug report is incorrect. Django's JSON deserializer already properly handles KeyError exceptions and converts them to DeserializationError as expected. The current behavior is:
+
+1. The Python deserializer's `_handle_object` method may raise KeyError when accessing missing keys
+2. The JSON deserializer's overridden `_handle_object` method catches these KeyErrors
+3. It re-raises them as DeserializationError with an appropriate error message
+
+The actual behavior matches what the bug reporter wants - DeserializationError is raised for malformed JSON, not KeyError. The proposed fix in the bug report is unnecessary as the issue is already handled correctly at the JSON deserializer level.

@@ -1,0 +1,37 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug in pandas.core.indexers.length_of_indexer.
+
+Key Findings:
+1. The bug report is accurate - the function returns incorrect lengths for range objects when step > 1
+2. The property-based test fails immediately, finding even more edge cases than reported
+3. The specific failing example range(0, 1, 2) returns 0 instead of 1
+
+Test Results:
+- range(0, 1, 2): Returns 0, should return 1 (contains [0])
+- range(0, 5, 3): Returns 1, should return 2 (contains [0, 3])
+- range(0, 10, 7): Returns 1, should return 2 (contains [0, 7])
+- range(10, 20, 3): Returns 3, should return 4 (contains [10, 13, 16, 19])
+- range(0, 100, 7): Returns 14, should return 15
+
+Additional Edge Cases Found:
+- range(1, 0, 1): Returns -1, should return 0 (empty range when start > stop)
+- range(0, 10, 100): Returns 0, should return 1 (contains [0])
+
+Source Code Analysis:
+The bug is in line 357 of the function:
+```python
+elif isinstance(indexer, range):
+    return (indexer.stop - indexer.start) // indexer.step
+```
+
+This formula is mathematically incorrect. It performs simple floor division which doesn't account for:
+1. Cases where the range doesn't evenly divide by step
+2. Empty ranges where start >= stop (returns negative values)
+3. The fact that range() in Python follows the pattern [start, stop) with step increments
+
+The correct calculation needs ceiling division: (stop - start + step - 1) // step
+Or more simply, Python's built-in len() handles all these cases correctly for range objects.
+
+The bug is reproducible and affects a core indexing function in pandas.

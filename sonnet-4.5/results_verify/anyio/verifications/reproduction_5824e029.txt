@@ -1,0 +1,28 @@
+# Bug Reproduction Analysis
+
+## Summary
+I have successfully reproduced the reported bug in anyio.streams.buffered.BufferedByteReceiveStream.receive_until().
+
+## Reproduction Steps
+1. Created a test script with the exact code provided in the bug report
+2. Used a MockByteReceiveStream that simulates a byte stream containing the delimiter b'\x00\x00'
+3. Called receive_until with delimiter=b'\x00\x00' and max_bytes=1
+
+## Expected Behavior
+According to the documentation and the function's contract, when max_bytes=1 and the delimiter is 2 bytes long, the function should raise DelimiterNotFound because:
+- To find a 2-byte delimiter, the function needs to buffer at least 2 bytes
+- The max_bytes parameter limits the number of bytes that can be read/buffered
+- Since 2 > 1, the delimiter cannot be found within the max_bytes limit
+
+## Actual Behavior
+The function successfully returns b'' (empty bytes) instead of raising DelimiterNotFound.
+
+## Root Cause
+After examining the source code at line 109-145 in buffered.py:
+1. The function searches for the delimiter in the buffer at line 127
+2. If found at index 0 (which happens when the buffer contains exactly the delimiter), it returns the bytes before the delimiter (empty in this case)
+3. The check for max_bytes at line 134 only happens AFTER attempting to find the delimiter
+4. The function never validates that the delimiter's end position (index + len(delimiter)) exceeds max_bytes
+
+## Bug Confirmation
+The bug is CONFIRMED. The function violates its documented contract by succeeding when it should fail with DelimiterNotFound.

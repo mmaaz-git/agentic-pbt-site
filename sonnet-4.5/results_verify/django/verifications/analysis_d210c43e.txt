@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The check_csrf_failure_view function only explicitly catches ImportError in its try-except block, and one could argue that the documentation doesn't explicitly promise to handle ViewDoesNotExist exceptions. Someone might claim that ViewDoesNotExist is a different type of error that indicates a different problem (attribute missing vs module missing) and therefore shouldn't be caught by the same error handler.
+
+**Why it might not be INVALID:**
+The function is part of Django's check framework which is explicitly designed to validate configuration and report errors gracefully without crashing. The error message that would be returned ("The CSRF failure view '%s' could not be imported") is equally applicable to both ImportError and ViewDoesNotExist cases. Both exceptions indicate the same fundamental problem: the specified view cannot be imported and used. The check system should not crash on configuration errors.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue this is an edge case that only occurs when users misconfigure their CSRF_FAILURE_VIEW setting by pointing to a module that exists but with a non-existent attribute. This might be considered a rare enough scenario that fixing it isn't worth the effort, especially since the exception message clearly indicates what went wrong. The crash provides immediate feedback about the misconfiguration.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it's a common configuration error that can easily happen when users typo an attribute name or refactor code. The Django check framework exists specifically to catch these kinds of configuration errors early and report them cleanly. Having the check system crash defeats its purpose. The fix is also trivial (adding ViewDoesNotExist to the except clause), making this not a case where the effort outweighs the benefit.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+There's no explicit documentation stating that check_csrf_failure_view will handle all possible import-related exceptions. One could argue the documentation should be updated to clarify that ViewDoesNotExist exceptions will cause the check to fail with an exception rather than returning an Error object, so users know to be careful about their configuration.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The Django check framework documentation and design principles make it clear that checks should catch configuration errors and return Error/Warning objects, not crash. The existing error message "could not be imported" already covers both ImportError and ViewDoesNotExist scenarios. This is a code bug, not a documentation issue - the code behavior is inconsistent with the framework's design principles.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting a new feature: "Add support for gracefully handling ViewDoesNotExist exceptions in check_csrf_failure_view". The current code only handles ImportError, so adding ViewDoesNotExist handling could be seen as extending functionality rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality but fixing existing broken behavior. The check is already supposed to validate the CSRF_FAILURE_VIEW setting and report import problems - it just incompletely implements this due to missing one exception type. The intent of the code (catching import failures and returning an Error) is clear, and the implementation is simply incomplete. This is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The check_csrf_failure_view function is part of Django's check framework, which is designed to validate settings and report configuration errors without crashing. When get_callable() raises ViewDoesNotExist (which happens when a module exists but the specified attribute doesn't), the check crashes instead of returning an Error object. This violates the fundamental design principle of the check framework. The function already catches ImportError and returns an appropriate Error with id 'security.E102' - the same should happen for ViewDoesNotExist. The error message "could not be imported" is equally applicable to both cases. This is a clear oversight where the developer only handled one of the two possible exceptions from get_callable().
+
+**Why it might not be BUG:**
+There are essentially no strong arguments against this being a bug. The only possible argument would be that the code works as written and ViewDoesNotExist is somehow fundamentally different from ImportError, but this doesn't hold up given that both exceptions indicate the same configuration problem (unable to import the specified view) and the check framework's purpose is to catch such problems gracefully.
+
+## Overall consideration
+
+After thorough analysis, this is clearly a **BUG** in Django's check_csrf_failure_view function. The Django check framework is explicitly designed to validate configuration settings and report problems through Error and Warning objects, not to crash with unhandled exceptions. The check_csrf_failure_view function attempts to import a view specified in settings and is supposed to report import failures, but it only catches ImportError while get_callable() can also raise ViewDoesNotExist.
+
+The evidence is compelling: When testing with non-existent modules, the function correctly catches ImportError and returns an Error object with id 'security.E102'. However, when testing with existing modules but non-existent attributes (like 'os.path.nonexistent_view'), the function crashes with ViewDoesNotExist. This inconsistent behavior violates the check framework's design principles and creates a poor user experience where configuration errors cause crashes instead of helpful error messages.
+
+The proposed fix is minimal and correct - simply adding ViewDoesNotExist to the except clause alongside ImportError. This would make the function handle all import-related failures consistently and fulfill its intended purpose of validating the CSRF_FAILURE_VIEW setting without crashing. This is not a feature request or documentation issue, but a legitimate bug where the implementation incompletely handles the possible exceptions from the underlying get_callable() function.

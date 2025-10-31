@@ -1,0 +1,32 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is accurate. The `make_command_file` function in Cython.Debugger.Cygdb does crash with a `UnicodeEncodeError` when the `prefix_code` parameter contains Unicode surrogate characters.
+
+### Test Results
+
+1. **Hypothesis Test Execution:**
+   - Ran the provided property-based test with surrogate characters (U+D800 to U+DFFF)
+   - Result: Test failed with `UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed`
+   - Falsifying example: `prefix_code='\ud800'`
+   - The crash occurs exactly as described in the bug report
+
+2. **Manual Test Execution:**
+   - Ran the manual reproduction case with `prefix_code = '\ud800'`
+   - Result: Confirmed the bug with error message: `'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed`
+   - The exception is caught and displayed as expected
+
+### Root Cause Analysis
+
+Examining the source code at `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Debugger/Cygdb.py`:
+
+1. Line 38: `fd, tempfilename = tempfile.mkstemp()` - Creates a temporary file descriptor
+2. Line 39: `f = os.fdopen(fd, 'w')` - Opens the file descriptor in text mode with default UTF-8 encoding
+3. Line 41: `f.write(prefix_code)` - Attempts to write the prefix_code directly to the file
+
+The crash occurs at line 41 when Python attempts to encode the surrogate character to UTF-8 for writing to the text file. Since surrogate characters (U+D800-U+DFFF) are not valid in UTF-8 encoding, Python raises a `UnicodeEncodeError`.
+
+### Impact
+The function fails to handle an edge case where `prefix_code` contains invalid Unicode surrogate characters. While these characters are technically invalid and shouldn't normally appear in Python strings, they can exist in Python strings internally and cause this crash when written to UTF-8 encoded files.
+
+The error is reproducible and consistent across both the property-based test and manual reproduction.

@@ -1,0 +1,48 @@
+# Documentation Analysis
+
+## Python zipfile.ZipFile.extract() Documentation
+
+The official Python documentation for `zipfile.ZipFile.extract(member, path=None, pwd=None)` states:
+
+1. **Purpose**: "Extract a member from the archive to the current working directory, using its full name"
+2. **Path parameter**: "You can specify a different directory using `path`"
+3. **Key specification**: The `path` parameter expects a **directory path** where the file will be extracted, NOT a file path
+
+The documentation is clear that `path` should be a directory. The method extracts the member into that directory, maintaining the member's name as the filename.
+
+## Cython Cache Documentation
+
+### Official Documentation
+The Cython documentation mentions caching but provides limited details about the Cache class implementation:
+- Caching can be enabled via `cythonize(extensions, cache=True)`
+- Cache stores generated .c/.cpp files to avoid recompilation
+- Cache location is determined by CYTHON_CACHE_DIR environment variable or platform defaults
+
+### Cache Class Documentation
+The `Cache.load_from_cache` method has **no docstring** or inline documentation. The method signature is:
+```python
+def load_from_cache(self, c_file, cached)
+```
+
+### Implementation Analysis
+Looking at the complementary `store_to_cache` method (lines 159-173):
+- For single artifacts: stores as gzip file
+- For multiple artifacts: creates a zip file with `zip.write(artifact, os.path.basename(artifact))`
+- This stores files with just their basename (no directory structure) in the zip
+
+## Expected Behavior Based on Documentation
+
+Given that:
+1. `store_to_cache` stores files with only their basename in the zip
+2. `zipfile.extract(member, path)` expects `path` to be a directory
+3. The files should be restored to their original locations for compilation
+
+The correct behavior should be:
+- Extract each artifact to the directory containing the c_file
+- NOT create subdirectories for each artifact
+
+## Documentation Verdict
+
+The Python zipfile documentation is **crystal clear** that the `path` parameter should be a directory path, not a file path. The current Cython implementation violates this documented behavior by passing a file path (`join_path(dirname, artifact)`) instead of just the directory path (`dirname`).
+
+While Cython's own documentation doesn't explicitly describe the cache loading behavior, the implementation clearly contradicts Python's standard library documentation for the zipfile module it uses.

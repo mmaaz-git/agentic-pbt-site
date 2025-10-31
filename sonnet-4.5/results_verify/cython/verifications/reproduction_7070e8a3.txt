@@ -1,0 +1,55 @@
+Bug Reproduction Results for Cython.Build.Cache.load_from_cache
+================================================================
+
+1. Bug Report Test Case - REPRODUCED:
+   The provided reproduction code demonstrates the issue:
+   - Created a zip with 'output.c'
+   - Called cache.load_from_cache(c_file, zip_path)
+   - Expected file at: /tmp/.../build/output.c
+   - Actually created: /tmp/.../build/output.c/output.c
+   - The file is incorrectly nested in a subdirectory
+
+2. Hypothesis Test - INITIALLY PASSED (FALSE POSITIVE):
+   - The original test used os.path.exists() which returns True for directories
+   - At the expected location, a DIRECTORY was created, not a FILE
+   - When corrected to use os.path.isfile(), the test FAILS as expected
+   - This confirms the bug: files are not extracted to the correct location
+
+3. Root Cause Analysis:
+   The current code does:
+   ```python
+   dirname = os.path.dirname(c_file)
+   for artifact in z.namelist():
+       z.extract(artifact, join_path(dirname, artifact))
+   ```
+
+   With artifact='output.c' and dirname='/tmp/build', this becomes:
+   z.extract('output.c', '/tmp/build/output.c')
+
+   Python's zipfile.extract() behavior:
+   - extract(member, path) extracts to: path/member
+   - So extract('output.c', '/tmp/build/output.c') creates: /tmp/build/output.c/output.c
+
+4. Multi-file Scenario Testing:
+   Tested caching multiple files (foo.c, foo.h, foo_api.h):
+   - All files end up in wrong locations:
+     * Expected: /tmp/build/foo.c
+     * Actual: /tmp/build/foo.c/foo.c
+     * Expected: /tmp/build/foo.h
+     * Actual: /tmp/build/foo.h/foo.h
+     * Expected: /tmp/build/foo_api.h
+     * Actual: /tmp/build/foo_api.h/foo_api.h
+
+5. Impact on Cython Compilation:
+   - After loading from cache, compilation will fail because files are not where expected
+   - The cache becomes effectively useless for multi-file outputs
+   - This breaks the caching optimization for complex Cython modules
+
+6. Test Suite Verification:
+   Cython's own test TestCyCache._test_multi_file_output expects files at:
+   - a.c, a.h, a_api.h in the source directory
+   - Not in subdirectories
+   - This test would fail with the current implementation
+
+The bug is real and reproducible. The fix suggested in the report is correct:
+Change z.extract(artifact, join_path(dirname, artifact)) to z.extract(artifact, dirname)

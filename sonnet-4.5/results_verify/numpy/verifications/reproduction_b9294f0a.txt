@@ -1,0 +1,42 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed and exhibits the exact behavior reported.
+
+1. HYPOTHESIS TEST REPRODUCTION:
+   - The property-based test fails as described
+   - Test case: ['ß'] causes the round-trip test to fail
+   - nc.lower(nc.upper(['ß'])) returns ['s'] instead of ['ß']
+   - This happens because nc.upper(['ß']) truncates 'SS' to 'S' with dtype <U1
+
+2. MANUAL TEST CASE REPRODUCTION:
+   All test cases from the bug report were verified:
+
+   a) German eszett (ß):
+      - Python: 'ß'.upper() = 'SS' (2 chars)
+      - NumPy with dtype <U1: nc.upper(['ß']) = 'S' (truncated)
+      - NumPy with dtype <U10: nc.upper(['ß']) = 'SS' (correct)
+
+   b) Turkish İ (I with dot above):
+      - Python: 'İ'.lower() = 'i̇' (2 chars: i + combining dot)
+      - NumPy with dtype <U1: nc.lower(['İ']) = 'i' (truncated, missing dot)
+
+   c) Ligatures (ﬁ, ﬂ, ﬆ):
+      - Python: 'ﬁ'.upper() = 'FI', 'ﬂ'.upper() = 'FL', 'ﬆ'.upper() = 'ST'
+      - NumPy with dtype <U1: All truncated to first character only ('F', 'F', 'S')
+      - NumPy with dtype <U10: All correct ('FI', 'FL', 'ST')
+
+3. KEY FINDING:
+   The truncation occurs silently - no warning or error is raised when the output
+   of the case transformation cannot fit in the input array's dtype. This leads
+   to data corruption for Unicode characters whose case mappings expand to more
+   characters than the original.
+
+4. ROOT CAUSE CONFIRMED:
+   - NumPy preserves the input dtype for the output array
+   - When np.array(['ß']) is created, NumPy infers dtype <U1 (1 Unicode character)
+   - The upper() function applies Python's str.upper() which returns 'SS' (2 chars)
+   - NumPy truncates 'SS' to 'S' to fit in the <U1 dtype
+   - This happens silently without any warning
+
+The bug is real, reproducible, and affects real-world text processing for multiple languages including German, Turkish, and any text with ligatures.

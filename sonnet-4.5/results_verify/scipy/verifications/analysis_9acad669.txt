@@ -1,0 +1,47 @@
+BUG TRIAGE ANALYSIS
+==================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does state that overwrite=True "applies only if csgraph is a dense, c-ordered array with dtype=float64", which could be interpreted as "if you don't meet these conditions, behavior is undefined." Users passing F-contiguous arrays could be considered as violating the documented preconditions.
+
+**Why it might not be INVALID:**
+The function returns mathematically incorrect results (inf instead of 0 on diagonal) which violates the fundamental definition of the Floyd-Warshall algorithm. Even if the user violates preconditions, returning silently wrong results is never acceptable behavior. The function should either work correctly or fail loudly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs with F-contiguous arrays when most NumPy operations default to C-contiguous. Users can easily work around this by calling np.ascontiguousarray(). The internal error is technically raised, just suppressed by the C extension layer.
+
+**Why it might not be WONTFIX:**
+This is a data corruption bug that silently returns incorrect mathematical results. The diagonal being inf instead of 0 fundamentally breaks shortest path calculations. This is not a trivial edge case but a serious correctness issue that could lead to wrong scientific conclusions.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about what happens when the C-contiguous requirement is not met. It currently says overwrite "applies only if" but doesn't specify the failure mode. Adding explicit warnings about F-contiguous arrays would help.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The core issue is not documentation - it's that the function returns mathematically incorrect results. No amount of documentation can justify returning inf for the diagonal of a shortest path matrix. The code behavior is objectively wrong, not just poorly documented.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting F-contiguous arrays could be seen as a new feature. The function could be enhanced to either convert F-contiguous to C-contiguous internally or have a separate code path for F-contiguous arrays.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not about adding new functionality but fixing broken existing behavior. The function already accepts F-contiguous arrays without raising an error at the Python level - it just returns wrong results. Supporting correct computation regardless of memory layout is a bug fix, not a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns mathematically incorrect results that violate the Floyd-Warshall algorithm's fundamental properties. The diagonal should always be 0 (distance from any node to itself), but F-contiguous arrays get inf. An internal exception is raised but suppressed, violating Python's principle that "errors should never pass silently." This is a clear data corruption issue that could cause silent failures in scientific computing applications.
+
+**Why it might not be BUG:**
+The documentation does specify that overwrite=True requires C-contiguous arrays, so users providing F-contiguous arrays are technically violating documented preconditions.
+
+## Overall Consideration
+
+This is unquestionably a **BUG** that needs to be fixed. While the bug report got some details wrong (claiming the input is returned unchanged when it's actually modified to incorrect values), the core issue is valid and severe.
+
+The function silently returns mathematically incorrect results when given F-contiguous arrays. Setting the diagonal to infinity instead of zero fundamentally breaks the shortest path computation - this is not a minor issue but a complete algorithmic failure. The fact that an internal exception is raised but then suppressed makes this worse, as it shows the code knows something is wrong but proceeds anyway.
+
+The severity is compounded by the fact that this affects both overwrite=True and overwrite=False modes, meaning there's no safe way to use F-contiguous arrays with this function. Since NumPy seamlessly works with both C and F-contiguous arrays in most operations, users would reasonably expect this function to either work correctly or raise a clear error, not silently corrupt their data.
+
+The appropriate fix would be to either: (1) raise a clear ValueError when F-contiguous arrays are passed, (2) automatically convert to C-contiguous internally, or (3) fix the algorithm to work with F-contiguous arrays. Returning incorrect results is never acceptable.

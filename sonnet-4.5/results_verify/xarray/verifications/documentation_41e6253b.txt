@@ -1,0 +1,37 @@
+## Documentation Analysis for _rescale_imshow_rgb
+
+### Function Purpose
+The `_rescale_imshow_rgb` function is an internal utility in xarray that normalizes RGB/RGBA image data before passing it to matplotlib's imshow. This is necessary because matplotlib doesn't support normalizing RGB data with vmin/vmax parameters, as noted in the code comment: "Matplotlib does not support normalising RGB data, so do it here."
+
+### Documentation Found
+
+1. **Public API Documentation (xarray.plot.imshow)**:
+   - The `robust` parameter is documented as: "If True and vmin or vmax are absent, the colormap range is computed with 2nd and 98th percentiles instead of the extreme values."
+   - For RGB/RGBA data, the documentation states: "Passing robust=True infers vmin and vmax in the usual way"
+   - Unlike matplotlib.pyplot.imshow which ignores vmin/vmax for RGB(A) data, xarray applies scaling to RGB data
+
+2. **Internal Implementation**:
+   - The function is only called when dealing with RGB image data in imshow
+   - It's triggered when `robust=True` OR when vmin/vmax are explicitly provided
+   - The function uses np.nanpercentile with ROBUST_PERCENTILE (2nd and 98th percentiles) to calculate bounds when robust=True
+
+3. **Expected Behavior**:
+   - The function should rescale array values to the [0, 1] range
+   - Line 779 shows the expected output: `return np.minimum(np.maximum(darray, 0), 1)`
+   - This clearly indicates the function's contract is to return values clamped to [0, 1]
+
+### Missing Documentation
+
+The documentation does NOT specify:
+- How to handle edge cases where vmin == vmax (constant arrays)
+- What should happen when all values in the array are identical
+- Whether NaN values are acceptable in the output
+- Any specific behavior for degenerate cases
+
+### Key Observation
+
+The function has an assertion at line 750: `assert robust or vmin is not None or vmax is not None`
+This suggests the function expects at least one of these conditions to be true, but doesn't document what happens in edge cases within those conditions.
+
+The scaling formula at line 778 is: `(darray.astype("f8") - vmin) / (vmax - vmin)`
+This will mathematically produce NaN when vmax == vmin (division by zero), which is not addressed in the documentation.

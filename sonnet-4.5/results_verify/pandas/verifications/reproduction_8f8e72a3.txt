@@ -1,0 +1,51 @@
+BUG REPRODUCTION RESULTS
+
+1. Bug Report Claims:
+   The bug report claims that calling kleene_and, kleene_or, or kleene_xor with both
+   left_mask and right_mask as None causes a RecursionError.
+
+2. Reproduction Testing:
+   I successfully reproduced the bug exactly as described:
+
+   a) kleene_and(False, False, None, None) → RecursionError
+   b) kleene_or(True, False, None, None) → RecursionError
+   c) kleene_xor(True, False, None, None) → RecursionError
+
+   All three functions crash with "maximum recursion depth exceeded"
+
+3. Root Cause Analysis:
+   Looking at the code, the infinite recursion occurs because:
+
+   - In kleene_and (line 156-157):
+     if left_mask is None:
+         return kleene_and(right, left, right_mask, left_mask)
+
+   - When both masks are None, this swaps arguments:
+     kleene_and(False, False, None, None) calls
+     kleene_and(False, False, None, None) which calls
+     kleene_and(False, False, None, None) ... infinitely
+
+   The same pattern exists in kleene_or (line 42-43) and kleene_xor (line 106-107).
+
+4. Correct Usage Testing:
+   When used correctly (only one mask is None), the functions work perfectly:
+
+   - kleene_and(array, scalar, mask, None) ✓ Works
+   - kleene_or(scalar, array, None, mask) ✓ Works
+   - kleene_xor(array, scalar, mask, None) ✓ Works
+
+5. Documentation vs Implementation:
+   The docstring clearly states: "Only one of these may be None"
+   This means passing both as None violates the documented precondition.
+
+6. Current Error Behavior:
+   When the precondition is violated (both masks None), instead of:
+   - Raising a clear ValueError about invalid input
+   - The functions crash with RecursionError
+   - This provides no useful error message to users
+
+7. Technical Accuracy:
+   The bug report's technical analysis is 100% correct:
+   - The infinite recursion happens exactly as described
+   - The root cause (argument swapping) is correctly identified
+   - The proposed fix would resolve the issue

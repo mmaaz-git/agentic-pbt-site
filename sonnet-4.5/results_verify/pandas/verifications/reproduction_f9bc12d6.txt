@@ -1,0 +1,36 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I have successfully reproduced the bug reported for pandas.plotting.scatter_matrix's diagonal parameter validation.
+
+HYPOTHESIS TEST RESULTS:
+The property-based test using Hypothesis confirmed the bug. The test generates random invalid diagonal values (anything except 'hist' or 'kde') and expects scatter_matrix to raise a ValueError or KeyError. However, the function accepts these invalid values without any error. The test failed with diagonal='0' and would fail with any other invalid string value.
+
+DIRECT TEST RESULTS:
+I ran explicit tests with several invalid diagonal values:
+- diagonal='invalid' - ACCEPTED (should be rejected)
+- diagonal='0' - ACCEPTED (should be rejected)
+- diagonal='foobar' - ACCEPTED (should be rejected)
+- diagonal='hist' - ACCEPTED (correct)
+- diagonal='kde' - ACCEPTED (correct)
+
+ROOT CAUSE ANALYSIS:
+After examining the source code, I found the issue in the implementation:
+
+1. The main scatter_matrix function in pandas/plotting/_misc.py (lines 155-232) performs NO validation on the diagonal parameter. It simply passes it through to the backend.
+
+2. The backend implementation in pandas/plotting/_matplotlib/misc.py (lines 34-100) has conditional logic for:
+   - if diagonal == "hist": (line 80) - draws histogram
+   - elif diagonal in ("kde", "density"): (line 83) - draws KDE plot
+
+3. CRITICALLY: There is no else clause to handle invalid values. When an invalid diagonal value is passed, the code simply skips both conditions and continues execution without drawing anything on the diagonal plots.
+
+EFFECT OF THE BUG:
+When an invalid diagonal value is passed:
+- No error is raised
+- The scatter matrix is still generated
+- The diagonal plots are left blank/empty
+- Users may not realize they've made a typo or error
+- This violates the documented API contract which explicitly states diagonal must be {'hist', 'kde'}
+
+The bug report is accurate and represents a genuine violation of the documented API contract.

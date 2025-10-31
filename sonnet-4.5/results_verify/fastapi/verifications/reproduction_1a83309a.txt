@@ -1,0 +1,62 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in FastAPI version 0.115.12.
+
+## Test Results
+
+1. **Basic Reproduction Script**
+   - Whitespace-only strings ("   ", "\t\r\n", "\x85") are returned as-is instead of being rejected
+   - Empty strings ("") and None values are correctly rejected (return None)
+   - This creates inconsistent behavior between empty and whitespace-only strings
+
+2. **Hypothesis Property-Based Tests**
+   - Both basic whitespace test and Unicode whitespace test fail as expected
+   - The tests correctly identify that whitespace-only strings are not rejected
+   - Tests confirm the bug exists for all whitespace characters, including Unicode whitespace
+
+3. **Auto-Error Behavior**
+   - With auto_error=True: Whitespace strings do NOT raise exceptions (they should)
+   - With auto_error=True: Empty strings and None correctly raise HTTP 403 exceptions
+   - With auto_error=False: Whitespace strings are returned as-is (should return None)
+   - With auto_error=False: Empty strings and None correctly return None
+
+## Code Analysis
+
+The bug is located in `/home/npc/miniconda/lib/python3.13/site-packages/fastapi/security/api_key.py` at line 14:
+
+```python
+def check_api_key(api_key: Optional[str], auto_error: bool) -> Optional[str]:
+    if not api_key:  # <- BUG: This only checks truthiness
+        if auto_error:
+            raise HTTPException(
+                status_code=HTTP_403_FORBIDDEN, detail="Not authenticated"
+            )
+        return None
+    return api_key
+```
+
+The problem is that `if not api_key:` uses Python's truthiness check:
+- Empty string "" evaluates to False (correctly rejected)
+- None evaluates to False (correctly rejected)
+- Whitespace strings like "   " evaluate to True (incorrectly accepted)
+
+## Impact
+
+This bug affects all three API key authentication classes:
+- APIKeyQuery (query parameter authentication)
+- APIKeyHeader (header authentication)
+- APIKeyCookie (cookie authentication)
+
+All three classes inherit from APIKeyBase and use the flawed check_api_key method.
+
+## Security Implications
+
+The bug creates a security vulnerability where authentication can potentially be bypassed using whitespace-only API keys. While these keys would likely not match any stored valid keys in a real application, the inconsistent validation could lead to:
+
+1. Confusion in security audits
+2. Potential bypass scenarios if downstream code assumes validated keys are non-whitespace
+3. Inconsistent behavior between empty and whitespace strings
+4. Log analysis difficulties when whitespace keys are involved
+
+The bug report's proposed fix is correct and would resolve the issue by checking both for empty strings and whitespace-only strings.

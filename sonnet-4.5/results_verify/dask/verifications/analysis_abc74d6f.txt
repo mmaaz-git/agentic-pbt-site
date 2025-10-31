@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `_sort_mixed` is a private internal function (starts with underscore), not part of the public API. The docstring only mentions "order ints before strings before nulls" and doesn't mention tuples at all. Since tuples aren't documented as supported, the function crashing on tuples could be considered expected behavior - users shouldn't be relying on undocumented behavior of private functions. Additionally, sorting mixed types with tuples is an edge case that may not be intended to be supported.
+
+**Why it might not be INVALID:**
+The implementation explicitly includes code to handle tuples (`tuple_pos` variable and related logic), indicating that tuple support was intentionally added. The function doesn't raise an informative error saying "tuples not supported" but instead crashes with a low-level numpy concatenation error. If tuples weren't meant to be supported, the code wouldn't have explicit tuple-handling logic.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a private internal function that users shouldn't be calling directly. The bug only affects a very specific edge case (arrays containing tuples) that might rarely occur in practice. The workaround is simple - don't pass tuples to this internal function. Since it's not public API, fixing this might not be worth the maintenance burden, especially if the current users of this function within dask never pass tuples to it.
+
+**Why it might not be WONTFIX:**
+The function has explicit code to handle tuples, suggesting they are meant to be supported. The fix appears straightforward (handle the dimensionality issue with np.argsort on tuples). If this function is used internally by dask and could receive tuples from user data, then the crash could affect end users even if they don't call this function directly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The docstring says "order ints before strings before nulls" but the implementation also handles tuples. The documentation is clearly incomplete. The simplest fix would be to update the docstring to either explicitly state that tuples are not supported, or to mention that tuples are sorted after strings but before nulls (as the implementation intends).
+
+**Why it might not be DOCUMENTATION_FIX:**
+The crash is a real implementation bug, not just a documentation issue. Even if we update the documentation to say tuples are supported, the code still crashes. Alternatively, if we update documentation to say tuples aren't supported, we'd need to remove the tuple-handling code or add proper error checking. Either way, code changes are needed beyond just documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If tuples were never meant to be supported (despite the code attempting to handle them), then properly supporting tuple sorting could be viewed as a new feature. The user is essentially asking for the function to handle a data type that wasn't fully implemented.
+
+**Why it might not be FEATURE_REQUEST:**
+The code already attempts to handle tuples - it's not asking for new functionality but fixing existing broken functionality. The presence of tuple-handling code indicates this was already intended as a feature, it just has a bug in the implementation.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function has explicit code to handle tuples (creating `tuple_pos`, calling `argsort` on tuple values, including `tuple_locs` in the final concatenation), clearly indicating tuples are intended to be supported. The crash is due to an implementation error where the developer didn't account for numpy's behavior of returning 2D arrays when calling argsort on arrays of tuples. This is a clear implementation bug - the code tries to do something but fails due to incorrect assumptions about numpy's behavior.
+
+**Why it might not be BUG:**
+The function is private (underscore prefix) and not part of the public API. The docstring doesn't mention tuple support. The tuple-handling code might be experimental or incomplete, and the function might not be intended for external use. Private functions can have undefined behavior on edge cases.
+
+## Overall Consideration
+
+Looking at all the considerations, three key facts stand out:
+
+First, the implementation explicitly includes tuple-handling code. The function creates a `tuple_pos` mask, attempts to sort tuples separately, and includes them in the final concatenation. This isn't accidental - someone deliberately wrote code to handle tuples. If tuples weren't meant to be supported, this code wouldn't exist. The presence of this code strongly suggests tuples are intended to be supported, making this a genuine implementation bug rather than unsupported functionality.
+
+Second, while the function is private (underscore prefix), it may be used internally within dask's codebase where it could receive tuple data from user inputs. Even if users don't call this function directly, they could trigger the bug indirectly through public APIs that internally use this function. The bug report doesn't show how this function is used internally, but if it's reachable from public APIs with user data, then this affects end users.
+
+Third, the nature of the error is telling. This isn't a case where the function intentionally rejects tuples with a clear error message. Instead, it crashes with a low-level numpy array concatenation error because of an unexpected interaction between numpy's argsort behavior on tuples (returning 2D arrays) and the concatenation step. This is a classic implementation bug where the developer made an incorrect assumption about numpy's behavior. The fix suggested in the bug report (using lexsort or properly handling the dimensionality) appears reasonable and maintains the intended behavior.

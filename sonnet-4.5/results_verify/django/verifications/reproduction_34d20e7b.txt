@@ -1,0 +1,66 @@
+BUG REPRODUCTION RESULTS
+
+1. REPRODUCTION SUCCESSFUL - BUG CONFIRMED
+
+The bug report accurately describes a real issue in Django's CreateModel.reduce() method. All test cases demonstrate the problem.
+
+2. TEST RESULTS:
+
+Test Case 1: Exact reproduction from bug report
+- Field defined as: 'myField' (lowercase 'my')
+- Referenced in unique_together as: 'MyField' (uppercase 'My')
+- After RenameField('myField' -> 'renamedField'):
+  * Expected: unique_together = {('other', 'renamedField')}
+  * Actual: unique_together = {('other', 'MyField')}
+  * RESULT: BUG CONFIRMED - Field not renamed
+
+Test Case 2: Control test (matching case)
+- Field defined as: 'myField'
+- Referenced in unique_together as: 'myField' (same case)
+- After RenameField('myField' -> 'renamedField'):
+  * Expected: unique_together = {('other', 'renamedField')}
+  * Actual: unique_together = {('other', 'renamedField')}
+  * RESULT: WORKS CORRECTLY - Field renamed as expected
+
+Test Case 3: index_together
+- Field defined as: 'myField'
+- Referenced in index_together as: 'MyField'
+- After rename: Field NOT renamed in index_together
+- RESULT: BUG CONFIRMED - Same issue affects index_together
+
+Test Case 4: order_with_respect_to
+- Field defined as: 'myField'
+- Referenced in order_with_respect_to as: 'MyField'
+- After rename: Field NOT renamed in order_with_respect_to
+- RESULT: BUG CONFIRMED - Same issue affects order_with_respect_to
+
+3. HYPOTHESIS TEST RESULTS:
+
+The hypothesis test found multiple failing cases where fields defined with one case and referenced with another case in constraints are not properly renamed. Example failures:
+- old_field='a', constraint_field='A', new_field='b' -> Field 'A' not renamed to 'b'
+
+4. CODE ANALYSIS:
+
+The bug is in /django/db/migrations/operations/models.py at line 330:
+```python
+operation.new_name if f == operation.old_name else f
+```
+
+This uses exact string comparison (==) which is case-sensitive. When a field 'myField' is referenced as 'MyField' in a constraint, the comparison fails and the field is not renamed.
+
+5. DJANGO BEHAVIOR VERIFICATION:
+
+- Django's field lookup (_meta.get_field()) IS case-sensitive
+- Django ALLOWS defining constraints with different case than field names
+- Example: field 'myField' can be referenced as 'MyField' in unique_together
+- This creates an inconsistent state that CreateModel.reduce() doesn't handle
+
+6. IMPACT:
+
+The bug causes:
+- Invalid migration states where constraints reference non-existent fields
+- Migration optimizer produces incorrect optimized migrations
+- Potential database errors when applying migrations
+- Silent failures where constraints don't get updated during field renames
+
+CONCLUSION: The bug report is technically correct and reproducible. The CreateModel.reduce() method fails to rename fields in constraints when the constraint uses different case than the field definition.

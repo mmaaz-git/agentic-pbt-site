@@ -1,0 +1,48 @@
+BUG REPRODUCTION RESULTS
+========================
+
+I successfully reproduced the bug exactly as described in the report.
+
+TEST RESULTS:
+-------------
+
+1. Test case: cap_length('00', max_len=1)
+   - Expected: Result length <= 1
+   - Actual: 'f15343____etc' (length: 13)
+   - FAILS: Result is 13 characters, not <= 1
+
+2. Test case: cap_length('a' * 100, max_len=10)
+   - Expected: Result length <= 10
+   - Actual: '281659__aaa...aaa__etc' (length: 106)
+   - FAILS: Result is 106 characters, not <= 10
+
+3. Property-based testing with Hypothesis:
+   - Ran 100 random test cases
+   - Found 11 failures where len(result) > max_len
+   - All failures occurred when input length > max_len
+
+ROOT CAUSE ANALYSIS:
+--------------------
+
+The bug is caused by incorrect handling of negative array indices in Python:
+
+1. The function uses: s[:max_len-17] when truncating
+2. When max_len < 17, this becomes s[:negative_number]
+3. In Python, s[:-n] means "all but the last n characters", NOT "empty string"
+
+Examples:
+- max_len=1: s[:1-17] = s[:-16] = returns all but last 16 chars
+- max_len=10: s[:10-17] = s[:-7] = returns all but last 7 chars
+
+This causes the "truncated" portion to be much longer than intended:
+- For 100-char string with max_len=10: truncated part is 93 chars (100-7)
+- Final result: 6 (hash) + 2 ("__") + 93 (truncated) + 5 ("__etc") = 106 chars
+
+VERIFICATION:
+-------------
+
+The bug is 100% reproducible and the root cause is clearly identified. The function violates its implied contract (based on the function name "cap_length" and parameter "max_len") by returning strings longer than max_len whenever:
+1. The input string length > max_len
+2. max_len < 17 (or more generally, when max_len - 17 < 0)
+
+The minimum output length when truncation occurs is 13 characters (when max_len=17), regardless of smaller max_len values.

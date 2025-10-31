@@ -1,0 +1,44 @@
+## Bug Reproduction Results
+
+### Test 1: Basic Reproduction from Bug Report
+**Code**:
+```python
+arr = np.array(['x=%d, y=%d'], dtype=str)
+result = char.mod(arr, (5, 10))
+```
+**Result**: `TypeError: not enough arguments for format string`
+**Expected**: `result[0] == 'x=5, y=10'`
+**Python % operator**: `'x=%d, y=%d' % (5, 10)` correctly produces `'x=5, y=10'`
+
+### Test 2: Property-Based Test
+The hypothesis test from the bug report fails with the same error for any integer value, confirming the systematic nature of the bug.
+
+### Test 3: Various Input Formats
+1. **Single format, single value**: `char.mod(['x=%d'], 5)` → Works: `'x=5'`
+2. **Single format, single-element tuple**: `char.mod(['x=%d'], (5,))` → Works: `'x=5'`
+3. **Multiple formats, tuple**: `char.mod(['x=%d, y=%d'], (5, 10))` → **FAILS**: TypeError
+4. **Multiple formats, list**: `char.mod(['x=%d, y=%d'], [5, 10])` → **FAILS**: TypeError
+5. **Dictionary formatting**: `char.mod(['%(x)d, %(y)d'], {'x': 5, 'y': 10})` → Works: `'5, 10'`
+
+### Test 4: Root Cause Verification
+Testing the internal wrapping behavior:
+- `'x=%d, y=%d' % (5, 10)` → Works: `'x=5, y=10'`
+- `'x=%d, y=%d' % ((5, 10),)` → **FAILS**: `%d format: a real number is required, not tuple`
+
+This confirms that NumPy's internal wrapping of `values` in `(values,)` is causing the issue.
+
+### Test 5: Array Broadcasting
+When trying to use a tuple with multiple array elements:
+```python
+formats = np.array(['x=%d, y=%d', 'a=%d, b=%d'], dtype=str)
+char.mod(formats, (5, 10))
+```
+**Result**: TypeError - the tuple cannot be broadcast to work with multiple format strings.
+
+### Summary of Reproduction
+The bug is 100% reproducible. The core issue is:
+1. `numpy.char.mod` claims to implement Python's % operator behavior
+2. Python's % operator accepts tuples for multiple format specifiers: `'x=%d, y=%d' % (5, 10)`
+3. `numpy.char.mod` fails with the same input: `char.mod(['x=%d, y=%d'], (5, 10))`
+4. The failure is due to internal implementation wrapping the values in an extra tuple layer
+5. This breaks compatibility with standard Python string formatting behavior

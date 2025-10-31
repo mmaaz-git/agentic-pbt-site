@@ -1,0 +1,81 @@
+TRIAGE ANALYSIS FOR BUG REPORT
+
+## CONSIDERATION FOR EACH CATEGORY
+
+### 1. BUG (Valid bug report)
+**Arguments FOR:**
+- The current behavior is clearly incorrect: adding flag values instead of ORing them causes wrong bit patterns
+- Duplicate flags should logically be idempotent (C_CONTIGUOUS twice should equal C_CONTIGUOUS once)
+- The bug causes valid arrays to be incorrectly rejected, breaking functionality
+- The implementation uses addition where bitwise OR is the standard practice for combining bit flags
+- This is a semantic error that violates the principle of least surprise
+- The fix is straightforward and correct (change += to |=)
+
+**Arguments AGAINST:**
+- Documentation doesn't explicitly say duplicate flags should work
+- Users could avoid the issue by not passing duplicate flags
+
+### 2. INVALID (Incorrect report)
+**Arguments FOR:**
+- Documentation doesn't explicitly support duplicate flags
+- The flags parameter could be interpreted as requiring unique values
+
+**Arguments AGAINST:**
+- The bug is real and reproducible
+- The current behavior is demonstrably incorrect (1+1=2 sets wrong bit)
+- Bit flags should use bitwise operations, not arithmetic
+- No reasonable interpretation makes the current behavior correct
+
+### 3. WONTFIX (Trivial/uninteresting)
+**Arguments FOR:**
+- Users can work around by ensuring no duplicate flags
+- Might be considered an edge case
+
+**Arguments AGAINST:**
+- This is not trivial - it causes valid arrays to be rejected
+- The bug breaks the fundamental semantics of bit flags
+- Could affect production code, especially when flags are programmatically generated
+- The fix is simple and correct
+
+### 4. FEATURE_REQUEST (New functionality)
+**Arguments FOR:**
+- Could argue that handling duplicates is a new feature
+- Documentation doesn't promise duplicate flag support
+
+**Arguments AGAINST:**
+- This is fixing broken behavior, not adding new functionality
+- Bit flags inherently should be idempotent
+- The code already attempts to handle flag lists, just incorrectly
+
+### 5. DOCUMENTATION_FIX (Doc issue)
+**Arguments FOR:**
+- Documentation could specify "no duplicate flags allowed"
+- Could document the current (broken) behavior
+
+**Arguments AGAINST:**
+- The code behavior is wrong, not just the documentation
+- Documenting broken behavior doesn't fix the semantic error
+- The implementation violates standard bit flag practices
+
+## DETAILED ANALYSIS
+
+The core issue is that `_num_fromflags()` uses arithmetic addition instead of bitwise OR to combine flag values. This is fundamentally incorrect for bit flags:
+
+1. **Bit flags are meant to be combined with OR operations** - This is a universal convention in programming. Using addition breaks this convention.
+
+2. **The bug causes functional breakage** - Valid C-contiguous arrays are rejected when duplicate C_CONTIGUOUS flags are passed, with a confusing error about needing F_CONTIGUOUS.
+
+3. **The behavior violates idempotency** - In any sane flag system, FLAG | FLAG = FLAG. The current implementation makes FLAG + FLAG = DIFFERENT_FLAG.
+
+4. **This is not an edge case** - Programs that build flag lists dynamically could easily produce duplicates. For example:
+   ```python
+   flags = []
+   if condition1: flags.append('C_CONTIGUOUS')
+   if condition2: flags.append('C_CONTIGUOUS')  # Oops, same condition
+   ```
+
+5. **The fix is obvious and correct** - Changing `+=` to `|=` is the standard, correct implementation for combining bit flags.
+
+## RECOMMENDATION
+
+This should be categorized as **BUG**. The implementation is objectively incorrect in its handling of bit flags, causing valid arrays to be rejected with misleading error messages. While the documentation doesn't explicitly address duplicate flags, the current behavior violates fundamental programming conventions for bit flag handling and causes actual functional failures.

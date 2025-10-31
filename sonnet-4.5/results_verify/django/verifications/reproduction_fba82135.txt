@@ -1,0 +1,38 @@
+Bug Reproduction Results
+
+1. Hypothesis Test Results:
+The hypothesis test FAILS as reported. When testing with the input '"' (single quote character):
+- First call: quote_etag('"') returns '"""'
+- Second call: quote_etag('"""') returns '"""""'
+- These are NOT equal, demonstrating non-idempotence
+
+2. Specific Test Case Verification:
+Input:  '"'
+Once:   '"""'    (wraps the single quote in quotes)
+Twice:  '"""""'  (wraps the three quotes in quotes again)
+Thrice: '"""""""' (continues adding quotes)
+
+The bug report's claim about unbounded string growth is CONFIRMED. Each subsequent call adds two more quotes.
+
+3. Additional Test Cases:
+- Normal strings like 'hello' work correctly (idempotent)
+- Already properly quoted strings like '"hello"' work correctly (idempotent)
+- Weak ETags like 'W/"hello"' work correctly (idempotent)
+- Empty quotes '""' work correctly (idempotent)
+- BUT any string containing quotes within what should be the "value" part fails:
+  - '"""' -> '"""""' -> '"""""""' (not idempotent)
+  - '"hello' -> '""hello"' -> '"""hello""' (not idempotent)
+  - 'hello"' -> '"hello""' -> '""hello"""' (not idempotent)
+
+4. Root Cause Analysis:
+The ETAG_MATCH regex pattern uses [^"]* which means "match zero or more non-quote characters". This correctly implements the RFC 9110 specification which forbids quotes within ETag values.
+
+When quote_etag receives '"':
+- It doesn't match the regex (single quote, not a valid ETag format)
+- Gets wrapped to become '"""'
+- '"""' still doesn't match the regex (middle character is a quote, violating [^"]*)
+- Gets wrapped again to become '"""""'
+- This continues indefinitely
+
+5. Technical Accuracy:
+The bug reproduction is technically accurate. The function does exhibit non-idempotent behavior when given inputs containing quote characters. However, this occurs specifically because such inputs produce INVALID ETags according to the HTTP specification.

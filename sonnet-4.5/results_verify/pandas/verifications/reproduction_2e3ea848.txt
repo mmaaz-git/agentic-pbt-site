@@ -1,0 +1,58 @@
+REPRODUCTION OF BUG REPORT FOR pandas.tseries.frequencies.is_subperiod
+
+1. BUG REPORT CLAIMS:
+The report claims that is_subperiod violates the reflexivity property for certain frequencies (M, Q, Y, and their variants), returning False when it should return True. It also claims an inconsistency with is_superperiod for annual frequencies.
+
+2. REPRODUCTION RESULTS:
+
+A. REFLEXIVITY TEST RESULTS:
+I confirmed that is_subperiod(freq, freq) returns incorrect values for:
+- is_subperiod('M', 'M') = False ✗ (should be True)
+- is_subperiod('Q', 'Q') = False ✗ (should be True)
+- is_subperiod('Y', 'Y') = False ✗ (should be True)
+- is_subperiod('Y-JAN', 'Y-JAN') = False ✗ (should be True)
+- is_subperiod('Y-FEB', 'Y-FEB') = False ✗ (should be True)
+- is_subperiod('Q-JAN', 'Q-JAN') = False ✗ (should be True)
+- is_subperiod('Q-FEB', 'Q-FEB') = False ✗ (should be True)
+
+But correctly returns True for:
+- is_subperiod('D', 'D') = True ✓
+- is_subperiod('h', 'h') = True ✓
+- is_subperiod('B', 'B') = True ✓
+- is_subperiod('C', 'C') = True ✓
+- is_subperiod('W', 'W') = True ✓
+- is_subperiod('min', 'min') = True ✓
+- is_subperiod('s', 's') = True ✓
+- is_subperiod('ms', 'ms') = True ✓
+- is_subperiod('us', 'us') = True ✓
+- is_subperiod('ns', 'ns') = True ✓
+
+B. INVERSE RELATIONSHIP TEST:
+Confirmed inconsistency between is_subperiod and is_superperiod for annual frequencies:
+- is_subperiod('Y', 'Y') = False, but is_superperiod('Y', 'Y') = True ✗
+- is_subperiod('Y-JAN', 'Y-JAN') = False, but is_superperiod('Y-JAN', 'Y-JAN') = True ✗
+- is_subperiod('Y-FEB', 'Y-FEB') = False, but is_superperiod('Y-FEB', 'Y-FEB') = True ✗
+
+For M and Q frequencies, both functions return False (consistent but wrong):
+- is_subperiod('M', 'M') = False, is_superperiod('M', 'M') = False ✓ (consistent)
+- is_subperiod('Q', 'Q') = False, is_superperiod('Q', 'Q') = False ✓ (consistent)
+
+C. ALL ASSERTIONS FROM BUG REPORT CONFIRMED:
+✓ is_subperiod('M', 'M') == False (confirmed)
+✓ is_subperiod('Q', 'Q') == False (confirmed)
+✓ is_subperiod('Y', 'Y') == False (confirmed)
+✓ is_subperiod('Y-JAN', 'Y-JAN') == False (confirmed)
+✓ is_superperiod('Y', 'Y') == True (confirmed)
+✓ is_superperiod('Y-JAN', 'Y-JAN') == True (confirmed)
+✓ is_subperiod('D', 'D') == True (confirmed)
+✓ is_subperiod('h', 'h') == True (confirmed)
+
+3. ROOT CAUSE ANALYSIS:
+Looking at the source code, the bug occurs because:
+- For monthly (M), quarterly (Q), and annual (Y) frequencies, the code doesn't include the target frequency itself in the set of valid source frequencies
+- For example, when target is 'M', the code checks: source in {"D", "C", "B", "h", "min", "s", "ms", "us", "ns"}
+- Notice 'M' is not in this set, so is_subperiod('M', 'M') returns False
+- But for 'W' (weekly), the code correctly includes target: source in {target, "D", "C", "B", "h", "min", "s", "ms", "us", "ns"}
+
+4. CONCLUSION:
+The bug report is technically accurate. The code does violate the reflexivity property and has an inconsistency between is_subperiod and is_superperiod for annual frequencies.

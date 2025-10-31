@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+### Bug Confirmed
+The bug reported is technically correct and reproducible. The `truncate_string` function does indeed violate the length invariant when `max_length < 3`.
+
+### Technical Details
+1. **The failing test case works exactly as reported**:
+   - Input: `text="hello", max_length=2`
+   - Output: `'hell...'` (length 7)
+   - This clearly exceeds the maximum length of 2
+
+2. **Root cause analysis**:
+   The bug occurs in line 476 of utils.py:
+   ```python
+   return text[: max_length - 3] + "..."
+   ```
+
+   When `max_length < 3`:
+   - `max_length - 3` becomes negative
+   - Python's negative slicing is activated (e.g., `text[:-1]` means "all but the last character")
+   - This returns more characters than intended, not fewer
+   - Adding "..." makes the result even longer
+
+3. **Scope of the bug**:
+   - Affects all cases where `max_length < 3`
+   - `max_length=0`: Returns string of length >= 3 (e.g., "he..." for "hello")
+   - `max_length=1`: Returns string of length >= 3 (e.g., "hel..." for "hello")
+   - `max_length=2`: Returns string of length >= 3 (e.g., "hell..." for "hello")
+
+4. **The code behavior**:
+   The function currently has a simple truncation path that doesn't account for very small `max_length` values. It naively subtracts 3 from `max_length` to make room for the ellipsis, but doesn't handle the case where this would result in a negative number.
+
+### Assessment
+From a technical perspective, this IS a violation of what the function promises. The parameter is named `max_length` and the docstring says it truncates to a "maximum length". The returned string exceeding this maximum is a clear contract violation.

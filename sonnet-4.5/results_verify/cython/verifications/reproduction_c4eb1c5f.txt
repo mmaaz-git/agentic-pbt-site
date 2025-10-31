@@ -1,0 +1,46 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported regarding the Cython.Tempita sub() function's __name parameter leaking into the template namespace.
+
+### Test Results
+
+1. **Direct Reproduction Test**:
+   - Template: "Template name: {{__name}}"
+   - Call: sub(content, __name='mytemplate.html')
+   - Expected Result: "Template name: " (empty, __name should not be accessible)
+   - Actual Result: "Template name: mytemplate.html"
+   - **Status**: BUG CONFIRMED
+
+2. **Multiple Variables Test**:
+   - Template: "Name is: {{__name}} and foo is: {{foo}}"
+   - Call: sub(content3, __name='template.html', foo='bar')
+   - Result: "Name is: template.html and foo is: bar"
+   - This confirms that __name is indeed being treated as a regular template variable alongside other kwargs
+
+3. **Property-Based Test with Hypothesis**:
+   - Test failed with the first randomly generated string "A"
+   - When __name="A" is passed, the template {{__name}} renders as "A" instead of empty string
+   - The test correctly fails, confirming the bug across all possible inputs
+
+### Source Code Analysis
+
+Looking at the source code in /home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Tempita/_tempita.py:
+
+Lines 381-385:
+```python
+def sub(content, delimiters=None, **kw):
+    name = kw.get('__name')  # Extracts but doesn't remove __name
+    delimeters = kw.pop('delimeters') if 'delimeters' in kw else None  # Removes delimeters
+    tmpl = Template(content, name=name, delimiters=delimiters, delimeters=delimeters)
+    return tmpl.substitute(kw)  # kw still contains __name
+```
+
+The bug is clear:
+- Line 382 uses `kw.get('__name')` which reads but doesn't remove the __name from kw
+- Line 383 correctly uses `kw.pop('delimeters')` to remove the legacy parameter
+- Line 385 passes the unmodified kw dict (still containing __name) to substitute()
+- This makes __name available as a template variable
+
+### Impact
+
+The __name parameter intended for template naming (for error reporting) becomes accessible as a template variable, which is unexpected behavior. Users would not expect {{__name}} in their templates to expand to the template's name parameter.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation specifies that the function uses 'utf8' encoding by default. UTF-8, by specification, does not allow surrogate characters (U+D800 to U+DFFF). These are reserved code points that are invalid in UTF-8. The function is behaving correctly according to the UTF-8 standard by rejecting these characters. The user is passing invalid data for UTF-8 encoding and expecting it to work, which could be considered user error.
+
+**Why it might not be INVALID:**
+The function accepts Python strings in object arrays, and surrogate characters ARE valid Python strings. Python allows these characters in memory even though they can't be encoded to UTF-8. The function already has error handling for mixed types (the TypeError catch), suggesting it's designed to be robust. Other pandas functions handle various edge cases gracefully, and this could be seen as another edge case that should be handled rather than crash.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Surrogate characters are an extremely obscure edge case that would rarely occur in real-world data. They only exist due to UTF-16 encoding internals and are not meant to be used in actual text data. The effort to fix this might not be worth it for such a rare case. The error message is technically correct - surrogates are not allowed in UTF-8. Users encountering this should clean their data rather than expect the library to handle invalid UTF-8 sequences.
+
+**Why it might not be WONTFIX:**
+The function already has error handling code that attempts to deal with problematic inputs (the TypeError catch and fallback). The crash is unhandled and provides no graceful degradation. Given that the function is meant to hash arbitrary object arrays, it should be robust enough to handle any valid Python object, including strings with surrogates. The fix would be relatively simple - just catching one more exception type.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what happens with invalid UTF-8 sequences or surrogate characters. It simply says "encoding for data & key when strings" without explaining limitations. The documentation should clarify that the function requires UTF-8 compatible strings and will fail on surrogate characters. This would set proper expectations for users about what string data is acceptable.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is actually broken - it crashes on valid Python data. Simply documenting the limitation doesn't fix the underlying problem that the function can't handle certain inputs. The error is not a documented or expected behavior, it's an unhandled exception from deep in the Cython code. Documentation changes alone wouldn't address the core issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Currently, the function doesn't support hashing arrays containing strings with surrogate characters. Adding support for this could be seen as a new feature - extending the function to handle a broader range of inputs. The user is essentially asking for the function to be enhanced to handle surrogate characters gracefully, which it currently doesn't support.
+
+**Why it might not be FEATURE_REQUEST:**
+The function claims to hash object arrays containing strings, and surrogate-containing strings are valid Python strings. This isn't asking for new functionality but for the existing functionality to work correctly with all valid inputs. The function already attempts error recovery for TypeError, suggesting error handling is part of its design, not a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an unhandled exception on valid Python input (a numpy object array containing valid Python strings). The code already has error handling for TypeError but missed UnicodeEncodeError, suggesting incomplete error handling. The function accepts object arrays which can contain any Python object, including strings with surrogates, but fails to handle them properly. This is a clear case of the function not being robust enough to handle its declared input domain.
+
+**Why it might not be BUG:**
+The function is working as designed for UTF-8 encoding, which explicitly forbids surrogate characters. The error accurately reflects that surrogates are not allowed in UTF-8. This could be seen as correct behavior - rejecting invalid data for the specified encoding. The documentation states it uses UTF-8 encoding, and surrogate characters are well-known to be invalid in UTF-8.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a WONTFIX issue rather than a bug. Here's why:
+
+First, surrogate characters (U+D800-U+DFFF) are explicitly invalid in UTF-8 by the Unicode standard. They exist solely as an implementation detail of UTF-16 encoding and should never appear in actual text data. The function's default encoding is UTF-8, and it is behaving correctly according to the UTF-8 specification by rejecting these characters. This is not a bug but correct behavior per the encoding standard.
+
+Second, while the function could theoretically add special handling for surrogates (using errors='surrogatepass' or 'replace'), this would be addressing an extremely rare edge case that indicates problematic data. Real-world data should not contain lone surrogates - their presence usually indicates a data corruption or improper string handling elsewhere in the data pipeline. Adding complex error handling for this case would complicate the code for minimal practical benefit.
+
+Third, the existing error message is accurate and informative: "surrogates not allowed". This correctly identifies the problem and follows Python's standard behavior for UTF-8 encoding. Users encountering this error should fix their data source rather than expect pandas to silently handle or work around invalid UTF-8 sequences. The proper fix is at the data level, not in the hashing function.

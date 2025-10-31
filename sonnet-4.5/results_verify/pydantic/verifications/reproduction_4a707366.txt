@@ -1,0 +1,49 @@
+# Reproduction Results
+
+## Summary
+I have successfully reproduced the bug reported in pydantic.deprecated.json.timedelta_isoformat for negative timedeltas.
+
+## Test Results
+
+### Direct Reproduction
+Running the provided reproduction code confirms the issue:
+- Input: `datetime.timedelta(seconds=-1)`
+- Output from timedelta_isoformat: `-P1DT23H59M59.000000S`
+- Parsed back: `-2 days, 0:00:01` (total_seconds=-172799.0)
+- Expected: `-1 second` (total_seconds=-1.0)
+
+The round-trip fails completely - instead of getting back -1 second, we get -172799 seconds (approximately -48 hours).
+
+### Hypothesis Test Results
+The hypothesis-based property test failed on all three provided examples:
+1. `timedelta(seconds=-1)` -> `-P1DT23H59M59.000000S` -> `-2 days, 0:00:01`
+2. `timedelta(seconds=-30)` -> `-P1DT23H59M30.000000S` -> `-2 days, 0:00:30`
+3. `timedelta(hours=-1)` -> `-P1DT23H0M0.000000S` -> `-2 days, 1:00:00`
+
+All cases show the same pattern of incorrect encoding.
+
+## Root Cause Analysis
+
+The issue stems from how Python internally represents negative timedeltas:
+- `timedelta(seconds=-1)` is stored as `days=-1, seconds=86399, microseconds=0`
+- This is because Python normalizes the representation to have positive seconds/microseconds
+
+The current implementation in timedelta_isoformat (lines 139-141) incorrectly handles this:
+```python
+minutes, seconds = divmod(td.seconds, 60)
+hours, minutes = divmod(minutes, 60)
+return f'{"-" if td.days < 0 else ""}P{abs(td.days)}DT{hours:d}H{minutes:d}M{seconds:d}.{td.microseconds:06d}S'
+```
+
+It uses `td.seconds` directly (which is 86399 for -1 second) and only checks `td.days` for the sign. This creates `-P1DT23H59M59.000000S` which according to ISO 8601 means "minus (1 day + 23 hours + 59 minutes + 59 seconds)" = -172799 seconds.
+
+## Expected Behavior
+The correct ISO 8601 format for `timedelta(seconds=-1)` should be `-PT1S`, which the isodate library correctly parses back to -1 second.
+
+## Impact
+This bug affects any code that:
+1. Serializes negative timedeltas using this deprecated function
+2. Expects the serialized format to be correctly parseable back to the original value
+3. Uses the output for interoperability with other systems expecting valid ISO 8601 durations
+
+The function is marked as deprecated, but it still claims to produce "ISO 8601 encoding for Python timedelta object" which it fails to do correctly for negative values.

@@ -1,0 +1,65 @@
+BUG TRIAGE ANALYSIS
+===================
+
+Target: django.db.backends.utils.split_tzname_delta
+Issue: Incorrectly formats HHMM timezone offsets as 'HHMM:00' instead of 'HH:MM'
+
+Analysis for Each Category:
+---------------------------
+
+1. BUG (Valid Bug Report)
+REASONS FOR:
+- The function produces objectively incorrect output: '0530:00' is not a valid timezone offset format
+- PostgreSQL (and likely other databases) expect offsets in 'HH:MM' format, not 'HHMM:00'
+- The bug would cause database queries with timezone operations to fail or produce incorrect results
+- The function successfully parses HHMM format via parse_time() but then corrupts it
+- The fix is straightforward and would improve correctness
+
+REASONS AGAINST:
+- None. This is clearly a bug.
+
+2. INVALID
+REASONS FOR:
+- Could argue that HHMM format without separator isn't explicitly documented as supported
+
+REASONS AGAINST:
+- parse_time() accepts HHMM format, so the function implicitly supports it
+- The function produces malformed output rather than rejecting the input
+- The output '0530:00' is objectively incorrect for any timezone system
+
+3. WONTFIX
+REASONS FOR:
+- Could argue it's an edge case if users should use colon-separated format
+
+REASONS AGAINST:
+- HHMM format is commonly used in timezone specifications (e.g., ISO 8601)
+- The bug affects real database operations that would fail
+- The fix is simple and doesn't break existing functionality
+
+4. DOCUMENTATION_FIX
+REASONS FOR:
+- The documentation doesn't specify input/output formats
+
+REASONS AGAINST:
+- The issue isn't about unclear documentation - the function produces invalid output
+- Even if documented, producing '0530:00' would still be incorrect
+- The bug is in the code logic, not the documentation
+
+5. FEATURE_REQUEST
+REASONS FOR:
+- Could frame HHMM support as a new feature
+
+REASONS AGAINST:
+- The function already attempts to handle HHMM (via parse_time)
+- It's not adding new functionality but fixing broken existing behavior
+- The function produces corrupt output rather than rejecting unsupported input
+
+CONCLUSION:
+-----------
+This is clearly a BUG. The function:
+1. Accepts HHMM format input via parse_time()
+2. Incorrectly processes it to produce 'HHMM:00'
+3. Creates invalid timezone offset strings that break database operations
+4. Has a clear, simple fix that maintains backward compatibility
+
+The bug is not about edge cases or undocumented behavior - it's about producing objectively incorrect and unusable output for valid input.

@@ -1,0 +1,54 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. HYPOTHESIS TEST REPRODUCTION:
+   - The property-based test provided in the bug report runs and fails as expected
+   - The test creates a callable object (a class instance with __call__ method)
+   - When repr() is called on a Call instance containing this callable, it crashes with:
+     AttributeError: 'MyCallable' object has no attribute '__name__'
+   - The error occurs at line 46 in Cython/Plex/Actions.py
+
+2. MANUAL TEST REPRODUCTION:
+   I tested four different types of callables:
+
+   a) Callable object (class with __call__): FAILS
+      - Error: 'CallableObject' object has no attribute '__name__'
+
+   b) functools.partial: FAILS
+      - Error: 'functools.partial' object has no attribute '__name__'
+
+   c) Lambda function: WORKS
+      - Output: Call(<lambda>)
+      - Works because lambda functions have a __name__ attribute
+
+   d) Regular function: WORKS
+      - Output: Call(regular_func)
+      - Works because regular functions have a __name__ attribute
+
+3. ROOT CAUSE:
+   The Call.__repr__ method at line 46 unconditionally accesses self.function.__name__:
+
+   def __repr__(self):
+       return "Call(%s)" % self.function.__name__
+
+   This assumes all callables have a __name__ attribute, which is incorrect.
+
+4. VERIFICATION OF VALID INPUTS:
+   I examined Cython/Plex/Lexicons.py and found that at line 158, the code explicitly
+   creates Call actions for ANY callable:
+
+   try:
+       action_spec.__call__
+   except AttributeError:
+       action = Actions.Return(action_spec)
+   else:
+       action = Actions.Call(action_spec)
+
+   This confirms that Call is designed to accept any callable object, not just
+   functions with __name__ attributes. The bug report's test cases are valid inputs
+   that should be supported.
+
+CONCLUSION: The bug is confirmed and reproducible. The Call class accepts any callable
+but its __repr__ method incorrectly assumes all callables have a __name__ attribute.

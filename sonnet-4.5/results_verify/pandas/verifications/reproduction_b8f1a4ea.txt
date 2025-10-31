@@ -1,0 +1,43 @@
+## Reproduction of Bug Report: pandas.io.formats.css.CSSResolver.size_to_pt Scientific Notation Parsing
+
+### Bug Reproduction Confirmed
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in pandas 2.3.2.
+
+### Test Results
+
+1. **Basic Reproduction Test**:
+   - Input: `"1e-5pt"` → Output: `"0pt"` (Expected: `"0.00001pt"`)
+   - Input: `"0.00001pt"` → Output: `"0.000010pt"` (Correct)
+
+   The function incorrectly handles scientific notation, returning `"0pt"` with a warning "Unhandled size: '1e-5pt'".
+
+2. **Additional Test Cases**:
+   - `"1e-6pt"` → `"0pt"` (Expected: `"0.000001pt"`)
+   - `"5e-4pt"` → `"0pt"` (Expected: `"0.0005pt"`)
+   - `"1.5e-3pt"` → `"0pt"` (Expected: `"0.0015pt"`)
+   - `"1e6pt"` → `"0pt"` (Expected: `"1000000pt"`)
+
+   All scientific notation inputs fail and return `"0pt"` with warnings.
+
+3. **Hypothesis Property-Based Test**:
+   The test fails on the explicit example `6.103515625e-05`, confirming that when Python formats a float in scientific notation, the size_to_pt method cannot parse it correctly.
+
+### Root Cause Analysis
+
+The regex pattern `r"^(\S*?)([a-zA-Z%!].*)"` at line 351 incorrectly splits scientific notation:
+- For input `"1e-5pt"`, it captures:
+  - Value: `"1"` (incorrect - should be `"1e-5"`)
+  - Unit: `"e-5pt"` (incorrect - should be `"pt"`)
+
+The 'e' in the exponent is incorrectly interpreted as the start of the unit string because the pattern uses `[a-zA-Z%!]` to detect unit boundaries.
+
+### Impact
+
+This bug affects any CSS size value containing scientific notation, which can occur:
+1. When programmatically generating CSS values from floats
+2. When dealing with very small values (< 0.0001)
+3. When dealing with very large values (> 1,000,000)
+4. When Python's string representation of a float uses scientific notation
+
+The function fails silently by returning a default value of `"0pt"` (with a warning), which could lead to incorrect styling or layout issues in pandas-generated HTML/CSS output.

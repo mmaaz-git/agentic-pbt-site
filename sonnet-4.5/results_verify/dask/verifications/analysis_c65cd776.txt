@@ -1,0 +1,74 @@
+## Bug Report Triage Analysis
+
+### Evaluation Against Each Category
+
+#### BUG (Valid Bug Report)
+**Strong Evidence For:**
+- The code crashes with a TypeError when given valid Parquet statistics according to the Apache Parquet specification
+- The Apache Parquet format explicitly allows partial statistics (one of min/max being None)
+- The function claims to handle "missing stats" but fails on partial None cases
+- The comment "min/max cannot be None for remaining checks" is contradicted by the actual code behavior
+- This affects real-world use cases with legacy or incomplete Parquet files
+- The bug is reproducible and the fix is straightforward
+- Similar issue (#9764) was previously fixed, showing this type of bug is recognized as valid
+
+**Evidence Against:**
+- None - this appears to be a clear bug
+
+#### INVALID
+**Evidence For:**
+- None
+
+**Evidence Against:**
+- The bug report correctly identifies a real crash with valid input
+- The Parquet specification explicitly supports the failing case
+- The code doesn't handle a documented valid case
+
+#### WONTFIX
+**Evidence For:**
+- Could argue that partial statistics are rare in practice
+
+**Evidence Against:**
+- This is not an obscure edge case - partial statistics are explicitly allowed by the Parquet spec
+- The crash prevents reading valid Parquet files
+- The fix is simple and doesn't impact performance
+- Real users encounter this with legacy Parquet files or files from certain writers
+
+#### DOCUMENTATION_FIX
+**Evidence For:**
+- The internal comment claims "min/max cannot be None" but doesn't enforce it
+
+**Evidence Against:**
+- This is a code bug, not a documentation issue
+- The function crashes rather than handling the case gracefully
+- The Parquet specification is clear that partial stats must be handled
+
+#### FEATURE_REQUEST
+**Evidence For:**
+- Could argue that supporting partial statistics is a new feature
+
+**Evidence Against:**
+- The Parquet specification requires readers to handle missing min/max gracefully
+- This is fixing a crash, not adding new functionality
+- The function already claims to handle "missing stats"
+
+### Final Assessment
+
+This is clearly a **BUG**. The evidence is overwhelming:
+
+1. **Specification Violation**: The Apache Parquet format specification explicitly allows min or max to be None independently, and requires readers to handle this gracefully. The current implementation violates this specification.
+
+2. **Crash on Valid Input**: The function crashes with a TypeError when given input that is valid according to the Parquet specification.
+
+3. **Inconsistent Implementation**: The code has comments claiming "min/max cannot be None for remaining checks" but doesn't actually validate this assumption before performing comparisons.
+
+4. **Real-World Impact**: This affects users working with:
+   - Legacy Parquet files
+   - Files with incomplete statistics
+   - Files from certain Parquet writers that omit some statistics
+
+5. **Simple Fix Available**: The bug report provides reasonable fixes that would handle the case properly without breaking existing functionality.
+
+6. **Precedent**: Similar issues (like #9764) have been recognized and fixed in the Dask codebase.
+
+The function fails to fulfill its documented purpose of handling partition-level filtering with missing statistics. This is not an enhancement request or documentation issue - it's a failure to correctly implement the Parquet specification's requirements for handling optional statistics.

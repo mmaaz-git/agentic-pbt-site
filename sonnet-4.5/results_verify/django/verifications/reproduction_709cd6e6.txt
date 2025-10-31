@@ -1,0 +1,38 @@
+## Reproduction of Bug Report
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Basic Test Case
+When calling `truncate_name('00', 1)`:
+- Expected: Result should be at most 1 character long
+- Actual: Result is 'b4b1' which is 4 characters long
+- The function violates its length constraint by returning a string longer than the specified length
+
+### Property-Based Test
+The Hypothesis test fails immediately with the same input:
+- identifier='00', length=1
+- Result: 'b4b1' (length 4)
+- This confirms the bug is reproducible and violates the length invariant
+
+### Idempotence Test
+The function is also not idempotent when length < hash_len:
+- First call: truncate_name('00', 1) = 'b4b1'
+- Second call: truncate_name('b4b1', 1) = 'bfde7'
+- The function produces different results when called repeatedly with its own output
+
+### Root Cause Analysis
+Looking at the source code (lines 283-301), the issue occurs in line 299:
+```python
+name[: length - hash_len]
+```
+
+When `length=1` and `hash_len=4` (default), this becomes `name[: 1-4]` = `name[:-3]`.
+With `name='00'`, this gives us an empty string (slicing with negative stop index).
+The function then concatenates:
+- Empty namespace prefix: ""
+- Empty truncated name: ""
+- Full 4-character hash digest: "b4b1"
+
+Result: "b4b1" which is 4 characters, violating the length=1 constraint.
+
+The bug is confirmed and reproducible exactly as described in the report.

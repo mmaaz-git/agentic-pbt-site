@@ -1,0 +1,58 @@
+## Bug Reproduction Results
+
+### Core Issue Confirmed
+
+The bug report is technically accurate. Testing confirms that:
+
+1. **Rows with all None/NaN values are silently dropped** during the Excel round-trip process
+2. **The issue is in read_excel(), not to_excel()** - The rows ARE written to the Excel file but are skipped when reading
+
+### Reproduction Tests
+
+#### Test 1: Basic Reproduction
+- Input DataFrame: 3 rows with [None, None, None]
+- Excel file written: 4 rows total (1 header + 3 data rows confirmed via openpyxl)
+- DataFrame read back: 0 rows
+- **Data loss confirmed**
+
+#### Test 2: Pattern Analysis
+- Rows with ONLY None/NaN: **Completely dropped** (e.g., [None] → 0 rows)
+- Trailing None/NaN rows: **Dropped** (e.g., [1, None] → 1 row)
+- Leading None/NaN rows WITH subsequent values: **Preserved** (e.g., [None, 1] → 2 rows)
+- Middle None/NaN rows WITH subsequent values: **Preserved** (e.g., [1, None, 2] → 3 rows)
+
+#### Test 3: Hypothesis Testing
+- Ran 100 property-based tests
+- Multiple failures found when lists contain only None values
+- Confirms the invariant `len(df) == len(read_excel(to_excel(df)))` is violated
+
+#### Test 4: Engine-Specific Behavior
+- **openpyxl**: Writes rows correctly (verified by direct inspection), but pandas skips them when reading
+- **xlsxwriter**: Same behavior - writes correctly but pandas skips when reading
+- **Direct openpyxl inspection**: Shows max_row=4 (3 data rows + 1 header), confirming rows ARE written
+
+#### Test 5: Workaround Testing
+- `na_rep=''` (default): Rows lost
+- `na_rep='MISSING'`: Rows preserved, values read as 'MISSING'
+- `na_rep='-'`: Rows preserved, values read as '-'
+- `na_rep='0'`: Rows preserved, values read as 0
+- `keep_default_na=False`: Does NOT fix the issue
+- `na_filter=False`: Does NOT fix the issue
+
+### Technical Details
+
+The issue appears to be that:
+1. `to_excel()` correctly writes rows with None/NaN as empty cells
+2. Excel files contain these rows (verified with openpyxl direct inspection)
+3. `read_excel()` skips rows where all cells are empty
+4. This is likely an optimization in `read_excel()` to skip "blank" rows, but it causes data loss
+
+### Impact Assessment
+
+The bug causes:
+- **Silent data loss** - No errors or warnings
+- **Violation of round-trip property** - Data cannot be reliably saved and restored
+- **Loss of row position information** - Important in indexed data
+- **Unpredictable behavior** - Depends on data values, not structure
+
+The workaround (using non-empty `na_rep`) changes the data representation, which may not be acceptable in all use cases.

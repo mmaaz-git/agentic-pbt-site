@@ -1,0 +1,42 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue manifests in two different ways:
+
+### 1. Empty String to NaN Conversion
+
+When a DataFrame contains empty strings mixed with other data, the empty strings are converted to NaN during the Excel round-trip:
+
+- Original: `['active', '']`
+- After round-trip: `['active', nan]`
+
+This conversion happens because:
+1. `to_excel()` writes empty strings as empty Excel cells (None values)
+2. `read_excel()` with default settings interprets empty cells as NaN
+
+**Workaround exists**: Using `read_excel(filepath, na_filter=False)` or `read_excel(filepath, keep_default_na=False)` preserves empty strings correctly.
+
+### 2. Complete Row Loss
+
+More seriously, when a DataFrame row contains ONLY empty strings, the entire row is lost:
+
+- Original DataFrame: shape (1, 1) with value `[['']]`
+- After round-trip: shape (0, 1) - empty DataFrame with only column headers
+
+This happens because:
+1. `to_excel()` writes empty strings as empty cells
+2. Excel/openpyxl doesn't consider rows with only empty cells as actual data rows
+3. `read_excel()` sees no data rows and returns an empty DataFrame
+
+This row loss occurs regardless of `na_filter` or `keep_default_na` settings.
+
+### Testing Details
+
+The Hypothesis test correctly identifies this bug with the failing input `data=[['']]`. The test fails with:
+```
+AssertionError: DataFrame are different
+DataFrame shape mismatch
+[left]:  (1, 1)
+[right]: (0, 1)
+```
+
+Manual testing confirms both issues consistently. The bug affects data integrity in a silent manner with no warnings to the user.

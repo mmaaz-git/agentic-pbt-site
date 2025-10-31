@@ -1,0 +1,33 @@
+DOCUMENTATION ANALYSIS FOR django.dispatch.Signal
+
+I examined the Django source code and external documentation to understand the expected behavior of the Signal class. Here are my findings:
+
+1. SOURCE CODE DOCUMENTATION (dispatcher.py):
+   - Line 173-174 in send() method explicitly states: "sender: The sender of the signal. Either a specific object or None."
+   - Line 223-224 in asend() method states: "sender: The sender of the signal. Either a specific object or None."
+   - Line 69-71 in connect() method states: "sender: The sender to which the receiver should respond. Must either be a Python object, or None to receive events from any sender."
+   - Line 282-284 in send_robust() states: "sender: The sender of the signal. Can be any Python object (normally one registered with a connect if you actually want something to occur)."
+
+2. CACHING IMPLEMENTATION:
+   - Line 47: The code creates a WeakKeyDictionary when use_caching=True
+   - Lines 43-46 contain a comment explaining that the cache stores receivers per distinct sender
+   - The WeakKeyDictionary is a Python standard library feature that only accepts objects that can have weak references
+
+3. EXTERNAL DJANGO DOCUMENTATION:
+   - The official Django documentation mentions that sender is "typically a class" but does not restrict the type
+   - The documentation does not mention the use_caching parameter at all in the public API documentation
+   - The use_caching parameter appears to be an internal/undocumented feature
+
+4. KEY OBSERVATION:
+   The source code documentation explicitly allows None as a sender value, which is a common and documented use case. The documentation also suggests "any Python object" can be used as a sender. However, the implementation uses WeakKeyDictionary which cannot handle:
+   - None (NoneType objects)
+   - Strings (immutable built-in type)
+   - Integers (immutable built-in type)
+   - Other immutable built-in types
+
+5. CONTRADICTION:
+   There is a clear contradiction between:
+   - What the documentation says is allowed (None and any Python object)
+   - What the implementation can actually handle when use_caching=True (only objects that support weak references)
+
+The use_caching parameter itself appears to be an undocumented internal feature, not part of the public API based on the Django documentation reviewed.

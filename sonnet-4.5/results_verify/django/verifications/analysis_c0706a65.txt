@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The code technically works as designed from a Python perspective - strings are iterables, and the code checks for iterables. One could argue that the implementation is correct and it's the developer's responsibility not to return strings. The check for Iterable is intentional and the code doesn't crash, it just produces unexpected results. If Django intended to accept any iterable, then this behavior would be correct.
+
+**Why it might not be INVALID:**
+The documentation, docstrings, and error messages all explicitly state that check functions "must return a list" - not an iterable, but specifically a list. The error message at line 92-93 literally says "The function %r did not return a list. All functions registered with the checks registry must return a list." When documentation is this explicit and the code contradicts it, the bug is valid. Additionally, the resulting behavior (splitting strings character-by-character) is clearly not the intended functionality.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an edge case that rarely happens in practice. Experienced Django developers know to return lists of CheckMessage objects, and returning a raw string would be caught quickly in testing. The fix might be considered not worth the effort since it only affects developers who make a specific type of mistake. The current behavior, while incorrect, doesn't crash the system immediately.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it's a fundamental type safety issue where the code accepts inputs that violate its documented contract. The bug can cause confusing downstream errors that are hard to debug, especially for new Django developers. The fix is trivial (changing one line of code), and the impact on developer experience is significant. This is exactly the kind of defensive programming that frameworks should implement.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the documentation should be updated to reflect that any iterable is accepted, not just lists. The error message could be changed to say "must return an iterable" instead of "must return a list". This would make the documentation match the current implementation without changing any behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation is correct about the intended behavior - check functions should return lists of CheckMessage objects. Changing the documentation to say "any iterable" would be misleading because not all iterables make sense (strings being the prime example). The documentation reflects the intended design, and the code is what needs fixing, not the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as a request for better type checking or validation rather than a bug fix. The request would be to add stricter type validation to ensure only lists (or lists/tuples) of CheckMessage objects are accepted. This could be seen as an enhancement to make the framework more robust rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a request for new functionality - the documented behavior already exists and is clearly specified. The code simply doesn't implement what the documentation promises. When code doesn't match its specification, that's a bug, not a missing feature. The framework already claims to require lists, it just doesn't enforce that requirement properly.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case where the implementation violates the documented contract. The documentation, docstrings, and error messages all state that check functions "must return a list", but the code accepts any iterable including strings. When a string is returned, it gets split character-by-character, which is obviously not the intended behavior for a check function. This violates type safety, can cause confusing downstream errors, and the fix is straightforward.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if Django intentionally designed the system to accept any iterable and the documentation is simply outdated or poorly worded. However, given that the error message itself says "must return a list" in the same function that checks for Iterable, this seems unlikely. The behavior with strings is clearly unintended.
+
+## Overall Consideration
+
+This is unequivocally a valid BUG. The evidence is overwhelming: the documentation at multiple levels (docstrings, error messages, and patterns) explicitly states that check functions must return a list, specifically "a list of Errors and Warnings". The implementation contradicts this by accepting any iterable, including strings, which leads to nonsensical behavior where strings are split character-by-character. This is not a documentation issue because the documentation correctly describes the intended behavior. It's not a feature request because the feature is already supposed to exist according to the specification.
+
+The bug has real impact on developers who might accidentally return error messages as strings instead of wrapped in a list. Instead of getting a clear error, they get confusing downstream failures when code expects CheckMessage objects but receives individual characters. The fix is trivial and improves type safety without breaking any legitimate use cases.
+
+Most importantly, this is exactly the type of bug that should be fixed in a framework: where the code silently accepts invalid input that violates its documented contract, leading to confusing errors later in the execution flow. The fact that the error message says "must return a list" while the code checks for any iterable is particularly damning evidence that this is an implementation bug, not a documentation issue.

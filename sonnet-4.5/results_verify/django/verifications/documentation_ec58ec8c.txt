@@ -1,0 +1,34 @@
+DOCUMENTATION ANALYSIS FOR django.core.mail.backends.filebased
+================================================================
+
+1. BASE CLASS DOCUMENTATION (BaseEmailBackend.send_messages):
+   - Location: django/core/mail/backends/base.py, line 55-59
+   - Docstring: "Send one or more EmailMessage objects and return the number of email messages sent."
+   - This clearly states the method should return a NUMBER (integer)
+
+2. DJANGO OFFICIAL DOCUMENTATION:
+   - The Django documentation confirms that send_messages() should "return the number of successfully delivered messages"
+   - For an empty list, the number of successfully delivered messages would be 0
+   - The documentation does NOT specify any special case for empty lists that would justify returning None
+
+3. IMPLEMENTATION ANALYSIS:
+   - FileBasedBackend inherits from ConsoleEmailBackend
+   - ConsoleEmailBackend.send_messages() has an early return on line 31 that returns None when email_messages is empty
+   - This is the root cause of the bug
+
+4. OTHER BACKENDS FOR COMPARISON:
+   - SMTPBackend (line 125-126): Explicitly returns 0 for empty messages
+   - DummyBackend (line 10): Returns len(list(email_messages)) which is 0 for empty list
+   - LocmemBackend: Iterates and counts, returns 0 for empty list
+
+5. CONTRACT VIOLATION:
+   - The base class establishes a contract: return "the number of email messages sent"
+   - For an empty list, the number sent is 0, not None
+   - Returning None violates the type contract (should be int) and the semantic contract (should be a count)
+
+6. CONSISTENCY PRINCIPLE:
+   - 3 out of 5 backends (SMTP, dummy, locmem) correctly return 0
+   - 2 backends (console, filebased) incorrectly return None
+   - This inconsistency can break code that depends on the return value being an integer
+
+CONCLUSION: The documentation is clear that send_messages() should return a number (integer) representing the count of messages sent. There is no documented exception for empty lists that would justify returning None.

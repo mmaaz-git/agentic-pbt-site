@@ -1,0 +1,59 @@
+## Bug Reproduction Results
+
+### Test Environment
+- pandas version: 2.3.2
+- Python version: 3.13
+
+### Reproduction Tests Conducted
+
+#### Test 1: Simple Duplicate Integer Index
+```python
+pd.read_csv(StringIO("a,b,c\n1,2,3\n4,5,6"), index_col=[0, 0])
+```
+**Result**: ValueError: list.remove(x): x not in list
+**Status**: BUG REPRODUCED
+
+#### Test 2: Duplicate String Column Names
+```python
+pd.read_csv(StringIO("a,b,c\n1,2,3\n4,5,6"), index_col=['a', 'a'])
+```
+**Result**: ValueError: list.remove(x): x not in list
+**Status**: BUG REPRODUCED
+
+#### Test 3: Mixed Duplicate (Integer and String Referring to Same Column)
+```python
+pd.read_csv(StringIO("a,b,c\n1,2,3\n4,5,6"), index_col=[0, 'a'])
+```
+**Result**: ValueError: list.remove(x): x not in list
+**Status**: BUG REPRODUCED
+
+#### Test 4: Non-Duplicate Control Test
+```python
+pd.read_csv(StringIO("a,b,c\n1,2,3\n4,5,6"), index_col=[0, 1])
+```
+**Result**: Successfully creates MultiIndex DataFrame
+**Status**: Works as expected
+
+### Error Analysis
+
+The error occurs in `/pandas/io/parsers/base_parser.py` at line 1073 in the `_clean_index_names` method:
+```python
+columns.remove(name)
+```
+
+The traceback confirms the exact behavior described in the bug report:
+1. The function iterates through index_col values
+2. For each column index, it removes the corresponding column name from the columns list
+3. When a duplicate index is encountered, it tries to remove the same column name twice
+4. The second removal fails with ValueError because the name was already removed
+
+### Property-Based Testing
+
+The hypothesis-based test successfully reproduces the bug with minimal inputs (ncols=2, nrows=1, duplicate_index=0), confirming that the issue occurs consistently with duplicate index_col values.
+
+### Technical Verification
+
+The bug report's technical analysis is accurate:
+- The code does not check if a column has already been removed before attempting removal
+- The error message "list.remove(x): x not in list" is confusing and doesn't indicate the actual problem (duplicate index_col values)
+- The issue occurs for both integer indices and string column names when they refer to the same column

@@ -1,0 +1,49 @@
+DOCUMENTATION ANALYSIS
+======================
+
+1. Scipy Documentation Review:
+   - The scipy.stats.poisson documentation shows an example claiming round-trip property:
+     "prob = poisson.cdf(x, mu); np.allclose(x, poisson.ppf(prob, mu))  # Returns True"
+   - However, the documentation does NOT specify what ppf should return when q=1.0
+   - No explicit mention of how ppf handles edge cases or infinite support distributions
+
+2. Mathematical Definition of PPF for Discrete Distributions:
+   From mathematical literature and Wikipedia, the PPF/quantile function is defined as:
+   Q(p) = inf{x: F(x) >= p}
+
+   This means ppf(p) should return the minimum value x such that CDF(x) >= p.
+
+3. Behavior of Other Scipy Discrete Distributions:
+   Testing revealed two distinct behaviors:
+
+   a) Finite Support Distributions (binomial, hypergeometric):
+      - ppf(1.0) returns the maximum possible value (e.g., n for binomial)
+      - Round-trip property is preserved
+
+   b) Infinite Support Distributions (Poisson, geometric, negative binomial):
+      - ppf(1.0) returns infinity
+      - This appears to be a design choice in scipy
+
+4. Key Documentation Gap:
+   The scipy documentation does NOT specify:
+   - That ppf(1.0) returns infinity for infinite support distributions
+   - That the round-trip property ppf(cdf(k)) == k breaks when cdf(k) == 1.0
+   - The distinction between finite and infinite support distribution behavior
+
+5. Mathematical Considerations:
+   For discrete distributions with infinite support:
+   - When CDF(k) numerically equals 1.0 (due to floating-point limits), there IS a finite k
+     that achieved this value
+   - Mathematically, Q(1.0) = inf{x: F(x) >= 1.0} should return the smallest such k
+   - However, scipy appears to special-case q=1.0 to return infinity
+
+6. Consistency Analysis:
+   The behavior IS consistent across all scipy infinite-support discrete distributions
+   (Poisson, geometric, negative binomial all return inf for ppf(1.0)).
+   This suggests it's an intentional design decision rather than a bug specific to Poisson.
+
+Conclusion:
+The documentation does not explicitly state that ppf(1.0) should return infinity for
+infinite-support distributions, nor does it warn that the round-trip property breaks
+in this case. The example in the documentation implies the round-trip works but doesn't
+account for this edge case.

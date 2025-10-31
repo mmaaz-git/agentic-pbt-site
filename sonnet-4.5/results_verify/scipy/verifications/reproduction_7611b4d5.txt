@@ -1,0 +1,33 @@
+## Bug Reproduction Analysis
+
+### Test Results
+
+1. **Hypothesis Test**: Successfully reproduced the bug
+   - The test failed with `IndexError: index 1 is out of bounds for axis 0 with size 1`
+   - Error occurs when trying to use `beta0=[1.0]` (single parameter)
+   - Falsifying example found with n=5
+
+2. **Manual Test**: Confirmed the bug
+   - Using `beta0=[1.0]` raises IndexError as reported
+   - Traceback matches exactly what was reported in the bug
+   - Error location: scipy/odr/_models.py:215 in `_unilin` function
+   - Line causing error: `return x*B[0] + B[1]` where B only has one element
+
+3. **Workaround Verification**:
+   - Confirmed that using `beta0=[1.0, 0.0]` works correctly
+   - Returns beta = [2.5, ~0.0] as expected for the test data
+   - This confirms the model requires exactly 2 parameters
+
+### Root Cause
+
+The implementation of `_unilin` function at line 215 of `_models.py`:
+```python
+def _unilin(B, x):
+    return x*B[0] + B[1]
+```
+
+This function unconditionally accesses B[1], which doesn't exist when beta0 has only one element. The model is hardcoded to expect two parameters (slope B[0] and intercept B[1]).
+
+### Impact
+
+The bug occurs immediately upon initializing the ODR object with a single-parameter beta0, making it impossible to use the unilinear model with what would be the intuitive single parameter usage. Users must know to provide two parameters even if they want a line through the origin.

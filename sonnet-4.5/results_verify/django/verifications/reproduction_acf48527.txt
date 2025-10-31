@@ -1,0 +1,52 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have attempted to reproduce the bug reported in django.db.migrations.graph.Node.__eq__ and found the following:
+
+1. BUG REPORT CLAIM:
+The report claims that Node.__eq__ violates Python's equality contract by implementing asymmetric equality comparison where:
+- node == key evaluates to True
+- key == node evaluates to False
+
+2. REPRODUCTION RESULTS:
+When testing with Django 5.2.6 and Python 3.13.2:
+- node == key evaluates to True
+- key == node ALSO evaluates to True
+
+The symmetry appears to be PRESERVED, not violated as claimed.
+
+3. TECHNICAL INVESTIGATION:
+The current Node.__eq__ implementation is:
+```python
+def __eq__(self, other):
+    return self.key == other
+```
+
+This compares self.key directly with other, regardless of other's type.
+
+4. WHY SYMMETRY APPEARS PRESERVED:
+Through detailed tracing, I discovered that Python's comparison protocol automatically handles the symmetry:
+
+- When evaluating "tuple == node", Python first calls tuple.__eq__(node)
+- Since tuple doesn't know how to compare with a Node object, it returns NotImplemented
+- Python then automatically tries the reverse: node.__eq__(tuple)
+- This means Node.__eq__ gets called for BOTH "node == tuple" AND "tuple == node"
+
+5. HYPOTHESIS TEST RESULTS:
+The provided hypothesis test passes without error across 100 random test cases. The test checks:
+```python
+assert (node == key) == (key == node)
+```
+This assertion does NOT fail in my testing environment.
+
+6. SET MEMBERSHIP BEHAVIOR:
+The report also claims "key in node_set" incorrectly returns True. Testing shows:
+- key in {node} returns True
+- This is because Python uses the equality operator for membership testing
+- Since node == key returns True (by design), the membership test succeeds
+
+7. ACTUAL BEHAVIOR vs CLAIMED BEHAVIOR:
+- Claimed: Asymmetric equality (node==key is True, key==node is False)
+- Actual: Symmetric equality (both comparisons return True)
+
+The current implementation does allow a Node to compare equal to its key tuple, which may or may not be intended behavior, but it does NOT violate symmetry as claimed in the bug report.

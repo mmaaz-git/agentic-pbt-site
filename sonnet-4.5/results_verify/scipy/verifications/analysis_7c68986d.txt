@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The scipy documentation for mmwrite/mmread does not explicitly guarantee round-trip preservation of dtypes. The user might be making an assumption about behavior that was never promised. Additionally, the documentation doesn't specifically state that empty sparse matrices should preserve their complex dtype when written to Matrix Market format.
+
+**Why it might not be INVALID:**
+The Matrix Market format specification explicitly supports complex data types and requires them to be declared in the header. The behavior is inconsistent - non-empty complex matrices correctly write "complex" in the header, while empty ones write "real". This inconsistency suggests a bug rather than undefined behavior. The function already handles complex matrices correctly when they have non-zero values.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Empty sparse matrices with complex dtype are an edge case that might rarely occur in practice. Users can work around this by explicitly specifying the field='complex' parameter when calling mmwrite. The issue only affects matrices with exactly zero non-zero elements, which is a very specific scenario that may not warrant fixing.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - sparse matrices with zero non-zero elements are valid and can occur in real applications (e.g., during matrix construction or after filtering operations). The fix appears straightforward (check dtype when data array is empty), and the current behavior silently loses type information, which could cause downstream errors.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The scipy documentation could be clearer about dtype preservation expectations and the automatic field type detection behavior. Users might benefit from knowing that the field parameter should be explicitly set for empty complex matrices. The documentation could warn about this specific edge case.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code behavior is clearly incorrect according to the Matrix Market format specification. The format requires the correct data type to be specified in the header, and scipy is writing the wrong type. This is a code bug, not a documentation issue. Documenting incorrect behavior doesn't make it correct.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting dtype preservation for empty sparse matrices could be viewed as a new feature rather than a bug fix. The current implementation might have been designed to only look at actual values, and extending it to consider dtype metadata could be seen as an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality - the code already supports complex sparse matrices and correctly handles them when non-empty. The issue is that existing functionality fails in a specific case. The Matrix Market format already supports what's being requested; scipy's implementation is simply incorrect for this case.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is objectively incorrect according to the Matrix Market format specification. The format requires the data type to be correctly specified in the header, and scipy writes "real" for a complex matrix. The behavior is inconsistent - the same matrix with one non-zero complex value correctly writes "complex" in the header. The round-trip property (write then read should preserve the data) is violated. This is a clear logic error in the implementation where the field type determination fails to check the dtype when the data array is empty.
+
+**Why it might not be BUG:**
+The scipy documentation doesn't explicitly promise round-trip dtype preservation. The user might be expecting behavior that was never guaranteed. However, this argument is weak given that the Matrix Market format itself requires correct type specification.
+
+## Overall Consideration
+
+The Matrix Market format specification is unambiguous - it requires the correct data type to be specified in the header line. When scipy writes a complex sparse matrix with zero non-zero elements, it incorrectly writes "real" in the header instead of "complex". This violates the format specification itself.
+
+The bug is highly reproducible and specific: it only occurs when a sparse matrix has complex dtype and zero non-zero elements. The same code correctly handles non-empty complex matrices and empty real matrices, demonstrating that this is an implementation oversight rather than a design decision.
+
+While the scipy documentation doesn't explicitly guarantee round-trip dtype preservation, this is a fundamental expectation of any serialization format. Users reasonably expect that saving and loading a matrix should preserve its type information. The fact that it works correctly for non-empty matrices but fails for empty ones indicates a bug rather than intentional behavior. The proposed fix is straightforward and aligns with both the Matrix Market specification and reasonable user expectations.

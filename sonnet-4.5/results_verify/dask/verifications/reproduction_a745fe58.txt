@@ -1,0 +1,37 @@
+REPRODUCTION OF BUG REPORT: dask.base.key_split UnicodeDecodeError
+
+## Summary of Reproduction
+Successfully reproduced the bug as reported. The function crashes with UnicodeDecodeError when given non-UTF8 bytes.
+
+## Hypothesis Test Reproduction
+The provided Hypothesis test was executed and failed as described:
+- Test fails on bytes input b'\x80' with UnicodeDecodeError
+- Error message: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+- Stack trace shows the error occurs in dask/utils.py line 1979: return key_split(s.decode())
+
+## Minimal Example Reproduction
+The minimal reproduction example `dask.base.key_split(b'\x80')` was confirmed:
+- Raises UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+- The crash occurs at the exact line indicated in the bug report
+
+## Additional Testing
+Verified that the function works correctly with:
+1. Valid UTF-8 bytes: b'hello-world-1' returns 'hello-world' (as documented)
+2. None input: returns 'Other' (as documented)
+3. Regular strings: work as expected
+
+## Source Code Review
+Examined the actual implementation in dask/utils.py:
+```python
+if type(s) is bytes:
+    return key_split(s.decode())  # Line causing the issue
+```
+
+The function attempts to decode bytes using default UTF-8 encoding without any error handling.
+When bytes cannot be decoded as UTF-8, the function crashes instead of handling the error gracefully.
+
+## Conclusion
+The bug is CONFIRMED. The function crashes on non-UTF8 bytes despite:
+1. The docstring explicitly showing bytes as a supported input type
+2. The function handling other edge cases (None, malformed strings) gracefully by returning 'Other'
+3. No documentation indicating that only UTF-8 encoded bytes are supported

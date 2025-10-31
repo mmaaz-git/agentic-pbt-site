@@ -1,0 +1,49 @@
+BUG REPORT ANALYSIS
+===================
+
+## Categorization Considerations
+
+### INVALID - Why it might be:
+- The RotationSpline documentation doesn't explicitly guarantee exact keyframe reproduction
+- Numerical precision issues with closely spaced points might be expected behavior
+- Could be considered a limitation rather than a bug
+
+**Counterargument**: The fundamental mathematical definition of interpolating splines requires passing through control points. The name "RotationSpline" (not "RotationApproximator") and its description as "cubic spline interpolation" strongly implies this behavior.
+
+### WONTFIX - Why it might be:
+- Only occurs with very closely spaced keyframes near the end (edge case)
+- May be due to inherent numerical limitations with quaternion interpolation
+- Workaround exists (add small epsilon to last time query)
+
+**Counterargument**: This violates a core mathematical property that users would reasonably expect. The failure is not due to numerical precision (returns completely wrong quaternion, not slightly off). It affects any dataset with closely spaced final keyframes, which is common in motion capture and animation data.
+
+### DOCUMENTATION_FIX - Why it might be:
+- If the code intentionally doesn't guarantee exact keyframe reproduction, docs should state this
+- Could document this as a known limitation with closely spaced keyframes
+- Documentation could warn about boundary behavior
+
+**Counterargument**: This would be documenting incorrect behavior rather than fixing it. All other SciPy interpolators correctly handle this case. The documentation's reference to "cubic spline interpolation" implies standard spline behavior.
+
+### FEATURE_REQUEST - Why it might be:
+- Could be viewed as requesting enhanced precision at boundaries
+- Asking for behavior not originally designed into the implementation
+- Request for better handling of edge cases
+
+**Counterargument**: This is not requesting new functionality but expecting fundamental interpolation behavior. Passing through control points is not an enhancement—it's the definition of interpolation.
+
+### BUG - Why it IS:
+1. **Violates Mathematical Definition**: Interpolating splines, by definition, must pass through their control points. This is not optional behavior.
+
+2. **Inconsistent with SciPy Standards**: All other SciPy interpolators (CubicSpline, PchipInterpolator, etc.) correctly return exact values at data points.
+
+3. **Clear Implementation Error**: The spline returns the 4th keyframe value when asked for the 5th. This is not a numerical precision issue but an indexing/boundary condition bug.
+
+4. **Breaks User Expectations**: Any reasonable user would expect spline(times[i]) == rotations[i], especially given the documentation's analogy to cubic splines.
+
+5. **Not a Numerical Precision Issue**: The returned quaternion is completely different, not slightly off due to floating-point arithmetic.
+
+6. **Reproducible Pattern**: Consistently fails at the last keyframe when points are closely spaced—suggests a specific logic error, not random numerical instability.
+
+## Final Assessment
+
+This is clearly a BUG. The implementation has an error in handling the last keyframe, likely in the interval search or boundary condition logic. The fact that it returns the previous keyframe's exact value (not a corrupted or approximate value) strongly indicates an off-by-one or boundary condition error in the code.

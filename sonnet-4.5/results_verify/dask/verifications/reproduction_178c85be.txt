@@ -1,0 +1,54 @@
+## Bug Reproduction Analysis
+
+### Bug Report Summary
+The bug report claims that `dask.widgets.widgets.key_split` (actually `dask.utils.key_split`) crashes with a `UnicodeDecodeError` when given bytes that are not valid UTF-8, despite the function's docstring showing it accepts bytes input and having a general exception handler.
+
+### Reproduction Results
+
+1. **Valid UTF-8 bytes test**:
+   - `key_split(b'hello-world-1')` returns `'hello-world'` ✓
+   - This works as documented in the docstring
+
+2. **Invalid UTF-8 bytes test**:
+   - `key_split(b'\x80')` raises `UnicodeDecodeError` ✗
+   - Error: "'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte"
+   - The function crashes instead of handling the error gracefully
+
+3. **Hypothesis property test**:
+   - Failed on random binary data
+   - First failure example: `b'%\xbc\x9a%\xa4\n'`
+   - Error: "'utf-8' codec can't decode byte 0xbc in position 1: invalid start byte"
+
+4. **None input test**:
+   - `key_split(None)` returns `'Other'` ✓
+   - This demonstrates the function is designed to handle edge cases
+
+5. **Various invalid UTF-8 sequences**:
+   - All tested sequences raised `UnicodeDecodeError`:
+     - `b'\x80'` (Invalid start byte)
+     - `b'\xff'` (Invalid byte)
+     - `b'\xc0\x80'` (Overlong encoding)
+     - `b'\xed\xa0\x80'` (UTF-16 surrogate half)
+     - `b'\xc2'` (Incomplete sequence)
+
+### Code Analysis
+
+Looking at the implementation in `/home/npc/miniconda/lib/python3.13/site-packages/dask/utils.py`:
+
+```python
+def key_split(s):
+    # If we convert the key, recurse to utilize LRU cache better
+    if type(s) is bytes:
+        return key_split(s.decode())  # Line 1979 - crashes here on invalid UTF-8
+    if type(s) is tuple:
+        return key_split(s[0])
+    try:
+        # ... main processing logic ...
+    except Exception:
+        return "Other"  # Line 2002 - exception handler that should catch errors
+```
+
+The problem is that the `s.decode()` call on line 1979 happens **before** the try-except block that starts at line 1982. When `s.decode()` is called on invalid UTF-8 bytes, it raises a `UnicodeDecodeError` that is not caught.
+
+### Conclusion
+The bug report is correct. The function crashes on invalid UTF-8 bytes despite having documentation that shows it accepts bytes input and having an exception handler that returns "Other" for errors. The issue is a structural problem where the bytes-to-string conversion happens outside the exception handling block.

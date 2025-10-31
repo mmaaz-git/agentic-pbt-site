@@ -1,0 +1,61 @@
+## Bug Triage Analysis
+
+### Consideration for BUG Classification
+
+**Why this IS a valid bug:**
+1. **Documented public API is broken**: The class docstring explicitly promises `begin()` and `produce()` methods exist
+2. **Dependent functionality fails**: The Begin action (part of public API) fails with AttributeError
+3. **No workaround exists**: Users cannot change scanner state programmatically as documented
+4. **Real impact on users**: State-based lexical analysis is impossible without begin()
+5. **Clear contract violation**: The implementation doesn't match the documented interface
+6. **Help() shows non-existent methods**: Python's help system displays these unavailable methods
+
+### Consideration for INVALID Classification
+
+**Why this might be invalid:**
+1. Could argue it's a Cython compilation detail - but NO, the docstring creates an API contract
+2. Could claim internal implementation choice - but NO, Begin action depends on it publicly
+
+**Verdict: NOT INVALID** - The documentation creates a clear contract that's violated
+
+### Consideration for WONTFIX Classification
+
+**Why this might be WONTFIX:**
+1. Might be intentional optimization for performance (cdef inline)
+2. Could be legacy documentation from before Cythonization
+3. Might require significant refactoring to fix
+
+**Verdict: NOT WONTFIX** - This breaks core functionality (Begin action) with no alternative
+
+### Consideration for FEATURE_REQUEST Classification
+
+**Why this might be FEATURE_REQUEST:**
+1. Could argue these methods were never meant to be public
+2. Might be requesting new functionality not previously available
+
+**Verdict: NOT FEATURE_REQUEST** - The documentation already promises this functionality exists
+
+### Consideration for DOCUMENTATION_FIX Classification
+
+**Why this might be DOCUMENTATION_FIX:**
+1. Could remove the methods from the docstring to match implementation
+2. Documentation might be outdated from pre-Cython era
+3. Could add note that these are internal-only methods
+
+**Verdict: POSSIBLY DOCUMENTATION_FIX** - But this would break the Begin action which needs begin()
+
+### Final Analysis
+
+This is clearly a **BUG** because:
+
+1. **The Begin action fails**: This is not just a documentation issue. The Begin action class (Actions.py line 82) calls `token_stream.begin()` and fails with AttributeError. Begin is part of the public API for state management in lexical analyzers.
+
+2. **Core functionality is broken**: State management is essential for many lexical analysis tasks (e.g., handling comments, strings, different parsing modes). Without begin(), this functionality is completely unavailable.
+
+3. **The Python source has the methods**: The methods exist and work in Scanners.py but are made inaccessible by the Cython compilation directives (`cdef inline`). This appears to be an oversight in the Cythonization process.
+
+4. **No reasonable workaround**: Users cannot implement state-based lexing without these methods. There's no alternative API provided.
+
+5. **Clear regression**: The Python-only version would work, but the compiled version breaks functionality that the documentation promises and that other parts of the codebase depend on.
+
+The proper fix would be to change the Cython declarations from `cdef inline` to `cpdef` or `def` to make them Python-accessible, maintaining backward compatibility and fixing the Begin action.

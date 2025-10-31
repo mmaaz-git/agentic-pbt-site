@@ -1,0 +1,31 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported for scipy.spatial.transform.RotationSpline.
+
+### Hypothesis Test Results
+The provided property-based test uncovered multiple failing cases when run. The test found several different failure patterns:
+
+1. **ValueError during construction**: Some time arrays (e.g., `[0., 1., 1.0078125, 2., 4.]`) cause a ValueError with "array must not contain infs or NaNs" during spline construction, due to numerical overflow in coefficient calculations.
+
+2. **ValueError during evaluation**: Other time arrays (e.g., `[1., 1.0078125, 2., 4.]`) allow successful construction but fail during evaluation with "Found zero norm quaternions in `quat`" error.
+
+### Specific Failing Example
+The exact example provided in the bug report (`times=array([0., 0.0078125, 1., 4.])`) actually fails during construction (not evaluation as stated) with "array must not contain infs or NaNs".
+
+### Alternative Failing Case
+Testing with `times=array([1., 1.0078125, 2., 4.])` confirms the bug pattern described in the report:
+- Spline construction succeeds without error
+- Evaluation at intermediate points fails with "Found zero norm quaternions in `quat`"
+
+### Root Cause
+The issue stems from numerical instability when time points are very close together (e.g., 1.0 and 1.0078125). The small time difference (0.0078125) leads to:
+1. Large angular rates being computed (rotation_vector / very_small_dt)
+2. Numerical overflow or near-zero values in polynomial coefficient calculations
+3. Invalid rotation vectors during evaluation that produce zero-norm quaternions
+
+### Bug Validity
+The bug is valid and reproducible. The core issue is that RotationSpline accepts inputs that it cannot handle numerically, leading to either:
+- Immediate failure during construction (with overflow errors)
+- Delayed failure during evaluation (with zero-norm quaternion errors)
+
+Both failure modes represent the same underlying numerical instability problem with closely-spaced time points.

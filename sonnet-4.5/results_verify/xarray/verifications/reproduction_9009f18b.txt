@@ -1,0 +1,46 @@
+## Bug Reproduction Results
+
+### Technical Verification
+I successfully reproduced the bug as reported. The behavior is exactly as described:
+
+1. **Irreflexivity Violation Confirmed**:
+   - `AlwaysGreaterThan() > AlwaysGreaterThan()` returns `True` (should be `False`)
+   - `AlwaysLessThan() < AlwaysLessThan()` returns `True` (should be `False`)
+   - This violates the mathematical axiom that no element can be strictly greater/less than itself
+
+2. **Trichotomy Violation Confirmed**:
+   - For two `AlwaysGreaterThan` instances: both `==` and `>` return `True`
+   - For two `AlwaysLessThan` instances: both `==` and `<` return `True`
+   - This violates the trichotomy law where exactly one of `<`, `==`, or `>` should be true
+
+3. **Contrast with np.inf**:
+   - `np.inf > np.inf` correctly returns `False`
+   - `np.inf == np.inf` returns `True`
+   - NumPy's infinity correctly maintains irreflexivity and trichotomy
+
+### Root Cause Analysis
+The implementation is straightforward but flawed:
+```python
+class AlwaysGreaterThan:
+    def __gt__(self, other):
+        return True  # Always returns True, even for self-comparison
+
+    def __eq__(self, other):
+        return isinstance(other, type(self))  # Returns True for any instance of same type
+```
+
+The `__gt__` method unconditionally returns `True` without checking if `other` is an instance of the same type. This creates the logical inconsistency where an object is both equal to and greater than another object of the same type.
+
+### Practical Impact Testing
+1. **Sorting still works** but may produce unexpected orderings when multiple INF/NINF values are present
+2. **Max/min functions work correctly**, selecting INF as maximum and NINF as minimum
+3. **Transitivity is maintained** for comparisons with other types
+4. **Cannot be used in sets** (unhashable type error)
+
+### Hypothesis Test Results
+All three hypothesis tests from the bug report failed as expected:
+- `test_always_greater_than_irreflexivity`: Failed
+- `test_trichotomy_law`: Failed (2 conditions true instead of 1)
+- `test_always_less_than_irreflexivity`: Failed
+
+The bug is accurately reported and reproducible.

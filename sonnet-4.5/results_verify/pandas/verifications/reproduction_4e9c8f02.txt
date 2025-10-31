@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is accurate and reproducible. The `pandas.io.sas.read_sas` function incorrectly detects file format using substring matching instead of checking actual file extensions.
+
+### Hypothesis Test Reproduction
+- Ran the provided property-based test using Hypothesis
+- Test FAILED as expected with example: filename='0.xpt.txt'
+- The test correctly identifies that files with '.xpt' as a substring but not as the actual extension are incorrectly detected as xport format
+
+### Simple Reproduction
+- Ran the simple test case with filename "data.xpt.backup"
+- Result: FileNotFoundError was raised (meaning format was detected as xport)
+- Expected: ValueError with message "unable to infer format..."
+- This confirms the bug - the file "data.xpt.backup" has extension ".backup", not ".xpt", but is still treated as an xport file
+
+### Source Code Analysis
+Examined `/home/npc/miniconda/lib/python3.13/site-packages/pandas/io/sas/sasreader.py` lines 141-144:
+
+```python
+if ".xpt" in fname:
+    format = "xport"
+elif ".sas7bdat" in fname:
+    format = "sas7bdat"
+```
+
+This code uses the `in` operator for substring matching, which will match ".xpt" anywhere in the filename, not just at the end as a proper extension check would require.
+
+### Impact
+The bug causes incorrect format detection for files that contain ".xpt" or ".sas7bdat" as substrings but have different actual extensions, such as:
+- data.xpt.backup
+- data.sas7bdat.old
+- myfile.xpt.txt
+- archive.sas7bdat.tmp
+
+This leads to FileNotFoundError being raised when attempting to read these files instead of the more appropriate ValueError indicating the format cannot be inferred.

@@ -1,0 +1,74 @@
+## Bug Triage Analysis
+
+### Evaluation for Each Category:
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function's type signature explicitly accepts `Sequence[Hashable]`, which includes strings, not just tuples
+- The assertion causes a runtime crash rather than providing a helpful error message
+- The comment "# for mypy" suggests the assertion was meant for static type checking, not runtime enforcement
+- The function works inconsistently - accepts non-tuples when there are no duplicates but crashes when duplicates exist
+- The docstring provides no warning about tuple requirements
+- This is a clear violation of the function's contract as defined by its type signature
+
+**Arguments AGAINST:**
+- The function appears to be internal (not in public API documentation)
+- In normal pandas usage via parsers, `is_potential_multiindex=True` only occurs when names are already tuples
+
+#### 2. INVALID
+**Arguments FOR:**
+- The function is internal and not part of the public API
+- The normal code path (via parsers) ensures tuples are passed when `is_potential_multiindex=True`
+- The assertion might be considered a valid precondition check
+
+**Arguments AGAINST:**
+- The type signature explicitly allows non-tuples
+- Even internal functions should honor their type signatures
+- An assertion with "# for mypy" comment shouldn't cause runtime crashes
+- The function partially works with non-tuples (when no duplicates)
+
+#### 3. WONTFIX
+**Arguments FOR:**
+- This is an edge case that wouldn't occur in normal pandas usage
+- The function is internal and not meant to be called directly
+- The crash only happens with a specific combination (non-tuples + duplicates + is_potential_multiindex=True)
+
+**Arguments AGAINST:**
+- The fix is straightforward (proper error handling)
+- The current behavior is confusing and inconsistent
+- Even internal functions should fail gracefully
+
+#### 4. DOCUMENTATION_FIX
+**Arguments FOR:**
+- The type signature could be updated to reflect the tuple requirement
+- The docstring could document the tuple requirement for `is_potential_multiindex=True`
+- This would align documentation with implementation
+
+**Arguments AGAINST:**
+- The current type signature is technically correct for the general case
+- The implementation is what's wrong, not the documentation
+- Changing the type signature would be a breaking change
+
+#### 5. FEATURE_REQUEST
+**Arguments FOR:**
+- Supporting non-tuples with `is_potential_multiindex=True` could be seen as a new feature
+- The current implementation doesn't handle this case
+
+**Arguments AGAINST:**
+- The type signature already promises this functionality
+- This is fixing broken behavior, not adding new functionality
+- The function partially works with non-tuples already
+
+### Decision Rationale:
+
+This is clearly a **BUG**. The function has a type signature that promises to accept any `Sequence[Hashable]`, but crashes with an `AssertionError` when given valid input according to that signature. The assertion's comment "# for mypy" strongly suggests it was meant for static type checking only, not runtime enforcement.
+
+Key factors:
+1. **Contract violation**: The function doesn't honor its type signature
+2. **Poor error handling**: Uses assertion instead of proper error with helpful message
+3. **Inconsistent behavior**: Works with non-tuples when no duplicates, fails with duplicates
+4. **Misleading implementation**: Comment suggests static checking, but causes runtime crash
+
+Even though this is an internal function and the error might not occur in normal pandas usage through the documented API, it's still a bug that should be fixed. The function should either:
+- Handle non-tuples gracefully when `is_potential_multiindex=True`, or
+- Raise a proper TypeError with a clear message instead of an assertion error

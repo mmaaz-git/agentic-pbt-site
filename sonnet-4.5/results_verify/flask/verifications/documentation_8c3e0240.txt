@@ -1,0 +1,45 @@
+## Documentation Analysis for flask.helpers.get_root_path
+
+### Official Docstring (from source code)
+The function's docstring states:
+```
+Find the root path of a package, or the path that contains a module.
+If it cannot be found, returns the current working directory.
+```
+
+This is a clear, unambiguous statement that establishes the function's contract:
+1. Primary purpose: Find the root path of a package or module
+2. Fallback behavior: **"If it cannot be found, returns the current working directory"**
+
+### Actual Implementation Behavior
+After examining the source code (flask/helpers.py lines 570-624), the function's actual behavior is:
+
+1. First checks if module is already imported and has a __file__ attribute
+2. If not, tries to find the module spec using importlib.util.find_spec
+3. If the loader is None (module doesn't exist), returns os.getcwd()
+4. If loader exists but has no get_filename method, falls back to importing the module
+5. After importing, gets the __file__ attribute from the module
+6. **If __file__ is None (e.g., for built-in modules), raises RuntimeError**
+
+### The Contradiction
+The docstring promises: "If it cannot be found, returns the current working directory"
+
+However, the implementation contains this code (lines 613-621):
+```python
+if filepath is None:
+    raise RuntimeError(
+        "No root path can be found for the provided module"
+        f" {import_name!r}. This can happen because the module"
+        " came from an import hook that does not provide file"
+        " name information or because it's a namespace package."
+        " In this case the root path needs to be explicitly"
+        " provided."
+    )
+```
+
+### Inconsistent Behavior
+- For non-existent modules: Returns os.getcwd() (matches docstring)
+- For built-in modules without __file__: Raises RuntimeError (violates docstring)
+
+### Conclusion
+The docstring establishes a clear contract that the function should ALWAYS return a string - either the root path or the current working directory as a fallback. The RuntimeError for built-in modules directly violates this documented contract. Users relying on the documented behavior would not expect the function to raise an exception.

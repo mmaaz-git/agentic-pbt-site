@@ -1,0 +1,46 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug in pandas.core.indexers.length_of_indexer.
+
+## Bug Confirmation
+
+The bug report is accurate. The function `length_of_indexer` returns negative values when given slices that would produce empty results due to out-of-bounds indices.
+
+## Reproduction Results
+
+1. **Hypothesis Test**: The property-based test correctly identified the bug. It found multiple failing cases where the function returns negative values when it should return 0.
+
+2. **Specific Reproduction**: The provided example `slice(2, None, None)` on array `[0]` confirms:
+   - Actual slicing result: empty array `[]`
+   - Actual length: 0
+   - Predicted length from length_of_indexer: -1
+   - This is clearly incorrect.
+
+3. **Additional Test Cases Confirmed**:
+   - `slice(5, 10, None)` on array of length 3: Returns -2 instead of 0
+   - `slice(None, -2, None)` on array of length 1: Returns -1 instead of 0
+   - `slice(3, 2, None)` on array of length 5: Returns -1 instead of 0
+   - `slice(10, None, None)` on array of length 3: Returns -7 instead of 0
+
+## The Core Issue
+
+The bug occurs in line 316 of pandas/core/indexers/utils.py:
+```python
+return (stop - start + step - 1) // step
+```
+
+When `start >= stop` after normalization (which happens for out-of-bounds indices), this formula produces negative values. This violates the fundamental property that lengths must be non-negative.
+
+## Expected Behavior
+
+The function should return 0 for any slice that would produce an empty result, matching Python's native slicing behavior. The len() function in Python NEVER returns negative values - it's conceptually impossible to have a negative number of elements.
+
+## Impact
+
+This bug can cause:
+1. Logical errors in code that assumes lengths are non-negative
+2. Potential crashes or unexpected behavior in downstream code
+3. Violations of basic mathematical/programming invariants
+
+The bug is consistently reproducible and affects a core indexing utility function in pandas.

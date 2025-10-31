@@ -1,0 +1,41 @@
+## Bug Reproduction Analysis
+
+### Successful Reproduction
+The bug report's claims have been successfully reproduced and verified. The technical details are correct.
+
+### Key Findings
+
+1. **Truncation Confirmed**: DjangoJSONEncoder does indeed truncate microseconds from 6 digits to 3 digits (millisecond precision).
+   - Input: 123456 microseconds → Output: 123000 microseconds
+   - The last 3 digits are always truncated
+
+2. **Exact Truncation Mechanism**: The code uses string slicing to remove the last 3 digits:
+   - For datetime: `r[:23] + r[26:]` removes characters at positions 23-25 (the last 3 microsecond digits)
+   - For time: `r[:12]` keeps only up to position 11, removing the last 3 microsecond digits
+
+3. **Data Loss Verified**:
+   - Original: `2000-01-01T12:34:56.123456+00:00`
+   - Encoded: `2000-01-01T12:34:56.123Z`
+   - Reconstructed: `2000-01-01T12:34:56.123000+00:00`
+   - The values are NOT equal after round-trip
+
+4. **Systematic Behavior**: Testing multiple values shows consistent truncation:
+   - 999999 microseconds → 999000 (loses 999)
+   - 500500 microseconds → 500000 (loses 500)
+   - 123456 microseconds → 123000 (loses 456)
+   - Only values already at millisecond precision (e.g., 123000) are preserved
+
+5. **Both Types Affected**: The truncation affects both:
+   - `datetime.datetime` objects (lines 95-96 in the code)
+   - `datetime.time` objects (lines 106-107 in the code)
+
+6. **Hypothesis Test Passed**: The property-based test correctly identifies that any datetime with non-zero microseconds that aren't multiples of 1000 will lose precision.
+
+### Comparison with Bug Report
+The bug report's technical description is accurate:
+- The code locations cited (lines 95-96 and 106-107) are correct
+- The truncation behavior described matches exactly
+- The example output provided is accurate
+- The assertion about data loss is valid
+
+The truncation is intentional (following ECMA-262's millisecond precision), but this behavior is not documented in the DjangoJSONEncoder's docstring or Django's serialization documentation.

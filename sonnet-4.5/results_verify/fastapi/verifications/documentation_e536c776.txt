@@ -1,0 +1,38 @@
+## Documentation Analysis
+
+### Starlette Documentation
+The official Starlette documentation for TrustedHostMiddleware states:
+- Purpose: "guard against HTTP Host Header attacks" by enforcing correctly set Host headers
+- Wildcard support: Accepts patterns like `*.example.com` to match subdomains
+- Expected behavior: Returns 400 response for invalid/unmatched hostnames
+
+The documentation does NOT specify:
+- Exact rules for what constitutes a valid hostname
+- How edge cases with malformed hostnames should be handled
+- Whether hostnames starting with dots should be accepted or rejected
+
+### DNS Standards (RFC 952 and RFC 1123)
+According to DNS standards:
+
+**RFC 952 (Original DNS Specification):**
+- "The first character must be an alpha character"
+- Hostnames are composed of: alphabet (A-Z), digits (0-9), minus sign (-), and period (.)
+- Periods are only allowed to "delimit components of 'domain style names'"
+- No blank or space characters permitted
+
+**RFC 1123 (Updates to RFC 952):**
+- Relaxed the first character restriction to "allow either a letter or a digit"
+- Must support hostnames up to 63 characters
+- Should handle hostnames up to 255 characters
+
+### Key Finding
+A hostname starting with a dot (e.g., `.example.com`) violates DNS standards because:
+1. The first character of a hostname label must be alphanumeric (letter or digit)
+2. Periods are only meant to separate labels, not start them
+3. An empty label (which is what exists before the leading dot) is not valid
+
+### Documentation Gap
+While Starlette's documentation doesn't explicitly state that it follows DNS standards for hostname validation, the purpose of the middleware is security ("guard against HTTP Host Header attacks"). Accepting invalid hostnames that violate DNS standards contradicts this security purpose.
+
+### Conclusion
+The bug report's assertion that `.example.com` is an invalid hostname is correct according to DNS standards. The middleware should reject such hostnames, especially when its stated purpose is to provide security against Host header attacks. The current behavior allows malformed hostnames to bypass validation, which is inconsistent with both DNS standards and the middleware's security goals.

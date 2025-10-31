@@ -1,0 +1,32 @@
+REPRODUCTION ANALYSIS
+====================
+
+I successfully reproduced the bug described in the report using both the provided test cases.
+
+1. HYPOTHESIS TEST REPRODUCTION:
+   - Created test_hypothesis.py with the exact test case from the bug report
+   - Ran with the specific failing inputs: module_name='A', include_dirs=['0'], directives={'A': False}
+   - Result: AssertionError confirmed - Expected ['0'], got []
+   - The test failed exactly as described, showing that cython_include_dirs and cython_directives were lost
+
+2. MANUAL REPRODUCTION:
+   - Created test_reproduce.py with the exact reproduction code from the bug report
+   - Output confirmed:
+     * cython_include_dirs: [] (expected: ["/usr/local/include"])
+     * cython_directives: {} (expected: {"boundscheck": False})
+     * cython_gdb: True (correctly preserved through pyrex_gdb conversion)
+
+3. SOURCE CODE VERIFICATION:
+   - Examined /home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Distutils/extension.py
+   - Confirmed the exact issue described in the bug report:
+     * Lines 40-45: pyrex_* parameters are converted to cython_* in the kw dict
+     * Lines 47-63: Recursive call to Extension.__init__ passes standard distutils parameters but NOT the named cython_* parameters
+     * Line 64: Early return, skipping lines 83-92 that would set self.cython_* attributes
+     * Lines 83-92: These lines are never reached when pyrex_* options are present
+
+4. IMPACT:
+   - When any pyrex_* parameter is used (for backward compatibility), ALL explicitly passed cython_* parameters are silently lost
+   - This is a silent data loss bug - user configuration is ignored without warning
+   - The bug affects all cython-specific parameters when mixed with any pyrex_* parameter
+
+The bug is 100% reproducible and the analysis in the bug report is accurate.

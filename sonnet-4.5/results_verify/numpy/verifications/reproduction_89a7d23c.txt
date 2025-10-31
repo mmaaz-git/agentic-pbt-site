@@ -1,0 +1,33 @@
+## Bug Reproduction Report
+
+### Bug Claim
+The bug report claims that `numpy.ctypeslib.load_library` crashes with a TypeError when `sysconfig.get_config_var("EXT_SUFFIX")` returns None.
+
+### Reproduction Results
+
+1. **Basic Reproduction Test**: CONFIRMED
+   - When mocking `sysconfig.get_config_var` to return None, the function crashes with:
+     `TypeError: can only concatenate str (not "NoneType") to str`
+   - This matches exactly what the bug report claims
+
+2. **Property-Based Test**: CONFIRMED
+   - The hypothesis test fails as described, detecting the bug across multiple random library names
+   - The crash happens consistently whenever EXT_SUFFIX is None
+
+3. **Root Cause Analysis**: CONFIRMED
+   - Line 146 in _ctypeslib.py performs: `libname_ext.insert(0, libname + so_ext)`
+   - When `so_ext` is None (from line 144), Python cannot concatenate string + None
+   - The condition check on line 145 (`if not so_ext == base_ext:`) evaluates to True when so_ext is None
+   - This allows execution to reach the problematic concatenation
+
+4. **Fix Verification**: WORKS CORRECTLY
+   - The proposed fix (`if so_ext is not None and so_ext != base_ext:`) prevents the crash
+   - When EXT_SUFFIX is None, the fixed version properly skips the problematic concatenation
+   - The function then correctly raises OSError("no file with expected extension")
+   - The fix doesn't break normal operation when EXT_SUFFIX has a valid value
+
+### Technical Details
+- Normal EXT_SUFFIX value on test system: `.cpython-313-x86_64-linux-gnu.so`
+- The bug is a real crash, not just incorrect behavior
+- The proposed fix is minimal and correct
+- The edge case of None is legitimately possible according to Python's sysconfig documentation

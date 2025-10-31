@@ -1,0 +1,27 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. The bug occurs when converting categorical columns with missing values through the pandas interchange protocol.
+
+### Hypothesis Test Reproduction
+The provided Hypothesis test fails as expected with the assertion error, confirming that missing values are not preserved:
+- Original DataFrame has 1 missing value (NaN count = 1)
+- After interchange conversion, there are 0 missing values (NaN count = 0)
+
+### Manual Test Reproduction
+The manual reproduction example confirms the exact behavior described in the bug report:
+- Original DataFrame at index 3: NaN
+- After interchange conversion at index 3: 'c' (the third category)
+
+### Root Cause Analysis
+Through code tracing, I've confirmed the exact mechanism of the bug:
+
+1. In `categorical_column_to_series` (line 254), the code uses `codes % len(categories)` to map codes to values
+2. The sentinel value -1 (representing missing data) gets converted: `-1 % 3 = 2`
+3. This maps the missing value to index 2, which is category 'c'
+4. The corrupted data is then passed to `set_nulls`
+5. In `set_nulls` (line 521-522), there's an early return when `validity is None`
+6. For categorical columns using USE_SENTINEL, validity is indeed None, so the function returns without handling the sentinels
+7. The sentinel handling code (lines 526-527) is never reached
+
+### Effect
+The bug causes silent data corruption where missing values in categorical columns are converted to actual category values during interchange protocol conversion. This is a severe data integrity issue that could lead to incorrect analysis results.

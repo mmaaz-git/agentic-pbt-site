@@ -1,0 +1,58 @@
+BUG REPRODUCTION REPORT
+======================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. THE BUG EXISTS AND IS REPRODUCIBLE
+   The bug report is accurate - the `iterations` field in the zeros_full_output struct
+   contains uninitialized memory (garbage values) when certain conditions are met.
+
+2. REPRODUCTION RESULTS
+   Running the exact code from the bug report with a0=0.0 (root at boundary xa=0):
+   - iterations=-346829376 (garbage value)
+   - funcalls=2 (correct)
+   - error_num=0 (success)
+   - root=0.0 (correct)
+
+   The expected behavior would be iterations >= 0 (likely 0 or 1 for a boundary case).
+
+3. PATTERN OF THE BUG
+   The bug occurs:
+   - When the root is EXACTLY at one of the boundaries (xa or xb)
+   - Specifically when the function evaluates to zero (or within tolerance) at xa or xb
+   - The algorithm terminates early after just 2 function evaluations
+   - The iterations field is never initialized, containing whatever was in memory
+
+   The bug is intermittent/non-deterministic:
+   - Multiple runs with the same input produce different garbage values
+   - Sometimes iterations=-654327360, sometimes 1, sometimes 9997
+   - This confirms it's uninitialized memory, not a deterministic calculation error
+
+4. TESTED SCENARIOS
+
+   Scenarios where bug OCCURS:
+   - Root exactly at xa=0: iterations contains garbage
+   - Root exactly at xa=-5: sometimes garbage, sometimes valid
+
+   Scenarios where bug DOES NOT occur:
+   - Root in middle of interval (x=5): iterations=2 (valid)
+   - Root found after bisection iterations: iterations=8 (valid)
+   - Root at xb=-2: iterations appears valid
+
+5. ROOT CAUSE ANALYSIS
+   The function being tested is a polynomial: f(x) = a0 + a1*x + a2*x^2 + a3*x^3
+   When args=(0,0,0,1), it becomes f(x) = x^3
+
+   When the root-finding algorithm (brentq/bisect/ridder/brenth) checks the boundaries:
+   - It evaluates f(xa) and f(xb)
+   - If f(xa) ≈ 0, it returns xa immediately
+   - The early return path doesn't initialize the iterations field
+   - The struct contains whatever garbage was in memory at that location
+
+6. HYPOTHESIS TEST RESULTS
+   The hypothesis-based property test failed immediately, confirming the bug is systematic
+   and not a rare edge case. The test correctly identified that successful solves should
+   have iterations >= 1, but found garbage negative values instead.
+
+CONCLUSION: The bug is REAL and REPRODUCIBLE. The iterations field contains uninitialized
+memory when root-finding functions terminate early at boundary values.

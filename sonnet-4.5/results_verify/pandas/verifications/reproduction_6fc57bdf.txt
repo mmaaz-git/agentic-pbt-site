@@ -1,0 +1,51 @@
+## Bug Reproduction Results
+
+### Test Data
+Data: [1.0, -4294967297.0, 0.99999, 0.0, 0.0, 1.6675355247098508e-21]
+Window size: 3
+
+### Reproduction Successful - Bug Confirmed
+The bug was successfully reproduced. At window index 5 (containing values [0.0, 0.0, 1.6675355247098508e-21]):
+
+**Pandas Results:**
+- Rolling mean: 1.5894571940104224e-07
+- Rolling min: 0.0
+- Rolling max: 1.6675355247098508e-21
+
+**Expected Results (calculated independently):**
+- True mean: 5.558451749032836e-22
+- Min: 0.0
+- Max: 1.6675355247098508e-21
+
+### Mathematical Invariant Violation
+The bug violates a fundamental mathematical property:
+- **Invariant**: For any set of numbers, min ≤ mean ≤ max
+- **Violation**: mean (1.5894571940104224e-07) > max (1.6675355247098508e-21)
+- This is mathematically impossible and represents a clear error
+
+### Error Magnitude
+- Pandas result: 1.5894571940104224e-07
+- True mean: 5.558451749032836e-22
+- **Relative error: 2.86 × 10^16 %** (approximately 14 orders of magnitude)
+- The result is wrong by a factor of approximately 286,000,000,000,000
+
+### Root Cause Analysis
+Through simulation, I identified the likely cause:
+1. Pandas uses an incremental accumulator approach for rolling calculations
+2. When the window slides from containing -4294967297.0 to not containing it:
+   - The accumulator should become 0.0 + 0.0 + 1.6675355247098508e-21
+   - But due to floating-point precision errors, it becomes 4.632568358919914e-07
+3. This error (4.63e-07) is massive compared to the actual values (1.67e-21)
+
+### Hypothesis Test Results
+- The specific failing example consistently reproduces the bug
+- The property-based test with 100 random examples passed (likely because they didn't hit the specific conditions that trigger the precision error)
+- The bug appears to require very large numbers (like -4294967297 ≈ -2^32) to trigger
+
+### Verification of Bug Report Claims
+All claims in the bug report are accurate:
+1. ✓ The rolling mean violates the min ≤ mean ≤ max invariant
+2. ✓ The error is triggered by large numbers in the series
+3. ✓ The error persists to subsequent windows that don't contain the large number
+4. ✓ No warning or error is raised despite the massive calculation error
+5. ✓ The provided test case consistently reproduces the issue

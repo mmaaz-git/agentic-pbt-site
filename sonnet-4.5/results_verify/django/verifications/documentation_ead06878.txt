@@ -1,0 +1,45 @@
+## Documentation Analysis for django.core.handlers.wsgi.get_script_name
+
+### Function Documentation
+The `get_script_name` function in Django has the following documentation (from the source code):
+"""
+Return the equivalent of the HTTP request's SCRIPT_NAME environment
+variable. If Apache mod_rewrite is used, return what would have been
+the script name prior to any rewriting (so it's the script name as seen
+from the client's perspective), unless the FORCE_SCRIPT_NAME setting is
+set (to anything).
+"""
+
+### WSGI Specification Requirements (PEP 3333)
+According to PEP 3333, the WSGI specification mandates:
+1. All strings in the WSGI environ dictionary must be encoded using ISO-8859-1 (Latin-1)
+2. On Unicode platforms, these strings must contain only code points representable in ISO-8859-1 (\u0000 through \u00FF)
+3. The specification states: "It is a fatal error for an application to supply strings containing any other Unicode character"
+4. The rationale is that ISO-8859-1 can decode any bytestring, allowing WSGI to handle arbitrary byte data
+
+### Django's Encoding Strategy
+Django handles WSGI encoding as follows:
+1. `get_bytes_from_wsgi()`: Re-encodes WSGI environ values from ISO-8859-1 back to bytes (line 197)
+2. Similar functions use different decoding strategies:
+   - `get_path_info()`: Uses `repercent_broken_unicode(path_info).decode()` (line 151)
+   - `get_str_from_wsgi()`: Uses `value.decode(errors="replace")` (line 207)
+   - `get_script_name()`: Uses bare `script_name.decode()` (line 184) - NO ERROR HANDLING
+
+### The repercent_broken_unicode Function
+This function (defined in django/utils/encoding.py) handles broken UTF-8 sequences:
+- It attempts to decode the bytes as UTF-8
+- If UnicodeDecodeError occurs, it percent-encodes the invalid byte sequences
+- This prevents crashes when dealing with malformed UTF-8 in URLs
+
+### Key Observation
+The documentation does not specify:
+1. What should happen when SCRIPT_NAME/SCRIPT_URL contains invalid UTF-8 sequences
+2. Whether the function should crash or handle errors gracefully
+3. How the function should behave compared to similar functions in the same module
+
+### Inconsistency in Implementation
+There is a clear inconsistency in error handling across similar functions:
+- `get_path_info()` and `get_str_from_wsgi()` handle encoding errors gracefully
+- `get_script_name()` does not handle encoding errors and will crash on invalid UTF-8
+
+The documentation does not explicitly state that `get_script_name()` should handle all possible WSGI environ inputs without crashing, but the pattern established by other functions in the same module suggests it should.

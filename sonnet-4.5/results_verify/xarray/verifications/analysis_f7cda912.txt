@@ -1,0 +1,71 @@
+## Bug Report Triage Analysis
+
+### Evaluation Against Each Category
+
+#### 1. BUG (Valid Bug)
+**Strong Evidence For:**
+- The function violates a fundamental mathematical invariant: returned chunks must sum to input size
+- This invariant is enforced by downstream code (align_nd_chunks raises ValueError if sums don't match)
+- The bug occurs consistently for all cases where size < chunk_size
+- Real-world impact: Could cause data corruption when writing to Zarr with align_chunks=True
+- The fix is straightforward and logical: cap the first chunk at the remaining size
+
+**Evidence Against:**
+- Function is internal (not public API), but still used in production code
+- No explicit documentation stating this invariant (but usage context makes it clear)
+
+#### 2. INVALID
+**Evidence For:**
+- Function has no docstring explicitly stating chunks must sum to size
+- Function is internal/private (not in public API)
+
+**Evidence Against:**
+- The function is called with sum(var_chunks) as the size parameter, clearly indicating expectation
+- Downstream validation (align_nd_chunks) explicitly checks this invariant and raises error
+- The bug causes actual failures in the system, not just theoretical issues
+- Mathematical correctness: chunks dividing a size MUST sum to that size
+
+#### 3. WONTFIX
+**Evidence For:**
+- Could argue size < chunk_size is an edge case
+- Function is internal, not public API
+
+**Evidence Against:**
+- Not an obscure edge case - happens whenever dimension size < chunk size (common in real data)
+- Causes actual data corruption potential
+- Has real-world impact on users using Zarr backend with small dimensions
+- Fix is simple and non-breaking
+
+#### 4. FEATURE_REQUEST
+**Evidence For:**
+- Could argue handling size < chunk_size is a new feature
+
+**Evidence Against:**
+- This is not a new feature but a bug fix for incorrect behavior
+- The function already attempts to handle this case but does so incorrectly
+- The invariant (sum of chunks = size) is fundamental, not optional
+
+#### 5. DOCUMENTATION_FIX
+**Evidence For:**
+- Function lacks documentation about its contract
+
+**Evidence Against:**
+- The code behavior is objectively wrong, not just poorly documented
+- Adding documentation saying "chunks may sum to more than size" would be incorrect
+- The fix requires code change, not documentation change
+
+### Decision Rationale
+
+This is clearly a **BUG** because:
+
+1. **Mathematical Correctness**: When dividing a size into chunks, the chunks MUST sum to the original size. This is not negotiable or context-dependent.
+
+2. **Contract Violation**: The function is called with sum(var_chunks) expecting chunks that sum to exactly that value. The downstream code enforces this with explicit validation.
+
+3. **Real Impact**: This affects real users with real data (small dimensions with large chunk sizes), potentially causing data corruption.
+
+4. **Clear Fix**: The proposed fix (capping first chunk at remaining size) is correct and non-breaking.
+
+5. **Not an Edge Case**: Small dimensions are common in scientific data (e.g., single timestep, few vertical levels, etc.)
+
+The lack of explicit documentation doesn't make this behavior correct - it makes it undocumented incorrect behavior.

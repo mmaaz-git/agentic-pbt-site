@@ -1,0 +1,68 @@
+## Documentation Analysis
+
+### Source Code Review
+
+The `bunch` class is implemented in `/Cython/Tempita/_tempita.py` and is a subclass of `dict`. The complete implementation shows:
+
+```python
+class bunch(dict):
+    def __init__(self, **kw):
+        for name, value in kw.items():
+            setattr(self, name, value)
+
+    def __setattr__(self, name, value):
+        self[name] = value
+
+    def __getattr__(self, name):
+        try:
+            return self[name]
+        except KeyError:
+            raise AttributeError(name)
+
+    def __getitem__(self, key):
+        if 'default' in self:
+            try:
+                return dict.__getitem__(self, key)
+            except KeyError:
+                return dict.__getitem__(self, 'default')
+        else:
+            return dict.__getitem__(self, key)
+
+    def __repr__(self):
+        return '<%s %s>' % (
+            self.__class__.__name__,
+            ' '.join(['%s=%r' % (k, v) for k, v in sorted(self.items())]))
+```
+
+**Key observation**: The class does NOT implement `__delattr__`.
+
+### Documentation Review
+
+1. **Tempita Documentation**: The official Tempita documentation describes `bunch` as "a dictionary that also lets you use attributes." The documentation shows examples of setting and getting attributes but makes no mention of deleting attributes.
+
+2. **Python's help() output**: Shows that `bunch` inherits from `dict` and lists the methods it defines:
+   - `__getattr__`
+   - `__setattr__`
+   - `__getitem__`
+   - `__init__`
+   - `__repr__`
+
+   Notably absent: `__delattr__`
+
+3. **No explicit documentation about deletion**: Neither the Tempita documentation nor any comments in the source code mention whether attribute deletion is supported or intentionally unsupported.
+
+### Python's Attribute Protocol
+
+According to Python's standard attribute protocol:
+- Objects that support `__setattr__` typically should also support `__delattr__`
+- The default `__delattr__` from `object` would attempt to delete from the instance's `__dict__`
+- Since `bunch` stores attributes in the dictionary (self[name]) rather than the instance `__dict__`, the default `__delattr__` doesn't work correctly
+
+### Conclusion
+
+The documentation does not specify whether `delattr` should or should not work with `bunch` objects. There is no explicit statement that:
+1. Attribute deletion is intentionally unsupported
+2. Attribute deletion should work
+3. The class is meant to be immutable after creation (which it clearly isn't since `setattr` works)
+
+The lack of `__delattr__` implementation appears to be an oversight rather than a documented design decision. The class provides an incomplete implementation of Python's attribute protocol - it supports creating, reading, and modifying attributes but not deleting them.

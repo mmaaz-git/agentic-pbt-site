@@ -1,0 +1,36 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported for `pandas.core.indexers.length_of_indexer`.
+
+### Hypothesis Test Results
+The property-based test using Hypothesis correctly identifies the bug. When running the test, it immediately finds a failing case:
+- Input: `range(1, 0, 1)`
+- Expected (from Python's `len()`): 0
+- Actual (from `length_of_indexer`): -1
+
+### Manual Test Results
+I confirmed the bug with the provided test cases and additional ones:
+
+1. `range(1, 0, 1)`: Python's `len()` returns 0, `length_of_indexer()` returns -1
+2. `range(10, 0, 2)`: Python's `len()` returns 0, `length_of_indexer()` returns -5
+3. `range(10, 5, 1)`: Python's `len()` returns 0, `length_of_indexer()` returns -5
+4. `range(100, 0, 3)`: Python's `len()` returns 0, `length_of_indexer()` returns -34
+5. `range(5, 5, 1)`: Both return 0 (correctly handles equal start/stop)
+6. `range(0, 5, 1)`: Both return 5 (correctly handles normal positive ranges)
+
+### Root Cause
+I examined the source code and found the problematic implementation in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/indexers/utils.py`:
+
+```python
+elif isinstance(indexer, range):
+    return (indexer.stop - indexer.start) // indexer.step
+```
+
+This formula calculates `(stop - start) // step`, which produces negative values when `stop < start` with a positive step. For example:
+- `(0 - 1) // 1 = -1`
+- `(0 - 10) // 2 = -5`
+
+The correct behavior should match Python's built-in `len(range())`, which returns 0 for empty ranges regardless of whether they're empty due to `stop <= start` (with positive step) or `start <= stop` (with negative step).
+
+### Conclusion
+The bug is real and reproducible. The function returns negative lengths for empty range objects when it should return 0, violating the expected behavior of matching Python's `len()` function for range objects.

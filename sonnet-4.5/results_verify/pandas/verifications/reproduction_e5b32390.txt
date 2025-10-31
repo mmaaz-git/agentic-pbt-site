@@ -1,0 +1,25 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported for `_handle_truncated_float_vec` function in pandas.io.sas.sas_xport.
+
+### Reproduction Results:
+
+1. **Hypothesis Test**: Confirmed that when nbytes > 8, the function raises a ValueError with confusing message about negative dtype size (e.g., "S9,S-1" for nbytes=9).
+
+2. **Specific Case (nbytes=9)**: Reproduced exactly as reported:
+   - Input: vec = np.array([b'TEST'], dtype='S4'), nbytes=9
+   - Output: ValueError: format number 2 of "S9,S-1" is not recognized
+   - This matches the bug report exactly.
+
+3. **Edge Cases Tested**:
+   - nbytes=0: Returns [(b'', b'')] - doesn't raise error but creates empty fields
+   - nbytes=1: Returns [(b'T', b'')] - truncates data but doesn't raise error
+   - nbytes=-1: ValueError with "S-1,S9" - negative size in first field
+   - nbytes=2-7: Works correctly
+   - nbytes=8: Works correctly (returns original vector)
+   - nbytes>8: All fail with negative dtype size errors
+
+### Key Finding:
+The function creates a dtype string using f"S{nbytes},S{8 - nbytes}". When nbytes > 8, the expression (8 - nbytes) becomes negative, resulting in invalid dtype strings like "S9,S-1". NumPy cannot create dtypes with negative sizes, hence the error.
+
+The function appears to be designed for handling 2-8 byte truncated floats (as per the comments), but lacks input validation to enforce these bounds.

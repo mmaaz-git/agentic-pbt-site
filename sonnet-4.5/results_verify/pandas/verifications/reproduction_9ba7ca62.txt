@@ -1,0 +1,29 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the reported bug with pandas.core.util.hashing.hash_tuples.
+
+Test Results:
+1. The hypothesis test PASSED - calling hash_tuples([]) indeed raises TypeError with the message "Cannot infer number of levels from empty list"
+
+2. The reproduction code correctly demonstrates the inconsistency:
+   - hash_array(np.array([], dtype=np.int64)) returns an empty uint64 array: []
+   - combine_hash_arrays(iter([]), 0) returns an empty uint64 array: []
+   - hash_tuples([]) raises TypeError: "Cannot infer number of levels from empty list"
+
+Root Cause Analysis:
+The error originates from MultiIndex.from_tuples() which is called on line 210 of hashing.py:
+```python
+if not isinstance(vals, ABCMultiIndex):
+    mi = MultiIndex.from_tuples(vals)  # This line throws the error
+```
+
+MultiIndex.from_tuples() explicitly checks for empty input and raises a TypeError because it cannot determine the number of levels (dimensions) for an empty MultiIndex without additional information.
+
+Important Findings:
+1. hash_tuples is an INTERNAL function (pandas.core.util.hashing) not part of the public API
+2. The function's docstring states it hashes "MultiIndex / listlike-of-tuples efficiently"
+3. The error is consistent and reproducible
+4. The related functions hash_array and combine_hash_arrays both handle empty inputs gracefully
+
+The bug report accurately describes the behavior and the inconsistency in how empty inputs are handled across the hashing API.

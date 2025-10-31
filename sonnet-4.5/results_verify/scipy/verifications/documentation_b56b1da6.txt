@@ -1,0 +1,52 @@
+## Documentation Analysis for scipy.differentiate.derivative
+
+### Official Documentation (from docstring and web docs)
+
+The documentation for the `step_factor` parameter states:
+- **Default value**: 2.0
+- **Description**: "The factor by which the step size is *reduced* in each iteration"
+- If `step_factor < 1`, subsequent steps will be greater than the initial step
+- This may be useful if steps smaller than some threshold are undesirable (e.g. due to subtractive cancellation error)
+
+### Key Documentation Findings
+
+1. **No explicit restriction on step_factor = 1.0**
+   - The documentation only states that the parameter reduces step size
+   - No mention that step_factor = 1.0 is invalid or will cause errors
+   - The validation code only checks that step_factor >= 0 and is not NaN
+
+2. **Mathematical implications not documented**
+   - The documentation doesn't explain that step_factor = 1.0 means constant step size
+   - No warning that constant step size leads to singular matrices in the algorithm
+   - The algorithm relies on varying step sizes to create a non-singular Vandermonde matrix
+
+3. **Algorithm description**
+   - The docstring explains that each iteration reduces the step size by `step_factor`
+   - When step_factor = 1.0, the step size remains constant (h/1 = h)
+   - This breaks the fundamental assumption of the Richardson extrapolation-style algorithm
+
+### Source Code Analysis
+
+From examining the implementation:
+- Line 678: `h = s / fac ** p` where `fac` is the step_factor
+- When `fac = 1.0`, then `fac ** p = 1.0` for all powers `p`
+- This creates identical step sizes, leading to a Vandermonde matrix with repeated rows
+- Line 682: `weights = np.linalg.solve(A, b)` fails because matrix A is singular
+
+### Documentation Completeness
+
+The documentation is **incomplete** regarding this constraint:
+- It should explicitly state that step_factor must not equal 1.0
+- It should explain why: the algorithm requires varying step sizes
+- The error message from NumPy (LinAlgError: Singular matrix) is not informative for users
+
+### Comparison with Similar Functions
+
+Looking at the algorithm description (lines 196-205), it's clear that:
+- The algorithm is designed to use nested stencils with reducing step sizes
+- Each iteration is supposed to refine the derivative estimate with smaller steps
+- A step_factor of 1.0 fundamentally breaks this design
+
+### Conclusion
+
+The documentation does not adequately specify that step_factor = 1.0 is invalid. While the mathematical algorithm inherently requires step_factor != 1.0, this constraint is not communicated to users through documentation or proper input validation error messages.

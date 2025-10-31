@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug reported in scipy.stats.entropy. The function returns negative KL divergence values when computing relative entropy with extremely small probabilities.
+
+Test Results:
+-------------
+1. The hypothesis test failed immediately, finding a counterexample where KL divergence was negative:
+   - pk=[1.0, 1.8176053134562562e-246]
+   - qk=[1.0, 1.401298464324817e-45]
+   - Result: KL divergence = -8.407505742725511e-244
+
+2. The specific example from the bug report also reproduces the issue:
+   - pk=[1.0, 1.62e-138]
+   - qk=[1.0, 1.33e-42]
+   - Result: KL divergence = -3.577784931870767e-136
+
+Root Cause Analysis:
+--------------------
+The issue occurs due to numerical precision problems when computing KL divergence with extremely small probabilities:
+
+1. The function normalizes the inputs (though in these cases they're already essentially normalized since 1.0 >> 1e-138)
+2. For the second element, it computes: pk[1] * log(pk[1] / qk[1])
+   - pk[1] = 1.62e-138 (extremely small)
+   - qk[1] = 1.33e-42 (much larger than pk[1])
+   - pk[1]/qk[1] ≈ 1.22e-96
+   - log(pk[1]/qk[1]) ≈ -220.85 (large negative number)
+   - contribution = 1.62e-138 * (-220.85) ≈ -3.58e-136 (negative!)
+
+3. The first element contributes 0 (since pk[0]/qk[0] = 1, log(1) = 0)
+4. The sum is negative: -3.58e-136
+
+The bug is that scipy.special.rel_entr returns a negative value for these inputs, which violates the mathematical property that individual relative entropy terms should be non-negative when both inputs are positive.
+
+Impact:
+-------
+This is a legitimate bug because:
+1. KL divergence is mathematically guaranteed to be non-negative (Gibbs' inequality)
+2. The function returns negative values, violating this fundamental property
+3. This could lead to incorrect results in applications that depend on this mathematical property

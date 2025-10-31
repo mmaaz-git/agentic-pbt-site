@@ -1,0 +1,54 @@
+BUG REPRODUCTION RESULTS
+
+I successfully reproduced the reported bug exactly as described. Here are the findings:
+
+1. EXACT REPRODUCTION CASE (from bug report):
+   - DataFrame with 5 rows, requesting 7 chunks
+   - Result: Got 7 chunks total, with 2 empty chunks (chunks 5 and 6)
+   - Output matches exactly what the bug report claimed
+
+2. HYPOTHESIS TEST:
+   - The hypothesis test from the bug report runs and fails as expected
+   - Testing n_rows=5, n_chunks=7 produces 2 empty chunks
+   - Running the full hypothesis test suite shows the bug occurs consistently whenever n_chunks > n_rows
+   - Examples of failures:
+     * n_rows=1, n_chunks=2: 1 empty chunk
+     * n_rows=3, n_chunks=10: 7 empty chunks
+     * n_rows=54, n_chunks=189: 135 empty chunks
+
+3. ADDITIONAL EDGE CASES TESTED:
+   - When n_chunks > n_rows: Empty chunks are always created
+   - When n_chunks == n_rows: No empty chunks (works correctly)
+   - When n_chunks < n_rows: No empty chunks (works correctly)
+
+4. COLUMN IMPLEMENTATION:
+   - PandasColumn.get_chunks() has the exact same issue
+   - Series with 5 elements, requesting 7 chunks produces 2 empty chunks
+   - The bug affects both DataFrame and Column implementations identically
+
+5. TECHNICAL ANALYSIS OF THE BUG:
+   The code in both implementations uses this logic:
+   ```python
+   if n_chunks and n_chunks > 1:
+       size = len(self._df)  # or len(self._col)
+       step = size // n_chunks
+       if size % n_chunks != 0:
+           step += 1
+       for start in range(0, step * n_chunks, step):
+           yield chunk[start : start + step]
+   ```
+
+   When n_chunks=7 and size=5:
+   - step = 5 // 7 = 0
+   - Since 5 % 7 != 0, step becomes 1
+   - The loop iterates from 0 to 7 with step 1
+   - This creates chunks at indices [0:1], [1:2], [2:3], [3:4], [4:5], [5:6], [6:7]
+   - The last two slices [5:6] and [6:7] are beyond the data bounds, creating empty chunks
+
+6. VERIFICATION:
+   - The bug is 100% reproducible
+   - The behavior matches exactly what the bug report describes
+   - Both the simple reproduction case and the property-based test confirm the issue
+   - The suggested fix in the bug report (capping n_chunks at data size) would resolve the issue
+
+The bug report's technical details are completely accurate.

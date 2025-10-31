@@ -1,0 +1,68 @@
+# Triage Analysis
+
+## Consideration for BUG
+**Arguments for BUG:**
+- The encoder crashes on valid Python bytes objects (b'\x80' is a valid bytes value)
+- Python's bytes type is designed to hold arbitrary binary data (0x00-0xFF), not just UTF-8 text
+- The encoder silently assumes UTF-8 without documentation stating this requirement
+- Real-world use cases exist for non-UTF-8 bytes (binary files, encrypted data, protocols)
+- The error is not graceful - it crashes with UnicodeDecodeError rather than handling the case
+- Even the modern pydantic has this same issue, suggesting it's a systemic problem
+
+**Why it might not be BUG:**
+- The module is already deprecated, so fixing bugs might not be a priority
+- If the intended use was only for UTF-8 text stored as bytes, the current behavior might be "correct"
+
+## Consideration for INVALID
+**Arguments for INVALID:**
+- The module is deprecated, users should migrate to newer APIs
+- Could argue that bytes containing text should be UTF-8 (though this is not documented)
+
+**Why it's not INVALID:**
+- The bug affects valid Python bytes objects
+- No documentation states bytes must be UTF-8
+- The Python bytes type explicitly supports arbitrary binary data
+- Even the replacement (pydantic_core) has the same issue
+
+## Consideration for WONTFIX
+**Arguments for WONTFIX:**
+- The module is deprecated, fixing deprecated code might not be worthwhile
+- Users can work around by encoding bytes before passing to the encoder
+- The fix might break existing code that relies on UTF-8 decoding
+
+**Why it's not WONTFIX:**
+- The issue affects core functionality with valid inputs
+- The same issue exists in non-deprecated parts (pydantic_core)
+- It's not an edge case - any non-UTF-8 byte will trigger this
+
+## Consideration for FEATURE_REQUEST
+**Arguments for FEATURE_REQUEST:**
+- Could frame as "add support for non-UTF-8 bytes"
+- Base64 encoding would be a new feature for handling binary data
+
+**Why it's not FEATURE_REQUEST:**
+- The current code crashes on valid input - this is a bug, not missing feature
+- Supporting all valid bytes values should be expected behavior
+- The encoder claims to handle bytes type but fails on many valid bytes
+
+## Consideration for DOCUMENTATION_FIX
+**Arguments for DOCUMENTATION_FIX:**
+- Could document that bytes must be UTF-8 decodable
+- Add warning about the limitation in the encoder
+
+**Why it's not DOCUMENTATION_FIX:**
+- The code is actually broken for valid inputs
+- Documenting a bug doesn't make it not a bug
+- Users reasonably expect bytes encoder to handle all bytes
+
+## Final Assessment
+This is most clearly a **BUG** because:
+
+1. The encoder accepts the bytes type but crashes on valid bytes values
+2. Python's bytes type is explicitly designed for arbitrary binary data
+3. No documentation states UTF-8 is required
+4. The crash is ungraceful (exception rather than handled error)
+5. Common use cases (binary files, protocols) are broken
+6. The suggested fixes (base64 or latin-1) are reasonable and standard
+
+While the module is deprecated, the bug represents a fundamental flaw in handling a core Python type. The fact that even pydantic_core has the same issue suggests this is a systemic problem worth addressing.

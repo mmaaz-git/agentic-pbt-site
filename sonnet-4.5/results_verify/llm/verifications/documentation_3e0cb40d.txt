@@ -1,0 +1,62 @@
+# Documentation Analysis for monotonic_ulid
+
+## Function Documentation
+
+The `monotonic_ulid` function in `llm/utils.py` has the following docstring:
+
+```python
+"""
+Return a ULID instance that is guaranteed to be *strictly larger* than every
+other ULID returned by this function inside the same process.
+
+It works the same way the reference JavaScript `monotonicFactory` does:
+* If the current call happens in the same millisecond as the previous
+    one, the 80-bit randomness part is incremented by exactly one.
+* As soon as the system clock moves forward, a brand-new ULID with
+    cryptographically secure randomness is generated.
+* If more than 2**80 ULIDs are requested within a single millisecond
+    an `OverflowError` is raised (practically impossible).
+"""
+```
+
+## Key Documentation Claims
+
+1. **Primary Guarantee**: The function guarantees that returned ULIDs are "strictly larger than every other ULID returned by this function inside the same process"
+
+2. **Reference Implementation**: Claims to work "the same way the reference JavaScript `monotonicFactory` does"
+
+3. **Specified Behavior**:
+   - Same millisecond: increment randomness by one
+   - Clock moves forward: generate fresh ULID
+   - Overflow protection: raises OverflowError if too many ULIDs in same millisecond
+
+## External Documentation
+
+### ULID Specification
+The official ULID spec (https://github.com/ulid/spec) states:
+- ULIDs should be monotonic when generated within the same millisecond
+- The random component should be incremented when multiple ULIDs are generated in the same millisecond
+- However, the spec does NOT explicitly address clock regression scenarios
+
+### JavaScript Reference Implementation
+The JavaScript monotonicFactory (https://github.com/ulid/javascript) that this function claims to follow has this critical guarantee:
+> "Even if a lower timestamp is passed (or generated), it will preserve sort order"
+
+This means the JavaScript implementation DOES handle clock regression by maintaining monotonicity even when timestamps go backwards.
+
+## Documentation Discrepancies
+
+1. **Incomplete Behavior Description**: The docstring does not mention what happens when the clock goes backward. It only describes:
+   - Same millisecond behavior
+   - Clock moving forward behavior
+   - But NOT clock moving backward behavior
+
+2. **Reference Implementation Mismatch**: The function claims to work "the same way the reference JavaScript `monotonicFactory` does", but:
+   - JavaScript version: Maintains monotonicity even with backward timestamps
+   - This Python version: Generates fresh ULID with earlier timestamp, violating monotonicity
+
+3. **Guarantee Violation**: The primary guarantee of "strictly larger than every other ULID" is explicitly violated when the clock goes backward
+
+## Conclusion
+
+The documentation makes an explicit guarantee about strict monotonicity that the implementation fails to uphold. Furthermore, the function claims compatibility with the JavaScript reference implementation, which DOES handle clock regression correctly. The omission of clock regression behavior in the docstring, combined with the explicit monotonicity guarantee and reference to JavaScript implementation that handles this case, makes this a clear implementation bug rather than a documentation issue.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior could be considered expected and not a bug because empty strings are explicitly listed in pandas' default NA values, meaning they are treated as missing data by design. Excel itself treats completely blank rows as non-existent, which is standard spreadsheet behavior. The documentation never promises round-trip preservation for data written to Excel, and expecting empty string preservation through Excel format might be an unreasonable expectation since Excel fundamentally doesn't distinguish between an empty cell and a cell containing an empty string.
+
+**Why it might not be INVALID:**
+The behavior causes silent data loss which is a serious issue. Users have valid use cases where empty strings are meaningful data (e.g., survey responses where blank is different from no response). The fact that rows with mixed empty strings and other values are preserved (with empty strings becoming NaN) shows the system can handle empty data, making the complete row loss seem inconsistent.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior aligns with how Excel naturally works - blank rows are not considered data rows in spreadsheets. Changing this would require pandas to artificially insert markers or change how it interacts with Excel, potentially breaking existing workflows that rely on blank row skipping. The edge case of DataFrames containing only empty strings is rare in practice, and users who need this can use other formats like CSV or Parquet that preserve empty strings.
+
+**Why it might not be WONTFIX:**
+Data loss without warning is generally considered unacceptable in data processing libraries. The issue affects data integrity which is fundamental to pandas' purpose. The fact that users have already raised this as an issue (GitHub #39808 about skip_blank_lines) shows there is demand for controlling this behavior.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation nowhere explicitly states that rows containing only empty values will be lost during Excel round-trips. This is surprising behavior that users wouldn't expect without documentation. Adding a clear warning about this limitation would help users make informed decisions about using Excel format. The documentation could explain that Excel format is not suitable for preserving empty string data.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting data loss doesn't make it acceptable - if the behavior is wrong, it should be fixed rather than documented. Users expect pandas to preserve their data, and documentation alone doesn't address the fundamental issue of silent data corruption.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The request essentially asks for new functionality - the ability to preserve empty strings through Excel round-trips, which Excel format doesn't naturally support. This could be implemented as an optional feature with a parameter like 'preserve_empty_strings=True' that uses a special marker. The removed skip_blank_lines parameter (GitHub #39808) shows this was considered a feature that some users want control over.
+
+**Why it might not be FEATURE_REQUEST:**
+Data preservation during round-trips is a basic expectation, not a new feature. The user isn't asking for enhanced functionality but for the basic promise that their data won't be lost. Other serialization formats in pandas preserve empty strings, so this is about fixing inconsistent behavior rather than adding features.
+
+## BUG Considerations
+**Why it might be BUG:**
+Silent data loss is one of the most serious types of bugs in data processing libraries. Users reasonably expect that data written and read back should be preserved, especially with no warnings. The inconsistency where some rows with empty strings are preserved (when mixed with other data) but others are lost is confusing and error-prone. Empty strings are valid data that should be distinguished from missing data, and losing them violates data integrity.
+
+**Why it might not be BUG:**
+The behavior follows Excel's natural handling of blank cells and pandas' documented treatment of empty strings as NA values. No documentation promises round-trip preservation through Excel format. This is a limitation of the Excel format itself rather than a pandas bug, similar to how Excel can't preserve certain data types like timezone-aware timestamps perfectly.
+
+## Overall Consideration
+
+Looking at the evidence, this case sits at the boundary between a documentation issue and a feature request. The core issue is that pandas' behavior, while technically following Excel's conventions, violates user expectations about data preservation. The documentation never promises that DataFrames will round-trip perfectly through Excel format, and empty strings are explicitly listed as NA values in the read_excel documentation.
+
+The strongest argument against this being a bug is that Excel fundamentally treats blank cells as non-existent, not as cells containing empty strings. Pandas is faithfully representing Excel's behavior. When you open the generated Excel file in Excel itself, those rows would appear blank and Excel would not consider them data rows. This is a format limitation, not a pandas bug.
+
+However, the complete silence about data loss is problematic. At minimum, this behavior should be clearly documented. The fact that parameters like na_filter=False and keep_default_na=False don't help suggests this isn't about NA handling but about how Excel format fundamentally works. This points toward either a DOCUMENTATION_FIX to warn users about this limitation, or possibly an INVALID classification since the behavior matches Excel's native behavior and users shouldn't expect perfect round-trips through a format that has inherent limitations.

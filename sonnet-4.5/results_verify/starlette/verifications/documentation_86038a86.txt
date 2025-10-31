@@ -1,0 +1,50 @@
+## Documentation Analysis for TrustedHostMiddleware
+
+### Source Code Documentation
+The TrustedHostMiddleware class is found in starlette/middleware/trustedhost.py. The middleware has a simple purpose: to validate that incoming HTTP/WebSocket requests have a Host header that matches a list of allowed hosts.
+
+Key documented behavior:
+1. The middleware accepts an `allowed_hosts` parameter which is a list of allowed host patterns
+2. It supports wildcard patterns like "*.example.com"
+3. It has a `www_redirect` option to redirect to www-prefixed versions if the non-www version is not allowed
+4. If `allowed_hosts` is None, it defaults to ["*"] which allows all hosts
+5. When the host header doesn't match, it returns a 400 "Invalid host header" response
+
+### IPv6 Support - Not Explicitly Documented
+The source code and inline comments do not explicitly document how IPv6 addresses should be handled. There is no mention of:
+- IPv6 address support or restrictions
+- How to specify IPv6 addresses in allowed_hosts
+- How IPv6 addresses with ports should be handled
+
+### RFC 3986 Standard
+According to RFC 3986 section 3.2.2:
+- IPv6 addresses in URLs MUST be enclosed in square brackets: `[IPv6address]`
+- When a port is included, it comes after the closing bracket: `[IPv6address]:port`
+- Examples: `[::1]`, `[2001:db8::1]`, `[::1]:8080`
+
+The RFC specifically states:
+"A host identified by an IPv6 literal address is represented inside the square brackets"
+"IP-literal = '[' ( IPv6address / IPvFuture ) ']'"
+
+### HTTP Host Header Specification
+The Host header in HTTP follows the same format as URLs - IPv6 addresses must be in brackets per RFC 3986. This is standard HTTP behavior that web servers and middleware are expected to support.
+
+### Current Implementation Issue
+Line 40 of the middleware code does:
+```python
+host = headers.get("host", "").split(":")[0]
+```
+
+This splits on the first colon to remove the port number. However, this approach:
+1. Assumes colons only appear as port separators
+2. Does not account for IPv6 addresses which contain multiple colons
+3. Violates the expected handling of RFC 3986-compliant IPv6 addresses
+
+### Conclusion on Documentation
+The documentation does not explicitly state that IPv6 addresses are not supported or should be handled differently. Given that:
+1. Starlette is a modern ASGI framework
+2. IPv6 is a standard protocol that web frameworks are expected to support
+3. The Host header format with IPv6 is well-defined by RFC 3986
+4. There's no documented restriction against IPv6
+
+The lack of proper IPv6 handling appears to be an implementation oversight rather than intended behavior.

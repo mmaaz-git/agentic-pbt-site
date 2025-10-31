@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that empty pandas arrays should be handled the same as empty lists. The function documentation only mentions that "List-like input that is not yet a numpy array or an ExtensionArray is converted to one," which could be interpreted as meaning that already-created ExtensionArrays (like pandas arrays) should follow the standard dtype validation rules. The error message "arrays used as indices must be of integer or boolean type" is technically correct since Float64 is neither integer nor boolean.
+
+**Why it might not be INVALID:**
+The inconsistency is real and demonstrable. Empty arrays are logically valid indexers (they select nothing), and the function already has special logic to handle empty arrays. The fact that `[]` works but `pd.array([])` doesn't for the same logical operation (empty indexing) suggests this is a genuine inconsistency rather than intended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving empty arrays with an unusual dtype (Float64 for an empty pandas array). Users can easily work around this by specifying an explicit dtype when creating empty pandas arrays for indexing. The behavior only affects empty arrays created without explicit dtype specification, which is a relatively obscure scenario.
+
+**Why it might not be WONTFIX:**
+The issue affects idempotence - a fundamental property where `check_array_indexer(array, check_array_indexer(array, indexer))` should equal `check_array_indexer(array, indexer)`. This property is important for composability and predictable behavior. The fix is also straightforward and wouldn't break existing functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about how empty arrays are handled. It doesn't explicitly state that empty arrays bypass dtype validation when they're Python lists but not when they're already array-like. Adding documentation about this behavior difference would help users understand why `pd.array([])` fails while `[]` succeeds.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior seems unintentional rather than a documentation issue. The code already has logic to handle empty arrays specially (converting them to integer dtype), but this logic only applies to some empty arrays (lists) and not others (pandas arrays). This suggests the behavior is a bug rather than an undocumented feature.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting empty pandas arrays with Float64 dtype as indexers is a new feature. The current implementation explicitly requires integer or boolean dtypes for array indexers, and adding support for empty arrays of other dtypes could be seen as extending functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already supports empty indexers - it just does so inconsistently. The special case for empty arrays (lines 526-528) shows that empty indexers are intended to work. This isn't adding new functionality but fixing existing functionality to work consistently.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits inconsistent behavior for logically equivalent inputs. It violates idempotence for certain inputs. The code already contains logic to handle empty arrays (converting them to integer dtype), but this logic doesn't apply uniformly. The fact that `[]` works but `pd.array([])` doesn't, despite both representing empty indexers, is a clear inconsistency. The existing code comment "empty list is converted to float array by pd.array" at line 527 shows awareness that pd.array creates float arrays for empty lists, suggesting the special handling was intended to address this.
+
+**Why it might not be BUG:**
+The function's primary contract is to validate array indexers, and Float64 arrays are not valid indexers according to the specification. The function correctly rejects them. The special handling for empty lists could be seen as a convenience rather than a requirement, and extending this convenience to all empty arrays might not be necessary.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a genuine bug, though a relatively minor one. The key evidence:
+
+1. **Inconsistent behavior**: The function treats `[]` and `pd.array([])` differently despite both representing empty indexers. This violates the principle of least surprise - users would expect empty containers to behave similarly regardless of their type.
+
+2. **Existing special handling**: The code already recognizes that empty arrays need special treatment (lines 526-528), converting them to `np.array([], dtype=np.intp)`. The comment "empty list is converted to float array by pd.array" shows the developers were aware of this dtype issue. However, this handling only applies to lists, not to pandas arrays that are already array-like.
+
+3. **Idempotence violation**: While the bug report's idempotence test has some issues (using an empty array as both target and indexer), the principle is sound. For non-empty arrays, the function should produce consistent results when applied repeatedly, but it doesn't due to this empty array handling inconsistency.
+
+However, this is a relatively minor edge case that only affects empty pandas arrays created without explicit dtype specification. Most users would either use non-empty indexers or specify appropriate dtypes. The impact is limited, and there are easy workarounds. Given that about 90% of bug reports from this user are incorrect, and this is an edge case with limited practical impact, it could reasonably be closed as WONTFIX rather than being filed as a bug.

@@ -1,0 +1,47 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in the `get_extension_attr` method of `Cython.Distutils.build_ext`.
+
+Bug Location:
+-------------
+File: /home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Distutils/build_ext.py
+Line 81: `return getattr(self, option_name) or getattr(extension, option_name, default)`
+
+Reproduction Results:
+--------------------
+
+1. Hypothesis Test:
+   - Tested falsy values: 0, False, "", []
+   - All falsy values failed the test
+   - When build_ext instance has a falsy value (e.g., 0) and extension has "extension_value"
+   - Expected: The falsy value from build_ext (e.g., 0)
+   - Actual: Got "extension_value" from the extension instead
+   - This confirms that falsy values are incorrectly ignored
+
+2. Example 1 - Boolean Option:
+   - build_ext_instance.cython_cplus = 0 (command-line setting)
+   - extension.cython_cplus = 1 (extension setting)
+   - Expected: 0 (command-line should override)
+   - Actual: 1 (extension value used instead)
+
+3. Example 2 - Empty Dictionary:
+   - build_ext_instance.cython_compile_time_env = {} (command-line setting)
+   - extension.cython_compile_time_env = {"DEBUG": True} (extension setting)
+   - Expected: {} (command-line should override)
+   - Actual: {"DEBUG": True} (extension value used instead)
+
+Root Cause:
+-----------
+The problem is the use of the `or` operator in the return statement. In Python:
+- `0 or 1` returns 1
+- `False or "value"` returns "value"
+- `"" or "value"` returns "value"
+- `[] or "value"` returns "value"
+- `{} or "value"` returns "value"
+
+This causes any falsy value from the command-line (self) to be incorrectly treated as "not set" and the extension's value is used instead.
+
+Impact:
+-------
+This bug violates the fundamental principle that command-line options should override extension-level settings. Users cannot explicitly set falsy values at the command-line level when extensions have different values, as their settings will be ignored.

@@ -1,0 +1,65 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. INITIAL TEST CASE (from bug report):
+   Input: [1., 1., 1., 1., 1., 1., 1., 1., 1., 1.]
+   Weights: [1., 1., 1., 1.] (even-length, symmetric)
+
+   Results with mode='constant':
+   - correlate1d: [2. 3. 4. 4. 4. 4. 4. 4. 4. 3.]
+   - convolve1d(reversed): [3. 4. 4. 4. 4. 4. 4. 4. 3. 2.]
+   - CONFIRMED: Results differ (max difference = 1.0)
+
+   NumPy comparison:
+   - np.correlate: [2. 3. 4. 4. 4. 4. 4. 4. 4. 3.]
+   - np.convolve(reversed): [2. 3. 4. 4. 4. 4. 4. 4. 4. 3.]
+   - NumPy maintains the relationship correctly
+
+2. TESTING ACROSS DIFFERENT MODES:
+
+   mode='constant': FAILS - Relationship does not hold
+   mode='nearest': PASSES - Relationship holds
+   mode='reflect': PASSES - Relationship holds
+   mode='wrap': PASSES - Relationship holds
+   mode='mirror': PASSES - Relationship holds
+
+   CONFIRMED: Bug is specific to mode='constant'
+
+3. ODD vs EVEN LENGTH KERNELS:
+
+   Odd-length kernel [1., 2., 3.]:
+   - mode='constant': PASSES - Relationship holds
+   - correlate1d(x, w, origin=o) == convolve1d(x, w[::-1], origin=-o) for all valid o
+
+   Even-length kernel [1., 2., 3., 4.]:
+   - mode='constant': FAILS - Relationship does not hold with origin=0
+   - Found pattern: correlate1d(origin=o) == convolve1d(reversed, origin=-o-1)
+   - NOT the expected: correlate1d(origin=o) == convolve1d(reversed, origin=-o)
+
+4. KEY FINDING:
+
+   The issue is specifically with EVEN-LENGTH kernels in mode='constant'.
+
+   For even-length kernels:
+   - correlate1d(origin=0) == convolve1d(reversed, origin=-1) (not origin=0)
+   - correlate1d(origin=1) == convolve1d(reversed, origin=-2) (not origin=-1)
+
+   This suggests an off-by-one issue in the origin calculation for even-length kernels.
+
+5. HYPOTHESIS TEST:
+
+   Ran property-based testing with 20 random inputs.
+   Multiple failures found, confirming the bug is reproducible with various inputs.
+
+6. MATHEMATICAL VERIFICATION:
+
+   Manually verified that:
+   - convolve1d(x, w) == correlate1d(x, w[::-1]) holds for odd kernels
+   - This is the correct internal implementation
+
+   But the inverse relationship:
+   - correlate1d(x, w) == convolve1d(x, w[::-1])
+   - FAILS for even-length kernels with mode='constant'
+
+CONCLUSION:
+The bug is CONFIRMED and reproducible. It specifically affects even-length kernels when using mode='constant', where the mathematical relationship between correlation and convolution is violated due to an apparent off-by-one error in the origin/boundary handling.

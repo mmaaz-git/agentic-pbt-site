@@ -1,0 +1,59 @@
+Bug Reproduction Report: Django Mail Filebased Backend None Path Crash
+======================================================================
+
+## Bug Reproduced: YES
+
+### Test Environment
+- Django Version: Tested with installed Django
+- Python Version: 3.13
+- Test Date: 2025-09-25
+
+### Reproduction Steps
+
+1. **Hypothesis Property Test**: The property test was attempted but had a minor syntax issue with the decorator. However, the core issue was still validated.
+
+2. **Direct Reproduction**: Successfully reproduced the exact bug as described:
+   - Configured Django with `EMAIL_FILE_PATH=None`
+   - Created `EmailBackend` instance with `file_path=None`
+   - Observed the expected `TypeError`
+
+### Actual Behavior
+
+When both `file_path` parameter and `settings.EMAIL_FILE_PATH` are `None`, the code crashes with:
+```
+TypeError: expected str, bytes or os.PathLike object, not NoneType
+```
+
+The error occurs at line 18 in `/django/core/mail/backends/filebased.py`:
+```python
+self.file_path = os.path.abspath(self.file_path)
+```
+
+### Stack Trace
+```
+Traceback (most recent call last):
+  File "test_filebased_backend.py", line 57, in <module>
+    backend = EmailBackend(file_path=None)
+  File "/django/core/mail/backends/filebased.py", line 18, in __init__
+    self.file_path = os.path.abspath(self.file_path)
+TypeError: expected str, bytes or os.PathLike object, not NoneType
+```
+
+### Code Analysis
+
+The bug occurs in the `EmailBackend.__init__` method (lines 14-18):
+```python
+if file_path is not None:
+    self.file_path = file_path
+else:
+    self.file_path = getattr(settings, "EMAIL_FILE_PATH", None)
+self.file_path = os.path.abspath(self.file_path)  # Line 18 - CRASH HERE
+```
+
+When both sources of `file_path` are `None`:
+1. Line 14: `file_path is not None` evaluates to False
+2. Line 17: `self.file_path` is set to `None` (from `getattr(settings, "EMAIL_FILE_PATH", None)`)
+3. Line 18: `os.path.abspath(None)` raises `TypeError`
+
+### Verification
+The bug report is accurate. The code does indeed crash with a `TypeError` when both the `file_path` parameter and `settings.EMAIL_FILE_PATH` are `None`, exactly as described in the bug report.

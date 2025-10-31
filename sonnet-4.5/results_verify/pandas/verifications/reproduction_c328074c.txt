@@ -1,0 +1,46 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+## Successfully Reproduced
+
+I have successfully reproduced the bug described in the report. Both the Hypothesis test and the direct example confirm the issue.
+
+## Test Results
+
+### Direct Example
+Input: values=[2.2250738585e-313, -1.0], bins=2
+Result: ValueError: missing values must be missing in the same location both left and right sides
+
+The error occurs exactly as described in the bug report. The traceback confirms it originates from:
+- pandas/core/arrays/interval.py:664 in the _validate method
+
+### Key Observations
+
+1. The input values are valid Python floats:
+   - 2.2250738585e-313 (a denormal/subnormal float)
+   - -1.0 (a normal float)
+
+2. The value 2.2250738585e-313 is indeed a denormal float:
+   - It's smaller than the smallest normal float64 (2.2250738585072014e-308)
+   - It's a valid IEEE 754 floating-point number
+
+3. The error message is misleading:
+   - It complains about "missing values" when there are no missing values in the input
+   - The actual issue appears to be related to numerical precision during bin edge calculation
+
+4. Runtime warnings about "invalid value encountered in divide":
+   - Multiple warnings suggest that NaN values are being generated during calculations
+   - This likely happens when computing bin edges with the extreme range difference
+
+5. The range calculation works in numpy:
+   - Min: -1.0, Max: 2.2250738585e-313
+   - Range: 1.0 (approximately, due to the denormal being so close to 0)
+
+## Confirmation
+
+The bug report is accurate in its description:
+- The code does crash with the specified input
+- The error message is indeed misleading (talks about missing values when none exist)
+- The issue is related to handling denormal floats in combination with normal floats
+
+The bug manifests as described and represents a genuine issue where valid numeric input causes an unexpected crash with a confusing error message.

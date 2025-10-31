@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly guarantees that incremental and batch ConvexHull constructions should produce identical volume values. The incremental mode is described as a way to "add new points incrementally" with no specific mathematical guarantees about property equivalence. One could argue that incremental mode is primarily a convenience feature for progressive point addition, not a mathematically equivalent alternative to batch construction. The documentation is completely silent on this equivalence, so the user's expectation might be based on an assumption rather than a documented promise.
+
+**Why it might not be INVALID:**
+Volume is a fundamental geometric property of a convex hull. When two ConvexHull objects have identical vertices and simplices (as demonstrated in the reproduction), it's reasonable to expect they should report the same volume. This is a basic mathematical property - the volume of a geometric shape is determined by its boundary, and if two hulls have the same boundary, they should have the same volume. The fact that both modes identify the same vertices suggests they're computing the same hull, just reporting different volumes.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an obscure edge case that rarely affects real-world usage. Most users of ConvexHull likely use either batch or incremental mode consistently, not comparing between them. The bug only manifests when comparing volumes between the two modes, and users have a documented workaround (rebuild the hull non-incrementally). The incremental mode might have internal implementation reasons for this behavior related to how Qhull maintains state, and fixing it could require significant changes to the underlying Qhull library interface.
+
+**Why it might not be WONTFIX:**
+Volume calculation is a core feature of ConvexHull, not an obscure edge case. Users who rely on accurate volume calculations for scientific computations could get silently incorrect results, which is serious for a scientific computing library. The discrepancy is significant (33% error in the test case), not a minor floating-point difference. The bug undermines trust in the incremental mode feature and could lead to incorrect scientific results being published.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation fails to warn users that incremental mode may produce different volume calculations than batch mode. If this is intended behavior or a known limitation, it should be clearly documented. Adding a warning to the documentation about potential volume calculation differences in incremental mode would help users make informed decisions. The documentation could specify that incremental mode is for convenience of point addition, not for precise volume calculations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This appears to be incorrect behavior rather than a documentation issue. The code is producing mathematically incorrect results for a well-defined geometric property. Simply documenting broken behavior doesn't fix the underlying problem that the volume calculation is wrong. Users would reasonably expect correct mathematical results from a scientific computing library, regardless of which mode they use.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that accurate volume calculation after incremental updates is a new feature that hasn't been implemented yet. The current implementation might only support correct vertex identification in incremental mode, with volume calculation being a separate feature request. Users requesting that incremental mode produce identical results to batch mode could be seen as asking for an enhancement rather than reporting a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+The volume property already exists and is returned by the incremental ConvexHull - it's just wrong. This isn't asking for new functionality but for existing functionality to work correctly. When a method returns a value labeled "volume," users rightfully expect it to be the actual volume, not an incorrect approximation. Fixing broken existing features is bug fixing, not feature development.
+
+## BUG Considerations
+**Why it might be BUG:**
+The incremental ConvexHull returns a mathematically incorrect volume (0.666... instead of 1.0) despite having the correct vertices. This is objectively wrong - the area of a triangle with vertices [0,0], [1,0], [0,2] is exactly 1.0, not 2/3. The bug is reproducible and demonstrates clear incorrect behavior in a core mathematical calculation. Scientific computing libraries like SciPy should produce accurate mathematical results, and returning wrong values for fundamental properties like volume is a serious bug.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly promise that incremental and batch modes produce identical results. The incremental mode might be using a different internal representation or calculation method that produces different values by design. Without explicit documentation stating these should be equivalent, this might be considered undefined behavior rather than a bug. The user's expectation of equivalence might be reasonable but not contractually guaranteed by the API.
+
+## Overall Consideration
+
+This case presents a challenging triage decision. On one hand, we have clear mathematical incorrectness: the incremental ConvexHull reports a volume of 0.666... for a triangle that objectively has area 1.0. Both construction methods identify the same vertices ([0,0], [1,0], [0,2]), confirming they're computing the same convex hull, yet they report different volumes. This is not a floating-point precision issue but a significant 33% error.
+
+However, the documentation is notably silent on whether incremental and batch construction should produce equivalent results. The documentation describes incremental mode as allowing you to "add new points incrementally" but makes no promises about the mathematical properties of the resulting hull compared to batch construction. This silence could be interpreted as leaving the behavior undefined, making it difficult to definitively call this a bug versus a limitation that should be documented.
+
+The most compelling argument for this being a bug is that the volume property exists and returns a value - users reasonably expect that value to be correct. When a scientific computing library provides a method that returns a "volume," there's an implicit contract that this volume is mathematically accurate. The fact that the vertices are correct but the volume is wrong suggests an implementation error in the volume calculation after add_points(), not an intentional design choice. Given that SciPy is used for scientific research where accuracy matters, silently returning incorrect mathematical results is serious enough to warrant treating this as a bug rather than just a documentation issue.

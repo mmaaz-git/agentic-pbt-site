@@ -1,0 +1,45 @@
+TRIAGE ANALYSIS FOR _validate_socket BUG REPORT
+===============================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function _validate_socket is an internal/private function (prefixed with underscore), not part of the public API. There is no documentation specifying what error messages should be shown for different failure modes. The current behavior could be considered an implementation detail, and the error messages, while not perfectly accurate, still indicate that the validation failed. Users should not be directly calling this private function anyway.
+
+**Why it might not be INVALID:**
+Even though the function is private, it is used by public API methods like SocketStream.from_socket(). Misleading error messages affect users of these public methods. The error messages explicitly state incorrect reasons for failure ("must be connected" when the real issue is an invalid file descriptor), which can send developers on wild goose chases trying to debug non-existent connection issues.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving invalid file descriptors that would rarely occur in production code. The function is internal and not meant to be called directly. The error still prevents invalid usage, just with a suboptimal message. The impact is limited to developer debugging time, not runtime correctness. Fixing this requires additional error handling logic for a scenario that shouldn't happen with proper usage.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (removing 4 lines of code) and makes the error handling more correct. Poor error messages waste developer time and can lead to incorrect debugging approaches. The issue affects public API methods indirectly. Given how simple the fix is, marking it WONTFIX would be unnecessarily stubborn.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function has no documentation at all, being a private function. One could argue that the error handling behavior should be documented if it's going to remain as-is. The public API methods that use this function could document that error messages about connection/binding might actually indicate invalid file descriptors.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code behavior is objectively wrong - it's reporting incorrect error reasons. This isn't a documentation issue; it's a logic error in the code. Documenting incorrect behavior doesn't make it correct. The fix should be in the code, not in documentation explaining why misleading errors might occur.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that better error differentiation is a new feature - distinguishing between "invalid FD", "valid FD but not a socket", "socket not connected", and "socket not bound". The current code doesn't attempt to differentiate all these cases. Adding more specific error handling could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but fixing existing incorrect behavior. The code already tries to provide specific error messages; they're just wrong in certain cases. Correcting misleading error messages is a bug fix, not a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+The error messages are objectively incorrect and misleading. When socket.socket(fileno=fd) fails with EBADF (bad file descriptor), the error has nothing to do with whether a socket is connected or bound - the FD is simply invalid. This causes real confusion for developers trying to debug issues. The code makes an incorrect assumption that any OSError other than ENOTSOCK means the socket exists but isn't in the right state. The fix is simple and clear.
+
+**Why it might not be BUG:**
+The function is private/internal (underscore prefix) with no documented behavior contract. The validation still prevents invalid usage, just with imperfect error messages. This could be considered a quality-of-life issue rather than a functional bug since the validation still correctly rejects invalid inputs.
+
+**Overall consideration**
+
+This bug report describes a real issue where error messages are objectively misleading. When an invalid file descriptor causes EBADF, the function incorrectly reports that "the socket must be connected" or "the socket must be bound to a local address" - statements that are factually wrong since no socket exists at that file descriptor. The reproduction clearly demonstrates this issue occurring exactly as described.
+
+However, the function in question is a private/internal function (indicated by the underscore prefix), which typically means it's not part of the public API contract. Internal functions often have less stringent requirements for error message quality. Additionally, while the error messages are misleading, they still prevent invalid usage - the function correctly rejects the invalid file descriptor, just with an incorrect explanation.
+
+The strongest argument against this being a bug is that users should never encounter these error messages through normal use of the public API. Valid file descriptors that refer to actual sockets would not trigger this issue. Only when passing completely invalid file descriptors (which is already an error condition) do you get the misleading messages. From this perspective, it's an error message quality issue in an error path of an internal function, which many maintainers would consider WONTFIX or at best a minor documentation issue.

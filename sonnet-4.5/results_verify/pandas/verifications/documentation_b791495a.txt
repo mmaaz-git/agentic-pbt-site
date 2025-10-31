@@ -1,0 +1,55 @@
+DOCUMENTATION FINDINGS FOR DATAFRAME INTERCHANGE PROTOCOL AND CATEGORICAL NULL HANDLING
+
+1. OFFICIAL PROTOCOL SPECIFICATION:
+The DataFrame interchange protocol is an official specification developed by the Consortium for Python Data API Standards. The protocol is designed to enable data interchange between different dataframe libraries in the Python ecosystem.
+
+Key documentation sources:
+- Official spec: https://data-apis.org/dataframe-protocol/latest/
+- Pandas implementation: pandas.api.interchange.from_dataframe
+- Protocol version: 2021-DRAFT
+
+2. CATEGORICAL DATA REPRESENTATION:
+According to the protocol specification:
+- Categorical columns are represented using the CATEGORICAL DtypeKind
+- Categories use a CategoricalDescription with:
+  - is_ordered: whether ordering is semantically meaningful
+  - is_dictionary: whether a mapping exists
+  - categories: a Column containing the category values
+- The data buffer contains integer codes that index into the categories
+
+3. NULL VALUE HANDLING SPECIFICATION:
+The protocol explicitly defines multiple null representation strategies through ColumnNullType:
+- NON_NULLABLE (0): No null values
+- USE_NAN (1): Use explicit float NaN values
+- USE_SENTINEL (2): Use a specific sentinel value
+- USE_BITMASK (3): Use bits to represent null positions
+- USE_BYTEMASK (4): Use bytes to represent null positions
+
+For categorical columns with nulls, pandas uses USE_SENTINEL with value -1 to represent missing values in the codes array.
+
+4. ROUND-TRIP EXPECTATIONS:
+The pandas documentation states:
+- from_dataframe() "Build a pd.DataFrame from any DataFrame supporting the interchange protocol"
+- The function should convert data from the interchange format back to a pandas DataFrame
+- No explicit documentation states that round-trip conversion must be lossless
+
+However, the protocol specification's purpose states: "The purpose of this dataframe protocol (__dataframe__) is to enable data interchange, specifically a way to convert one type of dataframe into another type."
+
+5. IMPLEMENTATION NOTES:
+The pandas documentation includes important warnings:
+- "Due to severe implementation issues, we recommend only considering using the interchange protocol in the following cases:
+  - converting to pandas: for pandas >= 2.0.3
+  - converting from pandas: for pandas >= 3.0.0"
+- From pandas 2.3 onwards, from_dataframe preferentially uses Arrow PyCapsule Interface
+
+6. CODE COMMENTS IN IMPLEMENTATION:
+Line 251-252 of from_dataframe.py contains a comment:
+"# Doing module in order to not get ``IndexError`` for out-of-bounds sentinel values in `codes`"
+
+This comment explicitly acknowledges that the modulo operation is meant to handle sentinel values, but the implementation doesn't preserve them correctly.
+
+7. DATA PRESERVATION EXPECTATIONS:
+While not explicitly stated in the documentation, the fundamental purpose of a data interchange protocol implies data preservation. The protocol defines how to represent null values (via sentinel values for categoricals), and the implementation should honor this representation when converting back to pandas.
+
+CONCLUSION:
+The documentation and protocol specification clearly define how null values should be represented in categorical columns (via sentinel values). The implementation has a documented intent to handle sentinel values but fails to preserve them correctly during conversion. The bug represents a failure to correctly implement the documented protocol specification.

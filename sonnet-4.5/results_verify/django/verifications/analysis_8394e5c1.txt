@@ -1,0 +1,76 @@
+## Bug Triage Analysis
+
+### Evaluation Against Each Category:
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The code crashes with a TypeError when using documented functionality (`sender=None`)
+- The `use_caching` parameter should be a transparent optimization but instead breaks core features
+- The documentation explicitly states that `sender=None` is supported to receive events from any sender
+- The crash affects multiple methods: send(), has_listeners(), send_robust(), and async variants
+- There's no documentation warning about sender type limitations with caching
+- Common use patterns (sender=None) that work without caching fail with caching enabled
+- The implementation violates the principle of least surprise - an optimization flag shouldn't change functional behavior
+
+**Arguments AGAINST:**
+- The `use_caching` parameter might be considered an internal/undocumented feature
+- Could argue that users shouldn't use undocumented parameters
+
+#### 2. INVALID
+**Arguments FOR:**
+- The `use_caching` parameter is not documented in the public API
+- Users might be using an internal implementation detail
+
+**Arguments AGAINST:**
+- The parameter is part of the public constructor signature
+- Django itself uses this parameter internally
+- Even if undocumented, it shouldn't crash with valid senders
+- The crash message is cryptic and unhelpful
+
+#### 3. WONTFIX
+**Arguments FOR:**
+- Could be considered an edge case if `use_caching` is rarely used
+- Might argue that the performance benefit of WeakKeyDictionary outweighs the limitation
+
+**Arguments AGAINST:**
+- `sender=None` is not an edge case - it's a core documented feature
+- The crash is not graceful and provides no guidance
+- The workaround (not using caching) defeats the purpose of the parameter
+
+#### 4. FEATURE_REQUEST
+**Arguments FOR:**
+- Could reframe as "Add support for non-weakrefable senders with caching"
+- The current implementation works as designed (WeakKeyDictionary requires weakrefable keys)
+
+**Arguments AGAINST:**
+- This isn't adding new functionality - it's fixing broken existing functionality
+- The code already claims to support these sender types
+- It's a regression from the non-cached behavior
+
+#### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- Could document that `use_caching=True` requires weakrefable senders
+- Could add warnings about sender type limitations
+
+**Arguments AGAINST:**
+- The fundamental issue is the code crash, not missing documentation
+- Documenting the limitation doesn't fix the broken functionality
+- Users expect optimization flags to be transparent
+
+### Analysis Conclusion:
+
+This is clearly a **BUG** for the following reasons:
+
+1. **Violates documented behavior**: The documentation explicitly states that `sender=None` is supported to receive events from any sender. This is core functionality.
+
+2. **Silent breaking change**: The `use_caching` parameter silently breaks functionality that works without it. Optimization parameters should never change functional behavior.
+
+3. **Crashes instead of degrading gracefully**: Even if there were technical limitations, the code should handle them gracefully rather than crashing with a cryptic error.
+
+4. **Affects core Django patterns**: `sender=None` is not an edge case - it's one of the most common signal patterns in Django applications.
+
+5. **Implementation detail leaking**: The use of WeakKeyDictionary is an implementation detail that shouldn't restrict the public API.
+
+6. **No reasonable workaround**: Users cannot work around this while still using caching, forcing them to choose between performance and functionality.
+
+The bug report is accurate, well-documented, and identifies a legitimate defect in Django's Signal implementation where an optimization parameter breaks core documented functionality.

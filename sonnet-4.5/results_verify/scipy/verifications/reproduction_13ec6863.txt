@@ -1,0 +1,36 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed:
+
+### Reproduction Results:
+
+1. **Direct test with reported failing input (M=2, alpha=2.225e-311)**:
+   - Result: [ 0. nan]
+   - Confirmed: NaN value produced in the output
+
+2. **Manual test cases from bug report**:
+   - tukey(2, alpha=1e-308) = [ 0. nan]
+   - tukey(5, alpha=1e-308) = [ 0.  1.  1.  1. nan]
+   - tukey(10, alpha=1e-308) = [ 0.  1.  1.  1.  1.  1.  1.  1.  1. nan]
+
+### Warnings observed:
+The function produces two runtime warnings:
+1. "overflow encountered in divide" - Confirming that 2.0/alpha overflows to infinity
+2. "invalid value encountered in add" - Confirming that the NaN propagates through the calculation
+
+### Pattern observed:
+- The NaN consistently appears in the last element of the returned array
+- The rest of the values are either 0 or 1 (as expected for a Tukey window)
+- The issue occurs when alpha < ~1e-307, exactly as reported
+
+### Root cause confirmed:
+The warnings and line number (946) confirm the bug report's analysis:
+```python
+w3 = 0.5 * (1 + xp.cos(xp.pi * (-2.0/alpha + 1 + 2.0*n3/alpha/(M-1))))
+```
+When alpha is extremely small:
+1. 2.0/alpha overflows to infinity
+2. cos(infinity) evaluates to NaN
+3. This NaN propagates to the final output
+
+The bug is real and reproducible exactly as described in the report.

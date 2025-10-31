@@ -1,0 +1,40 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the validate_integer function. Here are my findings:
+
+### 1. Hypothesis Test Reproduction
+
+The property-based test using Hypothesis correctly identifies the inconsistency. When running the test with negative values and a positive min_val:
+- The test fails with input val=-1, min_val=0
+- The assertion "Float -1.0 should raise ValueError" fails
+- This confirms that float inputs bypass the min_val check
+
+### 2. Manual Example Reproduction
+
+The manual test case produces exactly the output claimed in the bug report:
+- Integer -5 with min_val=0: Correctly raises ValueError with message "'test_param' must be an integer >=0"
+- Float -5.0 with min_val=0: Incorrectly returns -5 without raising an error
+
+### 3. Code Analysis
+
+Examining the source code at pandas/io/parsers/readers.py lines 548-554 reveals the logic flaw:
+
+```python
+msg = f"'{name:s}' must be an integer >={min_val:d}"
+if is_float(val):
+    if int(val) != val:
+        raise ValueError(msg)
+    val = int(val)  # Converts float to int but doesn't check min_val
+elif not (is_integer(val) and val >= min_val):
+    raise ValueError(msg)
+```
+
+The bug occurs because:
+1. When a float is detected (line 549), the code checks if it can be safely converted to an integer (line 550)
+2. If it can, it converts the float to int (line 552)
+3. However, it never checks if this converted integer satisfies the min_val constraint
+4. The min_val check only happens in the elif branch (line 553) for actual integer inputs
+
+### Effect
+
+This bug creates an inconsistency where semantically identical values (-5 vs -5.0) produce different behavior when a min_val constraint is specified. This violates the principle of least surprise and the documented contract of the function.

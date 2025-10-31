@@ -1,0 +1,96 @@
+TRIAGE ANALYSIS
+===============
+
+## Evaluation Against Each Category
+
+### 1. INVALID
+**Arguments Against:**
+- The bug is real and reproducible
+- The documentation clearly states "Value that denotes non-edges" without any mention of tolerance
+- The behavior violates reasonable user expectations based on the API
+- The function silently drops mathematically non-zero values
+- Other similar parameters (infinity_null, nan_null) have explicit controls
+
+**Arguments For:**
+- None. The bug clearly exists and violates documented behavior.
+
+**Verdict: NOT INVALID**
+
+### 2. WONTFIX
+**Arguments For:**
+- Values like 1e-157 are extremely small and might be considered denormalized or near-zero
+- Could argue these are "obscure error cases that would never happen in practice"
+- Might be related to floating-point precision issues
+
+**Arguments Against:**
+- The threshold is at 1e-8, not at machine epsilon or denorm levels
+- This affects normal scientific computation ranges (1e-10, 1e-9 are common in physics/chemistry)
+- Silent data loss is a serious issue, not a trivial one
+- The threshold is arbitrary and undocumented
+- Users working with log-scale data or small probabilities may legitimately use such values
+
+**Verdict: NOT WONTFIX - This is not trivial or obscure**
+
+### 3. DOCUMENTATION_FIX
+**Arguments For:**
+- If the threshold behavior is intentional for numerical stability, it should be documented
+- Could add documentation explaining the threshold exists
+- The code might be working as designed but poorly documented
+
+**Arguments Against:**
+- The documentation explicitly says "Value that denotes non-edges" implying exact equality
+- Adding documentation about a hidden threshold would be acknowledging a design flaw
+- The API would be better served by adding a tolerance parameter if needed
+- Silent data corruption is more than a documentation issue
+
+**Verdict: POSSIBLE but not ideal - Better to fix the behavior**
+
+### 4. FEATURE_REQUEST
+**Arguments For:**
+- Could frame as "Add support for exact null_value comparison"
+- Could request a new `atol` parameter to control tolerance
+
+**Arguments Against:**
+- The current behavior is a deviation from documented behavior, not a missing feature
+- Exact comparison is what users expect based on documentation
+- This is fixing broken behavior, not adding new functionality
+
+**Verdict: NOT A FEATURE_REQUEST - This is fixing a bug**
+
+### 5. BUG
+**Arguments For:**
+- Silent data loss without warning or documentation
+- Violates the documented behavior ("Value that denotes non-edges" implies exact equality)
+- Breaks expected round-trip property
+- Arbitrary undocumented threshold at ~1e-8
+- No way for users to control or disable this behavior
+- Inconsistent with how other null values (NaN, infinity) are handled with explicit parameters
+- Could cause serious issues in scientific computing where small values are meaningful
+
+**Arguments Against:**
+- Could potentially be intentional for numerical stability (but then should be documented)
+
+**Verdict: STRONG CASE FOR BUG**
+
+## Final Assessment
+
+This is clearly a BUG for the following reasons:
+
+1. **Documentation Violation**: The documentation states null_value is "Value that denotes non-edges" with no mention of tolerance. Users reasonably expect exact comparison.
+
+2. **Silent Data Corruption**: Values that are mathematically non-zero are being silently dropped without warning, which can lead to incorrect scientific results.
+
+3. **Arbitrary Threshold**: The threshold of ~1e-8 is neither at machine epsilon (would be ~2.2e-16 for float64) nor documented. It appears arbitrary.
+
+4. **No User Control**: Unlike NaN and infinity handling (which have explicit boolean parameters), users cannot control this threshold behavior.
+
+5. **Broken Round-Trip**: The existence of both from_dense and to_dense functions implies they should be inverse operations, but this fails for small values.
+
+6. **Legitimate Use Cases Affected**: Scientific computing often deals with values in the range 1e-10 to 1e-8 (e.g., physical constants, probabilities, concentrations).
+
+While one could argue for DOCUMENTATION_FIX if the threshold is intentional for numerical stability, the better solution would be to:
+- Remove the threshold for exact comparison, OR
+- Add an optional `atol` parameter to control it, OR
+- At minimum, document the threshold clearly
+
+Since the current behavior contradicts documentation and causes data loss, this should be classified as BUG.

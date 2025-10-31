@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Cython API documentation for _zeros.loop_example doesn't explicitly state that it should raise an error when f(xa) and f(xb) have the same sign. One could argue that since this is a lower-level API primarily for performance, it might be designed to skip validation for speed, leaving input validation to the caller. The function might be intended as an "unsafe" fast path where the caller is responsible for ensuring valid inputs.
+
+**Why it might not be INVALID:**
+The mathematical algorithms implemented (bisect, brentq, brenth, ridder) fundamentally require opposite signs to function. These aren't optional preconditions but mathematical requirements. The Python API enforces this strictly, and returning a completely invalid result (0.0 outside the interval and not a root) is clearly incorrect behavior. The function silently returns nonsensical data rather than any indication of failure.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal, undocumented Cython API (under _zeros module with underscore prefix suggesting internal use). It might be considered low-priority since users should primarily use the public Python API which correctly validates inputs. The maintainers might consider this an edge case in an internal API that few users directly access.
+
+**Why it might not be WONTFIX:**
+The function is accessible and can be imported directly, making it part of the public interface even if not well-documented. Returning completely invalid results (0.0 when the root doesn't exist at that point) can cause silent failures in downstream calculations, which is a serious issue. The fix would be straightforward - add sign validation or return an error indicator.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The _zeros.loop_example documentation doesn't specify what happens with invalid inputs. One could argue the documentation should explicitly state that this function doesn't validate inputs and users must ensure f(xa) and f(xb) have opposite signs. The documentation could warn that invalid inputs lead to undefined behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior isn't just undefined or poorly documented - it's objectively wrong. Returning 0.0 (which is outside the interval and not a root) isn't a reasonable "undefined behavior" but rather a clear bug. Documentation can't fix the fact that the function returns mathematically nonsensical results.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Input validation could be seen as a feature that the Cython API currently lacks. Adding sign checking would be adding new functionality to make the Cython API more robust and match the Python API's behavior. This could be framed as requesting feature parity between the two APIs.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing broken behavior. The algorithms mathematically require opposite signs, so this is fixing a correctness issue, not adding a feature. Returning invalid results isn't missing functionality but incorrect implementation of existing functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+All bracketing root-finding methods mathematically require f(a) and f(b) to have opposite signs. Without this, the algorithms cannot function correctly. The Cython API returns objectively wrong results: 0.0 is not in the search interval [2.0, 3.0], and f(0.0) = -1.0 is not close to zero. This is a clear violation of the function's contract - it claims to return roots but returns non-roots. The Python API correctly validates this precondition, and the Cython API's failure to do so causes silent incorrect results.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the Cython API is explicitly designed as an "unsafe" performance-oriented interface where input validation is intentionally omitted. However, even in that case, returning 0.0 (rather than undefined behavior or a crash) suggests the function is attempting to return a result, just an incorrect one.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a clear BUG. The mathematical foundations of bracketing methods require opposite signs at the interval endpoints - this isn't an optional validation but a fundamental requirement for the algorithms to work. When this requirement is violated, the Cython API returns objectively incorrect results (0.0, which is neither in the interval nor a root) rather than indicating an error.
+
+The fact that the Python API correctly raises ValueError for the same inputs establishes the expected behavior. While the Cython API might be lower-level, returning mathematically nonsensical results is not acceptable "undefined behavior" - it's a bug that can cause silent failures in scientific computations.
+
+The bug is particularly serious because: (1) it returns a specific value (0.0) that appears valid but is completely wrong, (2) there's no indication to the user that anything went wrong, and (3) this could propagate through scientific calculations causing incorrect results. This isn't a documentation issue or missing feature - it's incorrect implementation that produces wrong outputs for invalid inputs rather than failing safely.

@@ -1,0 +1,46 @@
+## Bug Reproduction Analysis
+
+### Reproduction Success
+The bug has been successfully reproduced. The issue is confirmed as reported.
+
+### Test Results
+
+1. **Simple Reproduction Test**:
+   - Running the provided reproduction code confirms the exact behavior described in the bug report
+   - `_parse_datetime(0.5, 'd')` returns `1960-01-01 12:00:00`
+   - `_convert_datetimes([0.5], 'd')` returns `1960-01-01 00:00:00`
+   - The difference is exactly 12 hours (0.5 days)
+
+2. **Extended Testing with Multiple Values**:
+   - Tested with values: 0.25, 0.5, 0.75, 1.5, 2.33
+   - All fractional day components are truncated by `_convert_datetimes`
+   - `_parse_datetime` correctly preserves fractional components in all cases
+   - Examples:
+     - 0.25 days: loses 6 hours
+     - 0.75 days: loses 18 hours
+     - 2.33 days: loses 7 hours 55 minutes 12 seconds
+
+### Root Cause Analysis
+
+The bug is located in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/io/sas/sas7bdat.py`:
+
+1. **Line 75** in `_parse_datetime`:
+   ```python
+   return datetime(1960, 1, 1) + timedelta(days=sas_datetime)
+   ```
+   This correctly preserves fractional days because `timedelta(days=)` accepts and preserves float values.
+
+2. **Line 107** in `_convert_datetimes`:
+   ```python
+   vals = np.array(sas_datetimes, dtype="M8[D]") + td
+   ```
+   This truncates fractional days because `dtype="M8[D]"` creates datetime64 with day precision, which only stores whole days.
+
+### Impact
+
+The bug causes:
+1. **Data Loss**: Fractional day components (hours, minutes, seconds) are silently discarded
+2. **Inconsistency**: Two functions designed to handle the same SAS datetime conversion produce different results
+3. **Silent Failure**: No warning or error is raised when precision is lost
+
+The bug is real and affects any SAS data that includes fractional day values when the unit is 'd'.

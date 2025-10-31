@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior is intentional, not a bug. Dask deliberately converts object dtype columns to PyArrow strings as a performance optimization introduced around version 2023.03.01. This is a documented feature in GitHub issues and blog posts, even if not in the main API documentation. The conversion can be disabled with a configuration option (`dataframe.convert-string=False`), suggesting it's a configurable feature rather than a bug. The user's expectation that types must be preserved is not explicitly guaranteed in the documentation.
+
+**Why it might not be INVALID:**
+The conversion breaks existing functionality - arithmetic operations that work on the original DataFrame fail after conversion. The function's documented purpose is to "construct a Dask DataFrame from a Pandas DataFrame" for parallel operations, implying the data should remain functionally equivalent. Large integers are valid data that should be preserved, not corrupted. The silent nature of the conversion without warning is problematic.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving integers that exceed int64 range, which is relatively rare in practice. Most users work with data within standard numeric ranges. The workaround exists (setting `convert-string=False`) for users who need this specific behavior. The performance benefits of PyArrow strings for the majority of use cases might outweigh the inconvenience for this edge case. The issue has been known since at least GitHub issue #11117 but hasn't been prioritized for fixing.
+
+**Why it might not be WONTFIX:**
+The issue causes data corruption and breaks arithmetic operations, which is more than a minor inconvenience. Large integers are increasingly common in modern applications (cryptography, blockchain, scientific computing). The silent failure makes it dangerous - users might not realize their data has been corrupted until downstream operations fail. The fact that developers acknowledged it as "bad UX" suggests it should be fixed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation completely fails to mention this automatic type conversion behavior. Users have no way to know from the API documentation that their object dtype columns will be converted to strings. The configuration option `dataframe.convert-string` that controls this behavior is not documented in the `from_pandas()` function documentation. Adding documentation about this behavior and the workaround would help users understand and work around the issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the behavior doesn't fix the fundamental problem that data types are being changed in unexpected ways. The conversion breaks functionality (arithmetic operations), which is more than a documentation issue. Users would still consider it a bug even if documented, as it violates the principle of least surprise and data integrity.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for better handling of large integers - preserving them as integers rather than converting to strings. This could be implemented as a new feature to intelligently detect and preserve numeric types in object columns. An option could be added to `from_pandas()` to control string conversion behavior directly, rather than requiring global configuration. This would be an enhancement to make the function more robust.
+
+**Why it might not be FEATURE_REQUEST:**
+The functionality already exists (via configuration), so it's not requesting something new. The issue is about fixing incorrect behavior rather than adding new capabilities. Preserving data types during conversion is a basic expectation, not a feature request. The function already claims to create a Dask DataFrame from a pandas DataFrame, which implies type preservation.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function silently corrupts data by changing integers to strings, breaking arithmetic operations that worked on the original data. There's no warning or error to alert users to this conversion. The behavior violates the reasonable expectation that `from_pandas().compute()` should return data equivalent to the original. The fact that mixed-type columns (containing ints, floats, and strings) all get converted to strings shows overly aggressive type conversion. Even Dask developers acknowledged this as "bad UX" in GitHub issues.
+
+**Why it might not be BUG:**
+This is intentional behavior introduced for performance optimization with PyArrow strings. The behavior can be controlled via configuration, suggesting it's a feature not a bug. The conversion only affects object dtype columns, which are already a special case in pandas. The documentation doesn't explicitly promise type preservation. This might be considered a trade-off between performance and edge case handling rather than a bug.
+
+## Overall Consideration
+
+After careful analysis, this issue sits at the intersection of poor documentation and questionable design decisions. The automatic conversion of object dtype columns to PyArrow strings is an intentional performance optimization, but it has the unintended consequence of corrupting large integer data. The behavior is particularly problematic because it happens silently and breaks functionality that worked on the original data.
+
+The fact that this behavior is configurable via `dataframe.convert-string=False` suggests the Dask team recognizes it might not always be desirable. However, the lack of documentation about this behavior and its configuration option is a significant oversight. Users have no way to know from the API documentation that their data might be converted or how to prevent it.
+
+While the technical behavior described in the bug report is accurate and reproducible, the classification depends on whether we view this as a bug (data corruption), a documentation issue (undocumented behavior), or a feature request (better handling of edge cases). Given that the behavior is intentional but poorly documented, and that a workaround exists, this leans most strongly toward a DOCUMENTATION_FIX. The documentation should clearly explain the automatic string conversion behavior, when it occurs, its implications, and how to disable it when type preservation is critical.

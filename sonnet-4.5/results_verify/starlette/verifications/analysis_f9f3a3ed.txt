@@ -1,0 +1,45 @@
+Bug Triage Analysis
+===================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The Starlette documentation does not explicitly mention IPv6 support for TrustedHostMiddleware. One could argue that since IPv6 support is not documented, the middleware was never intended to support IPv6 addresses, and therefore this is not a bug but rather a request for functionality that was never promised or intended.
+
+**Why it might not be INVALID:**
+HTTP standards (RFC 3986 and RFC 7230) clearly define how IPv6 addresses must be represented in HTTP Host headers using square brackets. A web framework's Host header validation middleware should reasonably be expected to handle standard-compliant HTTP requests. The current implementation demonstrably fails to correctly parse valid, standards-compliant Host headers, which is an objective failure regardless of whether the documentation explicitly mentions IPv6.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+IPv6 adoption is still limited in many environments, and the maintainers might consider this an edge case that affects few users. The workaround of simply not using IPv6 addresses or using "*" in allowed_hosts might be deemed sufficient for most use cases. The complexity of properly parsing IPv6 addresses might be considered not worth the effort for a rarely-used feature.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case but a fundamental failure to parse standard HTTP headers correctly. IPv6 is an established internet standard, not an obscure feature. The bug causes the middleware to completely fail for any IPv6 request, returning 400 errors for valid requests. The fix is relatively simple and well-defined, making it unreasonable to leave such a clear parsing error unaddressed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that IPv6 addresses are not supported in TrustedHostMiddleware, warning users that the middleware only works with IPv4 addresses and domain names. This would at least make the limitation clear to users rather than having them discover it through failed requests.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not that the documentation is misleading or incorrect about existing functionality - the code is objectively broken for standard HTTP headers. Documenting a bug doesn't fix the bug. The parsing logic violates HTTP standards, and documenting this violation would not be appropriate when the correct fix is straightforward.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Since IPv6 support is not explicitly documented, adding proper IPv6 parsing could be viewed as a new feature rather than a bug fix. The current functionality works as apparently intended for IPv4 and domain names, and IPv6 support would extend the middleware's capabilities to handle additional address formats.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality but fixing broken parsing of standard HTTP headers. The middleware already attempts to parse Host headers that may contain IPv6 addresses (it doesn't reject them outright), it just parses them incorrectly. The issue is with the implementation's correctness, not with missing features. HTTP middleware should handle all valid HTTP headers correctly by default.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation objectively fails to correctly parse valid, RFC-compliant HTTP Host headers containing IPv6 addresses. The parsing logic uses a naive string split that breaks on the first colon, which is fundamentally incorrect for IPv6 addresses that contain multiple colons. This causes valid requests to be rejected with 400 errors when they should be accepted. The bug is reproducible, well-defined, and violates established HTTP standards. The fix is straightforward and addresses a clear logic error in the code.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the middleware was explicitly designed to not support IPv6, but there's no evidence of this intention. The code attempts to parse all Host headers uniformly without checking for IPv6, suggesting it was simply overlooked rather than intentionally excluded.
+
+## Overall Consideration
+
+After analyzing all aspects of this issue, this is clearly a BUG that should be fixed. The current implementation contains a logic error that causes it to incorrectly parse standard-compliant HTTP Host headers containing IPv6 addresses. The parsing fails because the code naively splits on the first colon character, which appears within IPv6 addresses themselves, rather than properly handling the bracketed format defined in RFC 3986.
+
+The bug has significant impact: it causes the middleware to reject all valid IPv6 requests with 400 errors, effectively breaking the middleware for any IPv6 traffic. This is not an edge case or undefined behavior - the HTTP standards clearly specify how IPv6 addresses should be formatted in Host headers, and the current implementation violates these standards. The fact that the documentation doesn't explicitly mention IPv6 doesn't excuse the incorrect parsing of valid HTTP headers.
+
+The proposed fix is simple, correct, and addresses the root cause without breaking existing functionality. This is a textbook example of a parsing bug that should be fixed rather than documented or dismissed. Web frameworks are expected to handle standard HTTP properly, and failing to parse valid Host headers is an objective failure that warrants correction.

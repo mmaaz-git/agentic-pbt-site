@@ -1,0 +1,49 @@
+REPRODUCTION OF BUG REPORT
+=========================
+
+I have successfully reproduced the behavior described in the bug report for django.utils.text.wrap.
+
+Test Results:
+-------------
+
+1. Hypothesis Test:
+   - The hypothesis test FAILED as reported
+   - Input '\x1e' produces output '' (empty string)
+   - Input 'Data\x1eRecord' produces output 'Data\nRecord'
+   - The assertion that content is preserved fails in both cases
+
+2. Direct Reproduction:
+   - wrap('\x1e', 100) returns '' (empty string) instead of '\x1e'
+   - wrap('Record1\x1eRecord2', 100) returns 'Record1\nRecord2' instead of preserving the separator
+
+3. Character Analysis:
+   The three characters mentioned in the bug report are:
+   - U+001C (File Separator)
+   - U+001D (Group Separator)
+   - U+001E (Record Separator)
+
+   These characters have the following Unicode properties:
+   - General Category: Cc (Control characters)
+   - Bidirectional Class: B (Paragraph Separator)
+   - Python's isspace(): Returns True (they ARE whitespace)
+   - Python's splitlines(): Treats them as line boundaries
+
+4. Implementation Analysis:
+   The wrap() function at lines 60-70 of django/utils/text.py uses text.splitlines() which:
+   - Splits on U+001C/1D/1E as line boundaries (documented Python behavior)
+   - When these chars appear alone, splitlines() returns [''] or ['', '']
+   - The function tries to restore "lines with only whitespace" (line 63-64)
+   - But when '\x1e'.splitlines() returns [''], this is an empty string, not the original separator
+
+Effect:
+-------
+The function does indeed remove these control characters from the input:
+- Single separators are completely removed
+- Separators between text are converted to newlines
+- Content is NOT preserved as the docstring claims
+
+Critical Finding:
+-----------------
+The bug report claims these characters are "NOT whitespace (they fail str.isspace())" but this is INCORRECT.
+Python officially considers U+001C/1D/1E as whitespace because they have bidirectional class B.
+str.isspace() returns True for all three characters, contrary to what the bug report states.

@@ -1,0 +1,38 @@
+## Reproduction Analysis
+
+I have successfully reproduced the behavior described in the bug report. The key findings are:
+
+### Test Results
+
+1. **Hypothesis Test**: The provided hypothesis test does identify a discrepancy, but the actual issue is more fundamental than the bug report suggests.
+
+2. **Direct Reproduction**: Running the exact code from the bug report produces the reported output:
+   ```
+   not_equal      : Python=True, NumPy=False
+   less           : Python=True, NumPy=False
+   greater_equal  : Python=False, NumPy=True
+   ```
+
+3. **Root Cause Identified**: The issue is NOT in the comparison functions themselves, but in NumPy's fundamental string handling. NumPy's `np.str_` type **intentionally strips trailing null characters**.
+
+### Evidence
+
+When creating NumPy arrays with strings containing trailing nulls:
+- `'a'` becomes `np.str_('a')`
+- `'a\x00'` also becomes `np.str_('a')` (null is stripped)
+- The arrays `np.array(['a'])` and `np.array(['a\x00'])` contain identical values
+
+This means the comparison operators are working correctly - they are comparing two identical strings ('a' == 'a'), which explains why:
+- `not_equal` returns False (they ARE equal after null stripping)
+- `less` returns False (they ARE equal after null stripping)
+- `greater_equal` returns True (they ARE equal after null stripping)
+
+### Additional Testing
+
+I verified that:
+1. Trailing nulls are stripped: `'a\x00'` → `'a'`
+2. Multiple trailing nulls are stripped: `'a\x00\x00'` → `'a'`
+3. Non-trailing nulls are preserved: `'a\x00b'` → `'a\x00b'`
+4. Leading nulls are preserved: `'\x00a'` → `'\x00a'`
+
+This behavior is consistent and affects all string comparison operations, not just the three mentioned in the bug report.

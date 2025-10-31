@@ -1,0 +1,22 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed.
+
+### Reproduction Results:
+
+1. **Basic Test Case**: When parsing a cookie string with multiple cookies that have whitespace-only names (e.g., " =first; \t=second; \n=third"), the parse_cookie function returns only {'': 'third'}, confirming data loss.
+
+2. **Property-Based Testing**: Running hypothesis tests confirms systematic data loss when multiple cookies have keys that consist entirely of whitespace characters. All such keys get stripped to empty string "", causing dictionary key collision where only the last value survives.
+
+3. **Root Cause Confirmed**: The bug occurs in lines 19-22 of django/http/cookie.py:
+   - Line 19: `key, val = key.strip(), val.strip()` strips all whitespace from keys
+   - When multiple cookies have whitespace-only names, they all become "" after stripping
+   - Line 22: `cookiedict[key] = val` overwrites previous values with the same key
+
+### Data Loss Examples:
+- Input: " =first; \t=second; \n=third" → Output: {'': 'third'} (lost 2 values)
+- Input: "\r=0; \n=1" → Output: {'': '1'} (lost value '0')
+- Multiple whitespace combinations all collapse to the same empty key
+
+### Impact:
+The function silently loses data when processing cookies with whitespace-only names. While such cookie names are unusual, silent data loss is problematic behavior that could lead to unexpected application behavior or security issues if an application relies on all cookies being preserved.

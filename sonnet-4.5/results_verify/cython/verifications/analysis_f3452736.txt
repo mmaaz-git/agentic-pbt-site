@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying how it should handle duplicate characters. Without a clear specification, the current behavior could be considered "as designed" even if unintuitive. The function is an internal utility method used only for debugging output in `dump_transitions`, not part of the public API. Since it's for debugging purposes only and doesn't affect the core functionality of the lexer, any "incorrect" output might not actually matter. The caller could be responsible for providing unique characters if that's what they want.
+
+**Why it might not be INVALID:**
+The function name `chars_to_ranges` strongly implies it should convert characters into ranges, and having duplicate identical ranges is semantically incorrect and defeats the purpose of range compression. Any reasonable implementation of a range-creation function should handle duplicates properly. The bug produces objectively wrong output that violates basic expectations about what a "range" is - ranges should not overlap or be duplicated.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a low-severity issue in a debugging utility function that doesn't affect the core functionality of Cython's lexer. The function is only used in `dump_transitions` for debug output, so the impact is minimal. Fixing it might risk breaking existing debug output that some users might depend on. The effort to fix might exceed the value since it's just cosmetic debug output. Given that Cython is a mature project, changing debug output format might be considered unnecessary churn.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (deduplicate the input list) and low-risk since it's isolated to a single utility function. The current behavior produces misleading debug output that could confuse developers trying to debug their lexers. Even if it's just for debugging, having correct output matters for developer experience. The proposed fix in the bug report is simple and doesn't change the function signature or break compatibility.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks any documentation about its expected behavior, especially regarding duplicate handling. Adding documentation that states "input must contain unique characters" would clarify the contract and make the current behavior "correct" per specification. This would be the least invasive change - just document the limitation rather than fix the code. It shifts responsibility to the caller to ensure uniqueness.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The only caller of this function (`dump_transitions`) passes character lists that may naturally contain duplicates from the state machine transitions, so documenting "must be unique" doesn't solve the actual problem. Adding documentation that says "produces duplicate ranges for duplicate inputs" would be documenting a bug, not a feature. The function name itself implies it should handle any character list correctly.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Handling duplicate characters correctly could be seen as a new feature rather than a bug fix, since the original implementation never explicitly supported this case. The bug report is essentially asking for the function to be enhanced to handle a broader set of inputs. Adding deduplication logic is adding new functionality that wasn't there before.
+
+**Why it might not be FEATURE_REQUEST:**
+This is fixing broken behavior, not adding new capabilities. The function already attempts to handle all character lists - it just does so incorrectly for duplicates. Any function that takes a list should handle duplicates without producing nonsensical output. This is a correctness fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces objectively incorrect output - duplicate identical ranges violate the basic concept of what a range is. The output fails a reasonable property test (non-overlapping ranges). The function's purpose is to create a compact representation of characters as ranges, and producing duplicate ranges defeats this purpose entirely. The fix is straightforward and the current behavior serves no useful purpose. Even though it's used only for debugging, incorrect debug output can waste developer time and cause confusion.
+
+**Why it might not be BUG:**
+The function has no specification stating how duplicates should be handled, so technically the behavior isn't violating any documented contract. It's only used internally for debug output, not for any functional purpose. The impact is purely cosmetic in debug messages. No actual lexer functionality is affected by this issue. Without explicit documentation saying duplicates should be deduplicated, this could be considered undefined behavior rather than incorrect behavior.
+
+## Overall consideration
+After careful analysis, this issue presents an interesting case. The `chars_to_ranges` function produces duplicate ranges when given duplicate input characters, which is semantically incorrect for any reasonable interpretation of "ranges." However, the function is undocumented, internal, and used only for debugging output.
+
+The key question is whether undocumented internal functions can have "bugs" when they produce unintuitive but non-crashing behavior. The function does exactly what its code says it does - it just doesn't do what a reasonable person would expect from a function called `chars_to_ranges`. The lack of documentation means there's no specification to violate, yet the output is objectively nonsensical (duplicate identical ranges).
+
+Given that this is an internal debugging utility with minimal impact, and considering the high bar for bug reports (expecting most to be invalid), this falls into the WONTFIX category. While the behavior is technically incorrect, fixing it would provide minimal value while potentially changing debug output that might be embedded in test expectations or documentation. The issue is real but too trivial to warrant a code change in a mature project like Cython.

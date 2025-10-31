@@ -1,0 +1,45 @@
+## Documentation Analysis for FixedForwardWindowIndexer
+
+### Official Documentation Review
+
+1. **Class Purpose:**
+   - Described as "Creates window boundaries for fixed-length windows that include the current row"
+   - The name explicitly includes "Forward" indicating forward-looking behavior
+   - The documentation example shows forward-looking windows (e.g., row 0 looks at rows 0 and 1)
+
+2. **Parameter Constraints:**
+   - The documentation specifies `window_size: int = 0` as the parameter type
+   - NO explicit constraint that window_size must be non-negative
+   - NO validation in __init__ method - it simply stores: `self.window_size = window_size`
+   - The type annotation indicates an integer, but doesn't restrict the sign
+
+3. **Source Code Analysis:**
+   The get_window_bounds implementation reveals the issue:
+   ```python
+   start = np.arange(0, num_values, step, dtype="int64")
+   end = start + self.window_size
+   if self.window_size:
+       end = np.clip(end, 0, num_values)
+   ```
+
+   Critical observation: When window_size is negative:
+   - `end = start + self.window_size` produces end values less than start values
+   - The clipping logic only executes if window_size is non-zero (truthy)
+   - For window_size=-1, the clip constrains end to [0, num_values], but doesn't fix the fundamental issue
+
+4. **Semantic Analysis:**
+   - The class name "FixedForwardWindowIndexer" semantically implies forward-looking windows
+   - A negative window_size would mean looking backward, which contradicts the "Forward" in the name
+   - The example in documentation shows window_size=2 creating forward windows
+
+5. **Missing Documentation:**
+   - No explicit statement that window_size must be >= 0
+   - No documentation of what happens with negative window_size
+   - No validation errors mentioned for invalid window_size values
+
+### Conclusion
+The documentation does NOT explicitly forbid negative window_size values, but:
+1. The semantic meaning of "Forward" strongly implies non-negative windows
+2. The implementation clearly produces invalid results with negative values
+3. The lack of validation appears to be an oversight rather than intentional support for negative values
+4. All examples use positive window_size values

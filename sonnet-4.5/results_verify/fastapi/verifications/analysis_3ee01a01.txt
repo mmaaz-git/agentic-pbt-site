@@ -1,0 +1,92 @@
+## Bug Report Triage Analysis
+
+### Evaluation Against Each Category
+
+#### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The code demonstrably fails to parse IPv6 host headers correctly
+- RFC 3986 clearly specifies that IPv6 addresses must be in brackets: "[address]:port"
+- IPv6 is a fundamental internet standard, not an edge case
+- The middleware is supposed to validate host headers but fails for valid IPv6 formats
+- The bug causes functional breakage - legitimate IPv6 requests get rejected
+- No documentation indicates IPv6 is unsupported
+- The fix is straightforward and addresses a clear parsing error
+- This affects production systems using IPv6
+
+**Arguments AGAINST:**
+- None identified
+
+#### INVALID
+**Arguments FOR:**
+- None - the bug is real and reproducible
+
+**Arguments AGAINST:**
+- The test cases work exactly as described
+- The RFC clearly defines the expected behavior
+- The parsing failure is demonstrable
+
+#### WONTFIX
+**Arguments FOR:**
+- IPv6 adoption is still not universal (weak argument)
+
+**Arguments AGAINST:**
+- IPv6 is not obscure - it's an internet standard since 1998
+- Major cloud providers and CDNs use IPv6
+- The bug completely breaks IPv6 support, not a minor issue
+- The fix is simple and doesn't break existing IPv4 functionality
+
+#### DOCUMENTATION_FIX
+**Arguments FOR:**
+- The code could be working as designed if IPv6 was never intended to be supported
+
+**Arguments AGAINST:**
+- There's no indication IPv6 support was intentionally omitted
+- The middleware accepts ALL host headers, not just IPv4
+- Adding "IPv6 not supported" to docs would be acknowledging a deficiency
+- The proper fix is to support the standard, not document the limitation
+
+#### FEATURE_REQUEST
+**Arguments FOR:**
+- IPv6 support could be considered a new feature if it was never implemented
+
+**Arguments AGAINST:**
+- Host header validation should work for all valid host formats by default
+- IPv6 is not a "nice to have" - it's part of the HTTP/URI standards
+- The code already tries to parse host headers, it just does it incorrectly
+- This is fixing broken parsing logic, not adding new functionality
+
+### Technical Analysis
+
+**Root Cause:**
+Line 40 in trustedhost.py uses `headers.get("host", "").split(":")[0]` which:
+1. Works for IPv4: "example.com:80" → "example.com" ✓
+2. Works for domains: "localhost:3000" → "localhost" ✓
+3. FAILS for IPv6: "[::1]:80" → "[" ✗ (should be "::1")
+4. FAILS for IPv6: "[2001:db8::1]:80" → "[2001" ✗ (should be "2001:db8::1")
+
+**Proposed Fix Evaluation:**
+The suggested fix correctly:
+1. Detects IPv6 format by checking for leading "["
+2. Extracts the address between brackets for IPv6
+3. Falls back to colon-split for IPv4/domains
+4. Maintains backward compatibility
+
+### Severity Assessment
+- **High severity** is justified because:
+  - Complete failure of IPv6 support
+  - Security implications (host validation bypass potential)
+  - Production impact for IPv6-enabled services
+  - No workaround available
+
+### Final Determination
+
+This is clearly a **BUG** that should be fixed:
+
+1. **Standards Violation**: The code violates RFC 3986 for IPv6 host parsing
+2. **Functional Breakage**: IPv6 requests are incorrectly rejected
+3. **Not Edge Case**: IPv6 is a core internet standard, not obscure
+4. **Simple Fix**: The proposed solution is correct and maintains compatibility
+5. **Security Impact**: Middleware meant for security (host validation) fails for IPv6
+6. **No Documentation Excuse**: Nothing indicates IPv6 was intentionally unsupported
+
+The bug report is accurate, well-documented, includes a working fix, and addresses a real problem in production systems. It should remain open and tagged as BUG for immediate fix.

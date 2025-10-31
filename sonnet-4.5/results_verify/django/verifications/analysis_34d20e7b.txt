@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes Django should handle case-insensitive field matching in constraints, but this is never explicitly stated in the documentation. Django's field lookup is case-sensitive by design (_meta.get_field()), and allowing mismatched cases in constraints could be considered user error. The user is creating an inconsistent state by defining a field as 'myField' but referencing it as 'MyField' in constraints. Since Python itself is case-sensitive, expecting Django to magically handle case differences could be seen as incorrect expectations.
+
+**Why it might not be INVALID:**
+Django accepts the mismatched case constraint definition without any validation errors or warnings. If Django allows you to create a model with field 'myField' and reference it as 'MyField' in unique_together, then Django's migration system should handle this properly. The fact that the model definition is accepted but the migration optimization fails creates an inconsistency in Django's behavior that leads to broken migrations.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that occurs only when developers use inconsistent casing between field definitions and constraint references. The proper solution is for developers to use consistent casing. The workaround is simple: use the same case in both places. Adding case-insensitive matching would add complexity to handle what is essentially bad practice. Most developers follow Python naming conventions and wouldn't encounter this issue.
+
+**Why it might not be WONTFIX:**
+This bug can cause actual migration failures and database errors. When the migration optimizer produces invalid migrations that reference non-existent fields, it breaks the application. The issue is not just cosmetic or a minor inconvenience - it produces incorrect code that fails at runtime. Since Django accepts the mismatched case in the first place, it should handle it correctly throughout the system.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that field names in constraints must match the exact case of field definitions. It also doesn't document that CreateModel.reduce() uses case-sensitive comparison. Adding documentation that clearly states "field references in constraints must match the exact case of field definitions" would prevent this confusion. The current behavior might be intentional, just poorly documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about documentation - there's actual broken behavior. Django accepts the model definition with mismatched cases but then fails to handle it correctly during migration optimization. Simply documenting this limitation doesn't fix the fact that valid Python code (the model definition) produces invalid migrations. If this were just a documentation issue, Django should reject the mismatched case constraint at model definition time.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting case-insensitive field matching in migration operations could be seen as a new feature rather than a bug fix. The current implementation uses simple string comparison, and adding case-insensitive matching would be an enhancement to make Django more forgiving of case differences. This would be similar to how some databases handle identifier case-insensitivity.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for existing functionality to work correctly. The RenameField operation is supposed to rename all references to a field, and it's failing to do so. The migration optimizer is producing incorrect output for valid input, which is a bug, not a missing feature. Django already accepts the mismatched case, so handling it properly isn't a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+Django accepts a model definition where fields can be referenced with different cases in constraints, but then fails to handle this correctly during migration operations. The CreateModel.reduce() method produces objectively incorrect output - it leaves references to non-existent fields in constraints after a rename operation. This causes actual failures when migrations are applied. The migration optimizer, a core Django component, is producing invalid migrations from valid model definitions. This is a clear logic error that causes data integrity issues.
+
+**Why it might not be BUG:**
+The behavior could be considered consistent with Python's case-sensitive nature. If field names are case-sensitive (as they are in Python), then it makes sense that field references should also be case-sensitive. The real issue might be that Django shouldn't accept mismatched cases in the first place, rather than that reduce() should handle them. The current behavior could be intentional to maintain strict case sensitivity throughout the system.
+
+## Overall consideration
+
+After thorough analysis, this appears to be a legitimate bug in Django's migration system, though it's an edge case that stems from Django's inconsistent handling of field name cases. The core issue is that Django accepts model definitions where field names in constraints don't match the case of the actual field definitions, but then fails to handle these properly during migration operations.
+
+The most telling evidence that this is a bug is that Django produces objectively incorrect output from the reduce() method. When a field 'myField' is referenced as 'MyField' in unique_together and then renamed to 'newField', the reduce() operation should update all references to point to 'newField'. Instead, it leaves 'MyField' in the constraint, which now references a non-existent field. This produces invalid migrations that will fail when applied to a database.
+
+While one could argue this is user error for using inconsistent casing, Django's behavior is inconsistent: it accepts the mismatched case when defining the model but fails to handle it during migration optimization. Either Django should reject mismatched cases at model definition time (making this INVALID), or it should handle them correctly throughout the system (making this a BUG). Since Django currently accepts the definition, the failure to handle it properly in reduce() is a bug that should be fixed.

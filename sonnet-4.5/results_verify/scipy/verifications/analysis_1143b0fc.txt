@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The SciPy documentation doesn't explicitly state that scalar masks must be supported. One could argue that the function expects mask to always be an array based on the example provided, which shows a 2D boolean array mask. The function's internal implementation might have been designed with the assumption that masks are always arrays, making scalar mask support an undocumented edge case rather than a bug.
+
+**Why it might not be INVALID:**
+The documentation clearly states the function accepts a "MaskedArray" as input without qualification. NumPy's documented behavior is to optimize masks to scalar `False` when no values are masked, and this is a standard, documented feature of NumPy masked arrays. Since SciPy claims to accept MaskedArray objects, it should handle all valid MaskedArray instances, including those with scalar masks. The function shouldn't crash on valid NumPy data structures.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an obscure edge case - users rarely work with graphs where no edges are masked. The workaround is trivial (using `np.ma.getmaskarray()`), and fixing it might add unnecessary complexity to the codebase. The error message, while not ideal, does indicate there's a problem with array dimensions, which a knowledgeable user could debug.
+
+**Why it might not be WONTFIX:**
+This is not an obscure error - any graph without the specific masked value will trigger this crash. It's a complete failure of the function, not a minor inconvenience. The error message is cryptic and doesn't help users understand the issue. The fix is straightforward and wouldn't add significant complexity.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current documentation could be updated to clarify that the mask must be an array, not a scalar. This would set proper expectations and guide users to pre-process their masked arrays when needed. Adding a note about using `np.ma.getmaskarray()` for arrays with no masked values would prevent the issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is clearly broken - it crashes with a valid input. Documentation shouldn't have to warn about implementation bugs. The function signature accepts MaskedArray, which includes those with scalar masks by NumPy's design. Documenting a limitation that's actually a bug would be covering up a real issue rather than fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting scalar masks could be seen as a new feature - extending the function to handle an optimization case that wasn't originally considered. The current implementation might have been designed only for "typical" masked arrays with array masks, and adding scalar mask support would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the function already claims to accept MaskedArray objects. Scalar masks are not a special feature but a standard part of how NumPy MaskedArrays work. The function should already handle all valid MaskedArray instances; this is fixing broken existing functionality, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an AxisError when given a valid NumPy MaskedArray that happens to have no masked values. This is a clear failure to handle standard NumPy behavior. The documentation states the function accepts MaskedArray objects without qualification, and NumPy's optimization of masks to scalar `False` is well-documented behavior. The function should handle all valid MaskedArray instances, not just a subset. The crash prevents users from converting valid graph representations to sparse format.
+
+**Why it might not be BUG:**
+One could argue the function was designed with the assumption that graphs typically have some masked edges, and the scalar mask case is an edge case that wasn't considered in the original design specification. The documentation example only shows array masks, which might indicate the expected input format.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug. The function `csgraph_from_masked` accepts MaskedArray objects according to its documentation, but crashes when the MaskedArray has no masked values due to NumPy's standard optimization of representing such masks as scalar `False`. This is not obscure or unexpected - any graph without the specific value being masked will trigger this crash.
+
+The NumPy behavior of optimizing masks to scalar `False` is well-documented and standard. It's not an edge case or unusual situation - it's how NumPy is designed to work efficiently. A function that claims to accept MaskedArray objects should handle all valid forms of MaskedArray, not just those with array masks. The fact that `np.ma.getmaskarray()` exists specifically to handle this distinction suggests that libraries using masked arrays should be aware of and handle both cases.
+
+The fix is straightforward - either use `np.ma.getmaskarray()` to ensure an array mask, or check for scalar masks and handle them appropriately. This is not a complex enhancement but a necessary fix to handle valid input correctly. The crash with a cryptic error message on valid input is a clear bug that should be fixed rather than documented as a limitation or ignored as too obscure.

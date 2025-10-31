@@ -1,0 +1,38 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed as follows:
+
+### Test Results
+
+1. **Property-based test**: Failed exactly as described with `n=1, k=2`, raising a `ValueError: Offset 2 (index 0) out of bounds`
+
+2. **Manual reproduction**:
+   - `eye_array(3, k=3)` returns an empty matrix with `nnz=0` (works)
+   - `eye_array(3, k=4)` raises `ValueError: Offset 4 (index 0) out of bounds` (fails)
+   - `eye_array(3, k=-3)` returns an empty matrix with `nnz=0` (works)
+   - `eye_array(3, k=-4)` raises `ValueError: Offset -4 (index 0) out of bounds` (fails)
+
+### The Issue
+
+The inconsistency is clear: when `abs(k) == n`, the function returns an empty sparse matrix (which is correct - there are no elements on such a diagonal), but when `abs(k) > n`, it raises a ValueError. This creates an inconsistent boundary condition.
+
+### Root Cause
+
+The error occurs in `/home/npc/.local/lib/python3.13/site-packages/scipy/sparse/_construct.py` at lines 213-215 in the `diags_array` function:
+
+```python
+length = min(m + offset, n - offset, K)
+if length < 0:
+    raise ValueError(f"Offset {offset} (index {j}) out of bounds")
+```
+
+When `offset > n`, the calculation `n - offset` becomes negative, making `length < 0`, which triggers the error. The same happens for negative offsets when `abs(offset) > m`.
+
+### Comparison with NumPy
+
+NumPy's `np.diag()` handles large offsets gracefully:
+- `np.diag(eye(3), k=3)` returns an empty array `[]`
+- `np.diag(eye(3), k=4)` also returns an empty array `[]`
+- When creating diagonals, `np.diag([1,2], k=3)` creates a valid 5x5 matrix with the values on the specified diagonal
+
+This shows that NumPy treats all out-of-bounds diagonals consistently as empty, which is the expected behavior.

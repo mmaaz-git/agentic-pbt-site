@@ -1,0 +1,39 @@
+REPRODUCTION ANALYSIS
+====================
+
+I successfully reproduced the bug as described in the report.
+
+1. Hypothesis Test Results:
+   - The hypothesis test failed exactly as described
+   - Error: ValidationError when trying to restore model from JSON
+   - The test generates models with aliases and tries to round-trip them with by_alias=False
+   - Fails immediately on the first example with field_one='0', field_two=0
+
+2. Simple Reproduction Results:
+   - Created ModelWithAlias with field_one having alias "fieldOne"
+   - When serialized with model_dump_json(by_alias=False, round_trip=True):
+     * Output: {"field_one":"test"} (uses internal field name)
+   - When trying to restore with model_validate_json():
+     * Fails with ValidationError: fieldOne Field required
+     * The validator expects the alias name "fieldOne" but gets "field_one"
+
+3. Observed Behavior:
+   - With by_alias=True, round_trip=True: Works correctly
+     * JSON: {"fieldAlias":"test"}
+     * Can be restored successfully
+   - With by_alias=False, round_trip=True: FAILS
+     * JSON: {"field":"test"}
+     * Cannot be restored because Pydantic expects the alias during validation
+
+4. Root Cause:
+   - Pydantic models with aliases ONLY accept the alias name during validation by default
+   - The field name is not accepted unless populate_by_name=True is configured
+   - When by_alias=False is used, the JSON contains field names, not aliases
+   - This makes the output incompatible with model_validate_json()
+
+5. Workaround Verification:
+   - Setting populate_by_name=True in model config does fix the issue
+   - This allows the model to accept both alias and field names during validation
+   - However, this is a workaround, not a solution to the contract violation
+
+The bug report is accurate: the combination of by_alias=False and round_trip=True produces JSON that cannot be parsed back into the model, directly violating the documented contract of round_trip.

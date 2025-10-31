@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The code could be argued to be working as designed if the internal representation is meant to optimize storage by only keeping start, stop, and size, with step being a derived property. Perhaps "similar to numpy.arange" doesn't mean "identical behavior" but just "similar interface". The fact that it recalculates step could be an intentional design choice for memory efficiency or numerical stability.
+
+**Why it might not be INVALID:**
+The documentation explicitly states this is "similar to numpy.arange" with the same calling signatures and parameter meanings. The step parameter is documented as "spacing between values" which has an unambiguous mathematical definition. When a user provides step=1.0, they expect values spaced by 1.0, not 0.75. The current behavior violates the principle of least surprise and the documented contract.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue might be considered a minor edge case that rarely affects real-world usage. Since the class is designed for memory-efficient representation of ranges, recalculating the step might be an acceptable trade-off. Users who need exact numpy.arange behavior can just use numpy.arange directly. The fix might require significant architectural changes to the RangeCoordinateTransform class.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it produces mathematically incorrect results that could lead to subtle bugs in scientific computations. The difference between -0.5 and -0.75 is significant (50% error in the interval). The bug affects a fundamental operation that users would rely on for correctness. The proposed fix is straightforward - just pass and store the original step parameter.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that RangeIndex.arange doesn't exactly match numpy.arange, but instead creates an evenly-spaced range between start and stop with the specified number of points. The documentation could warn users that the actual step might differ from the input step due to internal optimizations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation is clear and correct - it promises numpy.arange-like behavior. The problem is not with the documentation but with the implementation not matching what's documented. Changing the documentation to match the buggy behavior would be backwards - the code should match the documented interface, not the other way around.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that exact numpy.arange compatibility is a new feature that wasn't originally intended. The current implementation provides a different but potentially valid interpretation of creating ranges. Adding support for exact step preservation could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a request for new functionality - the method already exists and is documented to behave like numpy.arange. The issue is that the existing functionality doesn't work correctly. When a method is named "arange" and documented as similar to numpy.arange, matching numpy's behavior is not a feature request but a basic expectation.
+
+## BUG Considerations
+**Why it might be BUG:**
+The method is explicitly documented as being "similar to numpy.arange" but produces different values for the same inputs. The step parameter has a clear mathematical meaning - the spacing between consecutive values. When step=1.0 is provided but values are spaced by 0.75, this is objectively incorrect. The bug is deterministic, reproducible, and affects core functionality. The fix is straightforward and doesn't break the overall design.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the behavior was intentionally designed this way for some reason not apparent in the documentation. However, there's no indication of this being intentional, and the documentation suggests otherwise.
+
+## Overall Consideration
+
+Looking at all the considerations, this is clearly a **BUG**. The evidence is overwhelming:
+
+First, the documentation explicitly states that RangeIndex.arange is "similar to numpy.arange" and uses the same signature and parameter names. When a function claims compatibility with a well-known standard (numpy.arange), users rightfully expect it to produce the same results. The step parameter has an unambiguous mathematical meaning - it's the spacing between consecutive values. There's no reasonable interpretation where providing step=1.0 should result in values spaced by 0.75.
+
+Second, the technical analysis shows this is not a design choice but an implementation oversight. The code correctly calculates the size using the provided step, but then fails to preserve that step when creating the transform. Instead, it recalculates step as (stop-start)/size, which only works correctly when stop is exactly reachable from start in an integer number of steps. This is a classic bug pattern where derived values are recalculated instead of being preserved.
+
+Third, this bug has real consequences for scientific computing. The difference between -0.5 and -0.75 represents a 50% error in the spacing. For any application that depends on precise coordinate values (data analysis, plotting, numerical methods), this could lead to incorrect results. The bug is not an edge case - it affects any range where (stop-start) is not evenly divisible by step. The proposed fix is simple and correct - just pass the original step to RangeCoordinateTransform and use it directly.

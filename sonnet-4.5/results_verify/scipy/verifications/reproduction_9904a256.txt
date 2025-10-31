@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in scipy.spatial.geometric_slerp.
+
+## Test Execution Results
+
+1. **Hypothesis Property-Based Test**:
+   - The test failed as expected with the assertion error: "Shape mismatch: (1, 3) vs (3,)"
+   - This confirms that when start == end, the function returns shape (1, 3) instead of (3,) for scalar t
+
+2. **Simple Reproduction Code**:
+   - Confirmed the inconsistent behavior across all scalar t values (0.0, 0.3, 0.5, 0.7, 1.0)
+   - When start == end: always returns shape (1, 3) with value [[1. 0. 0.]]
+   - When start != end: always returns shape (3,) with appropriate interpolated values
+
+## Root Cause Analysis
+
+The bug occurs at line 198 in scipy/spatial/_geometric_slerp.py:
+```python
+if np.array_equal(start, end):
+    return np.linspace(start, start, t.size)
+```
+
+When t is a scalar:
+- t.size = 1
+- np.linspace(start, start, 1) returns a 2D array with shape (1, n_dimensions)
+- This violates the expected behavior for scalar t values
+
+In contrast, the normal execution path (lines 231-234) handles scalar t correctly:
+- When t.ndim == 0 (scalar), it calls _geometric_slerp with np.atleast_1d(t)
+- Then applies .ravel() to return a 1D array
+- This produces the expected shape (n_dimensions,)
+
+## Impact
+
+This is a genuine bug that causes:
+1. Inconsistent API behavior - same input types produce different output shapes
+2. Potential downstream errors in code expecting consistent shapes
+3. Violation of the documented contract that "The result may be 1-dimensional if t is a float"

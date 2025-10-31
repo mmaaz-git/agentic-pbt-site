@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if the documentation never intended to allow make_setup_args() without make_ext(). Perhaps the example showing both functions was meant to indicate they must always be used together. The "and" in the documentation could be interpreted as requiring both functions.
+
+**Why it might not be INVALID:**
+The code explicitly has an assertion "assert ext or setup_args" at line 129-130 that clearly allows for either one to exist independently. The getattr calls for both functions use None as default, making them optional. The error message in the assertion says "neither make_ext nor make_setup_args" using "nor" which indicates they are alternatives. This is clearly a valid use case that the code was designed to support.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue this is an obscure edge case that rarely occurs in practice. Most users who need custom build settings would likely define a full Extension object with make_ext() rather than just compiler flags. The workaround is simple - just define make_ext() as well. The bug has likely existed for a long time without many complaints.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it causes a complete crash with AttributeError, not just incorrect behavior. The use case of setting only compiler flags without custom Extension is reasonable and documented. The fix is trivial (2 lines) and has no side effects. Users shouldn't have to define unnecessary boilerplate make_ext() functions when they only want to set compiler flags.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue the documentation should be updated to clarify that both make_ext() and make_setup_args() must be defined together, and the code behavior is correct. The documentation example shows both functions, which could be interpreted as a requirement.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code's assertion logic clearly indicates that having only one of the two functions was an intended design decision. The assertion "ext or setup_args" is explicit about allowing either. Changing the documentation to require both would be changing the intended functionality, not fixing documentation. The bug is in the implementation not matching the design intent.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting make_setup_args() without make_ext() could be seen as a new feature that was never properly implemented. The code crash suggests this path was never tested or fully developed.
+
+**Why it might not be FEATURE_REQUEST:**
+The assertion at line 129-130 proves this was already designed as a feature - the code explicitly checks "ext or setup_args" allowing either to be None. The bug is that the implementation has an error after this check. This is not asking for new functionality but fixing existing broken functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear implementation error where the code crashes with AttributeError when using a documented and explicitly supported configuration. The assertion allows ext to be None, but the very next lines unconditionally access ext.sources. The fix is trivial and obvious - add an "if ext:" check. The code's design intent (shown by the assertion) doesn't match its implementation.
+
+**Why it might not be BUG:**
+There are essentially no valid reasons why this wouldn't be a bug. The code explicitly supports the configuration through its assertion, then immediately crashes when that configuration is used. This is a textbook case of a programming error.
+
+**Overall consideration**
+
+This is unequivocally a BUG. The evidence is overwhelming: First, the code at line 129-130 has an explicit assertion "assert ext or setup_args" that deliberately allows ext to be None when setup_args exists. This assertion's error message "neither make_ext nor make_setup_args" confirms that these are meant to be alternatives, not requirements to be used together. Second, immediately after this assertion that allows ext to be None, lines 131-132 unconditionally access ext.sources without checking if ext exists, causing an AttributeError crash.
+
+The bug represents a clear logic error in the code where the implementation doesn't match the design intent. The function was designed to support three configurations: only make_ext, only make_setup_args, or both. The assertion validates this design. However, the implementation only works for two of these three cases because of the missing null check. This is not a documentation issue, not a missing feature, and not an obscure edge case - it's a straightforward programming error where a null check was forgotten.
+
+The fix is trivial, safe, and exactly what the bug report suggests: wrapping lines 131-132 with "if ext:" to check that ext is not None before accessing its attributes. This fix has no side effects and makes the code work as originally intended. This is precisely the kind of bug that should be fixed in any well-maintained codebase.

@@ -1,0 +1,67 @@
+Bug Reproduction Results
+========================
+
+## Test Environment
+- Python 3.13
+- anyio version: tested with current installed version
+- Location of code: /home/npc/miniconda/lib/python3.13/site-packages/anyio/_core/_streams.py
+
+## Reproduction Test Results
+
+### 1. Basic Float Test (5.5)
+- **Input**: `create_memory_object_stream(5.5)`
+- **Expected (per type annotation)**: Should accept float value
+- **Actual**: ValueError: "max_buffer_size must be either an integer or math.inf"
+- **Result**: CONFIRMS BUG REPORT
+
+### 2. Integer Test (5)
+- **Input**: `create_memory_object_stream(5)`
+- **Expected**: Should accept integer
+- **Actual**: Accepted successfully
+- **Result**: Working as expected
+
+### 3. math.inf Test
+- **Input**: `create_memory_object_stream(math.inf)`
+- **Expected**: Should accept math.inf
+- **Actual**: Accepted successfully
+- **Result**: Working as expected
+
+### 4. Edge Cases with Float Values
+Tested various float values to understand the scope:
+- `0.5` → REJECTED (ValueError)
+- `3.14` → REJECTED (ValueError)
+- `100.1` → REJECTED (ValueError)
+- `0.0` → REJECTED (ValueError) - Note: This is float type, not int
+- `1.0` → REJECTED (ValueError) - Note: This is float type, not int
+
+### 5. Property-Based Test
+The hypothesis test from the bug report was executed and FAILED as expected. The test correctly identifies that non-integer float values are rejected despite the type annotation saying `float`.
+
+## Technical Analysis
+
+The root cause is in the validation logic:
+```python
+if max_buffer_size != math.inf and not isinstance(max_buffer_size, int):
+    raise ValueError("max_buffer_size must be either an integer or math.inf")
+```
+
+This code explicitly checks `isinstance(max_buffer_size, int)`, which means:
+- `5` (type: int) → PASSES
+- `5.0` (type: float) → FAILS
+- `5.5` (type: float) → FAILS
+- `math.inf` (type: float) → PASSES (special case)
+
+## Verification of Bug Report Claims
+
+1. **Type annotation says `float`**: CONFIRMED - Line 37 has `max_buffer_size: float`
+2. **Runtime rejects non-integer floats**: CONFIRMED - Validation at line 39-40
+3. **Creates contract violation**: CONFIRMED - Static type checkers would accept any float
+4. **Example failures (5.5, 3.14, 0.5)**: CONFIRMED - All rejected with ValueError
+
+## Conclusion
+
+The bug report is TECHNICALLY CORRECT. There is indeed a mismatch between:
+- The type annotation (`float`) which tells type checkers any float is valid
+- The runtime validation which only accepts `int` or `math.inf`
+
+This means code that passes static type checking will fail at runtime for valid float values.

@@ -1,0 +1,32 @@
+BUG REPRODUCTION RESULTS
+
+1. Code Analysis:
+   - Confirmed: Line 195 in pandas/core/methods/to_dict.py computes `data` variable using `_create_data_for_split_and_tight_to_dict`
+   - Confirmed: This computed `data` variable is NEVER used
+   - Confirmed: Lines 205-208 recompute the data using a different approach
+   - The 'split' orient (lines 181-192) correctly uses the computed `data` variable
+
+2. Functional Testing:
+   - The property-based test provided in the bug report PASSES
+   - Both 'split' and 'tight' produce functionally identical data output
+   - The bug does NOT affect correctness - only performance
+
+3. Performance Testing:
+   - Created a 100,000 row DataFrame with mixed data types
+   - 'split' orient: 0.0363 seconds
+   - 'tight' orient: 0.1229 seconds
+   - The 'tight' orient is 238% SLOWER than 'split'
+   - This confirms the performance impact claimed in the bug report
+
+4. Optimization Analysis:
+   - The helper function `_create_data_for_split_and_tight_to_dict` has an optimization:
+     * When not all columns are object dtype, it only applies `maybe_box_native` to object columns
+     * This avoids unnecessary boxing operations on numeric columns
+   - The 'tight' orient's recomputed approach applies `maybe_box_native` to ALL values
+   - This explains the significant performance difference
+
+5. Technical Details Verified:
+   - The unused variable computation is wasteful
+   - The performance optimization is bypassed
+   - The fix proposed (using the computed `data` variable) would resolve both issues
+   - No side effects or behavioral changes would occur from the fix

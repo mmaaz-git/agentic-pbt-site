@@ -1,0 +1,43 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for TrustedHostMiddleware doesn't explicitly state that it supports IPv6 addresses. It focuses on domain names and hostnames like "example.com" rather than IP addresses. One could argue that the middleware was never intended to work with raw IP addresses (IPv4 or IPv6) and is only meant for domain-based host validation. The examples in the documentation all use domain names, not IP addresses.
+
+**Why it might not be INVALID:**
+The middleware is designed to validate the HTTP Host header, and the HTTP specification (following RFC 3986) explicitly defines how IPv6 addresses must appear in Host headers - enclosed in square brackets. The middleware doesn't restrict itself to domains only; it validates whatever appears in the Host header. Since IPv6 addresses are a valid and standard part of HTTP Host headers, the middleware should handle them correctly according to established standards.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+IPv6 adoption is still relatively low in many environments, and most web applications use domain names rather than raw IP addresses in production. The maintainers might consider this an edge case that affects very few users. Additionally, the workaround is simple - users can just use domain names instead of IPv6 addresses, or set allowed_hosts=["*"] if they need to accept any host.
+
+**Why it might not be WONTFIX:**
+This is a complete failure to handle a standard part of the HTTP specification. Any service that binds to an IPv6 address will be unable to use this middleware correctly. This isn't an obscure edge case but a fundamental incompatibility with IPv6, which is an increasingly important protocol as IPv4 address exhaustion continues. The bug causes legitimate requests to be rejected with 400 errors, which is a serious functional issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never claims to support IPv6 addresses. It could be updated to explicitly state that the middleware only works with domain names and IPv4 addresses, warning users that IPv6 addresses are not supported. This would at least make the limitation clear to users.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is objectively broken for a standard HTTP use case. Documenting a bug doesn't fix the bug. The correct behavior according to RFC 3986 is well-defined, and the code should implement it correctly rather than documenting its failure to do so. The issue isn't that the documentation is wrong; it's that the implementation violates HTTP standards.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Since the documentation doesn't mention IPv6 support, adding IPv6 support could be considered a new feature rather than a bug fix. The middleware currently works as documented for domain names, and IPv6 support would be an enhancement to handle additional use cases.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing broken parsing of standard HTTP headers. The middleware claims to validate Host headers, and IPv6 addresses in brackets are a standard, required part of Host header syntax per RFC 3986. This is fixing incorrect behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation violates RFC 3986, which is the authoritative standard for URI syntax including Host headers. The current code cannot parse ANY valid IPv6 address correctly, causing all IPv6 requests to fail validation even when the IPv6 address is in the allowed_hosts list. This is a clear violation of HTTP standards and breaks a fundamental use case. The bug is reproducible 100% of the time with any IPv6 address.
+
+**Why it might not be BUG:**
+The documentation focuses entirely on domain names and doesn't explicitly promise IPv6 support. If the middleware was designed only for domain-based validation, then the lack of IPv6 support might be intentional, even if unfortunate.
+
+## Overall Consideration
+This is clearly a BUG that should be fixed. The evidence is overwhelming:
+
+First, the technical facts are indisputable. RFC 3986 mandates that IPv6 addresses in URIs (including HTTP Host headers) must be enclosed in square brackets. This isn't optional or ambiguous - it's a required standard that has been in place since 2005. The current implementation using `.split(":")[0]` fundamentally cannot parse these standard-compliant headers correctly. Every single IPv6 address will be misparsed, not just edge cases.
+
+Second, the impact is significant. Any service binding to an IPv6 address cannot use this security middleware correctly. With IPv4 exhaustion and increasing IPv6 adoption, this isn't a theoretical issue. The bug causes the middleware to reject legitimate requests with 400 errors, which is a security feature working against legitimate traffic - the worst kind of failure for security middleware.
+
+Third, while the documentation doesn't explicitly mention IPv6, it doesn't exclude it either. The middleware's purpose is to validate Host headers to prevent Host header injection attacks. Since IPv6 addresses are a standard part of Host headers, a Host header validation middleware should handle them correctly. The fix is simple and doesn't break any existing functionality - it just makes the parser RFC-compliant. This isn't about adding new features but about correctly implementing the stated purpose of validating Host headers according to HTTP standards.

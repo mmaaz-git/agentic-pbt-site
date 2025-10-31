@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This behavior is already documented as a "known limitation" in NumPy's GitHub issues (#20118) and is explicitly stated to NOT be a bug by NumPy maintainers. Warren Weckesser explained that NumPy "ignores any trailing characters that are 0, because they are assumed to be part of the padding" in fixed-width string dtypes. The behavior is a consequence of NumPy's fundamental string storage mechanism where fixed-width dtypes pad with zeros, making it impossible to distinguish between intentional trailing nulls and padding nulls. Since this is acknowledged as intentional behavior by the NumPy team, reporting it as a bug contradicts the maintainers' explicit position.
+
+**Why it might not be INVALID:**
+The numpy.char.str_len documentation itself makes no mention of this limitation, and a reasonable user would expect it to behave like Python's len() function. The function is documented to return "the number of Unicode code points" for Unicode strings, and '\x00' is a valid Unicode code point that should be counted. The fact that this limitation exists in GitHub issues doesn't mean users are aware of it, and the behavior directly contradicts what the documentation implies.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a fundamental architectural limitation of NumPy's fixed-width string dtype system that has existed for years. Fixing it would require a complete redesign of how NumPy stores strings internally, which would be a massive breaking change affecting countless existing codebases. The NumPy team has already introduced StringDType in NumPy 2.0+ as a forward-looking solution rather than trying to fix the legacy dtype system. The edge case of strings with trailing nulls is relatively rare in typical NumPy use cases (scientific computing, data analysis) where strings are usually labels or identifiers rather than binary data.
+
+**Why it might not be WONTFIX:**
+The severity is marked as "High" in the bug report, and it does cause real downstream issues with other string functions (center, ljust, rjust). The behavior is counterintuitive and violates Python's string semantics, potentially causing silent data corruption when users process strings containing null characters. If NumPy aims to be consistent with Python's string handling, this inconsistency should be addressed rather than dismissed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The numpy.char.str_len documentation completely fails to mention this critical limitation. Users have no way of knowing from the official documentation that trailing nulls will be ignored. The documentation should explicitly warn users that the function does not handle trailing null characters the same way as Python's len() function. Adding a warning about this behavior would prevent confusion and bug reports while maintaining the current implementation. The GitHub issue #20118 was actually tagged as "DOC" suggesting the maintainers view this as a documentation issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting broken behavior doesn't make it acceptable. If a function called str_len doesn't correctly return string length for valid Python strings, that's a functionality bug, not a documentation issue. Users shouldn't have to read warnings about basic functions not working as expected. The documentation already says it returns the "number of Unicode code points," which is technically incorrect if it's ignoring valid code points.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting proper null character handling could be viewed as a new feature rather than a bug fix, especially given that NumPy has historically not supported this. The request is essentially asking NumPy to handle strings more like Python does, which could be considered an enhancement. The newer StringDType already provides this functionality, so this could be seen as requesting a backport of modern string handling to the legacy char module.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but asking for correct implementation of existing functionality. The str_len function already exists and claims to return string length - making it work correctly isn't a feature, it's fixing broken behavior. The fact that Python strings can contain null characters isn't a new feature of Python; it's fundamental to how Python strings work.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function objectively returns incorrect results compared to Python's len() function for valid Python strings. The behavior contradicts the documented purpose of returning "the number of Unicode code points" since '\x00' is a valid Unicode code point (U+0000). The bug causes downstream failures in other NumPy functions and could lead to data corruption in applications that process strings with null characters. The technical analysis in the bug report is accurate and well-documented with reproducible test cases.
+
+**Why it might not be BUG:**
+NumPy maintainers have explicitly stated this is NOT a bug but a "known limitation" of the string representation system. The behavior is intentional, even if unfortunate, due to architectural decisions in NumPy's dtype system. Multiple GitHub issues exist acknowledging this behavior as expected given NumPy's internal implementation. The maintainers have chosen to address this through new dtypes (StringDType) rather than fixing the old system.
+
+## Overall Consideration
+
+After careful analysis, this issue falls into a gray area between DOCUMENTATION_FIX and WONTFIX. The technical details in the bug report are entirely accurate - numpy.char.str_len does incorrectly calculate string lengths for strings with trailing null characters. However, this behavior is already known to NumPy maintainers and has been explicitly classified as a "known limitation" rather than a bug.
+
+The critical factor is that the numpy.char.str_len documentation makes no mention of this limitation. Users reading the documentation would reasonably expect the function to behave like Python's len(), especially since the docs claim it returns "the number of Unicode code points" without any caveats. This documentation gap has persisted despite GitHub issue #20118 being tagged as "DOC" back in 2021, suggesting the documentation should have been updated but wasn't.
+
+Given that NumPy maintainers have explicitly stated this won't be fixed in the legacy dtype system (instead offering StringDType as the solution), and the primary issue is that users aren't warned about this behavior, this should be classified as DOCUMENTATION_FIX. The function's documentation needs to clearly state that trailing null characters are not counted due to limitations in NumPy's fixed-width string dtype system, and users requiring proper null character handling should use StringDType or other alternatives.

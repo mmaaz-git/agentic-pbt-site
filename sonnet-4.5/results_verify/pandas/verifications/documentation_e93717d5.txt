@@ -1,0 +1,42 @@
+## Documentation Analysis for check_array_indexer
+
+### Official Documentation Summary
+The pandas documentation states that `check_array_indexer`:
+- Validates an array indexer for compatibility with a given array
+- Accepts indexers that are integer or boolean arrays
+- Converts list-like inputs to numpy arrays
+- Returns a numpy array that can be used for indexing
+- Raises IndexError for unsupported indexer types
+
+### Source Code Analysis
+
+Looking at the implementation in pandas/core/indexers/utils.py (lines 523-551), the function has special handling for empty lists:
+
+1. **Lines 524-528**: If the indexer is NOT array-like (e.g., a Python list), it converts it using `pd_array()`. If the result is empty, it explicitly converts to `np.array([], dtype=np.intp)` with a comment: "empty list is converted to float array by pd.array"
+
+2. **Line 530-551**: After this conversion, it checks the dtype:
+   - Boolean dtypes are validated for length
+   - Integer dtypes are converted to np.intp
+   - All other dtypes raise: "arrays used as indices must be of integer or boolean type"
+
+### The Critical Issue
+
+The code has a logic gap:
+- Empty Python lists are NOT array-like (according to `is_array_like([])`), so they go through the special handling in lines 524-528
+- Empty numpy arrays ARE array-like (according to `is_array_like(np.array([]))`), so they skip this special handling
+- This means `np.array([])` (which has float64 dtype) goes directly to dtype checking and fails at line 551
+
+### Documentation vs Implementation
+
+The documentation states that the function "converts list-like inputs to numpy arrays" but doesn't specify:
+1. How empty arrays should be handled
+2. That empty float arrays are not allowed while empty lists are
+3. That there's an inconsistency between empty lists and empty numpy arrays
+
+The docstring in the source code (lines 503-509) explicitly shows that float64 arrays should raise an error, but it doesn't mention the special case of empty arrays.
+
+### Key Finding
+
+The comment on line 527 ("empty list is converted to float array by pd.array") shows that the developers were aware that empty lists become float arrays and added special handling for this case. However, they failed to extend this logic to handle numpy arrays that are already created as float arrays.
+
+This is an implementation oversight where the special case handling for empty arrays only works for one input path (Python lists) but not another (numpy arrays), creating an inconsistent API behavior.

@@ -1,0 +1,38 @@
+REPRODUCTION OF BUG: scipy.constants.precision Returns Negative Values
+
+I have successfully reproduced the reported bug. Here are my findings:
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The hypothesis test in the bug report correctly identifies the issue. When I ran it, it immediately failed with:
+"precision('electron-deuteron mag. mom. ratio') returned -2.6120335080216547e-09, which is negative"
+
+2. SPECIFIC EXAMPLE REPRODUCTION:
+The specific example provided works exactly as described:
+- precision('neutron to shielded proton mag. mom. ratio') = -2.3357768576309262e-07
+- The physical constant has value = -0.68499694
+- The uncertainty = 1.6e-07
+- The current calculation (uncertainty/value) = -2.3357768576309262e-07 (negative)
+- Expected non-negative value would be: 2.3357768576309262e-07
+
+3. SCOPE OF THE ISSUE:
+I found that this affects exactly 33 physical constants in the CODATA database, all of which have negative values. Examples include:
+- Sackur-Tetrode constants
+- Various magnetic moment ratios (electron, deuteron, neutron)
+- Electron charge to mass quotient
+- Various g-factors
+
+4. ROOT CAUSE VERIFICATION:
+I examined the source code at /home/npc/.local/lib/python3.13/site-packages/scipy/constants/_codata.py
+The precision() function implementation is:
+```python
+def precision(key: str) -> float:
+    _check_obsolete(key)
+    return physical_constants[key][2] / physical_constants[key][0]
+```
+
+This confirms that when physical_constants[key][0] (the value) is negative, the result will be negative since the uncertainty (physical_constants[key][2]) is always positive.
+
+5. EFFECT:
+The bug causes the precision() function to return negative values for 33 physical constants that have negative measured values. This is mathematically incorrect because precision (relative uncertainty) is conceptually a non-negative quantity - it represents the magnitude of uncertainty relative to the magnitude of the measurement.
+
+The bug report's claim is fully verified and reproducible.

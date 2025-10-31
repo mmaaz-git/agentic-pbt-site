@@ -1,0 +1,42 @@
+## Reproduction Analysis
+
+### Bug Reproduction
+I successfully reproduced the reported bug. When calling:
+```python
+RangeIndex.linspace(0.0, 1.0, num=1, endpoint=True, dim='x')
+```
+
+The code crashes with:
+```
+ZeroDivisionError: float division by zero
+  File "xarray/indexes/range_index.py", line 283, in linspace
+    stop += (stop - start) / (num - 1)
+```
+
+### Root Cause
+The error occurs on line 283 of range_index.py:
+```python
+if endpoint:
+    stop += (stop - start) / (num - 1)
+```
+
+When `num=1`, the expression `(num - 1)` evaluates to 0, causing division by zero.
+
+### Conditions for Bug
+The bug occurs when ALL of these conditions are met:
+1. `num=1`
+2. `endpoint=True`
+
+The bug does NOT occur when:
+- `num=1` and `endpoint=False` (works correctly)
+- `num > 1` and `endpoint=True` (works correctly)
+
+### Comparison with NumPy
+NumPy's linspace handles this case gracefully:
+- `np.linspace(0.0, 1.0, num=1, endpoint=True)` returns `[0.]`
+- `np.linspace(5.0, 10.0, num=1, endpoint=True)` returns `[5.]`
+
+NumPy always returns the start value when `num=1`, regardless of the endpoint setting.
+
+### Mathematical Logic
+The formula `stop += (stop - start) / (num - 1)` is used to adjust the stop value to ensure proper spacing when the endpoint is included. However, when there's only one point (`num=1`), there's no spacing to calculate - the single point should just be the start value. The division by `(num - 1)` is mathematically undefined for this edge case.

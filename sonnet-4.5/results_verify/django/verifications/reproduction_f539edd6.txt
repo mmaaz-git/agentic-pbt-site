@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+### Summary
+I have successfully reproduced the bug described in the report. The FileSystemStorage and InMemoryStorage implementations do behave inconsistently when handling text files with non-LF line endings.
+
+### Test Results
+
+1. **Property-Based Test**: The Hypothesis test failed immediately with the input `content='\r'`, reporting "Content mismatch: '\r' != '\n'", exactly as described in the bug report.
+
+2. **Specific Test Cases**: All test cases with CR or CRLF line endings showed inconsistent behavior:
+   - `'\r'` → FileSystemStorage returns `'\n'`, InMemoryStorage returns `'\r'`
+   - `'\r\n'` → FileSystemStorage returns `'\n'`, InMemoryStorage returns `'\r\n'`
+   - `'hello\rworld'` → FileSystemStorage returns `'hello\nworld'`, InMemoryStorage returns `'hello\rworld'`
+   - `'hello\r\nworld'` → FileSystemStorage returns `'hello\nworld'`, InMemoryStorage returns `'hello\r\nworld'`
+   - `'line1\rline2\rline3'` → FileSystemStorage converts all `\r` to `\n`
+   - `'windows\r\nstyle\r\nfile'` → FileSystemStorage converts all `\r\n` to `\n`
+
+3. **Binary Mode Comparison**: When opening files in binary mode ('rb'), both storages correctly preserve the original line endings, confirming the issue is specific to text mode.
+
+### Root Cause Identified
+
+The bug is in `FileSystemStorage._open()` at line 81 of `/home/npc/miniconda/lib/python3.13/site-packages/django/core/files/storage/filesystem.py`:
+
+```python
+def _open(self, name, mode="rb"):
+    return File(open(self.path(name), mode))
+```
+
+Python's built-in `open()` function in text mode performs universal newline translation by default, converting `\r` and `\r\n` to `\n`. This behavior can be controlled with the `newline` parameter.
+
+In contrast, `InMemoryStorage` uses its own `InMemoryFileNode` class that preserves the original line endings when opening files in text mode.
+
+### Impact
+This inconsistency means that:
+1. Storage backends do not behave identically, violating the principle of backend equivalence
+2. Text files with specific line endings (Windows CRLF, Mac CR) are silently modified
+3. Round-trip operations (save then open) do not preserve the original content
+4. Applications relying on specific line endings will behave differently depending on the storage backend used

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly guarantee that the cache will never exceed max_entries. It only states that culling happens "when MAX_ENTRIES is reached" and describes the culling strategy. The phrase could be interpreted as describing when culling is triggered, not as a hard guarantee about the cache size. Additionally, this is an edge case that only occurs with specific configurations where max_entries < cull_frequency.
+
+**Why it might not be INVALID:**
+The parameter is called "max_entries" which strongly implies a maximum limit that should not be exceeded. Any reasonable developer would expect that a cache configured with max_entries=1 would never contain more than 1 entry. The current behavior violates this reasonable expectation, making it a valid bug rather than undefined behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This edge case only occurs when max_entries < cull_frequency, which could be considered a misconfiguration. The default values (max_entries=300, cull_frequency=3) don't exhibit this problem. It's an obscure scenario that's unlikely to occur in production environments, especially since the documentation notes that LocMemCache is "probably not a good choice for production environments."
+
+**Why it might not be WONTFIX:**
+The bug causes the cache to violate its fundamental constraint of limiting memory usage. Even if it's an edge case, it's a clear logical error in the implementation. The fix is simple and doesn't impact normal operations. Allowing unbounded growth in any scenario, even edge cases, could lead to memory issues.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about the exact behavior when max_entries is reached and what guarantees are made. It could explicitly state that in certain configurations (when max_entries < cull_frequency), the cache may temporarily exceed the limit. This would set proper expectations without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The parameter name "max_entries" is self-explanatory and implies a hard limit. Documenting that "max_entries might be exceeded" contradicts the parameter's name and purpose. The issue is clearly in the implementation logic, not in unclear documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that enforcing a strict max_entries limit when the culling frequency doesn't align well with the cache size is a new feature. The current implementation follows a simple culling algorithm, and adding logic to handle edge cases could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather for the existing max_entries parameter to work as its name implies. The cache already has code to prevent exceeding max_entries; it just has a bug in the culling calculation. Fixing broken functionality isn't a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+The parameter is named "max_entries" which clearly indicates a maximum limit. The cache exceeds this limit in reproducible scenarios, violating the implied contract. The implementation has a clear logical error where integer division can result in zero items being culled, allowing unbounded growth. The fix is straightforward and addresses a genuine implementation flaw.
+
+**Why it might not be BUG:**
+The documentation doesn't make an explicit guarantee that max_entries will never be exceeded, only that culling occurs when the limit is reached. This could be interpreted as the culling being "best effort" rather than a hard guarantee. The edge case only occurs with unusual configurations that are unlikely in practice.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a valid BUG. The parameter name "max_entries" creates a clear expectation that the cache will not exceed this number of entries. While the documentation doesn't explicitly state this guarantee, it's a reasonable and fundamental expectation for any cache implementation with a "max" parameter.
+
+The bug occurs due to a simple mathematical oversight in the culling calculation. When max_entries < cull_frequency, the integer division len(cache) // cull_frequency results in 0, causing no items to be removed during culling. This allows the cache to grow beyond its configured maximum, potentially leading to unbounded memory usage in pathological cases.
+
+The fact that this is an edge case doesn't diminish its validity as a bug. The fix is minimal (adding a max(1, ...) to ensure at least one item is culled), has no negative impact on normal operations, and corrects a clear logical error. Even if this configuration is uncommon, correctness in edge cases is important for a widely-used framework like Django.

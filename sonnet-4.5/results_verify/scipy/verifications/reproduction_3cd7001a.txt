@@ -1,0 +1,50 @@
+REPRODUCTION RESULTS
+====================
+
+I successfully reproduced the bug described in the report. The issue is real and consistent with the description.
+
+Test 1: Bug Reproduction (cache directory doesn't exist)
+---------------------------------------------------------
+When running the reproduction script with a non-existent cache directory:
+- Input: Invalid dataset callable with name "not_a_dataset"
+- Cache directory: /tmp/scipy_test_nonexistent (does not exist)
+- Expected: ValueError should be raised saying "Dataset method not_a_dataset doesn't exist"
+- Actual: Function returns early with message "Cache Directory /tmp/scipy_test_nonexistent doesn't exist. Nothing to clear." without raising ValueError
+- Result: BUG CONFIRMED
+
+Test 2: Control Test (cache directory exists)
+----------------------------------------------
+When running the same code with an existing cache directory:
+- Input: Invalid dataset callable with name "not_a_dataset"
+- Cache directory: /tmp/scipy_test_existing (exists)
+- Expected: ValueError should be raised
+- Actual: ValueError is correctly raised with message "Dataset method not_a_dataset doesn't exist. Please check if the passed dataset is a subset of the following dataset methods: ['ascent', 'electrocardiogram', 'face']"
+- Result: Behaves as expected when cache exists
+
+Test 3: Hypothesis Property-Based Test
+---------------------------------------
+The Hypothesis test confirms the inconsistency:
+- When cache_exists=True: Test passes (ValueError is raised as expected)
+- When cache_exists=False: Test fails with "Failed: DID NOT RAISE <class 'ValueError'>"
+- The test demonstrates that the validation behavior is dependent on filesystem state
+
+Code Analysis
+-------------
+Looking at _utils.py lines 24-26, the function has an early return when the cache directory doesn't exist:
+```python
+if not os.path.exists(cache_dir):
+    print(f"Cache Directory {cache_dir} doesn't exist. Nothing to clear.")
+    return
+```
+
+This early return occurs BEFORE the validation logic at lines 36-42:
+```python
+assert callable(dataset)
+dataset_name = dataset.__name__
+if dataset_name not in method_map:
+    raise ValueError(f"Dataset method {dataset_name} doesn't exist...")
+```
+
+This creates inconsistent behavior where invalid input is sometimes accepted (when cache doesn't exist) and sometimes rejected (when cache exists), violating the principle of consistent input validation.
+
+The bug is fully reproduced and confirmed.

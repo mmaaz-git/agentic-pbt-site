@@ -1,0 +1,51 @@
+DOCUMENTATION ANALYSIS
+======================
+
+After thorough review of Django's documentation and source code, here are my findings:
+
+Source Code Documentation:
+-------------------------
+
+1. **Signal.send() method** (dispatcher.py line 159-180):
+   - Docstring explicitly states: "sender - The sender of the signal. Either a specific object or None."
+   - This clearly documents that `None` is a valid sender value
+
+2. **Signal.has_listeners() method** (dispatcher.py line 155):
+   - Method signature: `def has_listeners(self, sender=None):`
+   - The default parameter is `sender=None`, indicating `None` is an expected valid value
+
+3. **Signal.__init__() method** (dispatcher.py line 35):
+   - Accepts `use_caching` parameter but no documentation warns about limitations with certain sender types
+   - Comments (lines 43-46) explain caching is per-distinct-sender but don't mention weakref limitations
+
+Public Documentation:
+--------------------
+
+1. **Django Signals Documentation** (https://docs.djangoproject.com/en/5.2/topics/signals/):
+   - Does not mention `use_caching` parameter at all
+   - Shows examples using classes as senders but doesn't restrict to only classes
+   - No warning about sender type restrictions
+
+2. **Django Signals Reference** (https://docs.djangoproject.com/en/5.2/ref/signals/):
+   - Does not document the Signal class API methods in detail
+   - No mention of sender type restrictions
+
+Django's Own Usage:
+------------------
+
+1. **Model Signals** (django/db/models/signals.py):
+   - Lines 42-51: All model signals use `use_caching=True`
+   - These are production signals used throughout Django
+
+2. **Actual Usage** (django/db/models/base.py):
+   - Sends with model classes as senders: `post_save.send(sender=origin, ...)`
+   - Model classes are weakref-able, so this works
+
+Documentation Gap:
+-----------------
+The documentation does NOT warn that:
+- When `use_caching=True`, certain sender types will cause crashes
+- `None` cannot be used as sender with caching despite being documented as valid
+- Non-weakref-able objects (basic `object()`, integers, strings) will fail
+
+The API explicitly allows `None` as a sender in multiple places but the implementation crashes when caching is enabled. This is a clear contradiction between documented API and implementation.

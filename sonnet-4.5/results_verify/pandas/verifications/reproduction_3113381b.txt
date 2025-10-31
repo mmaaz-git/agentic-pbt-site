@@ -1,0 +1,33 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+I successfully reproduced the bug using both the provided test cases and additional examples. The key findings are:
+
+1. **Version class behavior (PEP 440 compliant)**: Works correctly
+   - Input: `1.0.0+local` → public: `1.0.0` ('+' removed)
+   - Input: `2.1.0rc1+git.abc123` → public: `2.1.0rc1` ('+' removed)
+   - The Version.public property correctly strips the local version identifier
+
+2. **LegacyVersion class behavior (non-PEP 440)**: Exhibits the bug
+   - Input: `not-pep440+local` → public: `not-pep440+local` ('+' retained)
+   - Input: `0.dev0+µ` → public: `0.dev0+µ` ('+' retained)
+   - Input: `legacy+version` → public: `legacy+version` ('+' retained)
+   - The LegacyVersion.public property returns the full string including '+' and local parts
+
+3. **Special case**: `0.dev0+µ`
+   - This version string is parsed as LegacyVersion (not Version) because the µ character in the local part violates PEP 440's requirement that local version labels must use only ASCII letters, digits, and periods
+   - As a LegacyVersion, its public property incorrectly includes the '+µ' part
+
+### Technical Details
+The bug is confirmed in the implementation:
+- `Version.public` (line 429-430): `return str(self).split("+", 1)[0]` - Correctly removes local part
+- `LegacyVersion.public` (line 204-205): `return self._version` - Returns full string unchanged
+
+### Hypothesis Test Results
+The hypothesis test from the bug report fails as expected:
+- The test generates various version strings with local parts (after '+')
+- It expects that `v.public` should never contain '+'
+- The test fails for any version string that gets parsed as LegacyVersion and contains '+'
+
+### Consistency Issue
+The bug creates an inconsistency where the same property (`public`) on two classes that share the same base class (`_BaseVersion`) and are supposed to provide the same API behaves differently. Users cannot reliably use `.public` to get the public version identifier without local parts.

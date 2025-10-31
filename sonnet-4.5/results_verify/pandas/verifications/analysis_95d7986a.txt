@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This is an internal function (_convert_datetimes) that is not part of the public API, and the documentation doesn't specify how it should handle out-of-range values. The function is only called internally when reading SAS files with convert_dates=True. Raising an exception for values that cannot be represented as datetime64 is reasonable default behavior. The user can catch these exceptions or disable date conversion if dealing with corrupted SAS files.
+
+**Why it might not be INVALID:**
+The function already demonstrates it can handle special cases gracefully (NaN → NaT), so there's precedent for handling edge cases without crashing. The inconsistency between handling NaN and handling out-of-range values could be seen as a genuine issue.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that would only occur with corrupted or malformed SAS files containing datetime values far outside reasonable ranges (millions of years in the future). Real SAS files from legitimate sources would never contain such values. The engineering effort to handle these extreme edge cases may not be justified given their rarity in practice.
+
+**Why it might not be WONTFIX:**
+The fix appears relatively straightforward (catching the exception and converting to NaT), and data corruption is a real concern when dealing with file formats. If pandas aims to be robust against malformed input files, this would be worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior (raising OutOfBoundsDatetime or OverflowError) makes sense and is technically correct - these values truly cannot be represented. The documentation could be updated to explicitly state that out-of-range values will raise exceptions, making this expected behavior clear to users.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is an internal function with minimal documentation. Users don't directly call this function, and the parent read_sas() function documentation doesn't make promises about datetime overflow handling, so there may not be documentation to fix.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding graceful handling of out-of-range datetime values would be a new feature - the ability to read corrupted SAS files without crashing. This could be implemented as an optional parameter or error handling mode rather than changing default behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already has a pattern for handling invalid values (NaN → NaT), so extending this to out-of-range values would be more of a bug fix to make the behavior consistent rather than a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+There is a clear inconsistency in how the function handles invalid inputs: NaN values are gracefully converted to NaT, but out-of-range values cause crashes. This inconsistent error handling makes it difficult for users to handle corrupted SAS files robustly.
+
+**Why it might not be BUG:**
+This is an internal function dealing with extreme edge cases that wouldn't occur in normal usage. The values being tested (1e16 seconds = 317 million years) are absurdly large and would never appear in legitimate SAS datetime data. Raising an exception for truly invalid data is appropriate behavior.
+
+## Overall Consideration
+
+This bug report concerns an internal pandas function (`_convert_datetimes`) that crashes when given extremely large datetime values that cannot be represented in pandas' datetime64 format. The function is not part of the public API (indicated by the leading underscore), and the test cases use values that are millions of years beyond any reasonable datetime range.
+
+The key issue is one of consistency: the function gracefully handles NaN values by converting them to NaT, but raises exceptions for out-of-range numeric values. However, this inconsistency might be intentional - NaN is an expected special value in data processing, while values like 1e16 seconds (317 million years from 1960) are clearly erroneous and might warrant an exception to alert users to data corruption.
+
+Most importantly, this is an internal implementation detail of SAS file reading. Users don't call this function directly, and legitimate SAS files would never contain such extreme datetime values. The scenarios described (corrupted files, special markers) are hypothetical edge cases. The current behavior of raising an exception actually helps users identify corrupted data rather than silently converting it to NaT, which could hide data quality issues. Given that this affects an internal function handling unrealistic edge cases, and that the current behavior (raising exceptions for invalid data) is defensible, this should likely be closed as INVALID.

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is working as designed - it has special handling for lowercase Django-specific field names and passes through uppercase field names directly to PostgreSQL. The documentation doesn't promise validation of PostgreSQL field names, and the regex is clearly designed for SQL injection prevention, not field validation. The function is an internal database backend operation that's not directly exposed to users, and Django's ORM layer likely only passes valid field names to this function.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that invalid PostgreSQL field names are accepted and would cause runtime errors. The inconsistency between lowercase special field handling (which works) and uppercase versions (which don't) is a real issue that could cause confusion and errors.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal Django function that's not directly exposed to end users. Django's ORM layer likely only passes known-valid field names to this function, so the issue may never manifest in practice. The uppercase versions of special fields ("WEEK_DAY", "ISO_WEEK_DAY", "ISO_YEAR") are not documented as supported, and developers shouldn't be using them. Adding validation would add overhead to every query for an edge case that shouldn't occur in normal usage.
+
+**Why it might not be WONTFIX:**
+The inconsistency between lowercase and uppercase handling is confusing and could lead to subtle bugs. If the function accepts "week_day" and translates it correctly, it's reasonable to expect "WEEK_DAY" to work similarly. The fix would be relatively simple and would improve the robustness of the code.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function's behavior is technically correct but poorly documented. The documentation should explicitly state that only lowercase special field names are supported, and that uppercase field names are passed through directly to PostgreSQL without validation. This would clarify the expected behavior and prevent confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about documentation - there's actual incorrect behavior where invalid SQL is generated. Simply documenting that uppercase special fields don't work doesn't fix the underlying problem that the function accepts invalid input and generates broken SQL.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting uppercase versions of special field names could be seen as a new feature rather than a bug fix. The function currently only supports lowercase special fields, and adding uppercase support would be an enhancement to make the API more flexible and consistent.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't about adding new functionality - it's about fixing inconsistent behavior in existing functionality. The function already handles these special fields in lowercase, so making it work consistently isn't a new feature but rather fixing incomplete implementation.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits inconsistent behavior where "week_day" works correctly but "WEEK_DAY" generates invalid SQL. This violates the principle of least surprise and could cause runtime failures. The function accepts invalid field names without validation and generates SQL that will fail against PostgreSQL. This is a clear logic error where the uppercase conversion happens after special case checking, causing the special cases to be missed for uppercase inputs.
+
+**Why it might not be BUG:**
+The function is working as implemented - it's designed to handle specific lowercase special cases and pass everything else through. The regex validation is for SQL injection prevention, not field validation. This is an internal function that shouldn't receive invalid input in normal Django usage, and the behavior for uppercase special fields was never documented or promised to work.
+
+## Overall Consideration
+After careful analysis, this appears to be primarily a WONTFIX issue. The function is an internal Django database backend operation that's not directly exposed to end users. Django's ORM layer controls what values are passed to this function, and it would never pass uppercase versions of the special field names like "WEEK_DAY" or "ISO_WEEK_DAY".
+
+The regex validation `[A-Z_]+` is clearly designed to prevent SQL injection by ensuring only safe characters are used, not to validate against PostgreSQL's list of valid EXTRACT fields. Adding field validation would add unnecessary overhead to every date extraction query for an edge case that shouldn't occur in practice. The function's special handling for lowercase field names appears to be intentional Django-specific behavior for cross-database compatibility.
+
+While the bug report is technically correct that the function accepts invalid field names, this is an implementation detail of an internal function. Unless there's evidence that Django's ORM actually passes these invalid uppercase field names to the function, or that third-party code can directly access this function in a way that causes issues, this is an academic problem rather than a practical bug. The appropriate response would be to either close as WONTFIX or possibly add documentation clarifying that only lowercase special field names are supported.

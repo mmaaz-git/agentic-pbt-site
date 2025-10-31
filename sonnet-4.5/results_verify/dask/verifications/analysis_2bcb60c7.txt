@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that the index column should be automatically included when not in the columns list. One could argue that if you specify columns=['b', 'c'], you're explicitly requesting only those columns, and if you need 'a' as an index, you should include it in the columns list. The current behavior could be seen as enforcing explicit column specification.
+
+**Why it might not be INVALID:**
+The function has separate parameters for `columns` and `index`, which strongly implies they serve different purposes. The `index` parameter's purpose is to specify which column becomes the index, not which columns to load. Furthermore, the similar `read_parquet` function handles this case correctly by automatically including the index column, establishing a clear precedent for expected behavior in the dask ecosystem.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The error could be considered an edge case that users can easily work around by including the index column in their columns list. The workaround is simple: just use columns=['a', 'b', 'c'] instead of columns=['b', 'c']. The current implementation might be intentionally explicit to avoid hidden data loading.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it's a reasonable use pattern that users would expect to work based on the API design. The fact that read_parquet handles this correctly shows it's not an obscure requirement. The crash with a KeyError is a poor user experience that should be fixed rather than documented as a limitation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that when using the index parameter, the index column must be included in the columns list. This would clarify the current behavior and prevent user confusion. The documentation currently lacks any example showing the combined use of columns and index parameters.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior itself is inconsistent with read_parquet and counterintuitive given the API design. Simply documenting a limitation doesn't make the limitation correct. The separate parameters strongly suggest orthogonal concerns, and requiring the index in columns defeats the purpose of having separate parameters. Fixing the documentation would cement a poor API decision.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that automatically including the index column when it's not in the columns list is a new feature that extends the current functionality. The current implementation might have been designed to only work with explicitly specified columns, and adding automatic index inclusion would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality but fixing broken existing functionality. The function already accepts both columns and index parameters - it just doesn't handle them correctly together. The crash with KeyError indicates a bug, not a missing feature. The user isn't asking for something new; they're reporting that existing parameters don't work as expected.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with a KeyError when using valid parameter combinations that users would reasonably expect to work. The API design with separate columns and index parameters implies they should work independently. The read_parquet function handles this exact case correctly, establishing the expected behavior pattern in dask. The error occurs deep in the code (io/utils.py) rather than being caught early with a helpful message. The bug report provides accurate technical details and a valid fix.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the current behavior was intentionally designed this way, but there's no evidence of that in the documentation or code. Even if intentional, crashing with a KeyError rather than providing a clear error message would still constitute a bug in error handling.
+
+## Overall Consideration
+
+This is clearly a **BUG** that should be fixed. The evidence is overwhelming:
+
+1. **API Design Intent**: The function has separate `columns` and `index` parameters, strongly suggesting they serve orthogonal purposes. The columns parameter specifies which data columns to include in the DataFrame, while the index parameter specifies which column becomes the index. These are fundamentally different concerns that should work independently.
+
+2. **Precedent in Dask Ecosystem**: The `read_parquet` function, which has an identical API signature for these parameters, handles this case correctly by automatically including the index column when needed. This establishes the expected behavior pattern within dask itself. Users moving between different file formats would expect consistent behavior.
+
+3. **Technical Failure Mode**: The function doesn't fail gracefully with a clear error message if this were intended behavior. Instead, it crashes deep in the code with a KeyError at io/utils.py:117 when trying to pop a column that doesn't exist. This is clearly an oversight in the implementation rather than intentional design. If the behavior were intentional, the code would check for this condition early and provide a helpful error message like "Index column 'a' must be included in columns list when both parameters are specified."
+
+The bug report is technically accurate, provides a clear reproduction case, identifies the exact location of the failure, and even suggests a reasonable fix. The fact that this causes a crash rather than working as expected (or at least failing gracefully) confirms this is a legitimate bug that should be fixed.

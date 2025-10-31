@@ -1,0 +1,28 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported for anyio.create_memory_object_stream.
+
+### Hypothesis Test Results
+The hypothesis test with floats that are not integers consistently fails with ValueError. The test generates various float values (1.5, 2.5, 0.5, etc.) and all of them trigger the ValueError: "max_buffer_size must be either an integer or math.inf".
+
+### Simple Test Results
+I ran explicit tests with various values:
+- `2.5` (float, non-integer) → ValueError
+- `1.5` (float, non-integer) → ValueError
+- `2` (integer) → Success
+- `math.inf` (float infinity) → Success
+- `0.0` (float with integer value) → ValueError
+- `3.0` (float with integer value) → ValueError
+
+### Key Finding
+The validation uses `isinstance(max_buffer_size, int)` which checks for the actual type `int`, not whether a number has an integer value. This means:
+- `3` (type int) passes
+- `3.0` (type float) fails, even though it represents the same integer value
+- `math.inf` passes due to special handling
+
+### Source Code Verification
+From anyio/_core/_streams.py:
+- Line 37: Type annotation declares `max_buffer_size: float = 0`
+- Line 39-40: Runtime validation `if max_buffer_size != math.inf and not isinstance(max_buffer_size, int)` rejects all non-integer floats except math.inf
+
+The bug report accurately describes the issue: there is a mismatch between the type annotation (which promises to accept float) and the runtime validation (which only accepts int or math.inf).

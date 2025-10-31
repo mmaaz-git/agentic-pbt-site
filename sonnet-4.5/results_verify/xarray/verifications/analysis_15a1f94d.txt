@@ -1,0 +1,66 @@
+## Triage Analysis
+
+### Considerations for INVALID
+Arguments against INVALID:
+- The bug is real and reproducible
+- The function violates a critical invariant that's enforced elsewhere in the code
+- The align_nd_chunks function explicitly checks that sum(chunks) == size
+- The error message in align_nd_chunks states "This inconsistency should never occur at this stage"
+
+Could this be INVALID? **NO** - The bug clearly exists and violates documented invariants.
+
+### Considerations for WONTFIX
+Arguments for WONTFIX:
+- Could argue that size < chunk_size is an edge case that might not occur in practice
+- Zarr chunks are typically smaller than dimension sizes for efficiency
+
+Arguments against WONTFIX:
+- This is not an obscure edge case - it's a simple mathematical boundary condition
+- The bug causes data corruption (chunks covering more than the actual data)
+- It breaks a fundamental invariant that other parts of the code depend on
+- The fix is simple and doesn't impact normal operation
+
+Could this be WONTFIX? **NO** - This is a real bug that can cause data corruption, not a trivial issue.
+
+### Considerations for FEATURE_REQUEST
+Arguments for FEATURE_REQUEST:
+- None - the function already exists and should work correctly
+
+Arguments against FEATURE_REQUEST:
+- This is fixing broken existing functionality, not adding new features
+- The expected behavior (chunks summing to size) is already enforced elsewhere
+
+Could this be FEATURE_REQUEST? **NO** - This is a bug in existing functionality.
+
+### Considerations for DOCUMENTATION_FIX
+Arguments for DOCUMENTATION_FIX:
+- The function has no docstring
+- One could argue the documentation should specify behavior for size < chunk_size
+
+Arguments against DOCUMENTATION_FIX:
+- The code is broken, not just the documentation
+- The invariant (sum(chunks) == size) is enforced in align_nd_chunks with an error
+- Even without documentation, the mathematical property of partitioning is fundamental
+- The bug causes actual failures in the system (ValueError in align_nd_chunks)
+
+Could this be DOCUMENTATION_FIX? **NO** - The code itself is incorrect and causes errors.
+
+### Considerations for BUG
+Arguments for BUG:
+- The function returns mathematically incorrect results (sum(chunks) > size)
+- It violates an invariant enforced by align_nd_chunks
+- The error message states this "should never occur"
+- It causes downstream errors in the xarray/zarr pipeline
+- The bug is reproducible and deterministic
+- It affects a boundary condition (size < chunk_size) that should be handled correctly
+- The proposed fix is reasonable and maintains backward compatibility for correct cases
+
+Arguments against BUG:
+- None substantial
+
+### Conclusion
+This is clearly a **BUG**. The function fails to maintain the fundamental invariant that chunks must partition the input size exactly. When size < chunk_size, it returns chunks whose sum exceeds the input size, which:
+1. Violates mathematical correctness
+2. Causes ValueError in align_nd_chunks
+3. Could lead to data corruption if not caught
+4. Has a clear, simple fix that maintains all existing correct behavior

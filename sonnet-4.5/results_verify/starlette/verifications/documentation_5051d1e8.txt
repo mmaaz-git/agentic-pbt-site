@@ -1,0 +1,47 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## Starlette Documentation
+
+The official Starlette documentation for GZipMiddleware states:
+- It "handles GZip responses for requests that include 'gzip' in the Accept-Encoding header"
+- The documentation does NOT specify whether the matching should be case-sensitive
+- The documentation does NOT specify whether "gzip" should be matched as a substring or as a token
+- It only mentions configuration options (minimum_size, compresslevel) and exclusions (Content-Encoding already set, text/event-stream content type)
+
+## HTTP Specification (RFC 7231)
+
+According to RFC 7231 and related HTTP specifications:
+
+1. **Content-Coding Values are Case-Insensitive** (RFC 7231):
+   - "All content-coding values are case-insensitive"
+   - This means "gzip", "GZIP", "Gzip", and any case variation should be treated equivalently
+
+2. **Token-Based Parsing Required**:
+   - The Accept-Encoding header contains a comma-separated list of content-coding tokens
+   - Each token may have optional quality parameters (e.g., "gzip;q=0.8")
+   - Tokens should be parsed individually, not matched as substrings
+
+3. **Examples of Valid Accept-Encoding Headers**:
+   - `Accept-Encoding: gzip, deflate`
+   - `Accept-Encoding: GZIP`
+   - `Accept-Encoding: gzip;q=1.0, identity;q=0.5, *;q=0`
+
+## Analysis
+
+The bug report's claims are CORRECT:
+
+1. **Case Sensitivity Violation**: The current implementation uses `"gzip" in headers.get("Accept-Encoding", "")` which is case-sensitive. This violates RFC 7231 which explicitly states content-coding values are case-insensitive.
+
+2. **Substring Matching Issue**: The current implementation would incorrectly match "not-gzip" or "gzip-not" as valid gzip requests. The specification requires parsing comma-separated tokens, not substring matching.
+
+3. **Documentation Gap**: While the Starlette documentation doesn't explicitly promise RFC compliance, HTTP middleware is expected to follow HTTP specifications by default. The documentation could be clearer, but the expectation of RFC compliance is reasonable for HTTP middleware.
+
+## Conclusion
+
+The bug report correctly identifies violations of HTTP specifications. The middleware should:
+1. Perform case-insensitive matching for "gzip"
+2. Parse the Accept-Encoding header as a comma-separated list of tokens, not use substring matching
+3. Handle quality parameters correctly (though the current substring approach accidentally works for "gzip;q=1.0")
+
+This is a legitimate bug that affects HTTP specification compliance and interoperability.

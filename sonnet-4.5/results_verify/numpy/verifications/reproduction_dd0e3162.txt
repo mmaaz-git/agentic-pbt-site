@@ -1,0 +1,58 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The issue occurs exactly as described when multiplying polynomials with denormal (subnormal) coefficients.
+
+TEST RESULTS:
+-------------
+
+1. Property-based test with random inputs: PASSED
+   - The hypothesis test with 500 random examples did not find any issues
+   - This is expected since denormal numbers are extremely rare in random generation
+
+2. Specific failing input test: CONFIRMED BUG
+
+   Input:
+   - c1 = np.array([2.0])
+   - c2 = np.array([0.0, 5e-324])
+   - c3 = np.array([0.5])
+
+   Results:
+   - (c1 * c2) * c3 = [0.e+000 5.e-324]  (shape: (2,))
+   - c1 * (c2 * c3) = [0.]               (shape: (1,))
+
+   The results are different both in shape and value, violating associativity.
+
+ROOT CAUSE ANALYSIS:
+--------------------
+
+The bug occurs due to inconsistent handling of denormal numbers and polynomial trimming:
+
+1. Left-to-right evaluation: (c1 * c2) * c3
+   - c1 * c2 = [0.0, 1e-323] (denormal preserved)
+   - [0.0, 1e-323] * c3 = [0.0, 5e-324] (denormal preserved)
+   - Final result has 2 coefficients
+
+2. Right-to-left evaluation: c1 * (c2 * c3)
+   - c2 * c3 computes [0.0, 5e-324] * [0.5]
+   - The second coefficient: 5e-324 * 0.5 = 2.5e-324
+   - 2.5e-324 underflows to exactly 0.0 in IEEE 754 arithmetic
+   - polymul then trims the trailing zero, leaving [0.]
+   - c1 * [0.] = [0.]
+   - Final result has 1 coefficient
+
+KEY OBSERVATIONS:
+-----------------
+
+1. 5e-324 is the smallest positive denormal float (np.finfo(float).smallest_subnormal)
+2. When 5e-324 is multiplied by 0.5, it underflows to exactly 0.0
+3. The polymul function appears to call polytrim after multiplication
+4. polytrim removes trailing zeros from polynomial coefficient arrays
+5. The trimming behavior creates different results depending on multiplication order
+
+IMPACT:
+-------
+
+This violates the mathematical property of associativity for polynomial multiplication.
+While it involves extreme edge cases with denormal numbers, it breaks a fundamental
+algebraic property that users may rely upon. The bug is reproducible and deterministic.

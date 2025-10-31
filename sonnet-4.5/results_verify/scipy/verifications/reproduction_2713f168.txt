@@ -1,0 +1,38 @@
+## Bug Reproduction Results
+
+### Test Case 1: Direct Reproduction
+I ran the exact code provided in the bug report:
+```python
+obs = np.array([[5.721286105539075], [5.721286105539075], ...]) # 7 identical values
+```
+
+Results:
+- Computed std_val: 8.881784197001252e-16 (not exactly 0)
+- std_val == 0: False
+- Original value: 5.721286105539075
+- Whitened value: 6441595493246444.0 (6.44e15)
+
+The bug is confirmed: the function produces an astronomical value instead of leaving the column unchanged.
+
+### Test Case 2: Hypothesis Test Scenario
+Testing with n_obs=7, n_features=1:
+- Set all 7 values in column to constant: 5.721286105539075
+- All values are identical: True
+- Computed std: 8.881784197001252e-16
+- After whitening: all values become 6.44159549e+15
+- Expected behavior: values should remain 5.721286105539075
+- np.allclose() test: False
+
+### Mathematical Verification
+Division result: 5.721286105539075 / 8.881784197001252e-16 = 6441595493246444.0
+
+This confirms the issue is caused by dividing by a near-zero (but not exactly zero) standard deviation.
+
+### Root Cause
+The floating-point precision issue occurs when numpy computes the standard deviation of identical floating-point values. Due to rounding errors in floating-point arithmetic, the result is not exactly zero but a value on the order of machine epsilon (around 1e-16). The current implementation's exact equality check (`std_dev == 0`) fails to catch these near-zero values.
+
+### Impact
+When a user provides data with columns containing identical values (a common scenario in real data), the whiten function:
+1. Does not raise the expected warning
+2. Returns astronomically large values instead of leaving the column unchanged
+3. Violates the behavioral contract stated in its own warning message

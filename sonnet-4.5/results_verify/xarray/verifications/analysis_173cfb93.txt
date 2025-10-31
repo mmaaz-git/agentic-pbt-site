@@ -1,0 +1,63 @@
+## Triage Analysis for build_grid_chunks Bug Report
+
+### Considering INVALID
+**Why it might be INVALID:**
+- Function has no documentation specifying behavior for edge cases
+- Could argue that size=0 is an undefined edge case
+
+**Why it's NOT INVALID:**
+- The mathematical semantics of partitioning are unambiguous: sum(chunks) must equal size
+- The calling function `align_nd_chunks` explicitly validates this invariant and states "This inconsistency should never occur"
+- The function name and parameters clearly indicate a partitioning operation
+- Even without documentation, a partitioning function that doesn't preserve the total is fundamentally broken
+
+### Considering WONTFIX
+**Why it might be WONTFIX:**
+- Could argue size=0 is an obscure edge case that rarely occurs in practice
+- Empty arrays might not be common in xarray usage
+
+**Why it's NOT WONTFIX:**
+- The bug violates a fundamental mathematical invariant
+- The error will propagate to `align_nd_chunks` which will raise an exception with a confusing error message
+- Empty arrays are valid in numpy/xarray and should be handled correctly
+- The fix is trivial (one line to check for size=0)
+
+### Considering DOCUMENTATION_FIX
+**Why it might be DOCUMENTATION_FIX:**
+- Function lacks any documentation
+- Could document that size=0 is not supported
+
+**Why it's NOT DOCUMENTATION_FIX:**
+- The bug is in the code logic, not documentation
+- The mathematical semantics are clear even without documentation
+- Documenting incorrect behavior doesn't make it correct
+- The calling code expects the invariant to hold
+
+### Considering FEATURE_REQUEST
+**Why it might be FEATURE_REQUEST:**
+- Could argue that handling size=0 is a new feature
+
+**Why it's NOT FEATURE_REQUEST:**
+- This is not adding new functionality but fixing broken existing functionality
+- The function already attempts to handle all sizes >= 0 (no validation preventing size=0)
+- The bug causes incorrect behavior, not missing behavior
+
+### Considering BUG
+**Why it IS a BUG:**
+1. **Violates fundamental invariant**: The function returns chunks that don't sum to the input size
+2. **Breaks caller expectations**: `align_nd_chunks` explicitly validates sum(backend_chunks) == sum(var_chunks)
+3. **Clear mathematical semantics**: A partitioning function must preserve the total
+4. **Causes downstream errors**: Will cause confusing ValueError in `align_nd_chunks`
+5. **Simple logic error**: The code blindly creates initial chunk without checking if size < chunk_size
+6. **Valid input rejected**: size=0 is a mathematically valid input for partitioning
+7. **Reproducible and deterministic**: The bug occurs consistently for size=0
+
+### Severity Assessment
+- **Medium severity** is appropriate:
+  - Not a crash or data corruption
+  - But violates a fundamental invariant
+  - Will cause confusing errors downstream
+  - Has a simple fix
+
+### Conclusion
+This is unequivocally a **BUG**. The function violates the fundamental mathematical invariant of partitioning (sum of parts equals whole) for the valid input size=0. The calling code explicitly depends on this invariant, and the violation will cause errors downstream. The fix is straightforward and should be implemented.

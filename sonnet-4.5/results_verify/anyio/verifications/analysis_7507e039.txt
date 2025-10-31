@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The anyio documentation does not explicitly specify that aclose() must guarantee cleanup of both streams even when exceptions occur. The current implementation follows a simple sequential pattern that is technically valid Python code. One could argue that if the send stream fails to close due to a serious error, it might be intentional to abort the entire operation rather than continue with partial cleanup. The user's expectation of "both streams must close" is not explicitly documented anywhere in anyio's API contract.
+
+**Why it might not be INVALID:**
+Python's established conventions for resource management strongly support the bug report's expectations. The async context manager protocol (__aexit__) exists specifically to ensure cleanup happens even during exceptions. Standard library implementations like contextlib consistently use try/finally blocks or similar patterns to ensure all resources are released. The behavior violates the principle of least surprise - developers reasonably expect cleanup operations to be exception-safe, especially when dealing with system resources.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only manifests when the underlying transport stream's aclose() raises an exception, which could be considered a rare edge case. In many practical scenarios, aclose() operations succeed without issues. The fix adds complexity to handle what might be an uncommon situation. If the send stream fails to close due to a critical error, leaving the receive stream open might not matter much since the entire connection is likely broken anyway.
+
+**Why it might not be WONTFIX:**
+Resource leaks are serious issues that can accumulate over time in long-running applications. Even if individual instances are rare, they can lead to system instability when they occur repeatedly. The fix is straightforward (try/finally or asyncio.gather) and is a well-established pattern in Python. Major async libraries handle this correctly, and anyio should meet the same standard. The fact that the same issue exists in multiple classes (TextStream, StapledByteStream, StapledObjectStream) suggests this is a systemic pattern worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The anyio documentation doesn't specify the expected behavior when aclose() encounters exceptions. One could argue that the current behavior is intentional but poorly documented. The documentation could be updated to explicitly state: "Warning: If closing the send stream raises an exception, the receive stream will not be closed." This would at least make users aware of the limitation and allow them to implement their own exception handling if needed.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is clearly a deficiency in the implementation rather than a documentation issue. No reasonable developer would intentionally design a resource cleanup method that leaks resources on error. Documenting this as expected behavior would be documenting a bug rather than fixing it. The Python community has clear conventions about resource cleanup that don't need to be explicitly documented for every method - they're assumed as part of good practice.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation provides basic functionality that works in the normal case. Adding exception-safe cleanup could be viewed as an enhancement rather than a bug fix. The user is essentially requesting more robust error handling, which could be considered a new feature. One could frame this as "Add exception-safe resource cleanup to TextStream.aclose()" as a feature enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+Exception-safe resource cleanup is not a feature - it's a fundamental requirement for any resource management code in Python. This is fixing broken behavior, not adding new functionality. The async context manager protocol and Python's with statement exist specifically because proper cleanup is considered essential, not optional. Other similar libraries already handle this correctly, so this would be fixing anyio to meet existing standards rather than adding something new.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a textbook resource leak bug. The code fails to release system resources (the receive stream) when an error occurs, which violates fundamental principles of resource management in Python. The issue is reproducible, has clear impact (resource leak), and has a straightforward fix using established patterns (try/finally or asyncio.gather). The same pattern appears in multiple classes, indicating a systemic issue. Python developers universally expect cleanup code to be exception-safe, and this expectation is supported by standard library patterns and async best practices.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is the lack of explicit documentation stating that both streams must be closed even on error. However, this is an extremely weak argument given Python's strong conventions around resource management. The current behavior could theoretically be intentional if someone believed that a send stream failure should abort all cleanup, though this would be a very unusual design choice.
+
+## Overall Consideration
+
+This bug report describes a legitimate resource leak issue in anyio's TextStream.aclose() method. When examining the technical details, the code clearly fails to close the receive stream when the send stream's close operation raises an exception. This violates fundamental Python resource management principles that are consistently followed throughout the standard library and major async frameworks.
+
+The lack of explicit documentation about exception handling in aclose() does not make this behavior acceptable. Python developers have strong, justified expectations about resource cleanup based on the language's design patterns. The async context manager protocol, the existence of finally blocks, and the widespread use of exception-safe cleanup patterns all reinforce that resources should be released even when errors occur. Failing to do so leads to resource leaks that can accumulate in production systems.
+
+While one could argue this is an edge case (how often does aclose() actually fail?), resource leaks are particularly insidious because they may not cause immediate problems but can lead to system degradation over time. The fix is straightforward and uses well-established patterns. The fact that the same issue exists in multiple classes (TextStream, StapledByteStream, StapledObjectStream) further supports that this is a genuine bug that should be fixed systematically rather than documented as a limitation. This is clearly a BUG that should be reported to the anyio maintainers.

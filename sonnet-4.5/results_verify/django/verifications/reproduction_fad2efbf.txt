@@ -1,0 +1,49 @@
+## Bug Reproduction Analysis
+
+### Bug Report Claims
+The bug report claims that `is_same_domain` incorrectly handles case sensitivity in domain comparisons, failing to match domains that differ only in case.
+
+### Reproduction Results
+
+#### 1. Hypothesis Test
+The hypothesis test from the bug report DOES fail:
+- Test: `is_same_domain(domain, domain)` should always return True for any domain
+- Failing input: `domain='A'`
+- Result: Returns `False` instead of `True`
+- This confirms the basic claim: a domain doesn't match itself when it contains uppercase letters
+
+#### 2. Specific Examples
+All examples from the bug report were confirmed:
+
+1. `is_same_domain('EXAMPLE.COM', 'EXAMPLE.COM')` returns `False`
+   - An uppercase domain doesn't match itself
+
+2. `is_same_domain('Example.COM', 'example.com')` returns `False`
+   - Mixed-case domain doesn't match lowercase version
+
+3. `is_same_domain('FOO.EXAMPLE.COM', '.example.com')` returns `False`
+   - Uppercase subdomain doesn't match lowercase wildcard pattern
+
+#### 3. Root Cause Analysis
+The code inspection confirms the issue:
+- Line 235: `pattern = pattern.lower()` - the pattern is lowercased
+- The host parameter is NOT lowercased
+- Comparisons then happen between the original (potentially uppercase) host and the lowercased pattern
+
+This creates an asymmetry:
+- `is_same_domain('example.com', 'EXAMPLE.COM')` returns `True` (lowercase host, uppercase pattern works)
+- `is_same_domain('EXAMPLE.COM', 'example.com')` returns `False` (uppercase host, lowercase pattern fails)
+
+#### 4. Fix Verification
+The proposed fix (adding `host = host.lower()` before the pattern lowercasing) was tested and:
+- Resolves all failing test cases
+- Makes the function behave symmetrically
+- Passes the hypothesis test that any domain should match itself
+- Aligns with DNS case-insensitivity requirements
+
+### Technical Accuracy
+The bug report is technically accurate:
+1. The function does fail on the provided test cases
+2. The root cause analysis is correct
+3. The proposed fix does resolve the issue
+4. The reference to RFC 4343 is correct - DNS is case-insensitive

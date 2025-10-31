@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function works as intended for its actual use case. It's a private/internal function (underscore prefix) that is only called in one place in the codebase (line 305), where the returned values are immediately unpacked and used for string interpolation without modification. The documentation doesn't specify that the return value must be immutable, and the current implementation fulfills its stated purpose of "lazily loading resource files into memory." The bug report is based on a theoretical vulnerability that doesn't manifest in actual usage.
+
+**Why it might not be INVALID:**
+The bug is technically real - the cached list can be mutated by callers, which violates the general expectation of cached values being stable. This is a well-known anti-pattern in Python when combining lru_cache with mutable return types. The test case demonstrates a genuine technical flaw in the implementation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal/private function (leading underscore) that is only used once in the codebase, where it's used correctly without mutation. The theoretical vulnerability doesn't cause any actual problems in practice. The function is not part of the public API, so external users shouldn't be calling it directly. Fixing this would be addressing a non-issue that has no practical impact on the library's functionality or users.
+
+**Why it might not be WONTFIX:**
+Even internal functions should follow best practices to prevent future bugs. If someone later modifies the code and inadvertently mutates the cached value, it could cause hard-to-debug issues. The fix is trivial (changing list to tuple) and maintains full backward compatibility.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation (docstring) doesn't specify whether the returned value should be treated as immutable. Adding a note that the returned value should not be modified would clarify the intended usage without changing the implementation. This would be appropriate if the current behavior is intentional but needs clarification.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't really about documentation - it's about a technical implementation detail. The function is private/internal, so detailed documentation about mutability isn't expected. The problem is the code pattern itself, not a misunderstanding of how it should be used.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that making the cache immutable is a new feature - adding protection against mutation that wasn't originally designed. The current implementation works for its intended use case, and adding immutability would be an enhancement rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality; it's fixing a design flaw. The function already implements caching, and returning an immutable type is a bug fix to make the caching work correctly, not a new feature. The behavior wouldn't change from the user's perspective.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of best practices for cached functions. Python's functools documentation explicitly states that caching "doesn't make sense" for functions that need to create distinct mutable objects on each call. The current implementation allows cache pollution, which is a well-known anti-pattern. The fix is simple, maintains compatibility, and prevents potential future issues.
+
+**Why it might not be BUG:**
+The function works correctly for its actual use case in the codebase. It's an internal function that isn't misused anywhere. The bug report demonstrates a theoretical problem that doesn't manifest in practice. The function fulfills its documented purpose of lazy loading, and there's no evidence of actual problems caused by this implementation.
+
+## Overall Consideration
+After careful analysis, this appears to be a theoretical issue in an internal/private function that doesn't cause actual problems in the xarray codebase. The function is only called once, at line 305 of formatting_html.py, where the returned values are unpacked and used immediately for string formatting without any mutation. The function is marked as private (underscore prefix), indicating it's not part of the public API and shouldn't be called by external users.
+
+While the bug report correctly identifies a technical flaw (returning mutable objects from an lru_cached function), this is more of a code smell than an actual bug. The Python documentation notes that caching doesn't make sense for functions that need distinct mutable objects, but in this case, the function doesn't need distinct objects - it intentionally returns the same cached data for performance. The mutability is incidental and unused.
+
+Given that this is an internal implementation detail that works correctly for its intended use, causes no actual problems, and isn't part of the public API, this should be classified as WONTFIX. While the suggested fix (using tuple instead of list) would be technically cleaner, fixing theoretical issues in working internal code that has no practical impact is typically considered low priority or unnecessary maintenance. The bar for bugs should be actual incorrect behavior, not just suboptimal patterns in internal code that works correctly.

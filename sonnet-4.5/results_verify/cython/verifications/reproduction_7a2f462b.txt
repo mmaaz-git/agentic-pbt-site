@@ -1,0 +1,41 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is valid. The `normalise_float_repr()` function in Cython.Utils produces invalid float string representations for negative numbers in scientific notation with negative exponents.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Reproduction**
+   - Ran the provided Hypothesis test that checks if `float(input) == float(normalise_float_repr(input))`
+   - Test failed on first example: `-1.8769048497751e-179`
+   - The function returned an invalid float string that cannot be parsed back to a float
+
+2. **Specific Example Reproduction**
+   - Input: `-7.941487302529372e-299`
+   - Output: `.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-7941487302529372`
+   - Result: `ValueError: could not convert string to float`
+   - The minus sign appears incorrectly in the middle of the string after all the zeros
+
+3. **Additional Test Cases**
+   Tested various negative numbers to understand the pattern:
+   - `-1.0` → `-1.` (works correctly)
+   - `-0.5` → `-0.5` (works correctly)
+   - `-1e-10` → `.00000000-1` (FAILS - invalid float)
+   - `-1e10` → `-10000000000.` (works correctly)
+   - `-123.456` → `-123.456` (works correctly)
+
+   The bug only affects negative numbers in scientific notation with negative exponents.
+
+### Root Cause Analysis
+
+Traced through the code logic with `-1e-10`:
+1. `float_str.lower().lstrip('0')` returns `-1e-10` (unchanged because no leading zeros)
+2. After splitting on 'e': `str_value = '-1'`, `exp = -10`
+3. The function incorrectly calculates `num_int_digits = 2` (counting the minus sign as a digit)
+4. This leads to `exp = -10 + 2 = -8`
+5. The result construction puts the minus sign in the wrong position: `.00000000-1`
+
+The fundamental issue is that the function doesn't properly handle the negative sign when processing the mantissa. It treats `-1` as having 2 characters instead of recognizing it as a negative number with 1 digit.
+
+### Impact
+This bug causes the function to generate invalid float representations that cannot be parsed back to floats, breaking the fundamental invariant that the normalized representation should still be a valid float string.

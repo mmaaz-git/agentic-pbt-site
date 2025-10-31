@@ -1,0 +1,40 @@
+Bug Reproduction Report
+=======================
+
+REPRODUCTION SUCCESS: The bug is confirmed and reproducible.
+
+Test Environment:
+- Pandas version: 2.3.2
+- Python version: 3.13
+
+Bug Description:
+When reading CSV data with dtype='int32', values that exceed int32 range (-2147483648 to 2147483647) silently overflow/wraparound instead of raising an error.
+
+Reproduction Results:
+
+1. Main Bug Case:
+   - Input: 2147483648 (int32_max + 1)
+   - Expected: OverflowError or ValueError
+   - Actual: -2147483648 (wrapped to int32_min)
+   - Status: BUG CONFIRMED
+
+2. Edge Cases Tested:
+   - 2147483647 (int32_max) -> 2147483647 ✓ (correct)
+   - 2147483648 (int32_max+1) -> -2147483648 (wrapped)
+   - 2147483649 (int32_max+2) -> -2147483647 (wrapped)
+   - -2147483648 (int32_min) -> -2147483648 ✓ (correct)
+   - -2147483649 (int32_min-1) -> 2147483647 (wrapped)
+
+3. Hypothesis Property-Based Test:
+   The Hypothesis test revealed INCONSISTENT behavior:
+   - For extremely large values (e.g., 18446744073709551616), pandas DOES raise OverflowError
+   - For values just beyond int32 range (e.g., 2147483648), pandas silently wraps around
+   - This inconsistency suggests there are different code paths for different magnitude overflows
+
+4. Behavior Pattern:
+   - Values within int32 range: Parsed correctly
+   - Values slightly beyond int32 range: Silent wraparound (BUG)
+   - Values far beyond int64 range: OverflowError raised (correct)
+
+Conclusion:
+The bug is real and reproducible. There is a gap in overflow detection for values that exceed int32 range but are still within int64 range. These values silently wraparound instead of raising an error, causing data corruption.

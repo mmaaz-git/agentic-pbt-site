@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation acknowledges that round-off errors can occur in eigenvalue computations, and the test uses matrices with extremely small values (1.52474291e-300) that are essentially at the limits of floating point representation. One could argue that using denormalized numbers or values approaching the smallest representable float is outside the reasonable use case for the function, and that users should not expect correct behavior with such pathological inputs.
+
+**Why it might not be INVALID:**
+The eigenvalue equation A @ v = λ * v is a fundamental mathematical property that should be satisfied by any eigenvalue/eigenvector pair. An error of magnitude 1.0 is not a "round-off error" - it's a complete failure to satisfy the defining equation. The documentation explicitly states this equation should be satisfied without qualifying that it only applies to "reasonable" input values.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs with extremely small values like 1e-300 that are far beyond typical use cases. These denormalized numbers are at the edge of floating point representation and handling them correctly might require significant changes to the underlying LAPACK routines. The maintainers might consider this an edge case not worth the engineering effort, especially since matrices with exact zeros work correctly.
+
+**Why it might not be WONTFIX:**
+The error magnitude is 1.0, which is catastrophic - this isn't a minor numerical precision issue. If the function cannot handle certain inputs correctly, it should at least raise an error or warning rather than silently returning incorrect results. The fact that exact zeros work but tiny non-zeros fail suggests an implementation bug rather than a fundamental limitation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that the function may not work correctly with denormalized numbers or values smaller than machine epsilon. It could warn users that matrices with values spanning many orders of magnitude may produce unreliable results and suggest using alternative methods like SVD or the symmetric eigenvalue solver for better numerical stability.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is not just imprecise - it's mathematically incorrect by a factor of infinity (dividing the actual error by the expected error of ~0). Simply documenting that "the function returns wrong answers for some inputs" doesn't fix the underlying problem that the function violates its mathematical contract.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as a request for better handling of denormalized numbers or ill-conditioned matrices. The feature request would be to add special case handling for matrices with extremely small values, perhaps by using higher precision arithmetic or different algorithms for such cases.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to compute eigenvalues and eigenvectors - it's not asking for new functionality but for the existing functionality to work correctly. The eigenvalue equation is the definition of what eigenvalues and eigenvectors are, so satisfying it is not a "feature" but a core requirement.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns results that violate the fundamental eigenvalue equation by a magnitude of 1.0. This is not a small numerical error but a complete failure of the algorithm. The inconsistency between how the algorithm treats small values (as zero for eigenvalue computation but non-zero for matrix multiplication) is clearly a bug in the implementation. The documentation makes no exception for small values and states the equation should be satisfied.
+
+**Why it might not be BUG:**
+Numerical algorithms often have limitations with extreme values, and 1e-300 is an extremely denormalized number. The infinite condition number of the test matrix indicates it's severely ill-conditioned. One could argue this falls under expected limitations of floating point arithmetic and LAPACK routines.
+
+## Overall Consideration
+
+This is a challenging case that sits at the intersection of numerical analysis limitations and correctness guarantees. The key factors to consider are:
+
+First, the magnitude of the error (1.0) is not a small numerical precision issue - it represents a complete failure to satisfy the defining equation of eigenvectors. When A @ v = [0, 1] but λ * v = [0, 0], the eigenvector is objectively wrong, not just imprecise. This is fundamentally different from typical floating-point rounding errors.
+
+Second, the root cause appears to be an inconsistency in how the algorithm handles very small values - treating them as zero for eigenvalue computation but as non-zero for matrix operations. This inconsistency is more suggestive of an implementation bug than a fundamental limitation. The fact that matrices with exact zeros work correctly while those with 1e-300 fail supports this interpretation.
+
+Third, while 1e-300 is indeed an extreme value, it is still a valid floating-point number that Python and NumPy handle in other contexts. The function accepts this input without error and returns a result, implying it should work correctly. If such values are unsupported, the function should detect and report this rather than silently returning incorrect results. The lack of any warning or error handling for this case could itself be considered a bug.
+
+Given that: (1) the error is catastrophic rather than minor, (2) the issue stems from inconsistent handling rather than fundamental limits, (3) the function silently returns incorrect results without warning, and (4) the documentation makes no exceptions for such cases, this appears to be a legitimate bug rather than an expected limitation or documentation issue.

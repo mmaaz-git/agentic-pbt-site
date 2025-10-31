@@ -1,0 +1,55 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is CONFIRMED. Both `get_swagger_ui_html` and `get_redoc_html` functions in FastAPI's `openapi.docs` module have XSS vulnerabilities due to lack of HTML escaping on user-controlled input parameters.
+
+### Reproduction Steps Taken
+
+1. **Hypothesis Test Execution**
+   - Ran the provided hypothesis test with 500 examples
+   - Test immediately failed with input `title='<'`
+   - The test correctly identifies that angle brackets are not escaped in the output HTML
+
+2. **Manual Reproduction Tests**
+   All four vulnerability vectors were confirmed:
+
+   a) **Swagger UI title XSS**:
+      - Input: `<script>alert("XSS")</script>`
+      - Result: Raw script tag appears in HTML `<title>` element
+      - Location: Line 123 of docs.py
+
+   b) **Swagger UI openapi_url XSS**:
+      - Input: `"><script>alert("XSS")</script>`
+      - Result: Script injection in JavaScript context `url: '...'`
+      - Location: Line 132 of docs.py
+
+   c) **ReDoc title XSS**:
+      - Input: `<script>alert("XSS")</script>`
+      - Result: Raw script tag appears in HTML `<title>` element
+      - Location: Line 223 of docs.py
+
+   d) **ReDoc openapi_url XSS**:
+      - Input: `"><script>alert("XSS")</script>`
+      - Result: Script injection in HTML attribute `spec-url="..."`
+      - Location: Line 248 of docs.py
+
+3. **Simple Angle Bracket Test**
+   - Input: `Test < and > Characters`
+   - Result: Raw angle brackets preserved in output
+   - This confirms no HTML escaping is performed at all
+
+### Code Analysis
+The vulnerable code uses Python f-strings to directly interpolate user input into HTML:
+- `<title>{title}</title>` - No escaping
+- `url: '{openapi_url}'` - No escaping in JavaScript context
+- `<redoc spec-url="{openapi_url}"></redoc>` - No escaping in HTML attribute
+
+### Impact Assessment
+- **Severity**: High (XSS vulnerability)
+- **Attack Surface**: Any FastAPI application that allows user control over:
+  - Documentation page titles (through configuration, environment variables, or admin panels)
+  - OpenAPI URL paths (less common but possible in multi-tenant scenarios)
+- **Real-world Usage**: FastAPI's own usage in `applications.py` shows these functions are called with `self.title` which comes from application configuration
+
+### Verification
+The bug is 100% reproducible and the proof of concept code demonstrates actual XSS injection that would execute in a browser context.

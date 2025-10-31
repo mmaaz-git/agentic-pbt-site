@@ -1,0 +1,48 @@
+## Bug Reproduction Results
+
+### Test Execution
+I successfully reproduced the bug using both the specific test case and the hypothesis property-based test provided in the bug report.
+
+### Specific Test Case Results
+With the provided test case (hourly timestamps from 2000-01-01 00:00:00 to 2000-01-02 00:00:00, rule='D', closed='right', label='right'):
+- **Actual output**: bin_divs has 3 elements, out_divs has 2 elements
+- **Expected**: Both should have the same length
+- **Result**: CONFIRMED - The bug exists as reported
+
+### Hypothesis Test Results
+Running 50 property-based test examples:
+- **Failure rate**: 11 out of 50 examples failed
+- **Failure pattern**: ALL failures occurred only with closed='right' and label='right'
+- **Other combinations**: closed='left'/label='left', closed='left'/label='right', and closed='right'/label='left' all passed
+
+### Root Cause Analysis
+Through step-by-step debugging, I identified the exact issue in lines 92-101:
+
+1. When `newdivs[-1] < divisions[-1]` and `len(newdivs) < len(divs)`:
+   - The code always appends to `newdivs`
+   - But only conditionally appends to `outdivs` based on comparison with `divisions[-1]`
+
+2. In the failing case:
+   - `newdivs` gets appended with `divisions[-1] + res`
+   - `outdivs` is NOT appended because `outdivs[-1] == divisions[-1]`
+   - This creates the length mismatch
+
+### Usage Impact
+The mismatched lengths cause problems in `ResampleAggregation._lower()` (lines 162-164):
+- It creates `BlockwiseDep(output_divisions[:-1])` and `BlockwiseDep(output_divisions[1:])`
+- With mismatched lengths, these create inconsistent partition boundaries
+- The `_divisions()` method expects both tuples to work together
+
+### Technical Correctness
+The bug is technically valid:
+1. The function returns two tuples that are meant to represent related division boundaries
+2. The usage in `ResampleAggregation` clearly expects them to have compatible structures
+3. The mismatch only occurs with specific parameter combinations (closed='right', label='right')
+4. The bug is deterministic and reproducible
+
+### Conclusion
+The bug report is accurate and the reproduction confirms:
+- The function does return mismatched lengths for bin_divs and out_divs
+- This only happens with closed='right' and label='right' parameters
+- The root cause is correctly identified in the conditional logic
+- The impact on downstream code is real and could cause partition boundary issues

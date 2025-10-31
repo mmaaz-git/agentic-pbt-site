@@ -1,0 +1,49 @@
+BUG REPRODUCTION RESULTS
+========================
+
+Test Setup:
+- Used exact code from bug report
+- scipy.sparse.linalg.expm_multiply with n=3 sparse matrix
+- Test value: stop=5e-324 (smallest positive subnormal float)
+
+Reproduction Results:
+
+1. CONFIRMED: ZeroDivisionError occurs exactly as reported
+   - Error message: "integer modulo by zero"
+   - Location: Line 719 in _expm_multiply.py
+   - Code: elif not (q % s):
+   - The error occurs when s=0 and modulo operation fails
+
+2. Test with 5e-324 (smallest subnormal float):
+   - CRASHES with ZeroDivisionError
+   - This is a valid positive float value in Python
+   - np.ceil(5e-324) = 1.0, but when norm is near zero, s can become 0
+
+3. Test with 1e-300 (very small but normalized):
+   - WORKS correctly, returns result
+   - No error occurs
+
+4. Test with 0.1 (normal value):
+   - WORKS correctly, returns expected result
+
+Technical Analysis:
+
+The bug occurs in the internal scaling logic:
+1. When stop time is extremely small (5e-324), the matrix norm calculations can produce values near zero
+2. In _fragment_3_1 function Path 1 (line 544-547):
+   - s = int(np.ceil(norm_info.onenorm() / theta))
+   - If norm is very small/zero, this produces s=0
+3. Path 2 has protection: s = max(s, 1) at line 557
+4. Path 1 lacks this protection, allowing s=0
+5. Later at line 719, code does (q % s) causing ZeroDivisionError when s=0
+
+Mathematical Context:
+- 5e-324 is Python's smallest positive subnormal float
+- For matrix exponential e^(tA) with t approaching 0, result should approach identity
+- The algorithm should handle this gracefully, not crash
+
+Property Test Verification:
+The semigroup property test also crashes with same error, confirming the issue is real and affects mathematical properties that should hold.
+
+Conclusion:
+The bug is 100% reproducible with the exact error and stack trace claimed in the report. The issue is a missing safeguard in the code path that allows a scaling factor to be zero, leading to division by zero in modulo operation.

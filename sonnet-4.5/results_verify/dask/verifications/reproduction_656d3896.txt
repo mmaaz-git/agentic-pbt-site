@@ -1,0 +1,41 @@
+BUG REPRODUCTION REPORT
+
+Test Case from Bug Report:
+- Input: divisions=(Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 01:00:00')),
+         rule='D', closed='left', label='left'
+- Expected: outdivs should be monotonically increasing
+- Actual Result: outdivs = (Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 00:00:00'))
+- Result: DUPLICATE VALUES - NOT monotonically increasing
+
+Bug Confirmed: YES
+
+Detailed Analysis:
+1. The function returns outdivs with two identical timestamps
+2. outdivs[0] == outdivs[1] == Timestamp('2000-01-01 00:00:00')
+3. This violates the monotonic increasing requirement (should be strictly <, not <=)
+
+Root Cause Analysis:
+The bug occurs in the adjustment logic (lines 92-101):
+1. When len(newdivs) < len(divs), a setter using append is created
+2. For outdivs, when outdivs[-1] < divisions[-1], the code appends temp.index[-1]
+3. In this case, temp has only one element, so temp.index[-1] equals outdivs[-1]
+4. This causes the same value to be appended, creating a duplicate
+
+Hypothesis Test Results:
+- Ran property-based testing with 100 examples
+- Found multiple failures with the same pattern
+- All failures show duplicate timestamps in outdivs
+- Pattern consistent: happens when resampling from fine to coarse granularity
+
+Additional Test Cases Found:
+- Any case where input has 2 hourly timestamps being resampled to daily
+- Similar issues with other frequency combinations (e.g., minutes to hours)
+
+Impact Assessment:
+- This bug affects core Dask functionality for time series resampling
+- Violates fundamental Dask invariant that divisions must be strictly increasing
+- Could cause downstream errors in partition-based operations
+- Could lead to incorrect data selection/filtering based on time ranges
+
+Verification:
+The bug is 100% reproducible with the provided test case and occurs consistently across similar input patterns.

@@ -1,0 +1,61 @@
+BUG REPRODUCTION RESULTS
+========================
+
+SUMMARY:
+--------
+The bug report is CONFIRMED. numpy.strings.replace does NOT match Python's str.replace behavior
+when replacing empty strings in short strings (length < 3).
+
+REPRODUCTION TEST RESULTS:
+--------------------------
+
+1. BASIC TEST CASE (empty string, replacement '00'):
+   - Python: ''.replace('', '00') = '00'
+   - NumPy:  nps.replace([''], '', '00') = '0'
+   - MISMATCH: NumPy truncates the result
+
+2. COMPREHENSIVE TEST RESULTS:
+   Input ''    + replacement 'ab'   : Python='ab'           NumPy='a'        ✗
+   Input ''    + replacement 'abc'  : Python='abc'          NumPy='a'        ✗
+   Input 'a'   + replacement 'xyz'  : Python='xyzaxyz'      NumPy='xax'      ✗
+   Input 'ab'  + replacement 'xyz'  : Python='xyzaxyzbxyz'  NumPy='xyaxybxy' ✗
+   Input 'abc' + replacement 'XYZ'  : Python='XYZaXYZbXYZcXYZ' NumPy='XYZaXYZbXYZcXYZ' ✓
+   Input 'hello' + replacement 'XYZ': Both produce 'XYZhXYZeXYZlXYZlXYZoXYZ' ✓
+
+3. PATTERN ANALYSIS:
+   The bug affects strings with length < 3:
+   - Length 0: Always truncated
+   - Length 1: Truncated when replacement length > 1
+   - Length 2: Truncated when replacement length > 2
+   - Length 3+: Works correctly
+
+4. OUTPUT LENGTH ANALYSIS:
+   For input string length n and replacement r:
+   - Expected (Python): (n + 1) * len(r) characters
+   - NumPy actual for n < 3: Appears to cap at approximately n + len(r) characters
+
+   Examples with empty input '':
+   - Replacement 'X' (1 char):     Python=1, NumPy=1  ✓
+   - Replacement 'XX' (2 chars):   Python=2, NumPy=1  ✗
+   - Replacement 'XXX' (3 chars):  Python=3, NumPy=1  ✗
+   - Replacement 'XXXXX' (5 chars): Python=5, NumPy=1  ✗
+
+5. HYPOTHESIS TEST:
+   The Hypothesis property-based test immediately found a counterexample:
+   input='', replacement='00' produces different results.
+   This confirms the bug is easily reproducible and affects common cases.
+
+TECHNICAL DETAILS:
+------------------
+- The bug is deterministic and reproducible
+- It specifically affects the empty string pattern replacement
+- The truncation suggests a buffer allocation issue in NumPy's C implementation
+- The threshold at string length 3 suggests hardcoded logic or optimization that fails for short strings
+
+IMPACT ASSESSMENT:
+------------------
+This is a real discrepancy between NumPy and Python behavior. Code expecting NumPy to match
+Python's string semantics will get incorrect results when:
+1. Replacing empty strings
+2. Working with short input strings (common in data processing)
+3. Using replacements longer than the input string

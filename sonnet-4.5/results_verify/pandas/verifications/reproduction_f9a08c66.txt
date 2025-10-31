@@ -1,0 +1,49 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported against `pandas.core.dtypes.common.ensure_python_int`.
+
+### Bug Confirmation
+
+1. **Hypothesis Test Reproduction**:
+   - The Hypothesis test from the bug report fails as expected
+   - When run with floats that equal their integer conversion (e.g., 0.0, 42.0, 5.0), the function accepts them despite the type signature declaring `value: int | np.integer`
+   - The test correctly identifies that floats are being accepted when they shouldn't be according to the type signature
+
+2. **Manual Test Reproduction**:
+   - Confirmed that `ensure_python_int(42.0)` returns `42` (as an int)
+   - The input type is `<class 'float'>`
+   - The function successfully converts whole-number floats to integers
+   - Non-integer floats (e.g., 42.5) correctly raise a TypeError
+
+### Source Code Analysis
+
+From examining `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/dtypes/common.py`:
+
+1. **Type Signature** (line 93): `def ensure_python_int(value: int | np.integer) -> int:`
+   - Explicitly declares it accepts only `int` or `np.integer` types
+   - Does NOT include `float` in the type union
+
+2. **Implementation** (line 109): `if not (is_integer(value) or is_float(value)):`
+   - Explicitly checks for BOTH integer AND float types
+   - This directly contradicts the type signature
+
+3. **Behavior verification**:
+   - `is_integer(5.0)` returns False (floats are not considered integers)
+   - `is_float(5.0)` returns True (recognizes float type)
+   - The function then attempts `int(value)` conversion and checks `new_value == value`
+   - For whole-number floats (42.0), this conversion succeeds
+
+### Impact
+
+The bug creates a clear mismatch between:
+- What the type signature promises (int | np.integer only)
+- What the docstring hints at ("if the value isn't an int or can't be converted to one")
+- What the implementation actually does (accepts floats that can be cleanly converted)
+
+This would cause issues for:
+- Type checkers (mypy, pyright) that would reject valid runtime calls
+- IDE auto-completion and type hints
+- Developer expectations based on the type signature
+- API consistency and documentation accuracy
+
+The bug report is accurate and reproducible.

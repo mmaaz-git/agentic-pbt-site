@@ -1,0 +1,46 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported for `pandas.core.arrays.sparse.SparseArray.map`.
+
+### Test Environment
+- Pandas version: 2.3.2
+- Python version: 3.13
+
+### Bug Reproduction
+
+The bug report is accurate. When running the provided test case:
+
+```python
+arr = SparseArray([0, 0, 1, 2], fill_value=0)
+mapped = arr.map(lambda x: 0 if x == 1 else x)
+```
+
+This raises a `ValueError: fill value in the sparse values not supported`
+
+The error occurs because:
+1. The array has sparse values [1, 2] with fill value 0
+2. The mapper tries to map the sparse value 1 → 0 (which is the fill value)
+3. The implementation (lines 1366-1368) explicitly checks if any mapped sparse value equals the fill value and raises an error
+
+### Confirmed Behavior
+
+The implementation contains this explicit check:
+```python
+if new_sp_val is fill_val or new_sp_val == fill_val:
+    msg = "fill value in the sparse values not supported"
+    raise ValueError(msg)
+```
+
+This prevents any mapping where a sparse value would be mapped to the fill value, even though such a mapping is semantically valid and would just require recalculating which indices are sparse.
+
+### Documentation Contradiction
+
+The docstring at line 1331 clearly states:
+"The output array will have the same density as the input."
+
+This statement is misleading because:
+1. It implies that density preservation is a guaranteed property
+2. It doesn't mention that certain mappings will raise errors
+3. The error message doesn't explain that it's related to density preservation
+
+The bug report correctly identifies this as a contract violation between the documented behavior and the actual implementation.

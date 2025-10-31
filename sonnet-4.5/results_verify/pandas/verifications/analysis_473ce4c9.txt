@@ -1,0 +1,87 @@
+BUG TRIAGE ANALYSIS
+===================
+
+I will analyze this bug report against each possible categorization:
+
+BUG (Valid Bug Report)
+----------------------
+Arguments FOR:
+- Data corruption occurs: Missing values (NaN) are silently converted to valid category values
+- Violates documented behavior: pandas.Categorical.from_codes explicitly documents -1 as NaN sentinel
+- Round-trip violation: Data changes when passed through interchange protocol
+- Silent failure with no warnings or errors
+- High severity: Affects all categorical data with missing values
+- Clear fix available: Remove modulo operation and let pandas handle sentinel values correctly
+- The comment acknowledges sentinel values exist but handles them incorrectly
+- Property-based test demonstrates the bug is systematic, not edge case
+- This is core functionality (data interchange) that should preserve data integrity
+
+Arguments AGAINST:
+- None. This is clearly incorrect behavior.
+
+INVALID
+-------
+Arguments FOR:
+- None. The bug is reproducible and violates documented behavior.
+
+Arguments AGAINST:
+- The test case is correct and matches pandas documentation
+- The -1 sentinel value convention is explicitly documented
+- The bug causes actual data corruption
+- The behavior is not ambiguous or undefined
+
+WONTFIX
+-------
+Arguments FOR:
+- None. This is not an obscure edge case.
+
+Arguments AGAINST:
+- This affects common use case (categorical data with missing values)
+- Data corruption is a serious issue that must be fixed
+- The bug is not about internal implementation details
+- Missing values in categorical data are extremely common in real datasets
+- The fix is straightforward and doesn't require major refactoring
+
+DOCUMENTATION_FIX
+-----------------
+Arguments FOR:
+- The from_dataframe() function lacks detailed documentation
+
+Arguments AGAINST:
+- The code behavior is wrong, not just the documentation
+- pandas.Categorical documentation is clear about -1 sentinel
+- Even without explicit documentation, data corruption is unacceptable
+- The interchange protocol's purpose is data preservation
+- Fixing documentation to say "corrupts missing values" would be absurd
+
+FEATURE_REQUEST
+---------------
+Arguments FOR:
+- None. Handling missing values correctly is not a new feature.
+
+Arguments AGAINST:
+- This is fixing broken existing functionality, not adding new features
+- The code already attempts to handle sentinel values (see comment)
+- Missing value support exists but is implemented incorrectly
+- Data preservation through interchange is core functionality
+
+DETAILED ANALYSIS
+----------------
+The core issue is that the modulo operation `codes % len(categories)` transforms the -1 sentinel value (representing NaN) into a valid category index. For example:
+- With 3 categories: -1 % 3 = 2 (points to third category)
+- With 5 categories: -1 % 5 = 4 (points to fifth category)
+
+This is fundamentally wrong because:
+1. It violates pandas' documented sentinel value convention
+2. It silently corrupts data without warning
+3. It breaks the fundamental property of data interchange (preservation)
+4. The comment shows awareness of sentinel values but implements wrong solution
+
+The correct approach is either:
+1. Let pandas.Categorical handle the codes directly (it knows -1 means NaN)
+2. Explicitly check for -1 and handle it as missing value
+3. Use the validity buffer properly to mark nulls
+
+CONCLUSION
+----------
+This is unequivocally a BUG. It causes silent data corruption by converting missing values to incorrect valid values, violating both documented pandas conventions and basic data integrity principles of interchange protocols. The bug affects common real-world use cases and has a clear, straightforward fix.

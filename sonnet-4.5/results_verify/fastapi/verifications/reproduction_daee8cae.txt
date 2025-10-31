@@ -1,0 +1,68 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug reported in the FastAPI security module. The issue is confirmed to exist in both `OAuth2PasswordRequestForm` and `SecurityScopes` classes.
+
+## Reproduction Steps
+
+### 1. Property-Based Test
+I ran the Hypothesis test provided in the bug report. The test fails with the exact input specified:
+- Input: `scope_list=['0\r']` (a scope with trailing carriage return)
+- Result: The carriage return gets stripped, resulting in `['0']`
+- The round-trip property is violated: the reconstructed string does not match the original
+
+### 2. Manual Reproduction Tests
+
+#### Test Case 1: Multiple Spaces
+- Input: `"read  write"` (two spaces between scopes)
+- Output: `"read write"` (single space)
+- The double space is normalized to single space, losing information
+
+#### Test Case 2: Tab Characters
+- Input: `"read\twrite"` (tab between scopes)
+- Output: `"read write"` (space between scopes)
+- Tab character is converted to space
+
+#### Test Case 3: Newline Characters
+- Input: `"read\nwrite"` (newline between scopes)
+- Output: `"read write"` (space between scopes)
+- Newline is converted to space
+
+#### Test Case 4: Carriage Return
+- Input: `"0\r"` (trailing carriage return)
+- Output: `"0"` (carriage return stripped)
+- Trailing whitespace is removed entirely
+
+#### Test Case 5: SecurityScopes with Whitespace
+- Input scopes: `['\r']` (just a carriage return)
+- Scope string created: `'\r'`
+- After split(): `[]` (empty list)
+- Complete data loss occurs
+
+## Root Cause Analysis
+
+The bug is caused by asymmetric operations in the code:
+
+1. **Line 147 in oauth2.py**: Uses `scope.split()` without arguments
+   - This splits on ALL whitespace characters (space, tab, newline, carriage return, etc.)
+   - Consecutive whitespace is collapsed into one separator
+   - Leading and trailing whitespace is removed
+
+2. **Line 653 in oauth2.py**: Uses `" ".join(self.scopes)`
+   - This joins with ONLY space characters
+   - Cannot reconstruct the original whitespace pattern
+
+## Impact
+
+1. **Data Loss**: Whitespace-only scopes or trailing whitespace are silently removed
+2. **Normalization**: Multiple spaces, tabs, newlines are collapsed/converted
+3. **Round-trip Violation**: Cannot reconstruct the original scope string
+4. **Silent Failure**: No error is raised, data is silently modified
+
+## Verification
+
+The bug affects both classes mentioned:
+- `OAuth2PasswordRequestForm.__init__` (line 147)
+- `SecurityScopes.__init__` (line 653 for join, relies on split elsewhere)
+
+The bug is 100% reproducible with the provided test cases.

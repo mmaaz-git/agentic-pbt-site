@@ -1,0 +1,41 @@
+## Documentation Analysis for normalize_axis_tuple
+
+### Official Documentation Review
+
+The documentation for `normalize_axis_tuple` is explicit and unambiguous about exception handling:
+
+1. **Docstring states**:
+   - "Raises AxisError If any axis provided is out of range"
+   - No mention of OverflowError as a possible exception
+
+2. **NumPy online documentation** (numpy.org/doc/stable):
+   - Confirms that AxisError should be raised when any axis is out of valid range
+   - Does not document OverflowError as an expected exception
+
+3. **AxisError documentation**:
+   - Clearly states: "This is raised whenever an axis parameter is specified that is larger than the number of array dimensions"
+   - AxisError is specifically designed to handle invalid axis values
+   - Subclasses both ValueError and IndexError for backward compatibility
+
+### Analysis of Documentation Intent
+
+The documentation clearly intends that:
+1. ALL invalid axis values should raise AxisError
+2. "Out of range" means any axis value that cannot be valid for the given ndim
+3. There is no distinction made between "too large to fit in array dimensions" vs "too large to fit in C int"
+
+### Root Cause Investigation
+
+The bug stems from:
+- `normalize_axis_tuple` internally calls `normalize_axis_index`
+- `normalize_axis_index` is likely a C-implemented function that converts Python ints to C ints
+- When Python integers exceed C int range (±2^31), the conversion fails with OverflowError
+- This OverflowError propagates up uncaught, violating the documented contract
+
+### Documentation Completeness
+
+The documentation is complete and correct in its intent. It promises that ANY out-of-range axis will raise AxisError. The fact that extremely large values raise OverflowError instead is a violation of this documented behavior, not a documentation deficiency.
+
+### Conclusion
+
+This is a clear violation of the documented API contract. The documentation promises AxisError for all out-of-range axes, but the implementation fails to deliver this promise for values outside the C int range. The fix proposed in the bug report (catching OverflowError and re-raising as AxisError) is the correct approach to honor the documented behavior.

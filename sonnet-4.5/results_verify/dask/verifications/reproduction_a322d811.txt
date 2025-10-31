@@ -1,0 +1,62 @@
+REPRODUCTION REPORT - dask.utils.key_split Bug
+==============================================
+
+I have successfully reproduced the bug described in the report. The function indeed raises exceptions in cases where the bug report claims it should return "Other".
+
+## Test Results
+
+### Basic Reproduction Test
+I ran the exact test cases provided in the bug report:
+
+1. **Invalid UTF-8 bytes (b'\x80')**:
+   - Expected: Should return "Other"
+   - Actual: Raises UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+
+2. **Unhashable type (empty list [])**:
+   - Expected: Should return "Other"
+   - Actual: Raises TypeError: unhashable type: 'list'
+
+3. **Unhashable type (empty dict {})**:
+   - Expected: Should return "Other"
+   - Actual: Raises TypeError: unhashable type: 'dict'
+
+4. **None input**:
+   - Result: Correctly returns "Other"
+
+5. **Valid inputs**:
+   - key_split('x') correctly returns 'x'
+   - key_split(b'hello') correctly returns 'hello'
+   - key_split(('test',)) correctly returns 'test'
+
+### Hypothesis Property-Based Test
+The hypothesis test confirmed the issue systematically. Out of 100 generated test cases:
+- Multiple failures for dictionaries (unhashable type)
+- Multiple failures for lists (unhashable type)
+- Multiple failures for binary strings with invalid UTF-8 sequences
+- Valid inputs (strings, tuples with strings, None, valid UTF-8 bytes) worked correctly
+
+## Source Code Analysis
+
+I examined the actual source code at `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/utils.py` lines 1947-2002.
+
+The function structure is:
+1. Line 1947: `@functools.lru_cache(100000)` decorator
+2. Lines 1978-1979: Bytes handling `if type(s) is bytes: return key_split(s.decode())`
+3. Lines 1980-1981: Tuple handling `if type(s) is tuple: return key_split(s[0])`
+4. Lines 1982-2001: Try-except block that catches Exception and returns "Other"
+
+## Root Cause Analysis
+
+The bug report is correct. There are two distinct issues:
+
+1. **Invalid UTF-8 bytes**: The bytes handling at lines 1978-1979 calls `s.decode()` OUTSIDE the try-except block. When invalid UTF-8 bytes are passed (like b'\x80'), this raises UnicodeDecodeError before the exception handler can catch it.
+
+2. **Unhashable types**: The `@functools.lru_cache` decorator requires hashable inputs. When unhashable types like lists or dictionaries are passed, the decorator raises TypeError before the function body even executes, so the try-except block never gets a chance to handle it.
+
+## Conclusion
+
+The bug is reproducible and valid. The function has exception handling that intends to return "Other" for problematic inputs, but this exception handling is bypassed in two specific cases due to:
+1. Bytes decoding happening before the try-except block
+2. The lru_cache decorator requiring hashable inputs before function execution
+
+This contradicts the apparent design intention of the function, which includes exception handling specifically to return "Other" for any exceptional cases.

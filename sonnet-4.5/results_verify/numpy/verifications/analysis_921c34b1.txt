@@ -1,0 +1,88 @@
+# Bug Report Analysis and Categorization
+
+## Evaluating Each Possible Category
+
+### 1. BUG (Valid Bug)
+**Arguments FOR classifying as BUG:**
+- The user explicitly created arrays with mask=[], indicating they want array-type masks
+- The concatenate function CONVERTS these array masks to nomask (scalar), changing the representation
+- This breaks the principle of least surprise - users who provide array masks expect array masks back
+- The inconsistency causes real errors: code that works with non-empty concatenations fails with empty ones
+- The behavior is internally inconsistent: concatenating two non-empty arrays preserves array masks, but adding any empty array converts to nomask
+
+**Arguments AGAINST:**
+- The documentation explicitly allows both nomask and array representations
+- nomask is a documented optimization for unmasked data
+- The conversion to nomask could be considered a valid optimization
+
+### 2. INVALID (Incorrect Report)
+**Arguments FOR classifying as INVALID:**
+- The documentation explicitly states nomask (scalar False) is a valid mask representation
+- The bug report incorrectly assumes masks must ALWAYS be arrays
+- nomask is a documented feature, not a bug
+- The function is working within its documented behavior
+
+**Arguments AGAINST:**
+- The user explicitly provided array-type masks, which were converted without request
+- The behavior is surprising and breaks user code
+- There's no documentation saying concatenate will convert mask types
+
+### 3. WONTFIX (Trivial/Unimportant)
+**Arguments FOR classifying as WONTFIX:**
+- This is an edge case with empty arrays
+- Users can work around it by checking if mask is nomask
+- The optimization (using nomask) provides performance benefits
+
+**Arguments AGAINST:**
+- This is not obscure - empty arrays are common in data processing
+- The workaround requires users to handle two different mask types everywhere
+- The bug affects non-empty results too (when any input is empty)
+
+### 4. FEATURE_REQUEST (New Functionality)
+**Arguments FOR classifying as FEATURE_REQUEST:**
+- Requesting concatenate to preserve mask representation type is a new feature
+- The current behavior is not explicitly wrong, just different than expected
+- Adding a parameter to control mask type preservation would be a feature
+
+**Arguments AGAINST:**
+- This is about fixing inconsistent behavior, not adding new functionality
+- The user isn't asking for new features, just consistent behavior
+
+### 5. DOCUMENTATION_FIX
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+- The documentation doesn't explain when concatenate converts masks to nomask
+- Users need to know that mixing empty arrays changes mask representation
+- The behavior is technically correct but poorly documented
+
+**Arguments AGAINST:**
+- The actual behavior seems inconsistent and surprising
+- Documentation alone won't fix the breaking code issue
+
+## Analysis Summary
+
+The core issue is that numpy.ma.concatenate has an UNDOCUMENTED behavior where it converts array-type masks to nomask when:
+1. All inputs have no masked values AND
+2. At least one input is empty OR all inputs are unmasked
+
+This creates several problems:
+1. **Surprise Factor**: Users who explicitly create array masks get scalars back
+2. **Inconsistency**: The same operation (concatenating unmasked arrays) gives different mask types depending on whether arrays are empty
+3. **Breaking Code**: Code that assumes masks are arrays (a reasonable assumption when you created array masks) breaks
+
+The behavior appears to be an overzealous optimization that converts to nomask even when users explicitly chose array representation.
+
+## Recommendation
+
+This should be classified as **BUG** because:
+
+1. The behavior violates the principle of least surprise
+2. It's internally inconsistent (empty vs non-empty behave differently for the same logical operation)
+3. When users explicitly provide array-type masks, they should get array-type masks back
+4. The conversion happens silently and breaks user code
+5. While nomask is a valid optimization, it should be used when users don't specify masks, not when they explicitly provide array masks
+
+The fix would be to preserve the mask representation type when users explicitly provide it, only using nomask when:
+- No mask was specified by the user AND
+- The result has no masked values
+
+This maintains the optimization while respecting user intent.

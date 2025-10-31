@@ -1,0 +1,49 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that upsampling and downsampling must be symmetric operations, but the documentation does not specify this requirement. The functions could be designed to handle the inherent asymmetry in calendar frequencies. Converting from D (all days) to B (business days only) legitimately loses weekend information that cannot be recovered, making true bidirectional conversion impossible. The current implementation might intentionally prevent data loss by not allowing certain conversions.
+
+**Why it might not be INVALID:**
+The functions are clearly used for resampling operations in pandas, and the asymmetry creates inconsistent behavior. The code shows that `is_superperiod('C', 'D')` returns True, indicating C can upsample to D, which makes logical sense since custom business days are a subset of all days. The fact that the reverse operation is blocked seems arbitrary rather than based on data preservation logic.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+These functions appear to be internal utilities primarily used in plotting code, not prominently documented public APIs. The asymmetry only affects three specific frequency combinations (D/B/C) which might be edge cases. Users rarely need to explicitly call these functions, and the current behavior might not cause practical issues in real-world usage. The fix would require changing long-standing behavior that existing code might depend on.
+
+**Why it might not be WONTFIX:**
+The functions are exported in the module's `__all__` list, indicating they're intended as public APIs. The inconsistency affects fundamental day-level frequencies that are commonly used. The issue creates confusion about the relationship between different day frequencies and could lead to bugs in user code that relies on these functions for frequency conversion logic.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explain the asymmetric behavior or clarify that these functions don't form inverse pairs. Adding documentation to explain that B, C, and D frequencies have special conversion rules would help users understand the current behavior. The functions work as coded but need better explanation of their design decisions.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior appears to be a genuine logic error rather than a documentation issue. The code implementation shows clear asymmetry where `is_superperiod` allows D/B/C conversions but `is_subperiod` doesn't. Simply documenting this inconsistency wouldn't address the underlying logical problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report is essentially asking for new behavior - symmetric conversion between day-level frequencies. This could be viewed as an enhancement request to support bidirectional frequency conversion. The current implementation might never have been designed to be symmetric, and adding this capability would be a new feature.
+
+**Why it might not be FEATURE_REQUEST:**
+The report identifies inconsistent behavior in existing functionality rather than requesting something new. The functions already claim to test for upsampling/downsampling possibility, and the asymmetry violates the logical relationship between these operations. This is fixing broken logic, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation contains clear logical inconsistency where `is_superperiod('C', 'D')=True` but `is_subperiod('D', 'C')=False`. If C can upsample to D (going from sparse to dense), then D should be able to downsample to C (going from dense to sparse). The asymmetry violates the mathematical relationship between upsampling and downsampling operations. The code explicitly includes D, B, and C in the superperiod checks but excludes them in the subperiod checks, suggesting an implementation oversight.
+
+**Why it might not be BUG:**
+The functions never claimed to be symmetric in their documentation. The behavior might be intentional to prevent lossy conversions - you can always add data points (upsample) but shouldn't remove them (downsample) between different calendar systems. Business days and calendar days represent fundamentally different time concepts that might not be freely interconvertible.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a DOCUMENTATION_FIX rather than a bug. Here's why:
+
+First, the relationship between D (calendar days), B (business days), and C (custom business days) is inherently complex and not strictly hierarchical. While B and C are subsets of D in terms of which days they include, they represent different conceptual frameworks for time. Business days skip weekends, creating gaps that make round-trip conversion problematic. When you convert from D to B, you lose weekend data; converting back from B to D cannot recover that lost information.
+
+Second, the terms "upsampling" and "downsampling" in time series typically refer to frequency changes like hour-to-minute (upsampling) or day-to-week (downsampling), where there's a clear multiplicative relationship. The D/B/C relationships don't fit this pattern cleanly. The current implementation appears to take a conservative approach: it allows "upsampling" (B→D, C→D) because you can always place business day data onto a calendar day axis, but restricts "downsampling" (D→B, D→C) because not all calendar days map to business days.
+
+Third, while the asymmetry is technically inconsistent, it may reflect practical resampling constraints in pandas. The functions are used internally for plotting and resampling operations where these restrictions make sense. Allowing `is_subperiod('D', 'B')` to return True might incorrectly suggest that any daily data can be converted to business day frequency, when in reality, weekend data would be lost or need special handling.
+
+The real issue is that the documentation doesn't explain this design decision. The functions should document that D, B, and C have special conversion rules that don't follow the typical upsampling/downsampling symmetry due to the nature of business day calendars. This would help users understand why the apparent asymmetry exists and how to properly use these functions.

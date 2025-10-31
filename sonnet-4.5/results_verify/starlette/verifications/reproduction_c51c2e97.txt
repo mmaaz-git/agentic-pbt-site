@@ -1,0 +1,66 @@
+Bug Reproduction Report
+========================
+
+## Summary
+The bug report is technically correct. There is an inconsistency in how CORSMiddleware processes header names with whitespace.
+
+## Reproduction Results
+
+### Property-Based Test
+The hypothesis test failed as claimed when testing headers with whitespace:
+- Input: `[' ']` (single space) - Returns 400 instead of expected 200
+- Input: `['\xa0']` (non-breaking space) - Returns 400 instead of expected 200
+- Input: `[' X-Custom-Header ']` (spaces around header) - Returns 400 instead of expected 200
+
+### Manual Reproduction
+The manual test case provided in the bug report accurately reproduces the issue:
+- Allowed headers: `[' X-Custom-Header ']`
+- Requested headers: `" X-Custom-Header "`
+- Expected: Status 200
+- Actual: Status 400 with "Disallowed CORS headers" message
+
+## Root Cause Analysis
+
+The code has an inconsistency between initialization and validation:
+
+1. **During initialization (line 67):**
+   ```python
+   self.allow_headers = [h.lower() for h in allow_headers]
+   ```
+   Headers are lowercased but NOT stripped of whitespace.
+   Result: `' X-Custom-Header '` becomes `' x-custom-header '`
+
+2. **During validation (lines 128-129):**
+   ```python
+   for header in [h.lower() for h in requested_headers.split(",")]:
+       if header.strip() not in self.allow_headers:
+   ```
+   Headers are lowercased AND stripped before checking.
+   Checking: `'x-custom-header'` (stripped) against `[' x-custom-header ']` (not stripped)
+   Result: No match found, returns 400 error
+
+## Edge Cases Tested
+
+1. **No whitespace**: Works correctly (200)
+2. **Leading space only**: Fails (400)
+3. **Trailing space only**: Fails (400)
+4. **Both leading and trailing spaces**: Fails (400)
+5. **Tab characters**: Fails (400)
+6. **Non-breaking space**: Fails (400)
+7. **Multiple headers with mixed spacing**: Fails (400)
+
+## Important Note
+
+The test also revealed that spaces around commas in the Access-Control-Request-Headers value are handled correctly:
+- `"X-Header-1 , X-Header-2"` (with spaces) works fine
+- `"X-Header-1,X-Header-2"` (without spaces) also works fine
+
+The issue is specifically with whitespace in the header names themselves, not the comma-separated list formatting.
+
+## Conclusion
+
+The bug report accurately identifies a real inconsistency in the code. When a user configures `allow_headers` with header names containing whitespace, those headers will never match during preflight validation because:
+- They are stored with whitespace preserved (only lowercased)
+- They are compared after stripping whitespace
+
+This creates a situation where headers configured with whitespace can never be successfully validated, even when the exact same header (with whitespace) is requested.

@@ -1,0 +1,36 @@
+BUG REPRODUCTION RESULTS
+
+I successfully reproduced the bug as described in the report:
+
+1. **Main Test Case [' '] (single space):**
+   - Input: SecurityScopes(scopes=[' '])
+   - Result: scopes.scopes = [' ']
+   - Result: scopes.scope_str = ' '
+   - Result: scopes.scope_str.split() = []
+   - CONFIRMED: Round-trip fails ([' '] != [])
+
+2. **Additional Test Cases Found:**
+   - Empty string ['']: Round-trip fails ([''] != [])
+   - Newline ['\n']: Round-trip fails (['\n'] != [])
+   - Carriage return ['\r']: Fails differently - \r gets stripped by split()
+   - Tab character ['\t']: Round-trip fails (['\t'] != [])
+   - Form feed ['\x0c']: Round-trip fails
+   - Mixed valid/invalid ['read', ' ', 'write']: Returns ['read', 'write'] instead of original
+
+3. **Technical Accuracy of Bug Report:**
+   - The property-based test correctly identifies the issue
+   - The reproduction code works exactly as stated
+   - The output matches what the bug report claims
+   - The round-trip property IS violated for whitespace-only strings
+
+4. **Root Cause Analysis:**
+   - SecurityScopes accepts any list of strings without validation
+   - It joins them with spaces using " ".join(scopes)
+   - When split() is called on the result, whitespace-only strings disappear
+   - This breaks the expected round-trip property: split(join(x)) != x for certain inputs
+
+5. **Impact Assessment:**
+   - The bug occurs with edge cases that violate OAuth2 spec (whitespace isn't valid in scope names)
+   - Normal usage through OAuth2PasswordRequestForm wouldn't trigger this (it uses split() which filters whitespace)
+   - Only affects direct instantiation of SecurityScopes with invalid inputs
+   - The class is primarily meant to be used internally by FastAPI (per documentation)

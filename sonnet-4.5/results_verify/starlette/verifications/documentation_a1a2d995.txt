@@ -1,0 +1,32 @@
+DOCUMENTATION FINDINGS FOR STARLETTE CORS MIDDLEWARE
+
+1. STARLETTE DOCUMENTATION ON CORS MIDDLEWARE:
+   - The official Starlette documentation at https://www.starlette.io/middleware/#corsmiddleware describes the `allow_headers` parameter as:
+     "A list of HTTP request headers that should be supported for cross-origin requests."
+   - Default value is an empty list []
+   - Can use ['*'] to allow all headers
+   - The Accept, Accept-Language, Content-Language and Content-Type headers are always allowed
+   - NO MENTION of character encoding requirements or latin-1 restrictions
+
+2. HTTP SPECIFICATION (RFC 7230 Section 3.2):
+   - The HTTP specification states: "Historically, HTTP has allowed field content with text in the ISO-8859-1 charset"
+   - ISO-8859-1 is the same as latin-1 encoding
+   - The spec recommends: "Newly defined header fields SHOULD limit their field values to US-ASCII octets"
+   - Header field names must be tokens consisting of specific ASCII characters only
+   - The HTTP protocol fundamentally requires headers to be latin-1 encodable
+
+3. STARLETTE SOURCE CODE EXAMINATION:
+   - The CORSMiddleware.__init__ method (lines 16-73) accepts any string values for allow_headers
+   - No validation is performed on the character encoding of allow_headers
+   - The headers are stored directly into preflight_headers dictionary (line 60)
+   - When creating a Response, Starlette's Response.init_headers() method (in responses.py) explicitly encodes all headers as latin-1
+   - This is where the crash occurs - when the Response class tries to encode non-latin-1 characters
+
+4. DOCUMENTATION GAP:
+   - The Starlette documentation does not mention the latin-1 encoding requirement for allow_headers
+   - The documentation does not state that non-ASCII or non-latin-1 characters will cause errors
+   - There is no warning about Unicode characters beyond latin-1 being incompatible
+   - The parameter type is simply described as "A list of HTTP request headers" without encoding constraints
+
+CONCLUSION:
+The documentation lacks crucial information about the character encoding requirements for the allow_headers parameter. While the HTTP specification requires latin-1 encoding for headers, this constraint is not documented in Starlette's CORS middleware documentation, nor is it validated in the code.

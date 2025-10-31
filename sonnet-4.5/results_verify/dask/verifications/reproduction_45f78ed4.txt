@@ -1,0 +1,43 @@
+REPRODUCTION ANALYSIS FOR parse_bytes NEGATIVE VALUE BUG
+========================================================
+
+1. BUG CONFIRMATION:
+-------------------
+I have successfully reproduced the bug as described in the report. The parse_bytes function indeed accepts negative values and returns negative byte sizes.
+
+Test Results:
+- parse_bytes('-128MiB') returns -134217728 (Expected: should reject or return non-negative)
+- parse_bytes(-100) returns -100 (Expected: should reject or return non-negative)
+- parse_bytes('-5kB') returns -5000 (Expected: should reject or return non-negative)
+- parse_bytes('-1B') returns -1 (Expected: should reject or return non-negative)
+- parse_bytes('-1GB') returns -1000000000 (Expected: should reject or return non-negative)
+- parse_bytes(-1024) returns -1024 (Expected: should reject or return non-negative)
+
+The Hypothesis test correctly identifies the issue with the failing example: n=-1, unit='kB'
+
+2. CODE ANALYSIS:
+----------------
+Looking at the implementation in /home/npc/miniconda/lib/python3.13/site-packages/dask/utils.py (lines 1585-1639):
+
+The function:
+1. Accepts both numeric (int/float) and string inputs
+2. For numeric inputs, it simply returns int(s) without any validation (line 1615)
+3. For string inputs, it parses the numeric prefix and unit suffix
+4. Uses float(prefix) which accepts negative numbers (line 1629)
+5. Multiplies by the byte size multiplier (line 1638)
+6. Returns the result as an integer without checking if it's negative (line 1639)
+
+There is NO validation to ensure the result is non-negative.
+
+3. EFFECT OF THE BUG:
+--------------------
+The bug allows semantically incorrect values (negative byte sizes) to pass through the function. Since byte sizes represent amounts of data, negative values are meaningless and could cause issues in downstream code that assumes byte sizes are non-negative.
+
+The bug report correctly identifies that this could affect dask.bytes.read_bytes where parse_bytes is used to parse blocksize and sample parameters, potentially leading to incorrect behavior in block calculation logic.
+
+4. REPRODUCTION STATUS:
+----------------------
+✓ Bug successfully reproduced
+✓ Behavior matches the bug report description exactly
+✓ Both Hypothesis test and manual examples confirm the issue
+✓ Root cause identified: lack of validation for negative values

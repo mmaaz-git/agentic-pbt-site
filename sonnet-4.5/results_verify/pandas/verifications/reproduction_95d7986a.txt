@@ -1,0 +1,35 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the reported bug. Here are the key findings:
+
+### Test Results
+
+1. **Normal values work correctly**: Small datetime values (e.g., 100 seconds) convert properly to pandas datetime64 format.
+
+2. **NaN values are handled correctly**: The function properly converts NaN to NaT (Not-a-Time).
+
+3. **Large values cause exceptions**:
+   - Values like 1e16 seconds raise `OutOfBoundsDatetime` exception with message "cannot convert input 1e+16 with the unit 's'"
+   - Even larger values like 9.223372036854776e+18 raise `OverflowError` with message "Python int too large to convert to C long"
+
+4. **The hypothesis test fails consistently**: Running the property-based test with values between 1e16 and 1e18 consistently triggers OutOfBoundsDatetime or OverflowError exceptions.
+
+### Technical Details
+
+The function uses two different code paths:
+- For unit='s': Uses `cast_from_unit_vectorized` to convert seconds to milliseconds, then creates datetime64[ms]
+- For unit='d': Converts directly to numpy datetime64[D] then to datetime64[s]
+
+Both paths can fail with overflow errors when given very large values. The datetime64 type has limits:
+- For millisecond resolution: approximately year -292,275,055 to year 292,278,994
+- Values like 1e16 seconds (approximately 317 million years) exceed these limits
+
+### Verification
+
+The bug report accurately describes the behavior:
+1. The function does crash with OutOfBoundsDatetime or OverflowError on large values
+2. The provided test cases reproduce the exact errors mentioned
+3. The function handles NaN correctly but not out-of-range numeric values
+4. The inconsistency exists: NaN → NaT (handled), large values → Exception (crash)
+
+The technical description and reproduction code in the bug report are correct.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior described in the bug report is explicitly documented. The scipy.io.wavfile.read() documentation clearly states "Data is 1-D for 1-channel WAV, or 2-D of shape (Nsamples, Nchannels) otherwise." This is not undocumented behavior or a violation of any specification. The user's expectation of round-trip shape preservation is not promised anywhere in the documentation. The functions are working exactly as designed and documented.
+
+**Why it might not be INVALID:**
+While documented, the asymmetry between write() accepting (n, 1) arrays and read() returning (n,) arrays creates a genuine inconsistency that users might reasonably expect to work differently. The concept of round-trip preservation is a common expectation in I/O operations, even if not explicitly promised.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior has likely been in scipy for many years, and changing it would be a breaking change that could affect thousands of existing codebases that rely on getting 1-D arrays for single-channel audio. The workaround is trivial (reshape the array after reading if needed). The current behavior is also more memory efficient and aligns with how single-channel audio is typically processed in numpy/scipy workflows.
+
+**Why it might not be WONTFIX:**
+The issue causes real problems for users trying to write generic audio processing code that handles both mono and stereo consistently. The asymmetry is not just a minor inconvenience but can lead to subtle bugs in audio processing pipelines. The issue is not obscure - it affects a fundamental use case of these functions.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+While the current behavior is documented, the documentation could be clearer about the asymmetry and why round-trip operations don't preserve shape for single-channel audio. Adding a warning or note about this behavior would help users avoid confusion. The documentation could explicitly state that write() accepts both shapes but read() normalizes to 1-D for single-channel.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already clearly states the behavior: "Data is 1-D for 1-channel WAV". This is not ambiguous or unclear. Adding more warnings might make the documentation unnecessarily verbose for something that is already explicitly stated.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for new functionality - shape-preserving round-trip operations. This could be implemented as an optional parameter to read() like `preserve_shape=True` or `always_2d=True` that would return (n, 1) for single-channel audio. This would maintain backward compatibility while providing the desired behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+The user is reporting this as a bug, not requesting a new feature. They believe the current behavior is incorrect, not that they want additional functionality. The expectation of round-trip preservation is reasonable for I/O operations and shouldn't require special flags.
+
+## BUG Considerations
+**Why it might be BUG:**
+The asymmetry between write() and read() violates the principle of least surprise. Users reasonably expect that data written and then read back should maintain its structure. This inconsistency can cause real bugs in audio processing code, especially when trying to handle mono and stereo audio uniformly. The fact that multi-channel audio preserves shape but single-channel doesn't is inconsistent.
+
+**Why it might not be BUG:**
+The behavior is explicitly documented and has been this way for years. The documentation clearly states that single-channel audio returns as 1-D. This is a design decision, not a bug. The WAV format itself distinguishes between mono and multi-channel audio, and scipy's representation reflects this distinction. Many audio processing libraries treat mono audio as 1-D arrays by convention.
+
+## Overall Consideration
+
+Looking at all considerations, this issue sits at the intersection of documented behavior and user expectations. The key facts are: (1) The behavior is explicitly documented, (2) The behavior is consistent and predictable, and (3) Changing it would be a breaking change affecting existing code.
+
+The bug reporter makes a philosophical argument about round-trip preservation, but scipy never promises this property. The documentation is clear that single-channel audio returns as 1-D. While the asymmetry between write() and read() might be surprising, it reflects a deliberate design choice to represent single-channel audio in its most natural form (1-D array) while still accepting the more general 2-D representation for writing.
+
+Most importantly, this is exactly the kind of "bug" report that typically gets rejected - it's asking for the code to work differently than documented because of an unspecified expectation (round-trip shape preservation). The reporter even acknowledges in their own report that "the documentation states 'Data is 1-D for 1-channel WAV'" which confirms they know this is documented behavior. Given that 90% of bug reports from this user are invalid, and this one challenges explicitly documented behavior based on an undocumented expectation, this should be closed as INVALID.

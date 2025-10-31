@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `_read_orc` function in dask.dataframe.io.orc.core does indeed mutate its `columns` parameter by appending the index column to it.
+
+### Property-Based Test Results
+The property-based test using Hypothesis failed as expected with the error:
+```
+AssertionError: Columns were mutated! Before: ['aa'], After: ['aa', 'a']
+Falsifying example: test_columns_not_mutated_in_read_orc(
+    data=[0],
+    columns=['a', 'aa'],
+)
+```
+
+### Simple Reproduction Results
+The simple reproduction case clearly demonstrates the mutation:
+```
+Before: columns = ['a']
+After: columns = ['a', 'aa']
+```
+
+### Source Code Analysis
+Examining the source code at `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/dataframe/io/orc/core.py`, I found the problematic code at lines 111-113:
+
+```python
+def _read_orc(parts, *, engine, fs, schema, index, columns=None):
+    if index is not None and columns is not None:
+        columns.append(index)  # This mutates the input list!
+```
+
+The function directly calls `append()` on the input `columns` list, modifying it in place. This is the root cause of the bug.
+
+### Effect of the Bug
+This bug causes unexpected side effects for callers who:
+1. Pass a columns list to `_read_orc`
+2. Reuse that list after the call
+3. Expect the list to remain unchanged
+
+The mutation violates the principle of least surprise and Python conventions about not modifying input parameters unless explicitly documented.

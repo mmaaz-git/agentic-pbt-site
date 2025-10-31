@@ -1,0 +1,38 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the reported bug in numpy.ma.flatnotmasked_edges with empty arrays.
+
+### Hypothesis Test Reproduction
+The provided Hypothesis test fails as reported:
+- Input: `masked_array(data=[], mask=False, dtype=int64)` (empty array)
+- The test assertion fails because the result is `[0, -1]`, which violates the constraint that `result[1] >= result[0]`
+
+### Manual Test Reproduction
+Running the provided manual test case confirms the issue:
+- Input: `ma.array([], dtype=int)` (empty array)
+- Expected result: `None` (based on bug report's interpretation)
+- Actual result: `numpy.ndarray([0, -1])`
+
+The actual output shows:
+- Result is a numpy array, not None
+- First element: 0
+- Second element: -1
+- The second element is indeed negative and less than the first element
+
+### Source Code Verification
+Examining the source code at `/home/npc/miniconda/lib/python3.13/site-packages/numpy/ma/extras.py`, line 1995:
+```python
+if m is nomask or not np.any(m):
+    return np.array([0, a.size - 1])
+```
+
+When `a.size = 0` (empty array), this code returns `np.array([0, -1])` because:
+- An empty array has no mask (`m is nomask`)
+- The function returns `[0, a.size - 1]` = `[0, 0 - 1]` = `[0, -1]`
+
+### Effect of the Bug
+The function returns invalid indices `[0, -1]` for an empty array:
+- The index -1 is negative, which is typically used for reverse indexing but doesn't make sense as an "edge" index
+- The second index is less than the first index, violating the natural expectation that edges[1] >= edges[0]
+- These indices cannot be used to access elements in an empty array
+- The result is inconsistent with the conceptual meaning of "edges" of unmasked values

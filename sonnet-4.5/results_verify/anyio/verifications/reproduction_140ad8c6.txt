@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed and occurs exactly as described.
+
+### Test Results
+
+1. **Property-based test execution**: The Hypothesis test fails as expected, confirming that when an invalid file descriptor (e.g., 100, 99999) is passed to `_validate_socket()` with `require_connected=True`, it raises `ValueError("the socket must be connected")` instead of a more accurate error message.
+
+2. **Simple reproduction case**:
+   - When calling `_validate_socket(99999, socket.SOCK_STREAM, require_connected=True)`, it raises `ValueError: the socket must be connected`
+   - When calling `_validate_socket(99999, socket.SOCK_STREAM, require_bound=True)`, it raises `ValueError: the socket must be bound to a local address`
+   - When directly creating a socket with `socket.socket(fileno=99999)`, it raises `OSError: [Errno 9] Bad file descriptor`
+
+### The Problem
+
+The bug occurs in lines 47-57 of `/home/npc/pbt/agentic-pbt/envs/anyio_env/lib/python3.13/site-packages/anyio/abc/_sockets.py`:
+
+```python
+try:
+    sock = socket.socket(fileno=sock_or_fd)
+except OSError as exc:
+    if exc.errno == errno.ENOTSOCK:
+        raise ValueError("the file descriptor does not refer to a socket") from exc
+    elif require_connected:
+        raise ValueError("the socket must be connected") from exc
+    elif require_bound:
+        raise ValueError("the socket must be bound to a local address") from exc
+    else:
+        raise
+```
+
+When `socket.socket(fileno=invalid_fd)` fails with `OSError(errno=9, "Bad file descriptor")`, the code doesn't check for `errno.EBADF`. Instead:
+- If `require_connected=True`, it misleadingly reports "the socket must be connected"
+- If `require_bound=True`, it misleadingly reports "the socket must be bound to a local address"
+
+This is highly misleading because the actual problem is that the file descriptor is invalid (doesn't exist), not that an existing socket isn't connected or bound.
+
+### Impact
+
+This misleading error message can cause significant debugging confusion for users:
+1. They might spend time trying to connect or bind a socket that doesn't exist
+2. The error message suggests they have a valid socket when they don't
+3. It hides the real problem (invalid file descriptor) behind an incorrect diagnosis

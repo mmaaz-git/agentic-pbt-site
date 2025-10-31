@@ -1,0 +1,32 @@
+## Bug Reproduction Analysis
+
+### Test Results
+I successfully reproduced the reported behavior:
+
+1. **When cache directory doesn't exist:**
+   - Calling `datasets.clear_cache(fake_dataset)` where `fake_dataset` is not a valid dataset method
+   - Result: No ValueError is raised
+   - Output: "Cache Directory /home/npc/.cache/scipy-data doesn't exist. Nothing to clear."
+   - Function returns early without validating the dataset argument
+
+2. **When cache directory exists:**
+   - Calling `datasets.clear_cache(fake_dataset)` with the same invalid dataset
+   - Result: ValueError is raised as expected
+   - Error message: "Dataset method fake_dataset doesn't exist. Please check if the passed dataset is a subset of the following dataset methods: ['ascent', 'electrocardiogram', 'face']"
+
+### Technical Details
+The bug report is technically accurate:
+- The function has an early return at line 24-26 when cache directory doesn't exist
+- This early return bypasses the validation logic at lines 38-42
+- The validation logic explicitly checks if the dataset method exists in the registry and raises ValueError if not
+- The behavior is inconsistent: same invalid input produces different results based on filesystem state
+
+### What Actually Happens
+Looking at the code flow in _utils.py:
+1. Lines 24-26: Check if cache_dir exists, if not, print message and return
+2. Lines 28-56: Process the datasets parameter, including validation at lines 38-42
+
+The early return means validation never occurs when cache directory doesn't exist. This creates inconsistent behavior where the same invalid input sometimes raises an error and sometimes doesn't, depending on whether a cache directory exists on the filesystem.
+
+### Verification
+The property-based test from the bug report correctly identifies this behavior. The test expects ValueError to always be raised for invalid dataset methods, but this only happens when the cache directory exists.

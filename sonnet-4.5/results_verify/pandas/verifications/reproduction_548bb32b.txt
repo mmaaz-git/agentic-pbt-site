@@ -1,0 +1,43 @@
+BUG REPRODUCTION REPORT
+
+1. BUG REPORT CLAIMS:
+The report claims that when Series/DataFrame contains integers outside int64 range (< -2^63 or >= 2^63), they:
+- Can be serialized to JSON
+- Crash when deserialized with ValueError "Value is too small" or "Value is too large"
+- This violates round-trip serialization/deserialization expectations
+
+2. REPRODUCTION RESULTS:
+
+Test 1: Value = -9,223,372,036,854,775,809 (one less than int64 min)
+- Original Series dtype: object
+- JSON serialization: SUCCESSFUL - produces valid JSON string
+- Deserialization: FAILED with "ValueError: Value is too small"
+- Bug report claim: CONFIRMED
+
+Test 2: Value = 9,223,372,036,854,775,808 (one more than int64 max)
+- Original Series dtype: uint64
+- JSON serialization: SUCCESSFUL - produces valid JSON string
+- Deserialization: SURPRISINGLY SUCCEEDED but returned wrong dtype (datetime64[ns] with NaT value)
+- This is DIFFERENT from what the bug report claims - no ValueError raised, but wrong data returned
+
+Test 3: Value = -9,223,372,036,854,775,808 (exactly int64 min)
+- Original Series dtype: int64
+- JSON serialization: SUCCESSFUL
+- Deserialization: SUCCEEDED but returned wrong dtype (datetime64[ns] with NaT value)
+- This shows another problem - even valid int64 values at boundaries may be incorrectly parsed
+
+3. HYPOTHESIS TESTING:
+Ran property-based testing with 100+ random integers:
+- All integers within int64 range passed successfully
+- Integers outside int64 range:
+  - Below int64 min: Failed with "Value is too small" (as reported)
+  - Above int64 max: Sometimes succeeded but with wrong dtype (uint64 instead of object)
+
+4. KEY FINDINGS:
+- The bug report is PARTIALLY CORRECT about the ValueError for values below int64 min
+- However, values above int64 max don't always raise errors - they sometimes get misinterpreted
+- There's an additional problem with boundary values being interpreted as datetime64
+- The asymmetry between serialization (works) and deserialization (fails/corrupts) is real
+
+5. TECHNICAL DETAILS:
+The issue stems from ujson's intentional limitation to handle only int64 range values during deserialization, while Python's json.dumps() can serialize arbitrary precision integers. This creates the asymmetry described in the bug report.

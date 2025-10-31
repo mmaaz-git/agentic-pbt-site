@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is working as designed by the C implementation which explicitly requires a 16-byte encoded string. The error message clearly states this requirement when it fails. One could argue that users should understand that when working with encoding-sensitive functions, byte length matters, not character length. The function does provide a clear error message explaining what went wrong.
+
+**Why it might not be INVALID:**
+The Python API documentation never mentions the 16-byte requirement, only that hash_key is a string parameter. A reasonable Python programmer would expect that any 16-character string would work, especially since the default is a 16-character string. The discrepancy between character count and byte count is a common source of confusion, and the API should either document this requirement clearly or handle it transparently.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only affects non-ASCII characters in hash keys, which is likely rare in practice. Most users would use ASCII strings for hash keys. The error message is clear about what's wrong, and users can easily work around it by using ASCII-only keys. The fix would require either changing the C implementation or adding validation overhead to every hash_array call.
+
+**Why it might not be WONTFIX:**
+This is a crash in a public API function when given valid Python string input. The function accepts strings but has hidden constraints that cause crashes. This violates the principle of least surprise and could affect internationalization efforts or users working with non-ASCII data. The issue is not trivial as it represents a fundamental API contract violation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The root cause is that the documentation doesn't mention the 16-byte encoding requirement. If the documentation clearly stated "hash_key must be a string that encodes to exactly 16 bytes in the specified encoding", users would understand the constraint. The code is working as the C layer intended, but the Python documentation failed to communicate this requirement. Adding this clarification would prevent user confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the limitation doesn't fix the underlying API inconsistency. The Python interface accepts strings but has byte-level requirements, which is counterintuitive. Users expect Python string APIs to work with all valid strings, not just ASCII. Documentation alone wouldn't prevent the crashes; it would just shift blame to users for not reading carefully enough.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting multi-byte characters in hash keys could be seen as a new feature. The current implementation only properly supports ASCII keys, and extending it to handle arbitrary Unicode would be an enhancement. The user is essentially asking for the function to handle a broader range of inputs than originally designed. This could involve padding/truncating at the byte level or using a different hashing strategy.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to accept strings as input without qualification. This isn't asking for new functionality but for the existing API to work correctly with all valid string inputs. The Python API signature suggests it should handle any string, so making it actually do so is fixing a deficiency, not adding a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The Python API accepts a string parameter but crashes on valid Python strings. There's a clear mismatch between the API contract (accepts strings) and implementation (requires exactly 16 encoded bytes). The function fails to validate its inputs properly, leading to crashes rather than helpful errors at the Python level. This violates the principle that public APIs should handle all valid inputs gracefully. The documentation gives no hint about this limitation.
+
+**Why it might not be BUG:**
+The C implementation clearly documents its requirement, and the error message accurately describes the problem. The function does work correctly for its intended use case (ASCII keys). The issue only arises with an edge case (non-ASCII characters) that may not have been part of the original design scope. One could argue this is working as intended, just with incomplete documentation.
+
+## Overall Consideration
+The core issue here is a disconnect between the Python API's interface and its underlying implementation requirements. The hash_array function accepts a string parameter `hash_key` but has an undocumented requirement that this string must encode to exactly 16 bytes. This creates a trap for users who reasonably expect any 16-character string to work, especially given that the default value is a 16-character string.
+
+From a software engineering perspective, this represents a violation of the API contract. When a Python function accepts strings, it should either handle all valid strings or clearly document its limitations in the public documentation. The current situation where the function crashes on valid input (multi-byte UTF-8 characters) without any warning in the documentation is problematic. The error only appears at runtime from the C layer, which is poor user experience.
+
+While one could argue this is a documentation issue, the better categorization is DOCUMENTATION_FIX rather than BUG. The C implementation has a clear requirement (16 bytes), and the function does provide a descriptive error message when this requirement is violated. The primary failure is in the Python API documentation not communicating this requirement to users. Adding clear documentation about the byte-length requirement would resolve the issue adequately, as users could then make informed decisions about their hash keys. A code fix would be nice but isn't strictly necessary if the constraint is properly documented.

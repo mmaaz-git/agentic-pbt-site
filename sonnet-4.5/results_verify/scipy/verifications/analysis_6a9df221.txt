@@ -1,0 +1,85 @@
+# Triage Analysis for scipy.sparse.eye_array Bug Report
+
+## Consideration for Each Category
+
+### 1. BUG (Valid bug that should be fixed)
+
+**Arguments FOR classifying as BUG:**
+- **Clear behavioral inconsistency**: scipy.sparse.eye_array raises ValueError where numpy.eye returns a valid zero matrix
+- **Violates principle of least surprise**: Users expect sparse versions of numpy functions to behave identically except for the output format
+- **Function naming implies compatibility**: The function is explicitly named to parallel numpy.eye
+- **No documented exception**: The ValueError is not mentioned in the documentation
+- **Reasonable use case**: Creating zero matrices (when diagonal is out of bounds) is a valid operation
+- **Migration barrier**: Code working with numpy.eye breaks when switching to sparse arrays
+- **The fix is straightforward**: Returning a zero sparse matrix for out-of-bounds diagonals is both logical and implementable
+
+**This is the strongest classification** because the function fails to meet reasonable user expectations established by its numpy counterpart.
+
+### 2. INVALID (Incorrect bug report)
+
+**Arguments FOR classifying as INVALID:**
+- None. The bug is reproducible and the behavior difference is real.
+
+**Arguments AGAINST:**
+- The test cases all reproduce as described
+- The behavioral difference between numpy and scipy is confirmed
+- The error message is exactly as reported
+
+### 3. WONTFIX (Trivial/uninteresting bug)
+
+**Arguments FOR classifying as WONTFIX:**
+- Could argue that out-of-bounds diagonals are edge cases
+- Users could work around by checking bounds before calling the function
+
+**Arguments AGAINST:**
+- This is not an obscure edge case - it's a basic operation (requesting a diagonal that doesn't exist)
+- The workaround requires users to implement bounds checking that numpy.eye handles automatically
+- Silent creation of zero matrices is standard behavior in numpy
+- The inconsistency affects data science workflows where users switch between dense and sparse
+
+### 4. DOCUMENTATION_FIX (Documentation needs update)
+
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+- The documentation doesn't mention the ValueError for out-of-bounds k
+- Could document this as an intentional difference from numpy.eye
+- Users would at least know to expect different behavior
+
+**Arguments AGAINST:**
+- Simply documenting the difference doesn't resolve the underlying API inconsistency
+- The function name and description strongly imply numpy.eye compatibility
+- Documenting exceptions after the fact is less ideal than matching expected behavior
+- No technical reason why scipy.sparse.eye_array couldn't match numpy.eye behavior
+
+### 5. FEATURE_REQUEST (New functionality needed)
+
+**Arguments FOR classifying as FEATURE_REQUEST:**
+- Could frame handling out-of-bounds diagonals as a new feature
+
+**Arguments AGAINST:**
+- This is not requesting new functionality but consistency with existing numpy behavior
+- The numpy.eye function already establishes the expected behavior
+- This is fixing broken compatibility, not adding features
+
+## Technical Analysis
+
+The root cause is in the scipy.sparse._construct._eye function which calls diags_sparse with strict offset validation. The proposed fix (checking bounds and returning zero matrix) is:
+1. Technically feasible
+2. Maintains backward compatibility for valid inputs
+3. Improves numpy compatibility
+4. Has no performance penalty for normal use
+
+## Impact Assessment
+
+- **User Impact**: Medium - affects users migrating between dense/sparse or using dynamic diagonal offsets
+- **Code Impact**: Low - localized change to one function
+- **Risk**: Low - only affects currently-failing cases
+- **Benefit**: High - improves API consistency and user experience
+
+## Final Assessment
+
+This is a **BUG** because:
+1. scipy.sparse.eye_array is clearly intended to be the sparse equivalent of numpy.eye
+2. The ValueError for out-of-bounds diagonals is undocumented and unexpected
+3. The inconsistency breaks the principle of least surprise
+4. There's no technical barrier to matching numpy's behavior
+5. The fix improves API consistency without breaking existing working code

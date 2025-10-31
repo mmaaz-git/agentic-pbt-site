@@ -1,0 +1,57 @@
+## Bug Reproduction Report
+
+### Environment
+- NumPy version: 2.3.0
+- NumPy has native isdtype: True (indicates NumPy >= 2.0)
+- xarray.compat.npcompat uses the native NumPy implementation
+
+### Reproduction Results
+
+#### Test 1: Basic Scalar Input
+```python
+scalar = np.int32(5)
+result = isdtype(scalar, 'integral')
+```
+**Result**: TypeError: dtype argument must be a NumPy dtype, but it is a <class 'numpy.int32'>.
+
+This confirms that on NumPy >= 2.0, passing a scalar value to isdtype raises a TypeError.
+
+#### Test 2: dtype Property
+```python
+result = isdtype(scalar.dtype, 'integral')
+```
+**Result**: Success, returns True
+
+This shows the correct way to use isdtype with scalar values - by passing the dtype property.
+
+#### Test 3: Type Class
+```python
+result = isdtype(type(scalar), 'integral')  # type(scalar) is <class 'numpy.int32'>
+```
+**Result**: Success, returns True
+
+Interestingly, passing the type class also works.
+
+#### Test 4: Property Test Validation
+The hypothesis test confirms:
+- All scalar types (np.int32, np.float64, np.bool_) raise TypeError on NumPy >= 2.0
+- The TypeError message consistently states: "dtype argument must be a NumPy dtype, but it is a <class>."
+
+### Verification of Fallback Implementation
+Looking at the fallback implementation (lines 72-73 in npcompat.py):
+```python
+if isinstance(dtype, np.generic):
+    return isinstance(dtype, translated_kinds)
+```
+
+This code explicitly handles np.generic (scalar) instances, which would make the function accept scalars on NumPy < 2.0.
+
+### Verification of Version-Dependent Behavior
+The bug report is technically correct:
+1. On NumPy >= 2.0: The function uses numpy.isdtype directly, which rejects scalars
+2. On NumPy < 2.0: The fallback implementation would accept scalars due to the np.generic check
+
+This creates inconsistent behavior across NumPy versions, which could cause code to work on one version but fail on another.
+
+### Impact Assessment
+While the inconsistency exists, xarray's main codebase appears to use the dtypes.isdtype wrapper which validates inputs before calling npcompat.isdtype. The wrapper at xarray/core/dtypes.py only passes np.dtype objects to npcompat.isdtype, effectively avoiding this issue in the main codebase.

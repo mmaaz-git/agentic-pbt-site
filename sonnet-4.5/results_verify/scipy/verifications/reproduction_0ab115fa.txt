@@ -1,0 +1,29 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Reproduction
+The Hypothesis test provided in the bug report runs successfully and confirms the bug. When I ran the test with non-callable values (integers, strings, floats), the test passed without raising any exceptions, confirming that `scipy.datasets.clear_cache()` does not raise the expected errors for invalid inputs.
+
+### Manual Reproduction
+I created a detailed test script that demonstrates the bug clearly:
+
+1. **When cache directory does NOT exist**:
+   - Passing `42` (integer) - No exception raised, function returns after printing "Cache Directory ... doesn't exist. Nothing to clear."
+   - Passing `"not a callable"` (string) - No exception raised, same behavior
+   - Passing `[1, 2, 3]` (list of integers) - No exception raised, same behavior
+
+2. **When cache directory EXISTS**:
+   - Passing `42` (integer) - AssertionError is raised as expected
+
+### Confirmed Behavior
+The bug report is accurate. The function exhibits inconsistent behavior:
+- When the cache directory doesn't exist, invalid inputs (non-callables) are accepted without any validation
+- When the cache directory exists, the same invalid inputs cause an AssertionError on line 36
+
+### Root Cause
+The issue is in `_clear_cache()` function in `/home/npc/.local/lib/python3.13/site-packages/scipy/datasets/_utils.py`:
+- Lines 24-26: Early return when cache directory doesn't exist
+- Line 36: `assert callable(dataset)` - This validation only happens after the early return check
+
+The input validation (`assert callable(dataset)` on line 36) is never reached when the cache directory doesn't exist due to the early return on lines 24-26. This creates an inconsistency where the same invalid input is sometimes accepted and sometimes rejected based on filesystem state.

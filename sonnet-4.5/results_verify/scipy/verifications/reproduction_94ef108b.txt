@@ -1,0 +1,66 @@
+## Bug Reproduction Results
+
+### Test Execution Summary
+
+I successfully ran all the test cases provided in the bug report. The results confirm the reported behavior.
+
+### Test Results:
+
+1. **Test with initial_step = 0.0:**
+   - Expected: ValueError with descriptive message
+   - Actual: Returns df=nan, status=-3, success=False
+   - No exception raised
+
+2. **Test with initial_step = -0.5:**
+   - Expected: ValueError with descriptive message
+   - Actual: Returns df=nan, status=-3, success=False
+   - No exception raised
+
+3. **Test with initial_step = 0.5 (valid control):**
+   - Works correctly
+   - Returns df≈4.0 (true derivative), status=0, success=True
+   - Error is approximately 2e-14 (numerical precision)
+
+4. **Test with initial_step = -10.0:**
+   - Expected: ValueError with descriptive message
+   - Actual: Returns df=nan, status=-3, success=False
+   - No exception raised
+
+### Hypothesis Test Results:
+
+The property-based test fails for all non-positive initial_step values tested (0.0, -0.1, -1.0, -5.0). In each case:
+- The function accepts the invalid input without raising ValueError
+- Returns NaN for the derivative value
+- Sets status=-3 (non-finite value encountered) and success=False
+
+### Code Behavior Analysis:
+
+Looking at the source code (line 408 in _differentiate.py):
+```python
+h0 = xpx.at(h0)[h0 <= 0].set(xp.nan)
+```
+
+This line explicitly:
+1. Checks if initial_step (h0) is <= 0
+2. Sets those values to NaN
+3. Continues execution without raising an error
+
+The NaN then propagates through the computation, eventually resulting in:
+- df = NaN
+- status = -3 (non-finite value encountered)
+- success = False
+
+### Technical Accuracy:
+
+The bug report is technically accurate:
+1. The function does accept non-positive initial_step values
+2. It does produce NaN results rather than raising an error
+3. The status=-3 is indeed returned as claimed
+4. The behavior is inconsistent with how step_factor is validated (which does raise ValueError for negative values)
+
+### Key Finding:
+
+The current behavior appears to be intentional based on the code - it explicitly converts non-positive step sizes to NaN rather than raising an error. However, this design choice:
+1. Is not documented
+2. Is inconsistent with other parameter validation in the same function
+3. Makes debugging harder for users who may not realize their initial_step is invalid

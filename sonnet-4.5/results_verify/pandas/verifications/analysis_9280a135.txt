@@ -1,0 +1,69 @@
+## Bug Report Triage Analysis
+
+### Considerations for Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments For:**
+- The code crashes with an unhandled exception when given valid Python strings
+- Pandas DataFrames accept surrogate characters, but the interchange protocol cannot handle them
+- The crash is unexpected and undocumented
+- A reasonable user expectation is that data accepted by pandas should round-trip through the interchange protocol
+- The error occurs in production code, not in validation or input checking
+
+**Arguments Against:**
+- The interchange protocol specification explicitly requires UTF-8 encoding
+- Surrogate characters are technically invalid Unicode and cannot be encoded as UTF-8 by design
+- This might be considered a protocol limitation rather than a bug
+
+#### 2. INVALID
+**Arguments For:**
+- The protocol specification requires UTF-8, and surrogate characters fundamentally cannot be UTF-8 encoded
+- Surrogate characters are not valid Unicode characters on their own
+- The user is providing technically invalid input (isolated surrogates)
+
+**Arguments Against:**
+- Python strings accept surrogates, pandas accepts them, but the interchange fails
+- No documentation warns users about this limitation
+- The error is not gracefully handled
+
+#### 3. WONTFIX
+**Arguments For:**
+- Surrogate characters are an extreme edge case
+- Very few real-world applications would encounter isolated surrogates
+- The fix might complicate the codebase for minimal benefit
+
+**Arguments Against:**
+- The fix is relatively simple (add error handling)
+- Data corruption or loss could occur if users have such data
+- The crash is ungraceful
+
+#### 4. FEATURE_REQUEST
+**Arguments For:**
+- Supporting surrogate characters could be seen as a new feature
+- The protocol was designed for UTF-8, adding surrogate support extends it
+
+**Arguments Against:**
+- This is fixing a crash, not adding new functionality
+- The functionality (converting DataFrames) already exists
+
+#### 5. DOCUMENTATION_FIX
+**Arguments For:**
+- The core issue is that limitations aren't documented
+- Users need to know that surrogate characters will cause failures
+- Adding documentation about this limitation might be sufficient
+
+**Arguments Against:**
+- The code actually crashes, which is more than a documentation issue
+- Even with documentation, the ungraceful failure is problematic
+
+### Final Assessment
+
+This is a **BUG** for the following reasons:
+
+1. **Ungraceful Failure**: The code crashes with an unhandled exception rather than providing a clear error message or handling the edge case
+2. **Inconsistent Behavior**: Pandas accepts the data but the interchange protocol fails, creating an inconsistency within the pandas ecosystem
+3. **Undocumented Limitation**: Users have no way to know this will fail without hitting the error
+4. **Simple Fix Available**: The bug report provides reasonable solutions that would prevent the crash
+5. **Data Loss Risk**: Users with such data cannot use the interchange protocol at all
+
+While surrogate characters are an edge case, the principle of robust error handling suggests this should be fixed. The fix doesn't need to make surrogates work perfectly, but it should at least fail gracefully with a clear error message or handle them with a documented fallback behavior.

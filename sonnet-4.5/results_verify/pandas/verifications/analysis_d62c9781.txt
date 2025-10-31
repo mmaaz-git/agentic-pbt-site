@@ -1,0 +1,72 @@
+## Bug Triage Analysis
+
+### Evaluation Against Each Category
+
+#### BUG (Valid Bug Report)
+**Strong Evidence For:**
+1. **Data Loss**: Fractional day components are silently truncated, losing hours/minutes/seconds
+2. **Inconsistent Behavior**: Two functions in the same module (`_parse_datetime` and `_convert_datetimes`) handle the same data differently
+3. **Violates SAS Standards**: SAS format specification supports fractional days, pandas should preserve them
+4. **No Documentation of Truncation**: The function doesn't document that it truncates fractional days
+5. **Asymmetric Implementation**: The 's' (seconds) path preserves fractional components, but 'd' (days) path doesn't
+6. **Silent Failure**: No warning when precision is lost
+
+**Evidence Against:**
+- These are internal functions (prefixed with _), not public API
+
+#### INVALID
+**Evidence For:**
+- Functions are internal (underscore-prefixed), not part of public API
+- Could argue users shouldn't rely on internal function behavior
+
+**Evidence Against:**
+- The functions are imported and used by the public `read_sas()` function
+- Data loss is a serious issue regardless of internal status
+- Inconsistency between two related functions is problematic
+
+#### WONTFIX
+**Evidence For:**
+- Could be considered an edge case (fractional days might be uncommon)
+- Internal functions may have lower priority
+
+**Evidence Against:**
+- Data loss is not trivial - losing up to 23:59:59 of time data
+- Easy fix available (as shown in bug report)
+- Affects data integrity when reading SAS files
+
+#### DOCUMENTATION_FIX
+**Evidence For:**
+- Could document that fractional days are truncated
+- Add warning about precision loss
+
+**Evidence Against:**
+- The behavior appears to be a bug, not intended design
+- Sister function `_parse_datetime` preserves fractional days
+- Documenting data loss doesn't fix the underlying problem
+
+#### FEATURE_REQUEST
+**Evidence For:**
+- Could frame as "add support for fractional days"
+
+**Evidence Against:**
+- This is fixing broken behavior, not adding new functionality
+- SAS format already supports fractional days
+- The 's' path already handles fractional components correctly
+
+### Critical Factors
+
+1. **Data Integrity**: This bug causes silent data loss, which is serious
+2. **Consistency**: Two functions handling the same conversion behave differently
+3. **Standards Compliance**: SAS format supports fractional days; pandas should too
+4. **Easy Fix**: The solution is straightforward and aligns with existing code patterns
+
+### Conclusion
+
+This is a **BUG**. While the functions are internal, they:
+1. Cause actual data loss when reading SAS files
+2. Violate the principle of least surprise (silent truncation)
+3. Are inconsistent with related functionality
+4. Have no documented reason for the truncation
+5. Can be easily fixed to match the behavior of the 's' (seconds) path
+
+The fact that these are internal functions doesn't diminish the seriousness of data loss when users read SAS files through the public `read_sas()` API.

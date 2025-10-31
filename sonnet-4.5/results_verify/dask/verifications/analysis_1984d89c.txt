@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation whatsoever - no docstring, no comments, no type hints. Without documented behavior, one could argue that any behavior is technically "correct" since there's no specification to violate. The function name suggests it "cleans" boundaries but doesn't specify what clean means. Perhaps non-monotonic boundaries or boundaries exceeding frame_npartitions are intentionally allowed for some internal use case we're unaware of.
+
+**Why it might not be INVALID:**
+The function is clearly used for partition boundary management in a distributed dataframe context, and partition boundaries must be monotonic by definition to represent valid ranges. Non-monotonic boundaries like [0, 2, 1] cannot meaningfully represent partitions. The bugs are reproducible and violate fundamental mathematical properties required for partitioning.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function (starts with underscore) that's not part of the public API. It's only called in two specific places within the same module, and perhaps those calling contexts always provide pre-sorted boundaries and never exceed frame_npartitions, making the bugs theoretical rather than practical. The maintainers might consider fixing obscure edge cases in internal functions as low priority.
+
+**Why it might not be WONTFIX:**
+The function produces mathematically invalid results (non-monotonic sequences) which could cause serious issues in partition operations downstream. The bugs are not obscure edge cases but fundamental logic errors that occur with simple inputs like [2, 0]. Data corruption or incorrect results in a distributed computing framework is a serious issue that should be fixed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The complete absence of documentation makes it impossible to know the intended behavior. Perhaps the function expects pre-sorted input and the callers are responsible for sorting. Adding documentation to clarify that boundaries must be pre-sorted and within [0, frame_npartitions] range would prevent misuse. The current behavior might be intentional for performance reasons, avoiding sorting overhead.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function actively modifies boundaries to ensure they start at 0 and attempts to ensure they end at frame_npartitions, showing it's trying to enforce invariants. If it expected pre-sorted input, why would it check and modify the first and last elements? The bugs produce objectively invalid output (non-monotonic sequences) that no documentation could reasonably justify.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The function currently doesn't handle unsorted input, which could be seen as a missing feature rather than a bug. Adding sorting capability and proper handling of boundaries exceeding frame_npartitions would be enhancements to make the function more robust. The current implementation might be a minimal viable version that works for the specific current use cases.
+
+**Why it might not be FEATURE_REQUEST:**
+Producing non-monotonic boundaries is not a missing feature but a fundamental correctness issue. The function already attempts to modify boundaries (adding 0, modifying the last element), so it's clearly trying to ensure certain properties. It's not asking for new functionality but fixing existing broken logic.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces mathematically invalid output (non-monotonic sequences) that cannot represent valid partition boundaries. It loses data by replacing instead of appending when boundaries are less than frame_npartitions. The bugs are easily reproducible with simple inputs. The function's attempts to enforce starting at 0 and ending at frame_npartitions show these are intended invariants that the implementation fails to maintain correctly.
+
+**Why it might not be BUG:**
+Without any documentation, we cannot definitively say the current behavior is wrong. The function is internal (underscore prefix) and might have undocumented assumptions about its input. The calling code might ensure these edge cases never occur in practice. The lack of tests for this function suggests it might not be considered critical enough to have well-defined behavior.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be a clear BUG despite the lack of documentation. The function produces mathematically invalid results (non-monotonic sequences) that cannot possibly represent valid partition boundaries in any reasonable interpretation. The key evidence:
+
+1. **Mathematical Invalidity**: Non-monotonic boundaries like [0, 2, 1] cannot define valid partition ranges. If partition 0 covers [0, 2) and partition 1 covers [2, 1), the second partition would be invalid. This is not a matter of documentation or features - it's fundamentally broken logic.
+
+2. **Clear Intent**: The function already tries to enforce invariants (starting at 0, ending at frame_npartitions), showing these properties are intended. The implementation just fails to maintain them correctly when it replaces instead of appends, and when it doesn't sort.
+
+3. **Data Loss**: The function silently drops intermediate boundaries (replacing 10 with 20 in bug 3), which could cause incorrect partitioning and data corruption in a distributed system.
+
+While the complete lack of documentation is concerning and makes this evaluation more difficult, the mathematical invalidity of the output and the clear intent shown by the existing logic make this a BUG rather than any other category. The function attempts to ensure certain properties but fails due to implementation errors, not missing features or documentation issues.

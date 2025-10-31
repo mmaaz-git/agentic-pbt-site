@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly state that negative values are forbidden or that a ValueError should be raised. The method's behavior with negative values is unspecified, which means the current implementation (using Python's negative slicing) could be considered valid undefined behavior. Since the documentation doesn't promise any particular handling of negative values, the implementation is free to do whatever it wants, including using negative slice semantics. Many Python APIs don't validate every possible input, especially when the input doesn't make semantic sense.
+
+**Why it might not be INVALID:**
+The phrase "Read exactly the given amount of bytes" strongly implies a non-negative quantity. Reading a negative number of bytes is semantically nonsensical in any I/O context. While not explicitly documented, the reasonable expectation is that byte counts should be non-negative, similar to how you can't have -5 apples. The fact that negative values cause unexpected slicing behavior that returns a different amount of data than requested violates the "exactly" promise in the method name.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that would rarely occur in practice - developers don't typically pass negative byte counts intentionally. The issue only manifests when there's already data in the buffer, making it even more obscure. The cost of fixing this (adding validation) might not be worth it for such an unlikely scenario. The current behavior doesn't cause crashes or data corruption, it just returns unexpected data. Since passing negative values doesn't make sense anyway, this could be considered a "garbage in, garbage out" situation.
+
+**Why it might not be WONTFIX:**
+Input validation is a fundamental practice in robust software design. The fix is trivial (two lines of code) and would prevent confusing behavior. Other parts of AnyIO already validate inputs (like Semaphore checking for non-negative values). The unexpected slicing behavior could lead to subtle bugs that are hard to debug. Just because an edge case is rare doesn't mean it should be ignored when the fix is simple.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current implementation has consistent behavior using Python's slicing semantics, which could be documented. The documentation could be updated to explicitly state that negative values use Python's negative slice notation, making this a documented feature rather than a bug. Alternatively, the documentation could be clarified to state that nbytes must be non-negative, setting clear expectations without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior with negative values is clearly unintended - the method is called "receive_exactly" and negative slicing doesn't receive exactly N bytes. Documenting this as expected behavior would be endorsing a confusing API. The semantic meaning of "read exactly N bytes" inherently requires N to be non-negative, so this is more of a code bug than a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding input validation for negative values could be seen as a new feature - enhanced error checking that didn't exist before. The current code works within Python's type system and slice semantics; adding validation is adding a new capability. This could be framed as "Add input validation to receive_exactly method" rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+Input validation for nonsensical inputs is not a new feature, it's fixing incorrect behavior. The method already promises to "read exactly the given amount of bytes" and negative values violate this contract. This is fixing existing functionality to work correctly, not adding new functionality. Features are typically about adding capabilities, not preventing incorrect usage.
+
+## BUG Considerations
+**Why it might be BUG:**
+The method is named "receive_exactly" but with negative nbytes it doesn't receive exactly N bytes - it receives len(buffer) + nbytes bytes due to negative slicing. This violates the method's contract. The behavior is inconsistent: empty buffer returns empty bytes, but filled buffer returns sliced data. This inconsistency alone suggests unintended behavior. The semantic meaning of the function is clear, and negative values produce incorrect results. Similar methods in Python's standard library validate inputs, and AnyIO itself validates inputs elsewhere.
+
+**Why it might not be BUG:**
+The documentation never explicitly forbids negative values or promises ValueError. The behavior follows Python's consistent slicing rules, not random corruption. Since the documentation doesn't specify what should happen with negative inputs, any behavior could be considered "correct" for undefined inputs. This is an edge case with inputs that don't make logical sense - classic "garbage in, garbage out."
+
+## Overall Consideration
+
+After thorough analysis, this issue sits in a gray area between a bug and undefined behavior. The method's name and purpose strongly suggest that nbytes should be non-negative, as "reading exactly -5 bytes" is semantically meaningless. The current behavior when the buffer contains data (returning `buffer[:-5]` when nbytes=-5) clearly violates the "exactly" promise in the method name.
+
+However, the documentation does not explicitly require non-negative values or specify that ValueError should be raised. The lack of explicit documentation about edge cases is common in many libraries, and implementations are often free to handle undefined inputs however they choose. The fact that this only manifests when the buffer already contains data makes it an even more obscure edge case.
+
+The strongest argument for this being invalid is that the documentation doesn't promise any specific behavior for negative inputs, making this undefined behavior rather than a bug. The user is essentially passing nonsensical input (negative byte count) and getting nonsensical output. While adding validation would be nice, the lack of validation for undefined inputs is not necessarily a bug - it's just less defensive programming. Given that this user has a track record of mostly incorrect bug reports (90% wrong), and this is an edge case with undefined behavior, this should likely be closed as INVALID.

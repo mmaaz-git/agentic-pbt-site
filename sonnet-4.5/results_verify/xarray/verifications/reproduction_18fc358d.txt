@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+### Bug Summary
+The `collapsible_section` function in `xarray.core.formatting_html` does not escape HTML in the `name` parameter, allowing HTML injection when user-controlled input is passed.
+
+### Reproduction Steps Performed
+
+1. **Tested the specific failing input:**
+   - Called `collapsible_section(name='<script>alert("XSS")</script>')`
+   - Result: The HTML output contained the raw, unescaped `<script>` tag
+   - Generated HTML included: `<script>alert("XSS")</script>:` directly in the label element
+
+2. **Verified the assertions from the bug report:**
+   - ✓ Confirmed: `'<script>' in html` returns True
+   - ✓ Confirmed: `'&lt;script&gt;' not in html` returns True
+   - This proves the script tag is NOT being escaped
+
+3. **Ran the property-based test:**
+   - The Hypothesis test failed as expected when testing with inputs containing `<script>` tags
+   - The test correctly identifies that dangerous HTML is not being escaped
+
+### Actual Output
+When calling `collapsible_section(name='<script>alert("XSS")</script>')`, the function returns:
+```html
+<input id='section-[uuid]' class='xr-section-summary-in' type='checkbox' disabled >
+<label for='section-[uuid]' class='xr-section-summary' title='Expand/collapse section'>
+<script>alert("XSS")</script>:</label>
+<div class='xr-section-inline-details'></div>
+<div class='xr-section-details'></div>
+```
+
+### Impact
+The unescaped `<script>` tag in the HTML output creates a potential XSS vulnerability. If this HTML is rendered in a browser context where the `name` parameter comes from user input, malicious JavaScript could be executed.
+
+### Comparison with Other Functions
+Examined the same file and found that other functions consistently use `escape()` from the `html` module:
+- Line 43: `text = escape(short_data_repr(array))`
+- Line 57: Uses `escape(str(dim))` for dimension names
+- Line 66: Uses `escape(str(k))` and `escape(str(v))` for attributes
+- Line 85: Uses `escape(str(name))` for variable names
+- Line 189: **Does NOT use escape** for the name parameter in `collapsible_section`
+
+This inconsistency confirms that the lack of escaping in `collapsible_section` is likely an oversight rather than intentional behavior.

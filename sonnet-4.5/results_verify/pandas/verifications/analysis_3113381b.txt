@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+LegacyVersion is explicitly for non-PEP 440 version strings, and therefore may not be expected to follow PEP 440 conventions about public vs local version identifiers. The documentation doesn't explicitly state that LegacyVersion.public must behave identically to Version.public. Since LegacyVersion handles arbitrary non-standard version strings that don't conform to PEP 440, the concept of a "local version identifier" (which is a PEP 440 concept) might not apply, and therefore expecting it to strip content after '+' could be considered imposing PEP 440 semantics on non-PEP 440 strings.
+
+**Why it might not be INVALID:**
+Both Version and LegacyVersion inherit from _BaseVersion and expose the same API with properties like `public`, `base_version`, etc. The packaging library documentation states that the `public` property returns the public portion of the version excluding local identifiers, without making an exception for LegacyVersion. The property name "public" strongly implies it should return the public version identifier, and having it behave differently between the two classes creates an inconsistent API that violates user expectations.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+LegacyVersion is deprecated (as shown by the deprecation warning in the code) and will be removed in a future release. Fixing bugs in deprecated code that's slated for removal might not be worth the effort. Additionally, the current behavior has likely existed for a long time, and changing it now could break existing code that relies on LegacyVersion.public returning the full version string. The impact is limited since most modern Python packages use PEP 440 compliant versioning.
+
+**Why it might not be WONTFIX:**
+Even deprecated features should maintain consistent behavior while they exist. The bug creates a real problem for users who need to handle both PEP 440 and legacy versions uniformly. The fix is trivial (one line change) and would make the API consistent. The fact that it's deprecated doesn't mean it should have incorrect behavior while it still exists in the codebase.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how LegacyVersion.public should behave differently from Version.public. If the current behavior is intentional, then the documentation should clarify that LegacyVersion.public returns the full version string including any '+' characters, while Version.public strips local identifiers. This would at least make the inconsistent behavior documented and expected.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The packaging library documentation already states that the public property returns the public version excluding local identifiers, and this applies to all version objects. The code behavior doesn't match the documented behavior, so this is a code bug, not a documentation issue. Documenting the inconsistent behavior would be papering over a bug rather than fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding consistent behavior to LegacyVersion.public could be viewed as a new feature - making LegacyVersion understand and handle the '+' separator for local versions even though it deals with non-PEP 440 strings. This would be extending LegacyVersion to partially understand PEP 440 concepts that it wasn't originally designed to handle.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing existing functionality that doesn't work as expected. The `public` property already exists on LegacyVersion; it just doesn't work correctly. Making it consistent with Version.public is a bug fix to meet the existing API contract, not a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The `public` property has a clear semantic meaning - it should return the public version identifier without local parts. Version.public correctly implements this by stripping everything after '+'. LegacyVersion.public fails to do this, creating an inconsistent API where the same property on related classes behaves differently. This violates the principle of least surprise and makes it impossible to reliably use .public to get the public version across all version types. The fix is trivial and would make the behavior consistent.
+
+**Why it might not be BUG:**
+LegacyVersion is for non-PEP 440 strings where the concept of "local version identifier" may not apply. The '+' character might be a legitimate part of a legacy version string rather than a separator for local versions. Since LegacyVersion is deprecated and handles arbitrary version strings, expecting it to understand PEP 440 conventions about '+' separators might be incorrect.
+
+## Overall consideration
+After careful analysis, this appears to be a WONTFIX issue rather than a valid bug. While there is technically an inconsistency between Version.public and LegacyVersion.public, there are several compelling reasons why this shouldn't be treated as a bug:
+
+First, LegacyVersion is explicitly designed to handle non-PEP 440 version strings, which means it deals with arbitrary version formats that don't follow PEP 440 conventions. The '+' character in a legacy version string isn't necessarily a separator for a local version identifier - it could be a legitimate part of the version string itself. For example, "c++14" or "version++" might be valid legacy version strings where the '+' is integral to the version identity, not a separator. Applying PEP 440 semantics (splitting on '+') to non-PEP 440 strings would be incorrect and could break legitimate use cases.
+
+Second, LegacyVersion is already deprecated with a clear warning that it will be removed in the next major release. The deprecation suggests that maintainers want users to migrate to PEP 440 compliant versioning rather than continuing to support legacy formats. Changing the behavior of deprecated functionality could break existing code that relies on the current behavior, and the benefit is minimal given that the feature is going away. The effort to fix, test, and potentially deal with breakage isn't justified for deprecated code that has worked this way for years and will soon be removed entirely.

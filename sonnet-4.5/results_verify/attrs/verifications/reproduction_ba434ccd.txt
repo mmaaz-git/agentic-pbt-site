@@ -1,0 +1,32 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. BUG CONFIRMED
+   - The exact error described in the bug report occurs: `UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed`
+   - This happens when calling `dd.from_pandas()` on DataFrames containing surrogate characters like '\ud800'
+
+2. TEST RESULTS
+   - Test 1 (Simple surrogate): FAILS - Crashes with UnicodeEncodeError
+   - Test 2 (Exact bug input): FAILS - Crashes with UnicodeEncodeError
+   - Test 3 (Pandas only): SUCCESS - Pandas handles surrogate characters without issues
+   - Test 4 (PyArrow disabled): SUCCESS - Conversion works when PyArrow string conversion is disabled
+   - Test 5 (Hypothesis test): FAILS - Property test confirms the bug with the exact example
+
+3. ROOT CAUSE VERIFIED
+   The traceback confirms the bug location described in the report:
+   - Error occurs in `/dask/dataframe/_pyarrow.py` at line 69
+   - The issue happens when `df.astype(dtypes)` tries to convert object dtype to PyArrow string dtype
+   - PyArrow's `pa.array()` function rejects surrogate characters as invalid UTF-8
+
+4. WORKAROUND CONFIRMED
+   Setting `dask.config.set({'dataframe.convert-string': False})` successfully avoids the bug by preventing the PyArrow string conversion.
+
+5. PANDAS BEHAVIOR
+   Importantly, pandas itself has no issues with surrogate characters:
+   - Can create DataFrames with surrogate characters
+   - Can perform string operations (str.len(), notna(), etc.)
+   - The data is valid within the pandas ecosystem
+
+CONCLUSION: The bug is real and occurs exactly as described. The function fails on valid pandas DataFrames containing surrogate characters, which violates the reasonable expectation that `from_pandas()` should handle any valid pandas DataFrame.

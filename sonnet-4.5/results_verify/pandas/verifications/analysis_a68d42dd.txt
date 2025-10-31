@@ -1,0 +1,46 @@
+BUG TRIAGE ANALYSIS
+
+## INVALID Considerations
+**Why it might be INVALID:**
+Values near the minimum representable float64 (around 2.2e-308) are extreme edge cases that are rarely encountered in practical data analysis. One could argue that the function was never intended to handle such denormalized numbers, and the documentation doesn't explicitly promise support for the entire float64 range. The error could be considered user error for passing unrealistic data.
+
+**Why it might not be INVALID:**
+The values in question are valid, finite float64 numbers. The documentation makes no mention of any restrictions on the range of input values, and explicitly states it handles finite values. A user would reasonably expect that any finite float64 should work. The function accepts the input without type errors, suggesting it should handle it correctly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely obscure edge case involving values near the limits of floating-point representation (1e-308). In real-world data analysis, such tiny values are vanishingly rare and often represent measurement errors or numerical underflow from other computations. The complexity of fixing this edge case might not be worth it for such an unlikely scenario. Most users would never encounter this issue.
+
+**Why it might not be WONTFIX:**
+The fix is actually quite simple (clamping the digits parameter) and wouldn't affect normal usage. The bug causes a complete crash rather than a graceful degradation, which is poor user experience. Scientific computing applications legitimately work with extreme values, and pandas is used in scientific contexts where such values might occur.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to specify that qcut() has limitations with extremely small values near the float64 minimum. This would set proper expectations without requiring code changes. The issue stems partly from undocumented numpy.around() limitations, so documenting the constraint would be reasonable.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This isn't really a documentation issue - the code is genuinely failing to handle valid inputs that the documentation implies should work. Documenting a bug doesn't fix the bug. Users shouldn't need to know about internal implementation details like the numpy.around() decimal limit.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting extreme float values could be seen as a new feature rather than a bug fix, especially if the original design didn't contemplate such values. Adding robust handling for denormalized numbers and extreme ranges could be considered an enhancement to make the function more robust for scientific computing use cases.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts these values as input - it just fails to process them correctly. This is fixing broken existing functionality, not adding new capabilities. The function signature and interface wouldn't change, just the internal implementation would be fixed.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a bug - the function crashes with a cryptic error message when given valid finite float64 input. The root cause is well understood: an internal calculation produces an invalid parameter for numpy.around(), causing NaN generation. The documentation provides no warning about value range limitations. The proposed fix is simple, targeted, and wouldn't affect normal usage. The same bug affects both cut() and qcut() functions.
+
+**Why it might not be BUG:**
+The extreme values involved (1e-308) are at the very edge of float64 representation and could be considered outside the reasonable operating range of a data analysis function. One could argue this is more of a theoretical issue than a practical bug.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate BUG, though it involves extreme edge cases. The key factors supporting this classification:
+
+First, the function fails on valid, finite float64 inputs with no documented restrictions on input range. The pandas library is used in scientific computing where extreme values, while rare, can legitimately occur. The failure mode is particularly problematic - instead of gracefully handling the edge case or providing a clear error message, the function crashes with a cryptic ValueError about "missing values must be missing in the same location." This poor error message makes debugging difficult for users who encounter this issue.
+
+Second, the technical root cause is clear and well-diagnosed. The _round_frac() function calculates an excessive number of decimal places (310) for extremely small values, which exceeds an undocumented numpy.around() limitation, causing NaN generation. The fix is straightforward - clamping the digits parameter to a reasonable maximum (like 15, which matches float64 precision). This fix wouldn't affect normal operations but would prevent the crash.
+
+Third, while these extreme values are rare in typical data analysis, they can occur in scientific computing, particularly in fields dealing with quantum mechanics, cosmology, or numerical analysis where values spanning many orders of magnitude are processed. A robust library should handle the full range of valid inputs without crashing, even if that means reduced precision for extreme cases. The fact that the same bug affects both cut() and qcut() functions increases its impact and supports treating it as a bug rather than a one-off quirk.

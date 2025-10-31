@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The parse_list function's docstring does not explicitly state that it should handle comments. The docstring examples only show parsing of clean list data without any comments. The function could be argued to be working as designed - it parses whatever strip_string_literals gives it, and strip_string_literals intentionally preserves comment markers as substitution labels. If the function was never intended to handle comments, then this isn't a bug but rather a feature request.
+
+**Why it might not be INVALID:**
+Comments are a fundamental part of Python/Cython syntax and should be handled correctly by any parser. The fact that parse_list returns '#__Pyx_L1_' (an internal implementation detail) instead of either the actual comment or nothing is clearly broken behavior. No reasonable user would expect a parser to return internal substitution labels. The function is used to parse distutils directives where comments are common, making proper comment handling essential.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue might be considered too minor to fix if users rarely put comments after distutils directive values. The workaround is simple - don't put comments on the same line as directive values. The current behavior has presumably existed for some time without causing major issues, suggesting it's not a critical problem. Fixing it might risk breaking existing code that somehow depends on this behavior.
+
+**Why it might not be WONTFIX:**
+Returning internal substitution labels like '#__Pyx_L1_' is clearly incorrect behavior that could cause build failures if these labels are interpreted as actual values (e.g., library names). This is not an obscure edge case - adding explanatory comments after configuration values is common practice. The fix is straightforward and unlikely to break existing code since no one would intentionally depend on receiving '#__Pyx_L1_' labels.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The parse_list docstring doesn't mention how comments should be handled, leaving the behavior undefined. If the function was never intended to handle comments, the documentation should explicitly state this limitation. Users could be warned that comments are not supported in distutils directive values. The documentation could be updated to show the current behavior and warn against using inline comments.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior of returning internal substitution labels is not something that should be documented as correct behavior - it's clearly a bug. No documentation would reasonably say "this function returns internal substitution labels for comments." The absence of comment examples in the docstring doesn't mean the current broken behavior is intended. This is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Comment filtering could be seen as a new feature if the function was originally designed only for clean, comment-free input. The docstring examples don't show comment handling, suggesting it wasn't part of the original design. Adding comment support would be enhancing the function beyond its original scope. This would be adding new functionality rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality - it's fixing broken behavior. The function already attempts to handle comments (via strip_string_literals) but does so incorrectly by exposing internal labels. Comments are a standard part of Python syntax, not an optional feature. The function is specifically used for parsing Python/Cython source file directives where comments are expected. This is fixing a bug, not adding a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns internal implementation details ('#__Pyx_L1_') that should never be exposed to users. This is unambiguously incorrect behavior. When parsing "a b # comment", users reasonably expect ['a', 'b'], not ['a', 'b', '#__Pyx_L1_']. The function is used to parse distutils directives where comments are common and should be ignored. The current behavior could cause actual build failures if comment labels are interpreted as configuration values. The fix is straightforward and correct.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is that the documentation doesn't explicitly promise comment handling. However, this is a weak argument since returning internal substitution labels is clearly not intended behavior regardless of what the documentation says or doesn't say.
+
+**Overall consideration**
+After careful analysis, this is clearly a BUG. The function parse_list returns internal substitution labels ('#__Pyx_L1_') when encountering comments, which is unambiguously incorrect behavior. No user would ever want or expect to receive these internal labels as part of their parsed data. The fact that strip_string_literals replaces comments with these labels is an implementation detail that should not leak through to the parse_list output.
+
+The bug occurs in a real use case - parsing distutils directives from Cython source files where inline comments are reasonable and common. For example, when parsing "libraries = foo bar # needed for X", the function incorrectly returns ['foo', 'bar', '#__Pyx_L1_'] instead of ['foo', 'bar']. This could cause actual build failures if '#__Pyx_L1_' is interpreted as a library name.
+
+While the docstring doesn't explicitly show comment handling, this doesn't make the current behavior correct. Returning internal substitution labels is a bug regardless of documentation. The universal Python convention is that comments (marked with #) are not part of the data being processed. The proposed fix to filter out items starting with '#' is reasonable and unlikely to break existing code, as no one would intentionally depend on receiving these malformed labels.

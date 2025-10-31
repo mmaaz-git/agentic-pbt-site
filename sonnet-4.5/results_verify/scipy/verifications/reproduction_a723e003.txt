@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in scipy.sparse.kron.
+
+1. Hypothesis Test Reproduction:
+--------------------------------
+The property-based test fails consistently. When running the test with m=2, n=2:
+- A sparse matrix A with 2 nonzero elements
+- An identity matrix I of size 2x2
+- Expected nnz in kron(A, I): 2 * 2 = 4
+- Actual nnz returned: 8
+
+This shows that kron is storing 4 extra zeros explicitly.
+
+2. Manual Test Reproduction:
+-----------------------------
+Running the provided manual test code with A = [[0, 1]] and I = eye(2):
+
+Result matrix:
+[[0. 0. 1. 0.]
+ [0. 0. 0. 1.]]
+
+Key observations:
+- nnz reports 4 (should be 2)
+- Actual nonzeros via np.count_nonzero: 2
+- Data array contains: [1. 0. 0. 1.] - explicitly storing two zeros
+- After eliminate_zeros(): nnz correctly becomes 2
+
+3. Bug Confirmation:
+--------------------
+The bug is confirmed. The scipy.sparse.kron function creates a sparse matrix that:
+- Stores explicit zero values in its data array
+- Reports incorrect nnz count (includes the explicit zeros)
+- Can be fixed by calling eliminate_zeros() to remove the explicit zeros
+
+The effect is that sparse matrices created by kron violate the sparse matrix invariant of only storing nonzero elements, leading to:
+- Wasted memory
+- Misleading nnz attribute
+- Potential performance degradation in subsequent operations

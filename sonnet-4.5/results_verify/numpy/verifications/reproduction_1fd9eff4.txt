@@ -1,0 +1,36 @@
+REPRODUCTION REPORT
+==================
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. HYPOTHESIS TEST REPRODUCTION:
+   - Ran the provided hypothesis test with the explicit example
+   - Test FAILED with AssertionError when checking for inf values
+   - The test correctly detects that divmod(a, b) produces inf values
+   - Runtime warnings were generated about overflow in division operations
+
+2. DIRECT REPRODUCTION:
+   - Created reproduction script with the exact inputs from the bug report:
+     a = Polynomial([0., 1.])
+     b = Polynomial([1.0, 2.22507386e-311])
+   - Results matched the bug report exactly:
+     * Quotient: [inf]
+     * Remainder: [-inf]
+     * Contains inf: True
+   - Runtime warnings confirmed overflow at lines 417 and 424 in polynomial.py
+
+3. ROOT CAUSE VERIFICATION:
+   - Confirmed that Polynomial.__divmod__ calls numpy.polynomial.polynomial.polydiv
+   - Verified the problematic value 2.22507386e-311 is a denormalized (subnormal) float
+   - This value is smaller than np.finfo(float).tiny (2.2250738585072014e-308)
+   - Dividing 1.0 by this value produces inf due to overflow
+
+4. CODE PATH ANALYSIS:
+   - The bug occurs in polydiv() at lines 416-417:
+     * scl = c2[-1] gets the value 2.22507386e-311
+     * c2 = c2[:-1] / scl causes overflow (dividing by tiny number)
+   - The function only checks for exactly zero (line 404) but not near-zero values
+   - No handling for denormalized numbers that cause numerical overflow
+
+CONCLUSION:
+The bug is real and reproducible. The function fails to handle denormalized/subnormal floating-point numbers that, while non-zero, cause overflow when used as divisors in polynomial division.

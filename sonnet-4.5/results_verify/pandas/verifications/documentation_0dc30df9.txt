@@ -1,0 +1,34 @@
+## Documentation Analysis
+
+I carefully reviewed the documentation for `clean_column_name` in pandas.core.computation.parsing.py. Here are my findings:
+
+### Function Docstring (lines 100-127)
+The function's docstring explicitly documents the expected behavior:
+
+1. **Purpose**: "Function to emulate the cleaning of a backtick quoted name" - it's meant to clean identifiers that would be parsed as Python code inside backtick quoted strings.
+
+2. **Error Handling Contract** (lines 120-122):
+   - "For some cases, a name cannot be converted to a valid Python identifier."
+   - "In that case :func:`tokenize_string` raises a SyntaxError."
+   - "In that case, we just return the name unmodified."
+
+3. **Implementation** (lines 128-133):
+   The code only catches `SyntaxError`:
+   ```python
+   except SyntaxError:
+       return name
+   ```
+
+### Documentation vs Reality Gap
+The documentation assumes that `tokenize_string` only raises `SyntaxError` when it cannot parse a name. However, the Python tokenizer can raise other exceptions:
+- `tokenize.TokenError` - raised when the source contains null bytes
+- This is NOT a subclass of `SyntaxError` (verified through testing)
+
+### Tokenize Module Documentation
+Python's tokenize module documentation confirms that `TokenError` can be raised for various tokenization failures, including when source code contains null bytes. This is a distinct exception from `SyntaxError`.
+
+### Analysis
+The documentation's promise is clear: when a name cannot be converted to a valid Python identifier, the function should return it unmodified. The documentation doesn't say "only when SyntaxError is raised" - it says when conversion fails. The current implementation violates this documented contract by not handling all tokenization failures.
+
+### Conclusion
+This is a legitimate bug where the implementation fails to honor the documented behavior. The documentation promises graceful degradation (returning the name unmodified) for any name that cannot be converted, but the implementation only handles one specific type of failure (SyntaxError) while missing others (TokenError).

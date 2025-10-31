@@ -1,0 +1,39 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug report and confirmed its claims.
+
+## Hypothesis Test Reproduction
+The provided hypothesis test fails as expected:
+- Input: scalar=0.5
+- ByteSize.validate("0.5b") returns 0 (not 0.5)
+- Calling bs.to('b') returns 0.0 (not 0.5)
+- AssertionError raised: "ByteSize lost precision: 0.5b -> 0 -> 0.0b"
+
+## Manual Reproduction
+Running the provided reproduction code confirms:
+- ByteSize.validate("0.5b") = 0
+- bs.to('b') = 0.0
+
+Additional testing shows the precision loss pattern:
+- "0.1b" -> ByteSize: 0 -> Back to bytes: 0.0
+- "0.9b" -> ByteSize: 0 -> Back to bytes: 0.0
+- "1.7kb" -> ByteSize: 1700 -> Back to kb: 1.7 (works because 1700/1000 = 1.7 exactly)
+- "2.5mb" -> ByteSize: 2500000 -> Back to mb: 2.5 (works because result is integer)
+
+## Root Cause Analysis
+The issue occurs in line 1117 of types.py:
+```python
+return cls(int(float(scalar) * unit_mult))
+```
+
+For fractional byte values where unit_mult=1:
+- "0.5b": float(0.5) * 1 = 0.5, then int(0.5) = 0
+- "0.9999b": float(0.9999) * 1 = 0.9999, then int(0.9999) = 0
+
+The truncation happens silently without warning or error.
+
+## Technical Constraints
+ByteSize inherits from int class, which can only store integer values. This is a fundamental constraint that prevents storing fractional bytes directly.
+
+The bug is confirmed and reproducible exactly as described in the report.

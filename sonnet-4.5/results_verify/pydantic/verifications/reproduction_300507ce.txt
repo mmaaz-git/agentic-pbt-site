@@ -1,0 +1,40 @@
+## Bug Reproduction Analysis
+
+### Summary
+I have successfully reproduced the bug described in the report. The `filter_handlers` function crashes with an `AttributeError` when given a handler object whose attribute is set to a non-callable value that lacks a `__module__` attribute.
+
+### Reproduction Results
+
+#### 1. Hypothesis Test
+The Hypothesis test ran successfully and identified the bug. With `obj=0` (an integer), the test triggered the AttributeError:
+```
+AttributeError: 'int' object has no attribute '__module__'. Did you mean: '__mod__'?
+```
+The test correctly identifies that the function crashes when given objects without a `__module__` attribute, such as integers, strings, lists, etc.
+
+#### 2. Minimal Example
+The minimal reproduction case also successfully triggered the bug:
+```python
+handler = Mock()
+handler.on_enter = 0
+result = filter_handlers(handler, 'on_enter')
+```
+Output: `AttributeError: 'int' object has no attribute '__module__'`
+
+### Code Analysis
+The `filter_handlers` function is located at `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/plugin/_schema_validator.py`, lines 128-140.
+
+The problematic code is at line 135:
+```python
+elif handler.__module__ == 'pydantic.plugin':
+```
+
+The function retrieves the handler method using `getattr(handler_cls, method_name, None)` at line 132, then directly accesses `handler.__module__` at line 135 without first checking if the `handler` object has a `__module__` attribute.
+
+### Impact
+The bug occurs when:
+1. A plugin handler class has an attribute with a name matching one of the handler methods (e.g., 'on_enter', 'on_success', 'on_error', 'on_exception')
+2. That attribute is set to a value that doesn't have a `__module__` attribute (like builtin types: int, str, list, dict, None, bool, etc.)
+3. The `filter_handlers` function is called to check that handler
+
+This causes the validation system to crash with an uninformative error instead of gracefully handling the malformed handler.

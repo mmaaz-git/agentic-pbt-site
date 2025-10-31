@@ -1,0 +1,37 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the dask.dataframe.io.orc.core._read_orc function.
+
+### Test Results:
+
+1. **Property-based test**: FAILED with the error message:
+   - "columns list was mutated: ['a', 'b'] -> ['a', 'b', 'idx']"
+   - The test correctly detects that the input list was mutated
+
+2. **Direct reproduction example**: CONFIRMED the mutation
+   - Input columns list before call: ['a', 'b']
+   - Input columns list after call: ['a', 'b', 'idx']
+   - The 'idx' value (the index parameter) was appended to the original list
+
+### Technical Details:
+
+The issue occurs in line 113 of `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/dataframe/io/orc/core.py`:
+
+```python
+def _read_orc(parts, *, engine, fs, schema, index, columns=None):
+    if index is not None and columns is not None:
+        columns.append(index)  # <- This mutates the caller's list
+```
+
+The function directly calls `.append()` on the `columns` parameter, which modifies the original list object passed by the caller. This is a side effect that violates the principle of least surprise - functions should not mutate their input parameters unless explicitly documented to do so.
+
+### Impact:
+
+- If a caller reuses the `columns` list after calling this function, they will unexpectedly find the index column has been added
+- In concurrent operations or when the same columns list is used multiple times, this could lead to subtle bugs
+- The mutation is especially problematic because it's an internal implementation detail that callers wouldn't expect
+
+The bug report's suggested fix (creating a new list instead of mutating) would resolve this issue:
+```python
+columns = columns + [index]  # Creates a new list instead of mutating
+```

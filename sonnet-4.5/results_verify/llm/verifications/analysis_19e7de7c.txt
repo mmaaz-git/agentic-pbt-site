@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function's documentation doesn't explicitly specify how clock skew should be handled. One could argue that monotonic ULIDs are only guaranteed to be monotonic under normal forward-moving time conditions, and that clock skew represents an abnormal system state outside the function's intended operating parameters. The documentation mentions following the JavaScript reference implementation, which might also not handle backward clocks.
+
+**Why it might not be INVALID:**
+The documentation makes an absolute guarantee: ULIDs will be "strictly larger than every other ULID returned by this function inside the same process." This is an unqualified statement with no exceptions mentioned for clock skew. The word "guaranteed" implies the function should handle all reasonable scenarios, including clock adjustments that commonly occur in production systems.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Clock going backward is an edge case that might be considered a system administration issue rather than a code bug. The frequency of NTP adjustments causing backward time movement might be low enough that fixing this adds complexity for minimal real-world benefit. The workaround is simple: don't adjust system clocks backward while using this function.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - NTP synchronization is standard practice in production environments and clock adjustments are routine. The fix is straightforward and adds minimal complexity (just an additional if statement). The bug directly violates a core guarantee of the function, making it more than a trivial issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior might be considered acceptable if documented. The documentation could be updated to clarify that monotonicity is only guaranteed when the system clock moves forward, and users should be aware of this limitation in environments with potential clock skew. This would set proper expectations without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function name itself is "monotonic_ulid" - the entire purpose is to provide monotonic ordering. Weakening this guarantee in the documentation would fundamentally change what the function promises to deliver. Users specifically choose this function for its monotonicity guarantee, and documenting exceptions would defeat its purpose.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Handling clock skew could be seen as an enhancement beyond the original scope. The current implementation follows a simple model that works for forward-moving time, and adding backward clock handling could be considered a new feature for improved robustness rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality but fixing existing functionality that doesn't meet its specification. The documentation already promises strict monotonicity without qualification. The function is broken as-is because it doesn't deliver what it promises - this is a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function explicitly guarantees that each ULID will be "strictly larger" than all previous ULIDs with no stated exceptions. I've confirmed through testing that this guarantee is violated when clocks go backward, which can happen in normal production environments due to NTP synchronization. The bug is reproducible, the fix is straightforward, and the issue directly contradicts the core promise of the function.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if backward-moving clocks are considered completely out of scope for the function, similar to how a function might not handle hardware failures. However, clock adjustments are routine in distributed systems, not exceptional failures.
+
+## Overall Consideration
+
+This bug report describes a legitimate issue where the `monotonic_ulid` function fails to maintain its documented guarantee of strict monotonicity when system clocks go backward. The testing clearly demonstrates the violation: when time moves from 1001ms back to 999ms, the function generates a ULID that is lexicographically smaller than the previous one, directly contradicting the "strictly larger" guarantee.
+
+The issue is not a misunderstanding of the documentation or an unreasonable expectation. The function's docstring makes an unqualified promise of strict monotonicity within a process, and this promise is broken in a real-world scenario (clock skew from NTP adjustments). The bug is technically accurate, reproducible, and affects the core functionality that users would rely upon when choosing this function.
+
+While one might argue this is an edge case or documentation issue, the function's very name and purpose is to provide monotonic ULIDs. Clock skew is common enough in production systems that a function claiming to provide monotonicity should handle it. The proposed fix is reasonable and would ensure the function delivers on its documented guarantee. This is a valid bug report that identifies a real deficiency in the implementation.
+
+**Decision:** BUG - The function fails to maintain its documented guarantee of strict monotonicity in the presence of backward clock movement, which is a realistic production scenario.

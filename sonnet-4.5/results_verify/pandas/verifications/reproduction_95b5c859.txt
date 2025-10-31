@@ -1,0 +1,42 @@
+## Bug Reproduction Report
+
+### Bug Summary
+The bug report claims that `pandas.api.types.is_re_compilable` crashes with `re.PatternError` on invalid regex patterns instead of returning `False`.
+
+### Reproduction Status: CONFIRMED
+
+I successfully reproduced the bug with all test cases mentioned:
+
+1. **Single backslash `'\\'`**:
+   - Expected: Should return `False`
+   - Actual: Raised `re.PatternError: bad escape (end of pattern) at position 0`
+
+2. **Unclosed bracket `'['`**:
+   - Expected: Should return `False`
+   - Actual: Raised `re.PatternError: unterminated character set at position 0`
+
+3. **Invalid repetition `'*'`**:
+   - Expected: Should return `False`
+   - Actual: Raised `re.PatternError: nothing to repeat at position 0`
+
+4. **Invalid group `'(?P<'`**:
+   - Expected: Should return `False`
+   - Actual: Raised `re.PatternError: missing group name at position 4`
+
+### Function Implementation Analysis
+The current implementation only catches `TypeError` exceptions:
+```python
+try:
+    re.compile(obj)
+except TypeError:
+    return False
+else:
+    return True
+```
+
+However, `re.compile()` raises two types of exceptions:
+- `TypeError`: When the input is not a string-like object (e.g., integers, lists)
+- `re.error` (alias for `re.PatternError` in Python 3.13): When the input is a string but contains invalid regex syntax
+
+### Effect
+Any user calling `is_re_compilable()` with a string containing invalid regex syntax will encounter an unhandled exception instead of receiving the expected boolean return value. This breaks the function's contract as a predicate that should always return `True` or `False`.

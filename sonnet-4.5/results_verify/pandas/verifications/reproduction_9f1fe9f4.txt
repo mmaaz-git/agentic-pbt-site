@@ -1,0 +1,28 @@
+## Bug Reproduction Results
+
+### Test Case Verification
+I successfully reproduced the bug exactly as reported:
+
+**Input**: `pd.cut(np.array([0.0, 5e-324]), 2)`
+**Result**: ValueError with message "Bin edges must be unique: Index([0.0, 0.0, 5e-324], dtype='float64'). You can drop duplicate edges by setting the 'duplicates' kwarg"
+
+### Technical Analysis
+1. **5e-324 is the smallest positive float** (subnormal/denormalized number) representable in IEEE 754 double precision.
+
+2. **Root cause confirmed**: When np.linspace(0.0, 5e-324, 3) is called, it produces [0.0, 0.0, 5e-324] because the middle value (2.5e-324) rounds down to 0.0.
+
+3. **The 0.1% adjustment fails**: The code calculates adj = (5e-324 - 0.0) * 0.001, which underflows to 0.0. Therefore, bins[0] - adj equals bins[0], creating duplicate bin edges.
+
+### Additional Testing Results
+- Values from 0.0 to ~1e-323 trigger the error
+- Values from 1e-320 onwards work correctly
+- The error occurs precisely when the value range is so small that linspace cannot create distinct intermediate values
+
+### Attempted Workaround
+Using `duplicates='drop'` as suggested by the error message DOES NOT WORK. It raises a different error: "missing values must be missing in the same location both left and right sides". This indicates that duplicates='drop' was not designed for this use case.
+
+### Hypothesis Test Results
+The hypothesis test found multiple failures, confirming that the issue is not isolated to the single test case but affects a class of inputs with extremely small ranges.
+
+### Mathematical Verification
+The issue is mathematically correct: when dealing with ranges smaller than floating-point precision allows, it is impossible to create multiple distinct intermediate values. This is a fundamental limitation of floating-point arithmetic, not a coding error.

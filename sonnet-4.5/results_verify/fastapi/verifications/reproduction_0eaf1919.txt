@@ -1,0 +1,36 @@
+## Bug Reproduction Analysis
+
+### Technical Details Verification
+
+1. **Bug Report Claim**: The `allow_headers` list in CORSMiddleware is not sorted after lowercasing.
+   - **CONFIRMED**: The test shows that `middleware.allow_headers` is indeed not sorted after lowercasing.
+
+2. **Failing Input**: `headers=['[']`
+   - **CONFIRMED**: This input produces unsorted headers:
+     - Actual: `['accept', 'accept-language', 'content-language', 'content-type', '[']`
+     - Expected (sorted): `['[', 'accept', 'accept-language', 'content-language', 'content-type']`
+
+3. **Root Cause Analysis**:
+   - **CONFIRMED**: Line 58 sorts headers BEFORE lowercasing: `sorted(SAFELISTED_HEADERS | set(allow_headers))`
+   - **CONFIRMED**: Line 67 lowercases AFTER sorting: `[h.lower() for h in allow_headers]`
+   - This indeed breaks sort order because ASCII sorting differs before and after case conversion
+
+### Functional Impact Assessment
+
+1. **Header Validation**: The unsorted headers are used for validation in line 129, where order is IRRELEVANT
+   - Validation uses `header.strip() not in self.allow_headers` - this is a membership test, not order-dependent
+
+2. **Response Header Generation**: Line 60 uses the sorted (pre-lowercase) version for the HTTP response
+   - `preflight_headers["Access-Control-Allow-Headers"] = ", ".join(allow_headers)`
+   - This happens BEFORE the lowercasing, so the response headers ARE properly sorted
+
+3. **Actual Behavior**: The middleware functions correctly despite the internal storage not being sorted:
+   - Header validation works (order doesn't matter for membership tests)
+   - Response headers are properly formatted (using the sorted, pre-lowercase version)
+   - No functional impact on CORS behavior
+
+### Key Finding
+The `self.allow_headers` attribute stores headers in an unsorted order, but this has NO FUNCTIONAL IMPACT because:
+1. It's only used for membership testing (where order is irrelevant)
+2. The actual HTTP response uses the sorted version from line 60
+3. No part of the code relies on `self.allow_headers` being sorted

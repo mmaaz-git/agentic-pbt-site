@@ -1,0 +1,42 @@
+Bug Reproduction Results
+========================
+
+Test Environment:
+- Django version: Tested with Django installed at /home/npc/miniconda/lib/python3.13/site-packages/django
+- Python version: 3.13
+- Function tested: django.core.cache.utils.make_template_fragment_key
+
+Reproduction Test 1 - Manual Test Cases:
+----------------------------------------
+Test case 1: vary_on=["a:", "b"] vs vary_on=["a", ":b"]
+Result: COLLISION CONFIRMED
+- Both produce identical key: template.cache.fragment.b76cc21cba4ac805d1fc53024777d235
+- Hash portion is identical: b76cc21cba4ac805d1fc53024777d235
+
+Test case 2: vary_on=["x:y", "z"] vs vary_on=["x", "y:z"]
+Result: COLLISION CONFIRMED
+- Both produce identical key: template.cache.test.9650df9e19633bf061a181a85d966e32
+- Hash portion is identical: 9650df9e19633bf061a181a85d966e32
+
+Root Cause Analysis:
+-------------------
+The implementation concatenates elements with ':' separator without escaping:
+- ["a:", "b"] → "a:" + ":" + "b" + ":" = "a::b:"
+- ["a", ":b"] → "a" + ":" + ":b" + ":" = "a::b:"
+
+Both produce the exact same byte sequence "a::b:" that gets hashed, resulting in identical cache keys.
+
+Reproduction Test 2 - Hypothesis Test:
+--------------------------------------
+The hypothesis test from the bug report was run successfully and confirmed the failures.
+The test correctly identified that different vary_on lists can produce identical cache keys.
+
+Impact Verification:
+-------------------
+The bug is real and reproducible. The collision occurs because:
+1. The function uses ':' as a separator between elements
+2. Elements themselves can contain ':'
+3. No escaping or length-prefixing is used
+4. This creates ambiguity in the concatenated string
+
+This is a genuine cache key collision bug that violates the fundamental contract that different inputs should produce different cache keys.

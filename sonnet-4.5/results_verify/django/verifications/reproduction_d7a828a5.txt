@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+### Test Results
+I successfully reproduced the bug using both the property-based test and manual reproduction code:
+
+1. **Property-based test with `policy_values=[' ']`**:
+   - String input `' '` produces header: `''` (empty string after stripping)
+   - List input `[' ']` produces header: `' '` (single space preserved)
+   - These are different, confirming the inconsistency
+
+2. **Manual test with `[' no-referrer ', '  strict-origin']`**:
+   - String input produces: `'no-referrer,strict-origin'` (whitespace stripped)
+   - List input produces: `' no-referrer ,  strict-origin'` (whitespace preserved)
+   - Again, these are different
+
+### Code Analysis
+Looking at the SecurityMiddleware implementation (lines 54-58):
+```python
+",".join(
+    [v.strip() for v in self.referrer_policy.split(",")]
+    if isinstance(self.referrer_policy, str)
+    else self.referrer_policy
+)
+```
+
+The code:
+- For strings: splits on comma and strips whitespace from each value
+- For iterables: uses values as-is without any stripping
+
+### Impact Assessment
+This inconsistency has several implications:
+
+1. **Invalid HTTP Headers**: When using a list with whitespace, the resulting header may contain invalid policy tokens. For example, `" no-referrer "` is not a valid policy token according to the specification.
+
+2. **User Confusion**: Users might reasonably expect `["no-referrer", "strict-origin"]` and `"no-referrer, strict-origin"` to produce identical results, especially if one contains accidental whitespace.
+
+3. **Browser Behavior**: Browsers may handle invalid policy tokens differently. Some might ignore them, others might reject the entire header.
+
+### Technical Details Verified
+- The bug report's code runs correctly
+- The failing inputs produce the exact outputs claimed in the report
+- The inconsistency is reproducible and deterministic
+- The proposed fix would make the handling consistent by stripping whitespace in both cases

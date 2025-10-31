@@ -1,0 +1,33 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug described in the report. The bug occurs when saving and loading complex numbers with zero real part and infinite imaginary part using scipy.io.matlab functions with format='4'.
+
+Test Results:
+-------------
+1. Creating a complex number with 0 real and infinite imaginary part:
+   - Using complex(0.0, np.inf) creates: 0.+infj (correct)
+   - Using np.array([complex(0.0, np.inf)]) creates: [0.+infj] (correct)
+
+2. Save/Load Round Trip:
+   - Original: [0.+infj] with real=0.0, imag=inf
+   - After savemat/loadmat: [[nan+infj]] with real=nan, imag=inf
+   - The real part is corrupted from 0.0 to nan
+
+3. Root Cause Identified:
+   The issue is in scipy/io/matlab/_mio4.py line 218:
+   ```python
+   res = self.read_sub_array(hdr, copy=False)
+   res_j = self.read_sub_array(hdr, copy=False)
+   return res + (res_j * 1j)
+   ```
+
+   The operation (res_j * 1j) where res_j contains infinity causes a RuntimeWarning
+   "invalid value encountered in multiply" and produces nan in the real part.
+
+4. Verification:
+   - Tested res + (res_j * 1j) where res=[[0.0]] and res_j=[[inf]]
+   - Result: [[nan+infj]] instead of expected [[0.+infj]]
+   - Alternative approach using direct assignment to .real and .imag works correctly
+
+The bug is confirmed and reproducible exactly as described in the report.

@@ -1,0 +1,65 @@
+REPRODUCTION OF THE BUG
+=======================
+
+1. BUG REPRODUCED SUCCESSFULLY
+-------------------------------
+The bug report is technically accurate. I was able to reproduce the exact behavior described:
+
+Test Results:
+- When CONTENT_LENGTH is set to "-5", the LimitedStream.limit is set to -5
+- When attempting to read data, empty bytes b'' are returned instead of the actual content
+- The condition _pos >= limit evaluates to True (0 >= -5 = True), blocking all reads
+- This happens in both ServerHandler and WSGIRequest classes
+
+2. SPECIFIC TEST OUTPUTS
+-------------------------
+Test 1 - ServerHandler with CONTENT_LENGTH="-5":
+  - Input stream contains: b"12345"
+  - LimitedStream.limit: -5
+  - Data read: b'' (empty)
+  - Expected per bug report: Empty bytes due to blocking
+  - CONFIRMED: Bug exists as described
+
+Test 2 - WSGIRequest with CONTENT_LENGTH="-10":
+  - Input stream contains: b"Hello World"
+  - LimitedStream.limit: -10
+  - Body data: b'' (empty)
+  - CONFIRMED: Same bug affects WSGIRequest
+
+Test 3 - Direct LimitedStream with negative limit:
+  - Created with limit=-5
+  - Initial _pos=0
+  - Condition check: 0 >= -5 = True
+  - Read returns empty bytes
+  - CONFIRMED: Root cause correctly identified
+
+3. PROPERTY-BASED TEST RESULTS
+-------------------------------
+The property-based test from the bug report was run with various inputs:
+- content_length_value=-1: FAILED (limit=-1 instead of expected 0)
+- content_length_value=-100: FAILED (limit=-100 instead of expected 0)
+- content_length_value=-5: FAILED (limit=-5 instead of expected 0)
+- content_length_value=0: PASSED (limit=0 as expected)
+- content_length_value=10: PASSED (limit=10 as expected)
+- content_length_value=None: PASSED (limit=0 as expected)
+- content_length_value="invalid": PASSED (limit=0 as expected)
+- content_length_value=-3.14: PASSED (limit=0 as string "-3.14" can't be parsed)
+
+4. BEHAVIOR COMPARISON
+-----------------------
+Current Django behavior:
+- Non-numeric strings -> defaults to 0 ✓
+- None/missing values -> defaults to 0 ✓
+- Negative integers -> passes through negative value ✗
+- Positive integers -> passes through positive value ✓
+
+Expected behavior per HTTP spec:
+- All invalid values (including negative) should default to 0
+
+5. TECHNICAL ACCURACY OF BUG REPORT
+------------------------------------
+The bug report is TECHNICALLY CORRECT:
+- The code behaves exactly as described
+- The root cause analysis is accurate
+- The proposed fix would resolve the issue
+- The HTTP specification violation claim is valid

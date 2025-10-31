@@ -1,0 +1,38 @@
+## Reproduction Report for dask.bytes.read_bytes Bug
+
+### Summary
+I have successfully reproduced the reported bug in `dask.bytes.core.read_bytes` where the sample incorrectly includes data after the first delimiter when the entire file fits within the initial read operation.
+
+### Hypothesis Test Results
+The property-based test using Hypothesis failed as expected with the exact failing input specified in the bug report:
+- `data_before=b'\x00'`
+- `data_after=b'\x00'`
+- `sample_size=50`
+
+The test creates a file with content `b'\x00\n\x00'` and expects the sample to end with the delimiter `b'\n'`. The assertion failed with:
+```
+AssertionError: Sample must end with delimiter. Got: b'\x00\n\x00'
+```
+
+### Manual Reproduction Results
+The manual test case also confirmed the bug:
+- File content: `b'\x00\n\x00'`
+- Returned sample: `b'\x00\n\x00'` (entire file)
+- Expected sample: `b'\x00\n'` (stopping at first delimiter)
+- Sample ends with delimiter: False
+
+### Code Analysis
+Examining the source code at `/home/npc/miniconda/lib/python3.13/site-packages/dask/bytes/core.py`, lines 173-184, reveals the logic error:
+
+1. Line 173: Initial read into `sample_buff`
+2. Lines 174-183: While loop that reads more data and checks for delimiter
+3. The bug: The delimiter check (line 178) only happens on subsequent reads (`new`), not on the initial `sample_buff`
+4. If the entire file fits in the initial read (line 173), the while loop never executes because the next read (line 175) returns empty, causing a break at line 177
+
+### Impact
+The bug affects the correctness of the sample when:
+1. A delimiter is specified
+2. Sample size is requested
+3. The entire file (or the portion up to and including the first delimiter) fits within the initial sample read
+
+This violates the expected behavior that samples should respect delimiter boundaries when delimiters are specified.

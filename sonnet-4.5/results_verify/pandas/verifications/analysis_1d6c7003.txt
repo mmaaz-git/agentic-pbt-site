@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for skip_blank_lines never explicitly states that whitespace-only lines should be preserved during CSV operations. The term "blank lines" could reasonably be interpreted to include lines that appear blank (containing only whitespace). The current behavior might be intentional, treating visually blank lines as semantically blank. Users who need to preserve whitespace can use skip_blank_lines=False, which works correctly.
+
+**Why it might not be INVALID:**
+The bug report accurately describes actual data loss - a DataFrame with legitimate data (whitespace is valid data) loses rows when round-tripped through CSV format. The fact that to_csv() writes the whitespace but read_csv() ignores it creates an undocumented asymmetry that violates reasonable expectations about data preservation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior has existed for years and changing it now would be a breaking change for users who rely on the current behavior to clean up CSV files with whitespace-only lines. The workaround (skip_blank_lines=False) is simple and effective. The edge case of single whitespace values in CSV files is relatively rare in practice, and most users would want such lines skipped anyway.
+
+**Why it might not be WONTFIX:**
+Data loss without warning is a serious issue that should not be dismissed. The inconsistency where single-column whitespace rows are dropped but multi-column whitespace rows are preserved makes this more than just an edge case. The fact that pandas previously fixed a similar issue (#10728) suggests the maintainers consider this type of behavior worth addressing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation is genuinely ambiguous about what constitutes a "blank line." It should explicitly state that lines containing only whitespace characters are considered blank and will be skipped by default. Adding a note about the round-trip asymmetry and the skip_blank_lines=False workaround would help users understand and work around this behavior without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting data loss doesn't make it acceptable. If the behavior is surprising and causes data corruption, it should be fixed in the code, not just documented. The documentation gap is a symptom of the underlying problem, not the root cause.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for enhanced round-trip guarantees that pandas doesn't currently promise. A new feature could be added like skip_blank_lines='truly_empty' to distinguish between empty lines and whitespace-only lines. This would preserve backward compatibility while offering better control over the behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+The bug report isn't asking for new functionality but pointing out that existing functionality loses data. Round-trip preservation for valid data isn't a feature request - it's a reasonable expectation for data processing libraries. The fact that a workaround exists doesn't make this a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a data loss bug where legitimate data (whitespace characters) is silently dropped without warning. The behavior is inconsistent (single vs multiple columns behave differently) and undocumented. The asymmetry between to_csv() and read_csv() violates the principle of least surprise. Historical evidence (issue #10728) shows pandas maintainers have previously treated similar issues as bugs worth fixing.
+
+**Why it might not be BUG:**
+The skip_blank_lines parameter is working as designed - it skips lines that appear blank, including those with only whitespace. The behavior is consistent with a reasonable interpretation of "blank lines." The existence of a working workaround (skip_blank_lines=False) suggests this is documented behavior, just not well-documented.
+
+## Overall Consideration
+
+This issue sits at the intersection of documentation ambiguity and unexpected behavior. The core question is whether lines containing only whitespace should be considered "blank" for the purposes of skip_blank_lines. The current implementation says yes, but this is neither clearly documented nor consistent with user expectations for data preservation.
+
+The strongest argument for DOCUMENTATION_FIX is that the behavior, while surprising, is technically consistent with one reasonable interpretation of "blank lines." The documentation should be clarified to explicitly state that whitespace-only lines are considered blank and will be skipped by default. Users who need to preserve such data should be directed to use skip_blank_lines=False. This interpretation is strengthened by the fact that the parameter explicitly exists to control this behavior.
+
+However, the data loss aspect and the inconsistency between single-column and multi-column behavior suggest deeper issues. The fact that pandas previously addressed similar issues as bugs (issue #10728) indicates the maintainers take data preservation seriously. The silent nature of the data loss - no warning, no error - makes this particularly problematic for users who might not discover the issue until production data is corrupted.

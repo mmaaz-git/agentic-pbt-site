@@ -1,0 +1,45 @@
+## Documentation Analysis for dask.dataframe.io.orc
+
+After reviewing the official Dask documentation and source code, here are my findings:
+
+### Documentation Coverage
+
+1. **`to_orc()` function documentation:**
+   - The `write_index` parameter is documented as a boolean with default value `True`
+   - Description: "Whether or not to write the index. Defaults to True."
+   - The documentation does NOT specify any guarantees about index preservation when reading the data back
+   - The documentation only states that each partition will be written to a separate file
+
+2. **`read_orc()` function documentation:**
+   - Has an `index` parameter that allows specifying a column name to set as index
+   - NO mention of automatic index restoration from files written with `write_index=True`
+   - NO documentation about handling pre-existing indexes in ORC files
+   - The `index` parameter is for setting a data column as the index, not for restoring a saved index
+
+3. **Source Code Analysis:**
+   - In `to_orc()`: When `write_index=False`, the code explicitly drops the index with `df.reset_index(drop=True)`
+   - When `write_index=True`, the index is passed to PyArrow's `Table.from_pandas()` which includes it in the ORC file
+   - In `read_orc()`: The function reads partitions independently and only sets an index if explicitly specified via the `index` parameter
+   - The `_read_orc()` helper function only calls `set_index()` if an index column name is provided
+
+### Key Observations
+
+1. **No Round-Trip Guarantee:** The documentation does NOT promise that writing with `write_index=True` and reading back will preserve the original index values.
+
+2. **Index Handling is Asymmetric:**
+   - Writing: `write_index=True` includes the index in the ORC file (likely as a regular column)
+   - Reading: No automatic index restoration; requires explicit column name via `index` parameter
+
+3. **Per-Partition Processing:** The code clearly shows each partition is processed independently during both write and read operations, with no mechanism to preserve global index offsets.
+
+4. **PyArrow Dependency:** The actual ORC I/O is delegated to PyArrow's ORC module, which handles indexes as regular columns without special preservation semantics.
+
+### Documentation Gaps
+
+The documentation does not specify:
+- How indexes are stored in ORC files (as columns? metadata?)
+- Whether index values are preserved across partitions
+- What happens to custom index names
+- The expected behavior for round-trip operations with indexes
+
+This is a significant documentation gap that could lead users to assume round-trip preservation when it's not guaranteed.

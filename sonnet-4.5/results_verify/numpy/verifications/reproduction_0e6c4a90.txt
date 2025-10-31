@@ -1,0 +1,38 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is VALID and reproducible. The `__getattr__` function in numpy.typing crashes with a NameError when attempting to return NBitBase after it has been deleted from the module's namespace.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Execution**
+   - Ran the provided property-based test with Hypothesis
+   - The test correctly failed with NameError as described
+   - Error message: "NameError: name 'NBitBase' is not defined"
+   - Stack trace points to line 184 in numpy/typing/__init__.py
+
+2. **Simple Reproduction**
+   - Executed the simple reproduction code provided in the bug report
+   - Confirmed the same NameError occurs
+   - The error occurs when accessing `npt.NBitBase` after deleting it with `delattr(npt, 'NBitBase')`
+
+3. **Normal Behavior Verification**
+   - Verified that NBitBase normally exists in the module namespace
+   - NBitBase is present in dir(npt), npt.__dict__, and vars(npt)
+   - Without deletion, accessing npt.NBitBase works correctly and returns the class object
+
+### Root Cause Analysis
+
+The issue is in `/home/npc/miniconda/lib/python3.13/site-packages/numpy/typing/__init__.py` at line 184:
+
+```python
+def __getattr__(name: str):
+    if name == "NBitBase":
+        # ... deprecation warning ...
+        return NBitBase  # <-- Bug: NBitBase is not in local scope
+```
+
+The function tries to return `NBitBase` directly, but when NBitBase has been deleted from the module namespace, this bare reference causes a NameError. The function should use `globals()['NBitBase']` to access the module-level attribute, as is done in the second branch of the same function (line 187).
+
+### Impact
+This bug affects dynamic attribute access for NBitBase when it's been removed from the module namespace. While this is an edge case (manually deleting module attributes), the inconsistency in how the function accesses module globals is a genuine bug that violates the expected behavior of module `__getattr__`.

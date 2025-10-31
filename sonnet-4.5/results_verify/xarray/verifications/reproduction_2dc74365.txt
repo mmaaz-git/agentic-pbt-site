@@ -1,0 +1,56 @@
+## Bug Reproduction Results
+
+### Summary
+The bug report is technically correct. The `pretty_print` function does not honor its documented contract for small values of `numchars` (1 and 2).
+
+### Test Results
+
+#### For `numchars=1`:
+- Input: `obj='test'`, `numchars=1`
+- Expected output length: 1
+- Actual output: `'te...'`
+- Actual output length: 5
+- **FAIL**: Contract violation
+
+#### For `numchars=2`:
+- Input: `obj='test'`, `numchars=2`
+- Expected output length: 2
+- Actual output: `'tes...'`
+- Actual output length: 6
+- **FAIL**: Contract violation
+
+#### For `numchars >= 3`:
+- All tests pass correctly
+- The function correctly returns strings of exactly `numchars` length
+
+### Root Cause Analysis
+
+The issue is in the `maybe_truncate` function:
+```python
+def maybe_truncate(obj, maxlen=500):
+    s = str(obj)
+    if len(s) > maxlen:
+        s = s[: (maxlen - 3)] + "..."
+    return s
+```
+
+When `maxlen` is 1 or 2:
+- For `maxlen=1`: It tries to take `s[:(1-3)]` = `s[:-2]` = `'te'` and adds `'...'`, resulting in `'te...'` (5 chars)
+- For `maxlen=2`: It tries to take `s[:(2-3)]` = `s[:-1]` = `'tes'` and adds `'...'`, resulting in `'tes...'` (6 chars)
+
+The function unconditionally appends "..." (3 characters) when truncating, which causes the output to exceed the requested length when `maxlen < 3`.
+
+### Hypothesis Test Confirmation
+The hypothesis test immediately fails on `numchars=1`, confirming the bug exists.
+
+### Technical Details
+1. The bug is deterministic and reproducible
+2. It only affects cases where `numchars < 3` and the input string length > `numchars`
+3. The proposed fix in the bug report would address this issue by checking if `maxlen < 3` and handling it specially
+4. This is an edge case that likely doesn't occur often in practice since typical formatting uses much larger `numchars` values
+
+### Usage Context
+Looking at the codebase, `pretty_print` is primarily used internally within xarray's formatting system:
+- Used in `summarize_attr` with default widths from display options (typically 80+ chars)
+- Used in formatting various repr methods with column widths calculated to be at least 7+6=13 chars
+- The edge case of `numchars` being 1 or 2 is unlikely to occur in normal xarray usage

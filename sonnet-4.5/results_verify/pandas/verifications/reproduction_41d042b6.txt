@@ -1,0 +1,56 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug reported in pandas.io.excel._util._excel2num. The function indeed returns -1 for empty strings and whitespace-only strings instead of raising a ValueError as documented.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Reproduction**
+   - Ran the property-based test from the bug report
+   - The test failed with the assertion error: "_excel2num('') returned -1, but column indices should never be negative"
+   - This confirms the function can return negative values, violating the expectation that column indices should be non-negative
+
+2. **Direct Test Case Reproduction**
+   - Tested _excel2num("") → Returns: -1
+   - Tested _excel2num("   ") → Returns: -1
+   - Tested _excel2num("\t") → Returns: -1
+   - Tested _excel2num("\n") → Returns: -1
+   - All empty/whitespace inputs return -1 instead of raising ValueError
+
+3. **Valid Input Comparison**
+   - _excel2num("A") → Returns: 0 (correct)
+   - _excel2num("B") → Returns: 1 (correct)
+   - _excel2num("AA") → Returns: 26 (correct)
+   - Valid inputs work as expected
+
+### Source Code Analysis
+Examined the actual implementation in /home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/io/excel/_util.py:
+
+```python
+def _excel2num(x: str) -> int:
+    index = 0
+    for c in x.upper().strip():
+        cp = ord(c)
+        if cp < ord("A") or cp > ord("Z"):
+            raise ValueError(f"Invalid column name: {x}")
+        index = index * 26 + cp - ord("A") + 1
+    return index - 1
+```
+
+The bug occurs because:
+1. When x is an empty string or contains only whitespace, x.upper().strip() results in an empty string
+2. The for loop doesn't execute at all (no iterations over empty string)
+3. The function returns index - 1, which is 0 - 1 = -1
+4. No validation occurs to check if the input was empty
+
+### Downstream Impact Confirmed
+Tested _range2cols function which uses _excel2num:
+- _range2cols("A,,C") → Returns: [0, -1, 2] (includes -1 for empty column)
+- _range2cols(",A") → Returns: [-1, 0] (includes -1 for empty column)
+- _range2cols("A,") → Returns: [0, -1] (includes -1 for trailing comma)
+- _range2cols("   ,A") → Returns: [-1, 0] (whitespace treated as empty)
+
+These negative indices in the results confirm the bug can propagate to downstream code that parses column ranges.
+
+### Conclusion
+The bug is confirmed and reproducible. The function returns -1 for empty/whitespace-only inputs when it should raise a ValueError according to its documented contract that it raises ValueError for invalid column names.

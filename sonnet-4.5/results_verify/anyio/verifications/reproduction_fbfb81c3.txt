@@ -1,0 +1,35 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed:
+
+### What the Bug Report Claims:
+- The CapacityLimiter class has type hints declaring `total_tokens` as `float` throughout
+- The implementation rejects float values (except math.inf) and only accepts integers
+
+### Reproduction Results:
+
+1. **Property-based test**: The Hypothesis test fails immediately when trying to create a CapacityLimiter with float values like 1.0, raising "TypeError: total_tokens must be an int or math.inf"
+
+2. **Direct instantiation with float 1.5**: Fails with the same TypeError
+
+3. **Setting total_tokens to a float**: After creating a limiter with an integer value, attempting to set total_tokens to 2.5 also fails with the same TypeError
+
+4. **math.inf works**: As claimed, math.inf is the only float value that's accepted
+
+### Code Verification:
+I examined the source code at /home/npc/pbt/agentic-pbt/envs/anyio_env/lib/python3.13/site-packages/anyio/_core/_synchronization.py and confirmed:
+
+1. Line 494: `def __new__(cls, total_tokens: float) -> CapacityLimiter:`
+2. Line 613: `def __init__(self, total_tokens: float) -> None:`
+3. Line 637: `def total_tokens(self) -> float:`
+4. Line 644: `def total_tokens(self, value: float) -> None:`
+5. Lines 645-646: The validation that rejects floats:
+   ```python
+   if not isinstance(value, int) and value is not math.inf:
+       raise TypeError("total_tokens must be an int or math.inf")
+   ```
+
+### Impact:
+This is a clear inconsistency between the type hints and runtime behavior. Any developer relying on type hints (including IDE autocomplete, type checkers like mypy, and API documentation) would expect float values to be accepted, but they are rejected at runtime.
+
+The bug report is accurate in its description of the problem.

@@ -1,0 +1,44 @@
+TRIAGE ANALYSIS FOR BUG REPORT
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly state that mixing pyrex_* and cython_* parameters should work. The feature is for backward compatibility with old Pyrex code, not necessarily for mixing both styles. Users could argue that you should use either all pyrex_* or all cython_* parameters, not mix them. The code comment only says it translates pyrex_* to cython_* for backward compatibility, not that mixing is supported.
+
+**Why it might not be INVALID:**
+The code clearly attempts to handle pyrex_* parameters by transforming them, and there's no documented restriction against mixing the two styles. During a migration from Pyrex to Cython, it's reasonable to expect that code might temporarily use both parameter styles. The fact that pyrex_include_dirs gets correctly translated while cython_directives gets lost is clearly inconsistent behavior that violates the principle of least surprise.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Pyrex has been obsolete for many years, and the backward compatibility is likely only maintained for legacy code. Mixing pyrex_* and cython_* parameters is probably an edge case that affects very few users. The workaround is simple - just use all cython_* parameters or all pyrex_* parameters. The maintainers might consider this too obscure to fix, especially since it only affects transitional code.
+
+**Why it might not be WONTFIX:**
+The fix is straightforward (as shown in the bug report's patch), and the current behavior silently loses user data without any warning or error. Even if Pyrex is obsolete, the backward compatibility code exists and should work correctly if it's going to exist at all. Silent data loss is generally considered a serious issue worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that mixing pyrex_* and cython_* parameters is not supported and that users should use one style or the other. This would clarify the expected behavior and prevent confusion. The current lack of documentation about this limitation could be seen as the real issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code behavior is objectively broken - it silently drops parameters without warning. This isn't a case where the documentation is unclear about intended behavior; the code has a clear logic bug where it fails to forward parameters in the recursive call. Documenting a bug doesn't make it not a bug.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting mixed pyrex_* and cython_* parameters could be viewed as a new feature that was never intended. The current code might only be designed to support full translation from pyrex_* to cython_*, not mixing. Adding support for mixing could be seen as extending functionality beyond the original design.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the code already attempts to handle both parameter styles. The issue is that the existing implementation is broken. The recursive call simply forgets to forward certain parameters, which is clearly a bug in the implementation, not a request for new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code has a clear logic error where the recursive Extension.__init__ call fails to forward all cython_* parameters when pyrex_* parameters are present. This causes silent data loss - user-specified parameters are ignored without warning. The behavior is inconsistent (pyrex_ parameters work, cython_ parameters don't when mixed) and the fix is straightforward. The code clearly intends to support backward compatibility but fails to do so correctly.
+
+**Why it might not be BUG:**
+The mixing of pyrex_* and cython_* parameters might be considered unsupported behavior that was never intended to work. Since there's no documentation explicitly supporting this use case, it could be argued that this is undefined behavior rather than a bug.
+
+## Overall Consideration
+
+This is a legitimate bug in the Cython.Distutils.Extension implementation. The code provides backward compatibility for Pyrex parameters by transforming them to Cython parameters, but when both styles are mixed, it silently drops all Cython-specific parameters due to an incomplete recursive call. This is clearly unintended behavior that results in silent data loss.
+
+The bug occurs because the recursive Extension.__init__ call on lines 47-63 only forwards the base distutils parameters and **kw, but fails to forward the Cython-specific named parameters. This is an obvious oversight in the implementation - there's no logical reason why these parameters should be dropped when pyrex_* parameters are present.
+
+While Pyrex is obsolete and mixing parameter styles is likely rare, the current behavior is objectively broken and causes silent parameter loss. The fix is simple and correct (forward all parameters in the recursive call), and there's no good reason to leave broken code in place. Even if few users encounter this issue, those who do will experience confusing behavior where their parameters mysteriously disappear without any error or warning. This violates basic principles of software reliability and predictability.

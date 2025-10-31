@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python 3.13
+- scipy version (from module location): Recent version in site-packages
+
+### Reproduction Test Results
+
+1. **scipy.odr.polynomial(2) pickling test**:
+   - Result: FAILED
+   - Error: `AttributeError: Can't get local object 'polynomial.<locals>._poly_est'`
+   - Exactly matches the bug report's claimed error
+
+2. **Other predefined ODR models pickling tests**:
+   - multilinear: SUCCESS - can be pickled and unpickled
+   - exponential: SUCCESS - can be pickled and unpickled
+   - quadratic: SUCCESS - can be pickled and unpickled
+   - unilinear: SUCCESS - can be pickled and unpickled
+   - Confirms the bug report's claim about inconsistency
+
+3. **Hypothesis property-based test**:
+   - Result: FAILED with same error
+   - Confirms the bug occurs for any polynomial order
+
+### Source Code Analysis
+
+Examining `/home/npc/.local/lib/python3.13/site-packages/scipy/odr/_models.py`:
+
+1. **polynomial function (lines 120-178)**:
+   - Defines a local function `_poly_est` inside the polynomial function (lines 169-171)
+   - Returns a Model with this local function as the estimate parameter
+   - Local functions cannot be pickled per Python's pickle documentation
+
+2. **Other predefined models**:
+   - multilinear: Uses class _MultilinearModel with module-level function _lin_est
+   - exponential: Uses class _ExponentialModel with module-level function _exp_est
+   - quadratic: Uses class _QuadraticModel with module-level function _quad_est
+   - unilinear: Uses class _UnilinearModel with module-level function _unilin_est
+   - All use module-level functions which CAN be pickled
+
+### Technical Verification
+
+The bug report is technically accurate:
+1. polynomial() models cannot be pickled due to local function
+2. All other predefined models can be pickled
+3. The error message matches exactly
+4. The inconsistency is real and demonstrable

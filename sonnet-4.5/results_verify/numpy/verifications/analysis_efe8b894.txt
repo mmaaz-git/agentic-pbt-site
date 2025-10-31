@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for numpy.char.mod doesn't explicitly show examples with multiple format specifiers and tuples. One could argue that the lack of such examples implies this usage pattern isn't supported. Additionally, the parameter description says "array_like of values" which could be interpreted as meaning the values parameter should be an array, not a tuple for multiple arguments.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that char.mod performs "pre-Python 2.6 string formatting (interpolation)" and returns "(a % i)", directly referencing Python's % operator. Since Python's % operator supports tuples for multiple format specifiers, and NumPy claims to implement the same behavior, this is a clear deviation from the documented behavior. The function should behave consistently with Python's % operator.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Dictionary-based formatting (e.g., `'%(x)d, %(y)d' % {'x': 5, 'y': 10}`) works correctly in numpy.char.mod, providing an alternative way to handle multiple values. Users could use this workaround instead of tuple-based formatting. The issue might be considered low priority since there's a functional alternative.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - tuple-based formatting with multiple specifiers is a fundamental feature of Python's % operator. Many existing codebases rely on this pattern. The bug breaks basic compatibility with Python's string formatting, which is explicitly what the function claims to implement. Having a workaround doesn't excuse breaking core functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If NumPy intentionally doesn't support tuple arguments for multiple format specifiers, the documentation should be updated to clarify this limitation. The current documentation is misleading by claiming compatibility with Python's % operator without mentioning this significant limitation. Adding a note about this restriction would help users understand the actual behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already claims the function implements Python's % operator behavior. The issue isn't that the documentation is wrong about what the code should do - the code is wrong about what it actually does. Changing the documentation to match the broken behavior would be admitting a regression rather than fixing the actual problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting tuple arguments for multiple format specifiers is a new feature that hasn't been implemented yet. The current implementation might have been designed only for simple single-value formatting, and extending it to handle tuples properly would be an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality beyond what Python's % operator provides. The function explicitly claims to implement "pre-Python 2.6 string formatting", which has always included tuple support for multiple specifiers. This is restoring expected functionality, not adding something new. The code already attempts to implement % operator behavior but does so incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function documentation explicitly states it implements Python's % operator behavior ("pre-Python 2.6 string formatting"). Python's % operator has always supported tuples for multiple format specifiers - this is fundamental, documented behavior. The implementation incorrectly wraps the values parameter in an extra tuple, breaking compatibility. The bug report correctly identifies the root cause and provides a reasonable fix. This is a clear case where the implementation doesn't match the documented interface contract.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if NumPy never intended to fully support Python's % operator behavior, but this contradicts their own documentation. The lack of examples with multiple specifiers could suggest it was never tested or intended to work, making it more of an unimplemented feature than a bug.
+
+## Overall Consideration
+
+After thorough analysis, this appears to be a valid BUG. The numpy.char.mod function explicitly claims in its documentation to implement Python's % operator behavior for string formatting. The documentation states it returns "(a % i)" and performs "pre-Python 2.6 string formatting (interpolation)". This creates a clear contract that the function should behave like Python's % operator.
+
+Python's % operator has always supported tuples for format strings with multiple placeholders - this is fundamental, well-documented behavior that has existed since before Python 2.6. When numpy.char.mod fails to handle `char.mod(['x=%d, y=%d'], (5, 10))` while Python's `'x=%d, y=%d' % (5, 10)` works correctly, this is a clear violation of the documented interface contract.
+
+The bug report correctly identifies the root cause: the implementation wraps values in `(values,)`, which adds an unwanted extra layer of tuple nesting. This makes `'x=%d, y=%d'.__mod__((5, 10))` become `'x=%d, y=%d'.__mod__(((5, 10),))`, causing the error. This is not a documentation issue, not a missing feature, and not a trivial edge case - it's a fundamental incompatibility with the behavior NumPy claims to implement. The fact that dictionary-based formatting works while tuple-based formatting doesn't is inconsistent and suggests an implementation oversight rather than intentional design.

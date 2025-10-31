@@ -1,0 +1,43 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The FastAPI documentation doesn't explicitly state that the function should handle leading whitespace in Authorization headers. The function `get_authorization_scheme_param` is an internal utility that might have been designed to expect pre-processed input. If the expectation is that headers are already cleaned before reaching this function, then the current behavior could be considered correct for its intended use case.
+
+**Why it might not be INVALID:**
+RFC 7230 clearly states that HTTP parsers ought to exclude leading and trailing whitespace from header field values. This is a well-established HTTP standard that all HTTP implementations should follow. The function is specifically designed to parse HTTP Authorization headers, so it should conform to HTTP specifications. The bug causes real authentication failures in production scenarios.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs when clients send malformed headers with leading whitespace, which could be considered a client error. Clients should be sending properly formatted headers without extraneous whitespace. The workaround is simple - clients should ensure they don't add leading whitespace to their Authorization headers. This might be viewed as an edge case that rarely occurs in practice.
+
+**Why it might not be WONTFIX:**
+This violates a clear HTTP specification requirement. The RFC uses "ought to" (equivalent to SHOULD) which is a strong recommendation. Many HTTP clients and proxies might add or modify whitespace, and FastAPI should be robust enough to handle these common scenarios. The fix is trivial (adding a .strip() call) and would improve compatibility without any negative side effects.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The FastAPI documentation doesn't mention how whitespace in headers is handled. If the current behavior is intentional, the documentation should explicitly state that Authorization headers must not have leading whitespace. This would help developers understand the requirements and avoid this issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior violates HTTP standards, so documenting it as expected behavior would be incorrect. The code should be fixed to comply with RFC 7230, not the documentation updated to describe non-compliant behavior. This is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding support for headers with leading whitespace could be viewed as a new feature - enhanced compatibility with various HTTP clients. The current implementation works for the standard case (no leading whitespace), and adding support for edge cases could be considered an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a new feature but rather fixing non-compliance with existing HTTP standards. RFC 7230 has been around since 2014, and this behavior is expected from any HTTP implementation. It's fixing a deficiency in the current implementation, not adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation violates RFC 7230 Section 3.2.4, which clearly states that parsers ought to exclude leading and trailing whitespace from header field values. The bug causes legitimate HTTP requests to fail authentication, affecting real-world applications. The test cases clearly demonstrate the issue, and the fix is straightforward. FastAPI, as a modern web framework, should be compliant with HTTP standards.
+
+**Why it might not be BUG:**
+The function might have been designed with the assumption that input is pre-processed, and this could be working as intended for its original design scope. The documentation doesn't explicitly promise RFC compliance for this specific utility function.
+
+## Overall Consideration
+After careful analysis, this appears to be a valid BUG. The evidence strongly supports this classification for three key reasons:
+
+First, RFC 7230 Section 3.2.4 explicitly states that HTTP parsers "ought to" (SHOULD) exclude leading and trailing whitespace from header field values. This is not an optional nice-to-have feature but a standard requirement for HTTP implementations. FastAPI, being a web framework that handles HTTP requests, should comply with HTTP specifications. The current implementation directly violates this specification by treating leading whitespace as part of the parsing logic rather than ignoring it.
+
+Second, the bug has real-world impact. The reproduction clearly shows that valid authentication requests fail when there's leading whitespace in the Authorization header. This isn't just a theoretical issue - it causes actual API endpoints to return 403 Forbidden errors instead of processing legitimate requests. Various HTTP clients, proxies, or load balancers might introduce such whitespace, and a robust web framework should handle these cases gracefully.
+
+Third, the fix is trivial and has no negative side effects. Adding a simple `.strip()` call before parsing would make the function compliant with HTTP standards without breaking any existing functionality. Headers without whitespace would continue to work exactly as before, while headers with whitespace would now be parsed correctly. This is a clear improvement to the codebase that enhances compatibility and standards compliance.

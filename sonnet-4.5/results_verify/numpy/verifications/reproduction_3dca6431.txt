@@ -1,0 +1,23 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The bug is confirmed to exist in numpy's `normalize_axis_tuple` function.
+
+### Test Results
+
+When testing `normalize_axis_tuple` with axis values that exceed the C int range (2^31-1 for positive, -2^31 for negative), the function raises `OverflowError` instead of the expected `AxisError`.
+
+Key observations:
+1. **Within C int range**: Values like 2^31-1 (2147483647) and -2^31 (-2147483648) correctly raise `AxisError` when out of bounds for the given ndim
+2. **Outside C int range**: Values >= 2^31 or <= -(2^31+1) raise `OverflowError` with message "Python int too large to convert to C int"
+
+Specific test cases confirmed:
+- axis=2147483648 (2^31), ndim=1: Raises OverflowError ✗ (Should be AxisError)
+- axis=2147483649, ndim=1: Raises OverflowError ✗ (Should be AxisError)
+- axis=-2147483649, ndim=1: Raises OverflowError ✗ (Should be AxisError)
+- axis=4294967296 (2^32), ndim=1: Raises OverflowError ✗ (Should be AxisError)
+
+The bug occurs consistently for all integer values that cannot fit in a C int (32-bit signed integer). This confirms the bug report's claim that the function violates its documented behavior by raising the wrong exception type for these out-of-range values.
+
+### Impact
+
+This is a real bug that breaks the API contract. Code that expects to catch `AxisError` for all invalid axis values will fail to handle these overflow cases properly, potentially causing unexpected failures in production code.

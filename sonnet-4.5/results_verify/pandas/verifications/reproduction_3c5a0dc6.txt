@@ -1,0 +1,52 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python version: 3.13
+- Pandas installation: /home/npc/miniconda/lib/python3.13/site-packages/pandas/
+
+### Hypothesis Property-Based Test
+The provided Hypothesis test FAILS as reported:
+```python
+@given(st.one_of(st.just(float('inf')), st.just(float('-inf')), st.just(float('nan'))))
+@settings(max_examples=10)
+def test_ensure_python_int_special_floats_raise_typeerror(x):
+    with pytest.raises(TypeError):
+        ensure_python_int(x)
+```
+
+Result: The test fails on the first example with `x=inf`, raising `OverflowError` instead of the expected `TypeError`.
+
+### Manual Testing Results
+
+#### For float('inf'):
+- `ensure_python_int(float('inf'))` raises: `OverflowError: cannot convert float infinity to integer`
+- Expected per docstring: `TypeError`
+- **BUG CONFIRMED**: Wrong exception type
+
+#### For float('-inf'):
+- `ensure_python_int(float('-inf'))` raises: `OverflowError: cannot convert float infinity to integer`
+- Expected per docstring: `TypeError`
+- **BUG CONFIRMED**: Wrong exception type
+
+#### For float('nan'):
+- `ensure_python_int(float('nan'))` raises: `TypeError: Wrong type <class 'float'> for value nan`
+- Expected per docstring: `TypeError`
+- **CORRECT BEHAVIOR**: Raises TypeError as expected
+- Note: The underlying `ValueError` from `int(nan)` is properly caught and converted to `TypeError`
+
+### Root Cause Analysis
+The implementation in lines 115-119 of pandas/core/dtypes/common.py shows:
+```python
+try:
+    new_value = int(value)
+    assert new_value == value
+except (TypeError, ValueError, AssertionError) as err:
+    raise TypeError(f"Wrong type {type(value)} for value {value}") from err
+```
+
+The exception handler catches `(TypeError, ValueError, AssertionError)` but NOT `OverflowError`.
+
+When Python's `int()` is called with infinity values, it raises `OverflowError`, which is not in the caught exception tuple, so it propagates unchanged instead of being converted to `TypeError`.
+
+### Summary
+The bug report is ACCURATE. The function violates its documented contract by raising `OverflowError` for infinity values instead of `TypeError`. The proposed fix of adding `OverflowError` to the caught exceptions tuple would correctly address this issue.

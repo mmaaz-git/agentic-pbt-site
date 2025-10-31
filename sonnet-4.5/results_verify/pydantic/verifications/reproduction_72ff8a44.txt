@@ -1,0 +1,37 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug reported in the pydantic.deprecated.json bytes encoder. The bug causes a crash when encoding bytes containing non-UTF-8 sequences.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test
+The property-based test provided in the bug report correctly identifies the issue:
+- Test: `@given(st.binary(min_size=1, max_size=100))`
+- Failing input: `b'\x80'` (and any other invalid UTF-8 byte sequences)
+- Error: `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+
+### 2. Manual Test Case
+The manual test case with `b'\x80\x81\x82'` also reproduces the crash:
+- Input: `json.dumps(b'\x80\x81\x82', default=pydantic_encoder)`
+- Result: `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+
+### 3. Code Examination
+I examined the source code at `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/deprecated/json.py`, line 55:
+```python
+bytes: lambda o: o.decode(),
+```
+
+The code indeed calls `o.decode()` without specifying encoding or error handling, which causes it to:
+1. Default to UTF-8 encoding
+2. Default to 'strict' error handling
+3. Raise UnicodeDecodeError on invalid UTF-8 sequences
+
+## Effect
+The bug causes the pydantic_encoder function to crash with UnicodeDecodeError whenever it attempts to encode bytes objects that contain non-UTF-8 sequences. This is a real issue because:
+- Bytes can contain arbitrary binary data, not just UTF-8 text
+- The encoder is meant to handle serialization of Python types for JSON
+- A crash prevents the entire JSON serialization from completing
+
+## Conclusion
+The bug report is accurate. The pydantic_encoder function crashes when handling bytes with non-UTF-8 sequences due to calling decode() without proper error handling.

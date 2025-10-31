@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug only manifests in older NumPy versions (< 2.0). In current NumPy versions (2.0+), the default behavior of np.array() is to create a copy, which prevents the mutation. One could argue that if users are using outdated dependencies, that's not necessarily a bug in Dask. Additionally, the documentation doesn't explicitly guarantee that input parameters won't be modified, so technically this isn't violating any documented contract.
+
+**Why it might not be INVALID:**
+The issue represents a real problem that can cause data corruption in user code. Even if it only affects older NumPy versions, many production systems still use NumPy 1.x. The behavior violates common programming expectations - functions generally shouldn't mutate their inputs unless that's their explicit purpose. Pandas' quantile() doesn't mutate inputs, and Dask aims for pandas compatibility.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only affects users with NumPy < 2.0, which is becoming increasingly outdated. The problem "solves itself" when users upgrade to newer NumPy versions. Adding .copy() might introduce a small performance penalty for all users just to support legacy environments. The workaround is simple - users can pass q.copy() themselves if they're concerned about mutation.
+
+**Why it might not be WONTFIX:**
+This is a silent data corruption bug that can be very hard to debug. Users might not realize their input array is being modified, leading to subtle bugs in their code. The fix is trivial (adding .copy()) and the performance impact is negligible for typical quantile calculations. Supporting older NumPy versions is important for compatibility.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify whether input parameters will be preserved or modified. If the intention is that users should expect possible mutation with older NumPy versions, this should be documented. A documentation update warning about this behavior with NumPy < 2.0 could be sufficient.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The expected behavior (based on pandas compatibility and common practice) is clearly that inputs shouldn't be mutated. This is a code bug, not a documentation issue. Documenting unexpected mutation as "intended behavior" would be acknowledging a design flaw rather than fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting a new feature: "Support for preserving input arrays across all NumPy versions." The current code works correctly with modern NumPy, and adding backward compatibility could be seen as a feature addition rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing functionality to work correctly without side effects. Preserving input parameters is standard behavior, not a special feature. The issue is about fixing unexpected behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code can silently mutate user data, which is unexpected behavior that violates the principle of least surprise. Pandas doesn't mutate the input in its quantile() function, and Dask aims for pandas compatibility. The issue can cause real data corruption in production code. The fix is simple and low-risk - just adding .copy() to ensure consistent behavior across all NumPy versions. Even though it only affects NumPy < 2.0, many systems still use these versions.
+
+**Why it might not be BUG:**
+The issue only manifests with outdated dependencies (NumPy < 2.0). The code works correctly with current NumPy versions due to their default copy behavior. The documentation doesn't explicitly promise that inputs won't be modified. One could argue this is expected behavior when using older NumPy versions that had different defaults.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though with limited scope. The key factors are:
+
+First, the behavior violates reasonable user expectations. Functions in data processing libraries generally shouldn't mutate their inputs unless that's their explicit purpose (like in-place operations). Users passing an array to quantile() reasonably expect their array to remain unchanged. This is especially true given that pandas' quantile() doesn't mutate inputs, and Dask aims for pandas API compatibility.
+
+Second, while the issue only affects NumPy < 2.0, this is still a significant concern. Many production systems, especially in enterprise environments, run older versions of dependencies. NumPy 1.x is still widely used. The bug causes silent data corruption - the array is modified without any warning or error, which can lead to extremely hard-to-debug issues in user code. A user might use the same quantile array multiple times and get different results without understanding why.
+
+Third, the fix is trivial and has minimal downsides. Adding .copy() is a one-line change that ensures consistent behavior across all NumPy versions. The performance impact is negligible for typical use cases since quantile calculations are already computationally intensive compared to a simple array copy. The fix improves code robustness without any significant cost. Given that the issue represents real data corruption potential, the trivial fix makes this worth addressing as a bug rather than dismissing it as a legacy issue.

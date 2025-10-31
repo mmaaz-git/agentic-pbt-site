@@ -1,0 +1,42 @@
+DOCUMENTATION ANALYSIS
+======================
+
+After thorough research of available documentation, here are my findings:
+
+1. Middleware Documentation:
+   - FastAPI and Starlette documentation provide minimal information about HTTPSRedirectMiddleware
+   - The documentation only states that it "enforces that all incoming requests must either be https or wss"
+   - No specific port handling behavior is documented
+   - No mention of how ports 80, 443, or other ports are treated during redirects
+
+2. Source Code Analysis:
+   - The actual implementation shows explicit port handling logic: `url.port in (80, 443)`
+   - No code comments or docstrings explain why both ports are treated the same
+   - The code appears to assume both ports can be dropped, which is the source of the bug
+
+3. HTTP/HTTPS Standards (RFC Analysis):
+   - RFC 3986 (URI Syntax) states that default ports should be omitted for normalization
+   - HTTP default port is 80 (per RFC 1060, RFC 1340)
+   - HTTPS default port is 443 (per RFC 1700)
+   - Key principle: "URI producers and normalizers should omit the port component if its value would be the same as that of the scheme's default"
+
+4. Important Distinction:
+   - Port 80 is the default for HTTP scheme
+   - Port 443 is the default for HTTPS scheme
+   - Port 80 is NOT a default for HTTPS
+   - Port 443 is NOT a default for HTTP
+
+5. Expected Behavior Based on Standards:
+   - When redirecting from HTTP to HTTPS:
+     * HTTP on port 80 → HTTPS (port omitted, as 443 is HTTPS default)
+     * HTTP on port 443 → HTTPS on port 443 (preserved, as 443 is NOT HTTP's default)
+     * HTTP on port 8080 → HTTPS on port 8080 (preserved, non-standard port)
+
+6. Documentation Gap:
+   - The middleware's actual behavior (dropping both 80 and 443) is undocumented
+   - No justification provided for treating port 443 as droppable for HTTP requests
+   - The behavior contradicts RFC 3986's guidance on port normalization
+
+Conclusion:
+-----------
+The documentation does not specify or justify the current behavior. The implementation appears to violate RFC 3986 principles by dropping port 443 from HTTP URLs when it should be preserved (as it's not HTTP's default port). The lack of documentation makes this behavior unexpected and contradictory to standard URL normalization practices.

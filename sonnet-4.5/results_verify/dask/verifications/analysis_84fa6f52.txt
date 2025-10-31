@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be invalid if Django intentionally designed Node.__copy__ to share the children list for performance reasons or specific use cases. The code includes an explicit comment "Don't [:] as .__init__() via .create() does" suggesting this behavior is intentional. Additionally, Django's internal usage in Node.add() immediately replaces self.children after copying, so the shared reference doesn't cause issues internally.
+
+**Why it might not be INVALID:**
+The behavior clearly violates Python's established convention for container-like objects. All Python standard library containers (list, dict, deque, etc.) create new container objects during shallow copy. The Node class implements container-like methods (__len__, __contains__, __bool__) based on children, making it a container type that should follow these conventions.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be WONTFIX if the current behavior has been in Django for many years and changing it might break backward compatibility for code that relies on the shared reference behavior. The internal Django code works correctly with the current implementation, and the comment suggests developers were aware of this choice. Since it's in django.utils.tree which is primarily for internal ORM use, it might be considered too minor to fix.
+
+**Why it might not be WONTFIX:**
+The issue is not trivial - it violates fundamental Python conventions and the principle of least surprise. Any external code or Django extensions that use Node.__copy__ and then modify children will experience unexpected behavior. The fix is simple (one line change) and Django's own code wouldn't be affected since it immediately replaces children after copying.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+There is no public documentation for django.utils.tree.Node, and the module docstring only says it's "primarily used for filter constructs in the ORM." If this is considered internal API with undefined behavior, the issue might be treated as a documentation problem where the behavior should be documented but not changed.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Even internal APIs should follow Python conventions unless there's a compelling reason not to. The lack of documentation doesn't excuse violating standard semantics. The bug is in the implementation, not in missing or incorrect documentation. The code behavior is objectively wrong according to Python conventions.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper shallow copy semantics for Node is a new feature rather than a bug fix, especially given the intentional comment in the code. The request could be reframed as "Add proper shallow copy support to Node class" rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but rather fixing existing functionality that doesn't work correctly. The __copy__ method already exists but implements incorrect semantics. Python's copy protocol is well-established, and following it is not a feature but expected behavior.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of Python's copy protocol conventions. The Node class acts as a container (with __len__, __contains__, etc.) and should behave like other containers during copy operations. All standard library containers create new container objects during shallow copy. The current behavior can cause unexpected mutations between supposedly independent copies, which is a correctness issue. The fix is trivial and wouldn't break Django's internal usage.
+
+**Why it might not be BUG:**
+The behavior appears intentional based on the explicit comment in the code. Django's internal usage works correctly with the current implementation. The class is in django.utils which might be considered internal API where strict Python conventions don't necessarily apply. No Django documentation promises standard copy semantics for this class.
+
+## Overall Consideration
+
+After thorough investigation, this appears to be a legitimate bug, though one that Django developers were apparently aware of when writing the code. The Node class implements container-like behavior through methods like __len__, __contains__, and __bool__, all of which operate on the children attribute. Python has a clear and consistent convention that container types should create new container objects (not share them) during shallow copy operations.
+
+The investigation revealed that ALL Python standard library container types (list, dict, deque, OrderedDict, array, etc.) follow this convention. When a user-defined class acts like a container and implements __copy__, it should follow the same semantics. The current Django implementation violates this principle, potentially causing surprising behavior where mutations to one node's children affect other nodes that were supposedly copied.
+
+While the comment "Don't [:] as .__init__() via .create() does" suggests the behavior is intentional, this appears to be a mistaken optimization or misunderstanding. The Django internal usage wouldn't be affected by fixing this bug since Node.add() immediately replaces self.children after copying. Therefore, this should be classified as a BUG that should be fixed to align with Python conventions and prevent unexpected behavior in user code or Django extensions that might use Node.__copy__.

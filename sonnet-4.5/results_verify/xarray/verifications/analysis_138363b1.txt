@@ -1,0 +1,79 @@
+TRIAGE ANALYSIS
+===============
+
+## Consideration for Each Category
+
+### 1. BUG (Valid Bug Report)
+**Why it MIGHT be a BUG:**
+- The function already validates vmin < vmax when one parameter is None, establishing a clear requirement
+- The mathematical formula `(darray - vmin) / (vmax - vmin)` requires vmin < vmax to work correctly
+- When vmin > vmax, the function produces mathematically incorrect results (negative scaling factor)
+- When vmin == vmax, the function causes division by zero
+- The inconsistency in validation (validates in 2 cases but not the 3rd) appears to be an oversight
+- The code comment at line 759 states intent to "check that an interval between them exists"
+- The variable names themselves (vmin/vmax) establish the expectation that min < max
+
+**Why it might NOT be a BUG:**
+- The function is private (underscore prefix), so internal implementation details might be intentional
+- No explicit documentation states vmin must be less than vmax
+
+### 2. INVALID (Incorrect Report)
+**Why it MIGHT be INVALID:**
+- The function is private/internal, not part of the public API
+- There's no explicit documentation requiring vmin < vmax
+- The function technically "works" (produces output) even with inverted values
+
+**Why it's NOT INVALID:**
+- The existing validation in other branches shows clear intent to enforce vmin < vmax
+- The mathematical operation is fundamentally incorrect with inverted bounds
+- The code produces warnings (division by zero, overflow) indicating incorrect usage
+
+### 3. WONTFIX (Trivial/Unimportant)
+**Why it MIGHT be WONTFIX:**
+- Users providing vmin > vmax could be considered user error
+- The function is internal/private, not meant for direct use
+- Edge case that might rarely occur in practice
+
+**Why it's NOT WONTFIX:**
+- The function is used by the public imshow API, affecting end users
+- Silent incorrect behavior is worse than an error
+- The fix is trivial (4-5 lines of code)
+- Other branches already have this validation
+
+### 4. FEATURE_REQUEST (New Functionality)
+**Why it MIGHT be FEATURE_REQUEST:**
+- Adding validation could be seen as a new feature
+- The current code "works" without the validation
+
+**Why it's NOT FEATURE_REQUEST:**
+- This is fixing incorrect behavior, not adding new functionality
+- The validation already exists for other cases, just missing for one
+- This is about correctness, not enhancement
+
+### 5. DOCUMENTATION_FIX (Doc Issue)
+**Why it MIGHT be DOCUMENTATION_FIX:**
+- The public documentation doesn't explicitly state vmin must be < vmax
+- Could argue the docs should clarify this requirement
+
+**Why it's NOT DOCUMENTATION_FIX:**
+- The code behavior is incorrect, not just poorly documented
+- The existing partial validation shows this is a code bug, not a doc issue
+- Mathematical operations inherently require proper bounds
+
+## DETAILED REASONING
+
+The critical evidence is:
+
+1. **Existing Validation Pattern**: The code ALREADY validates vmin < vmax in lines 762-766 and 769-773 when one parameter is None. This establishes clear intent that vmin < vmax is required.
+
+2. **Mathematical Correctness**: The formula `(darray - vmin) / (vmax - vmin)` is a standard linear rescaling that maps [vmin, vmax] to [0, 1]. This mathematically requires vmin < vmax.
+
+3. **Inconsistent Behavior**: The function validates the relationship in 2 out of 3 cases, but misses the case when both are provided. This is clearly an oversight, not intentional design.
+
+4. **Silent Failure**: The function produces incorrect results without warning when vmin >= vmax, which violates the principle of failing fast and clearly.
+
+5. **Code Comments**: Line 759 explicitly states the intent to "check that an interval between them exists", but this check is missing for the both-provided case.
+
+## CONCLUSION
+
+This is a valid BUG. The function has inconsistent validation that allows mathematically incorrect operations to proceed silently. The existing validation in other branches proves this is unintended behavior that should be fixed.

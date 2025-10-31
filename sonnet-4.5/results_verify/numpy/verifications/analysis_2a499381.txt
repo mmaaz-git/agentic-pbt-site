@@ -1,0 +1,78 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## Consideration for Each Category
+
+### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The asymmetry is clearly demonstrated and reproducible
+- The asymmetry is specifically related to infinity and mask interaction, not the documented tolerance-based asymmetry
+- The current behavior is counterintuitive: when comparing masked vs unmasked infinity, the result depends on argument order
+- This appears to be an implementation bug in the infinity checking logic, not intentional design
+- The proposed fix is reasonable and would restore symmetry for this specific case
+
+**Arguments AGAINST:**
+- The parent function `numpy.allclose` is documented as potentially asymmetric
+- The documentation doesn't explicitly guarantee symmetry
+
+### INVALID
+**Arguments FOR:**
+- The documentation for `numpy.allclose` explicitly states it may be asymmetric
+- `numpy.ma.allclose` inherits from `numpy.allclose` and could inherit its asymmetry
+- The documentation doesn't promise symmetry
+
+**Arguments AGAINST:**
+- The documented asymmetry is about tolerance calculations, not mask/infinity interaction
+- The bug creates a different type of asymmetry than what's documented
+- Users would reasonably expect mask handling to be symmetric
+
+### WONTFIX
+**Arguments FOR:**
+- This is an edge case involving infinity and masked values
+- The asymmetry might rarely affect real-world usage
+- Fixing it could potentially break existing code that depends on current behavior
+
+**Arguments AGAINST:**
+- This violates intuitive expectations about comparison operations
+- The fix is straightforward and wouldn't affect normal use cases
+- Property-based testing revealed this issue, suggesting it's worth fixing
+
+### DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation doesn't specify behavior for infinity with masked values
+- Could document the current behavior as expected
+- The asymmetry could be considered a "feature" that needs documentation
+
+**Arguments AGAINST:**
+- The behavior appears to be a bug, not an undocumented feature
+- The asymmetry is unintuitive and likely unintended
+
+### FEATURE_REQUEST
+**Arguments FOR:**
+- Could frame this as requesting symmetric behavior for mask/infinity cases
+- The current code doesn't handle this case well
+
+**Arguments AGAINST:**
+- This is fixing broken behavior, not adding new functionality
+- Users already expect symmetry in comparison operations
+
+## Detailed Analysis
+
+The key issue is that this asymmetry is DIFFERENT from the documented asymmetry:
+
+1. **Documented asymmetry**: Due to the formula `|a - b| <= (atol + rtol * |b|)` using `|b|` instead of `|a|`
+2. **Bug's asymmetry**: Due to incorrect mask application when checking infinities
+
+The bug creates the following illogical behavior:
+- `allclose([inf], [masked])` = True (treats masked as "don't care")
+- `allclose([masked], [inf])` = False (fails infinity check)
+
+This is clearly inconsistent. If masked values are "don't care" values that match anything (when `masked_equal=True`), then the comparison should be symmetric.
+
+## Recommendation
+
+This should be classified as **BUG**. The asymmetry caused by mask/infinity interaction is:
+1. Not the same as the documented tolerance-based asymmetry
+2. Logically inconsistent with the concept of masked values
+3. Clearly a bug in the implementation logic
+4. Fixable without affecting the documented behavior

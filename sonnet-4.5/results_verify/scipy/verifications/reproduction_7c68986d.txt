@@ -1,0 +1,43 @@
+## Bug Reproduction Results
+
+### Test 1: Empty Complex Sparse Matrix
+When creating a complex sparse matrix with all zeros (nnz=0):
+- Original dtype: complex128
+- Original nnz: 0
+- File header written: "%%MatrixMarket matrix coordinate real symmetric"
+- Result dtype after reading: float64
+- **BUG CONFIRMED**: The dtype is not preserved (complex128 → float64)
+
+### Test 2: Non-Empty Complex Sparse Matrix
+When creating a complex sparse matrix with non-zero values (nnz=1):
+- Original dtype: complex128
+- Original nnz: 1
+- File header written: "%%MatrixMarket matrix coordinate complex symmetric"
+- Result dtype after reading: complex128
+- **WORKS CORRECTLY**: The dtype is preserved when nnz > 0
+
+### Test 3: Empty Real Sparse Matrix
+When creating a real sparse matrix with all zeros (nnz=0):
+- Original dtype: float64
+- Original nnz: 0
+- File header written: "%%MatrixMarket matrix coordinate real symmetric"
+- Result dtype after reading: float64
+- **WORKS CORRECTLY**: The dtype is preserved for real matrices
+
+### Hypothesis Test Results
+The hypothesis test failed with the exact scenario described in the bug report:
+- Falsifying example: rows=1, cols=1, density=0.0
+- Error: "AssertionError: Expected dtype complex128, got float64 (nnz=0)"
+
+### Technical Analysis
+The bug is specifically triggered when:
+1. The sparse matrix has complex dtype (complex128)
+2. The sparse matrix has no non-zero values (nnz=0)
+3. When writing such a matrix, scipy incorrectly writes "real" in the Matrix Market header instead of "complex"
+4. When reading back, scipy correctly interprets the "real" field type and returns float64
+
+### Root Cause
+The issue appears to be that when nnz=0, scipy.io.mmwrite determines the field type based on the actual values in the sparse matrix data array (which is empty), rather than the dtype of the sparse matrix itself. Since there are no values to examine, it defaults to "real" instead of checking the dtype attribute of the sparse matrix.
+
+### Impact
+This breaks the round-trip property for complex sparse matrices with all zeros. Users who save and load such matrices will lose the complex data type information, which could cause errors in subsequent calculations that expect complex numbers.

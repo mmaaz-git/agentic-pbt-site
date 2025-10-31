@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This is an internal function (starts with underscore) that's not part of the public API. The documentation doesn't specify that it should handle arbitrarily large values. The function is designed to convert SAS datetime values, and SAS datetime values have their own limits. Values like 1e20 seconds (billions of years) are not realistic datetime values that would ever appear in legitimate SAS files. The function works correctly for all reasonable datetime values that could actually exist in valid SAS data.
+
+**Why it might not be INVALID:**
+The function accepts float inputs without any documented restrictions and crashes ungracefully. Even if the values are unrealistic, a production system shouldn't crash with a cryptic "Python int too large to convert to C long" error. The function is called when reading potentially untrusted SAS files, so it should handle corrupt data gracefully.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an obscure edge case with astronomically large values (1e20 seconds is over 3 billion years) that would never occur in real SAS files. The error only happens with corrupt or artificially created data. The function is internal and not meant to be called directly by users. The effort to fix this for such an unlikely scenario may not be worthwhile.
+
+**Why it might not be WONTFIX:**
+The issue could affect production systems reading corrupt SAS files. The fix is relatively simple (add bounds checking). Other similar functions in pandas handle overflow more gracefully. The current error message is confusing and doesn't indicate it's a datetime issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function's documentation doesn't specify valid input ranges or what happens with extreme values. Adding documentation about the expected input range (values that can convert to valid pandas Timestamps) would clarify the function's contract. The current behavior of raising OverflowError for extreme values is technically correct - the documentation just needs to mention this possibility.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is an internal function, so detailed documentation about error conditions may not be necessary. The issue is more about the poor error message than missing documentation. Users don't directly interact with this function, so documenting its limitations wouldn't help them.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current function doesn't handle extreme values gracefully, but it could be enhanced to do so. Adding validation and returning NaT for out-of-range values would be a new feature that improves robustness. This would be adding new functionality to handle edge cases that weren't originally considered.
+
+**Why it might not be FEATURE_REQUEST:**
+Handling invalid input gracefully is more of a bug fix than a feature. The function should already handle its inputs robustly without crashing. This is fixing existing behavior rather than adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an unhelpful error message when given large values that could appear in corrupt SAS files. A library function that processes external data should handle invalid inputs gracefully. The error handling is inconsistent - some large values raise OutOfBoundsDatetime (descriptive) while others raise OverflowError (cryptic). Professional libraries should validate inputs and provide clear error messages or handle edge cases gracefully.
+
+**Why it might not be BUG:**
+This is an internal function processing unrealistic values that would never appear in valid SAS files. The values causing the error (1e20 seconds) are absurdly large - over 3 billion years. The function works correctly for all legitimate use cases. The documentation doesn't promise to handle such extreme values.
+
+**Overall consideration**
+This bug report involves an internal pandas function that crashes when processing extremely large datetime values that could theoretically appear in corrupt SAS files. The key issue is whether a data processing library should handle corrupt input gracefully or if it's acceptable to crash on unrealistic data.
+
+The function is internal (underscore-prefixed) and its documentation doesn't specify behavior for extreme values. However, it's called when reading external SAS files, which could be corrupt or malicious. The values causing issues (1e20 seconds) are astronomically large and would never appear in legitimate data files - they represent timeframes of billions of years.
+
+On balance, this appears to be either INVALID (the function isn't meant to handle such extreme values) or WONTFIX (the scenario is too obscure to merit fixing). While production code should handle errors gracefully, this is an internal function dealing with values so extreme they could only come from corrupt data or artificial test cases. The current behavior - raising an exception - is not unreasonable for such invalid input.

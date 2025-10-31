@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior is technically consistent with numpy's implementation, which pandas explicitly uses underneath. Since pandas delegates to numpy.abs() and this is standard numpy behavior that has existed for years, one could argue that this is expected behavior when working with fixed-width integer types in numerical computing libraries. The documentation doesn't explicitly promise that abs() will never return negative values, and users familiar with low-level integer arithmetic might expect this overflow behavior.
+
+**Why it might not be INVALID:**
+The mathematical definition of absolute value universally states that |x| ≥ 0 for all x. The pandas documentation describes abs() as returning "the non-negative magnitude" without any caveats about overflow. A function named "abs" that returns negative values violates the principle of least surprise and the fundamental contract implied by its name. Even if this matches numpy's behavior, it's still technically incorrect from a mathematical standpoint.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely rare edge case that only affects exactly one value out of 2^64 possible int64 values. The behavior is inherited from numpy, and changing it in pandas would create inconsistency with numpy's behavior. The performance cost of checking for this single edge case on every abs() operation might not be justified. Additionally, users working with values near the int64 boundaries are likely already aware of overflow issues in fixed-width integer arithmetic.
+
+**Why it might not be WONTFIX:**
+The issue violates a fundamental mathematical property that many algorithms depend upon. Code that assumes abs() always returns non-negative values (a reasonable assumption) could silently produce incorrect results. The fix would be relatively simple to implement (check for overflow and handle appropriately), and the performance impact would be minimal with modern branch prediction. Other languages like Python handle this correctly, showing it's not an unsolvable problem.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior, while mathematically incorrect, is consistent with numpy and common in fixed-width integer implementations. Rather than changing long-standing behavior that some users might depend on, it would be more appropriate to document this limitation clearly. Adding a warning to the documentation about integer overflow for min_int64 would alert users to this edge case while maintaining backward compatibility.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting broken behavior doesn't make it correct. Users shouldn't need to read fine print to discover that a function called "abs" might return negative values. The documentation currently describes the function as returning "non-negative magnitude," so the code behavior contradicts the documented behavior. If anything, the code should be fixed to match what the documentation already claims.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Handling integer overflow gracefully (by promoting to float64 or raising an error) could be seen as a new feature rather than a bug fix. The current behavior matches numpy's design, and adding overflow detection would be enhancing pandas beyond numpy's capabilities. This could be framed as requesting a new "safe_abs()" method or an optional parameter to control overflow behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but asking for the existing abs() function to work correctly according to its mathematical definition. The absolute value function has a well-defined meaning that doesn't include returning negative values. This is fixing broken behavior, not adding new capabilities. The fact that numpy has the same bug doesn't transform the fix into a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the fundamental mathematical property that absolute value is always non-negative. The documentation states abs() returns "the non-negative magnitude" but the implementation can return negative values. This silent violation of mathematical correctness could cause subtle bugs in downstream calculations. Python's built-in abs() handles this case correctly, proving it's technically feasible. The issue is reproducible, well-defined, and represents incorrect behavior rather than a missing feature or documentation issue.
+
+**Why it might not be BUG:**
+The behavior is consistent with numpy, which pandas explicitly builds upon. In the context of fixed-width integer arithmetic, overflow is a known limitation that affects many operations, not just abs(). Users working with extreme values should be aware of these limitations. The behavior has likely existed since pandas' inception without causing widespread issues, suggesting it's not a critical bug. Changing this behavior could break existing code that might somehow depend on this overflow behavior.
+
+## Overall consideration
+
+This is a challenging case that sits at the intersection of mathematical correctness and practical implementation constraints. The pandas Series.abs() function returns a negative value for the minimum int64 value, which clearly violates the mathematical definition of absolute value as always being non-negative. The documentation describes the function as returning "the non-negative magnitude" without mentioning any exceptions, setting an expectation that the function fails to meet.
+
+However, this behavior is inherited from numpy, which pandas explicitly uses for its numerical operations. This is a well-known limitation of two's complement integer arithmetic where the absolute value of the minimum integer cannot be represented in the same integer type. Many low-level implementations exhibit this behavior, and it only affects one specific value out of approximately 18 quintillion possible int64 values. The fact that this behavior has persisted in numpy and pandas for years without being addressed suggests the maintainers may view it as an acceptable limitation rather than a bug.
+
+The strongest argument for categorizing this as a DOCUMENTATION_FIX is that the behavior, while mathematically incorrect, is consistent with the underlying numpy library and common in systems programming. Rather than changing long-standing behavior that some specialized code might depend on, documenting this edge case would alert users while maintaining backward compatibility. The current documentation's claim about returning "non-negative magnitude" should be qualified with a note about integer overflow for the minimum value. This approach balances mathematical purism with practical engineering constraints and the principle of least surprise for users familiar with fixed-width integer limitations.

@@ -1,0 +1,50 @@
+Bug Triage Analysis for pandas.Series.str.slice_replace
+========================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly specify what should happen when start > stop. One could argue that since this edge case is not documented, the current behavior (whatever it is) could be considered the de facto specification. Additionally, using slice_replace with start > stop might be considered invalid usage that the user should avoid.
+
+**Why it might not be INVALID:**
+The behavior violates the principle of least surprise and standard Python slicing semantics. When Python users see a slicing operation, they expect consistent behavior with Python's built-in slicing, where start > stop produces an empty slice but doesn't lose data. The current implementation silently loses data, which is unexpected and potentially dangerous behavior that users would not anticipate.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The edge case of start > stop might be considered rare enough that fixing it isn't worth the effort. Users could work around this by ensuring start <= stop before calling the method. The current behavior has existed for multiple pandas versions without apparent widespread complaints, suggesting it may not be a practical problem for most users.
+
+**Why it might not be WONTFIX:**
+Data loss is a serious issue that should always be addressed, regardless of how rare the edge case might be. The fix is straightforward (simply removing the conditional logic that changes local_stop), and the bug could cause subtle, hard-to-debug issues in production code where data silently disappears without any warning or error.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify the behavior for start > stop, so one could argue that the documentation should be updated to warn users that using start > stop will result in character loss between those indices. This would at least make users aware of the current behavior and allow them to avoid it.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Documenting data loss as intended behavior would be inappropriate when the behavior is clearly counterintuitive and inconsistent with Python's slicing semantics. The issue is not that the documentation is wrong or unclear - it's that the implementation has a logic error that causes unexpected data loss. Documenting a bug doesn't make it correct behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper handling of start > stop cases is a new feature that wasn't originally implemented. The current implementation might have been designed only for the common case where start < stop, and supporting reversed indices could be seen as an enhancement request.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but rather fixing existing functionality to work correctly with all valid Python slice indices. Python slicing inherently supports start > stop (returning empty slices), and slice_replace should handle this case without data loss. It's fixing broken behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation causes silent data loss when start > stop, which is a serious issue. The behavior is inconsistent with Python's standard slicing semantics where slices with start > stop are valid and return empty sequences. The fix is straightforward and the expected behavior is clear: when replacing an empty slice, all original characters should be preserved. The implementation contains a clear logic error where it incorrectly modifies the stop index when the slice is empty, causing characters between the original stop and start positions to be lost.
+
+**Why it might not be BUG:**
+The only argument against this being a bug is that the documentation doesn't explicitly promise correct behavior for start > stop cases. However, this is a weak argument since users reasonably expect pandas string operations to follow Python's slicing conventions unless explicitly documented otherwise.
+
+## Overall Consideration
+
+This is clearly a BUG that should be fixed. The current implementation contains a logic error that causes data loss when start > stop. Here's why:
+
+First, the behavior violates Python's well-established slicing semantics. In Python, `s[2:1]` is a valid slice that returns an empty string, and replacing an empty slice should insert the replacement text while preserving all original content. The current pandas implementation instead loses characters, which no Python programmer would expect.
+
+Second, the data loss is silent and dangerous. Users receive no warning or error when characters disappear from their strings. This could lead to serious data corruption in production systems where the bug might go unnoticed until significant damage has been done. Silent data loss is one of the most serious types of bugs in data processing libraries.
+
+Third, the fix is trivial and obvious. The problematic code that sets `local_stop = start` when the slice is empty should simply be removed. The method should always use the original stop value, which would make the behavior consistent with Python slicing and eliminate the data loss. This is not a complex architectural change but a simple correction of flawed logic.
+
+**Overall consideration**
+This is a legitimate BUG that causes data loss through incorrect handling of valid Python slice indices. The implementation contains a clear logic error that should be fixed.

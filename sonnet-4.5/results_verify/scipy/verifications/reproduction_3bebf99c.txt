@@ -1,0 +1,49 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the bug reported against scipy.spatial.distance.jensenshannon.
+
+## Test Results
+
+### 1. Hypothesis Test Reproduction
+The hypothesis test ran successfully and identified 348 examples (out of 500) that produce non-finite results:
+- Negative bases (e.g., -2.702, -3.481) produce NaN values with "invalid value encountered in log" warnings
+- Base=0 produces NaN with "invalid value encountered in sqrt" warnings
+- Base=1.0 produces inf with "divide by zero encountered in scalar divide" warnings
+
+### 2. Manual Example Reproduction
+For the specific test case with p=[0.5, 0.5] and q=[0.3, 0.7]:
+
+**base=1.0**:
+- Result: inf (infinity)
+- Warning: RuntimeWarning: divide by zero encountered in scalar divide
+- The bug report correctly states this returns inf instead of raising ValueError
+
+**base=0**:
+- Result: -0.0
+- Warning: RuntimeWarning: divide by zero encountered in log
+
+**base=-1**:
+- Result: nan
+- Warning: RuntimeWarning: invalid value encountered in log
+
+### 3. Exception Handling
+The current implementation does NOT raise any exceptions for invalid base values:
+- base=1.0: No exception, returns inf
+- base=0: No exception, returns -0.0
+- base=-1: No exception, returns nan
+
+## Root Cause
+Looking at the implementation (scipy/spatial/distance.py lines 1386-1387):
+```python
+if base is not None:
+    js /= np.log(base)
+```
+
+The division by np.log(base) causes:
+- When base=1: np.log(1) = 0, resulting in division by zero → inf
+- When base≤0: np.log(base) is undefined/nan → nan result
+- No validation is performed on the base parameter before this operation
+
+## Conclusion
+The bug report is accurate. The function accepts mathematically invalid base values and produces non-finite results (inf/nan) with only runtime warnings, instead of raising proper ValueError exceptions for invalid inputs. This violates the expected contract of a distance function which should either return valid finite distances or raise clear exceptions for invalid parameters.

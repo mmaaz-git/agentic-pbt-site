@@ -1,0 +1,61 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### 1. Property-Based Test Reproduction
+
+The Hypothesis property-based test provided in the bug report fails as expected:
+- Running the test with `test_subperiod_superperiod_inverse()` triggers an assertion failure
+- Failing input: `source='D', target='B'`
+- Error: `is_subperiod('D', 'B') = False but is_superperiod('B', 'D') = True`
+
+### 2. Manual Reproduction
+
+The manual test cases all confirm the violations:
+```
+is_subperiod('D', 'B') = False
+is_superperiod('B', 'D') = True
+
+is_subperiod('D', 'C') = False
+is_superperiod('C', 'D') = True
+
+is_subperiod('C', 'B') = False
+is_superperiod('B', 'C') = True
+```
+
+### 3. Comprehensive Testing
+
+Running tests across all frequency pairs revealed 7 total violations of the inverse relationship:
+1. is_subperiod('D', 'B') = False vs is_superperiod('B', 'D') = True
+2. is_subperiod('D', 'C') = False vs is_superperiod('C', 'D') = True
+3. is_subperiod('B', 'D') = False vs is_superperiod('D', 'B') = True
+4. is_subperiod('B', 'C') = False vs is_superperiod('C', 'B') = True
+5. is_subperiod('C', 'D') = False vs is_superperiod('D', 'C') = True
+6. is_subperiod('C', 'B') = False vs is_superperiod('B', 'C') = True
+7. is_subperiod('Y', 'Y') = False vs is_superperiod('Y', 'Y') = True
+
+### 4. Code Analysis
+
+Examining the actual implementation in `/home/npc/miniconda/lib/python3.13/site-packages/pandas/tseries/frequencies.py`:
+
+For `is_subperiod` (line 467-470):
+```python
+elif target == "B":
+    return source in {"B", "h", "min", "s", "ms", "us", "ns"}
+elif target == "C":
+    return source in {"C", "h", "min", "s", "ms", "us", "ns"}
+```
+
+For `is_superperiod` (line 525-528):
+```python
+elif source == "B":
+    return target in {"D", "C", "B", "h", "min", "s", "ms", "us", "ns"}
+elif source == "C":
+    return target in {"D", "C", "B", "h", "min", "s", "ms", "us", "ns"}
+```
+
+The asymmetry is clear: `is_superperiod` includes "D" and "C"/"B" in the allowed targets when the source is "B"/"C", but `is_subperiod` does not include "D" and the complementary business day frequency in the allowed sources when the target is "B"/"C".
+
+### Conclusion
+
+The bug is real and reproducible. The functions violate the expected mathematical inverse relationship where `is_subperiod(A, B)` should equal `is_superperiod(B, A)` for all valid frequency pairs.

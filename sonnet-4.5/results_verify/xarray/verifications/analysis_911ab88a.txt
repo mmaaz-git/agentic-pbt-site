@@ -1,0 +1,76 @@
+TRIAGE ANALYSIS
+===============
+
+## Consideration for Each Category
+
+### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The VariableCoder base class explicitly documents that `decode(encode(variable)) == variable` must be satisfied
+- This is a clear violation of the documented round-trip property
+- The bug causes data corruption - valid data values are lost and replaced with NaN
+- This affects real-world use cases where 0.0 is both a valid data value and a common fill value
+- The issue is silent - no warning is issued when data corruption occurs
+- The problem is reproducible and well-defined
+- xarray's documentation emphasizes "perfect roundtripping" as a goal
+- The test case is reasonable - having zeros in data with _FillValue=0.0 is common in scientific datasets
+
+**Arguments AGAINST:**
+- The CF conventions don't explicitly address how to handle valid data equal to fill values
+- This might be considered expected behavior in the netCDF/CF community
+
+### INVALID
+**Arguments FOR:**
+- The CF conventions assume values equal to fill value ARE missing data
+- The behavior follows CF conventions as typically understood
+- Users should not use fill values that match valid data
+
+**Arguments AGAINST:**
+- The code violates its own documented contract (round-trip property)
+- The VariableCoder documentation is explicit about the requirement
+- The data corruption is real and affects valid use cases
+
+### WONTFIX
+**Arguments FOR:**
+- Fixing this might break backward compatibility
+- The issue might be considered an edge case
+
+**Arguments AGAINST:**
+- This is not an obscure edge case - zero is commonly both valid data and fill value
+- The data corruption is significant and silent
+- The violation of documented behavior is clear
+
+### DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation could be updated to warn about this limitation
+- Could document that round-trip is not guaranteed when data equals fill value
+
+**Arguments AGAINST:**
+- The round-trip property is a fundamental requirement, not a suggestion
+- Changing the documentation would violate the base class contract
+- The issue represents actual data corruption, not just a documentation mismatch
+
+### FEATURE_REQUEST
+**Arguments FOR:**
+- Supporting round-trip with data equal to fill values could be seen as a new feature
+- The current behavior might be considered "working as designed" per CF conventions
+
+**Arguments AGAINST:**
+- This is not requesting new functionality but fixing broken existing functionality
+- The round-trip property is already documented as required
+- The base class contract already promises this behavior
+
+## Conclusion
+
+This is clearly a **BUG**. The key factors are:
+
+1. **Documented Contract Violation**: The VariableCoder base class explicitly requires the round-trip property. CFMaskCoder, as a subclass, must satisfy this contract.
+
+2. **Data Corruption**: The bug causes actual data loss - valid zeros are converted to NaN and cannot be recovered.
+
+3. **Common Use Case**: Having zeros as both valid data and fill value is common in scientific computing, especially with integer data converted to float.
+
+4. **Silent Failure**: The corruption happens without warning, making it particularly dangerous.
+
+5. **Clear Reproducibility**: The bug is easily reproduced with simple, reasonable test cases.
+
+While the CF conventions may be ambiguous about this case, xarray has made an explicit design decision to guarantee round-trip encoding/decoding. The current implementation fails to meet this documented requirement.

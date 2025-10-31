@@ -1,0 +1,49 @@
+# Bug Reproduction Results
+
+## Test Environment
+- pandas version: 2.3.2
+- Testing pandas.io.excel._openpyxl.OpenpyxlWriter.check_extension
+- Supported extensions for OpenpyxlWriter: ('.xlsx', '.xlsm')
+
+## Reproduction Results
+
+### Invalid Extensions Accepted (Bug Confirmed)
+The following invalid extensions were incorrectly accepted by check_extension:
+- check_extension('.l') returned: True
+- check_extension('.x') returned: True
+- check_extension('.s') returned: True
+- check_extension('.m') returned: True
+- check_extension('.ls') returned: True
+- check_extension('.xl') returned: True
+
+### Valid Extensions (Working as Expected)
+- check_extension('.xlsx') returned: True
+- check_extension('.xlsm') returned: True
+
+### Completely Unrelated Extension (Working as Expected)
+- check_extension('.pdf') raised ValueError: Invalid extension for engine...
+
+## Analysis of the Bug
+The bug is confirmed. The method uses substring matching with the line:
+```python
+if not any(ext in extension for extension in cls._supported_extensions):
+```
+
+This causes the following incorrect behavior:
+- '.l' is accepted because 'l' is in '.xlsx' and '.xlsm'
+- '.x' is accepted because 'x' is in '.xlsx' and '.xlsm'
+- '.s' is accepted because 's' is in '.xlsx' and '.xlsm'
+- '.m' is accepted because 'm' is in '.xlsm'
+- '.ls' is accepted because 'ls' is in '.xlsx' and '.xlsm'
+- '.xl' is accepted because 'xl' is in '.xlsx' and '.xlsm'
+
+## Hypothesis Test Results
+The hypothesis test correctly identified all the failing cases with clear error messages showing that extensions like '.l', '.x', '.s', and '.m' are incorrectly accepted despite not being in the supported extensions list.
+
+## Proposed Fix Verification
+The bug report suggests changing the line to:
+```python
+if not any(f'.{ext}' == extension for extension in cls._supported_extensions):
+```
+
+This would perform exact matching instead of substring matching, which would correctly reject these invalid extensions while still accepting the valid ones.

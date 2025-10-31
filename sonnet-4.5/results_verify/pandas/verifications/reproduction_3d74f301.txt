@@ -1,0 +1,57 @@
+REPRODUCTION RESULTS FOR pandas.core.indexers.length_of_indexer BUG
+===================================================================
+
+1. BASIC REPRODUCTION - CONFIRMED:
+   The specific case mentioned in the bug report is reproduced:
+   - Input: slice(None, -1, None) on empty list []
+   - Expected (Python's behavior): len([][:-1]) = 0
+   - Actual (length_of_indexer): -1
+
+   This is a clear mismatch between the function's output and Python's actual slicing behavior.
+
+2. HYPOTHESIS TEST - MULTIPLE FAILURES:
+   The hypothesis test found numerous failing cases, including:
+   - slice(1, None, None) on empty list: Expected 0, Got -1
+   - slice(None, -1, None) on empty list: Expected 0, Got -1
+   - slice(None, -2, None) on empty list: Expected 0, Got -2
+   - slice(5, None, None) on empty list: Expected 0, Got -5
+   - Very large start values also produce incorrect negative results
+
+3. PATTERN OF FAILURES:
+   All failures occur when:
+   a) The target is an empty list (len = 0)
+   b) The slice has parameters that would be out of bounds
+
+   Specific failing patterns:
+   - Negative stop values: slice(None, -N, None) returns -N instead of 0
+   - Positive start > 0: slice(N, ..., None) returns negative values
+   - Start > stop cases produce negative lengths
+
+4. ROOT CAUSE ANALYSIS:
+   Looking at the source code (lines 298-316 of utils.py):
+
+   When stop < 0 and target_len = 0:
+   - Line 310: stop += target_len results in stop = -1 + 0 = -1
+   - Line 316: return (stop - start + step - 1) // step
+   - With start=0, stop=-1, step=1: (-1 - 0 + 1 - 1) // 1 = -1
+
+   Similarly for start > target_len when target_len = 0:
+   - Start remains unchanged (e.g., 1)
+   - Stop becomes 0 (target_len)
+   - Formula: (0 - 1 + 1 - 1) // 1 = -1
+
+5. PYTHON'S CORRECT BEHAVIOR:
+   Python's slice.indices() method properly normalizes all these cases:
+   - slice(None, -1, None).indices(0) returns (0, 0, 1)
+   - slice(1, None, None).indices(0) returns (0, 0, 1)
+   - All slices on empty sequences correctly normalize to produce length 0
+
+6. IMPACT:
+   The bug affects internal pandas operations that rely on length_of_indexer for:
+   - Validating slice assignments (check_setitem_lengths function)
+   - Pre-calculating result sizes for optimization
+
+   This could lead to:
+   - Incorrect validation errors or missed validation
+   - Wrong memory allocation calculations
+   - Potential crashes or unexpected behavior in edge cases

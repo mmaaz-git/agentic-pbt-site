@@ -1,0 +1,37 @@
+## Reproduction Results for FixedForwardWindowIndexer Bug
+
+### Test 1: Hypothesis Test Reproduction
+The hypothesis test with negative window sizes FAILED as reported:
+- When window_size=-1 and num_values=2, the assertion `start[i] <= end[i]` fails
+- Specifically at index 1: start[1]=1 but end[1]=0, violating the invariant
+
+### Test 2: Specific Bug Case (window_size=-1, num_values=2)
+Successfully reproduced the exact issue:
+- start array: [0, 1]
+- end array: [0, 0]
+- At index 0: start[0]=0, end[0]=0 (valid)
+- At index 1: start[1]=1, end[1]=0 (INVALID - start > end)
+
+### Test 3: Impact on DataFrame Operations
+Confirmed the practical impact:
+- DataFrame with values [1, 2, 3, 4, 5]
+- Using FixedForwardWindowIndexer(window_size=-1) with rolling().sum()
+- Result: All zeros [0.0, 0.0, 0.0, 0.0, 0.0]
+- This is because invalid window bounds (start > end) produce empty slices
+
+### Test 4: Pattern with Other Negative Values
+The problem is systematic with all negative window sizes:
+- window_size=-1: Invalid bounds at indices [1, 2, 3, 4]
+- window_size=-2: Invalid bounds at indices [1, 2, 3, 4]
+- window_size=-5: Invalid bounds at indices [1, 2, 3, 4]
+
+In all cases except index 0, we get start[i] > end[i].
+
+### Mathematical Analysis
+The code calculates: `end = start + window_size`
+- When window_size is negative, end < start for all non-zero start values
+- The clipping `np.clip(end, 0, num_values)` doesn't fix this - it just ensures end >= 0
+- For start[i] > 0 and window_size < 0, we always get start[i] > end[i]
+
+### Conclusion
+The bug is CONFIRMED. The implementation produces mathematically invalid window bounds when given negative window_size values, leading to empty windows and incorrect results in rolling operations. The behavior matches exactly what the bug report describes.

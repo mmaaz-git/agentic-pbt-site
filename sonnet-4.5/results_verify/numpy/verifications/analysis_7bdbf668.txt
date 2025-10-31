@@ -1,0 +1,45 @@
+TRIAGE ANALYSIS FOR numpy.strings.swapcase BUG REPORT
+======================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function technically does perform a case swap operation - uppercase becomes lowercase and vice versa. One could argue that the documentation doesn't explicitly promise full Unicode compliance or identical behavior to Python's str.swapcase(). The function does swap cases, just with a simpler algorithm that doesn't handle complex Unicode mappings.
+
+**Why it might not be INVALID:**
+The documentation explicitly states "Calls :meth:`str.swapcase` element-wise" which is an unambiguous claim that it delegates to Python's str.swapcase() method. This creates a clear contract that the behavior should be identical. The actual behavior demonstrably differs from Python's str.swapcase() for common Unicode characters like German ß.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The German eszett (ß) and other Unicode ligatures are relatively rare in many datasets. The current implementation likely works fine for ASCII and most common use cases. Fixing this would require significant changes to NumPy's string handling at the C level to support variable-length output from ufuncs, which might be considered too complex for the benefit gained.
+
+**Why it might not be WONTFIX:**
+This affects real-world text processing for German and other languages. The eszett is a common character in German text (appearing in words like "groß", "Straße"). The issue also affects Turkish and languages using ligatures. These aren't obscure edge cases but legitimate text processing scenarios that users would expect to work correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The code behaves consistently with a simpler one-to-one character mapping algorithm. The documentation could be updated to clarify that numpy.strings.swapcase performs character-wise case swapping but doesn't support Unicode's multi-character case mappings. This would set correct expectations without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation makes a specific technical claim: "Calls :meth:`str.swapcase` element-wise." This isn't vague wording that could be clarified - it's a false statement about the implementation. If the function doesn't actually call Python's str.swapcase(), the documentation is making a factually incorrect claim about the implementation details, not just being imprecise about behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Full Unicode case mapping support with multi-character expansions could be viewed as a new feature. The current implementation provides basic case swapping, and adding support for complex Unicode mappings would be an enhancement. NumPy string operations might have historically been designed for simpler ASCII-focused use cases.
+
+**Why it might not be FEATURE_REQUEST:**
+The documentation already claims this functionality exists ("Calls :meth:`str.swapcase` element-wise"). The issue isn't requesting new functionality but pointing out that the advertised functionality doesn't work correctly. Python's str.swapcase() has supported these Unicode mappings for many years - this is standard, expected behavior for string case operations.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation makes an explicit, testable claim: the function "Calls :meth:`str.swapcase` element-wise." Testing proves this claim is false - the function produces different output than Python's str.swapcase() for valid Unicode inputs. The discrepancy affects real languages (German, Turkish) with common characters. The behavior violates the documented contract in a way that could cause data corruption in text processing pipelines.
+
+**Why it might not be BUG:**
+NumPy's string operations might intentionally use simpler, faster algorithms that don't support complex Unicode features. The phrase "calls str.swapcase" might be interpreted as "performs a similar operation to str.swapcase" rather than literally invoking Python's method. The limitation might be an accepted trade-off for performance in NumPy's C-level string handling.
+
+## Overall Consideration
+
+The documentation for numpy.strings.swapcase makes an explicit technical claim that the function "Calls :meth:`str.swapcase` element-wise." This is not ambiguous language about general behavior - it's a specific claim about the implementation that references Python's standard library method. Testing definitively proves this claim is false: NumPy produces 'S' for 'ß' while Python produces 'SS', and similar discrepancies exist for other Unicode characters.
+
+The affected characters aren't obscure - German eszett appears in common words like "groß" (big/large) and "Straße" (street). This is a real issue that would affect any German text processing. The bug could cause data corruption where text is processed through NumPy and expected to behave like Python's string methods. Users reading the documentation would reasonably expect identical behavior to Python's str.swapcase().
+
+While fixing this bug might require significant changes to NumPy's string handling infrastructure (to support variable-length outputs from ufuncs), the current state represents a clear violation of the documented behavior. This is not a feature request for new functionality, nor is it a documentation ambiguity that needs clarification. The documentation makes a false claim about what the code does. Either the code should be fixed to match the documentation's promise, or the documentation should be corrected to accurately describe the limitations. Given that the documentation specifically references Python's method and creates an expectation of identical behavior, this appears to be a DOCUMENTATION_FIX - the documentation should be updated to clarify that NumPy's implementation differs from Python's for Unicode characters with complex case mappings.

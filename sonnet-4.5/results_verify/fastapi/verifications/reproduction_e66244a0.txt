@@ -1,0 +1,44 @@
+# Bug Reproduction Analysis
+
+## Summary
+I have successfully reproduced the bug reported in the FastAPI security API key validation. The bug is confirmed to exist exactly as described.
+
+## Reproduction Steps
+1. Created test file with both the property-based test and direct reproduction tests
+2. Ran the tests to confirm the behavior
+
+## Test Results
+
+### Direct Tests
+- **Empty string ("")**: Correctly rejected with HTTP 403 error ✓
+- **Whitespace-only (" ")**: Incorrectly accepted and returned as valid ✗
+- **Various whitespace ("\t", "\n", "\r", etc.)**: All incorrectly accepted ✗
+- **Missing header**: Correctly returns None (with auto_error=False) ✓
+- **Valid API key**: Correctly accepted ✓
+
+### Property-Based Test
+The hypothesis test with various whitespace strings FAILS, confirming that whitespace-only strings are incorrectly accepted as valid API keys.
+
+## Root Cause
+The bug is in the `check_api_key` method at line 14 of `/fastapi/security/api_key.py`:
+```python
+if not api_key:
+```
+
+This check only evaluates to True for falsy values:
+- `None` (missing header) → falsy → rejected ✓
+- `""` (empty string) → falsy → rejected ✓
+- `" "` (whitespace) → truthy → accepted ✗
+
+## Impact
+1. **Security Issue**: Whitespace-only API keys bypass the authentication check at this layer
+2. **Inconsistent Behavior**: Empty strings are rejected but whitespace strings are not
+3. **Potential Exploitation**: HTTP headers can contain whitespace, so a client could send `X-API-Key: ` (just spaces) and pass this validation
+
+## Verification
+The bug affects all three API key authentication methods:
+- APIKeyHeader (tested and confirmed)
+- APIKeyQuery (uses same check_api_key method)
+- APIKeyCookie (uses same check_api_key method)
+
+All inherit from APIKeyBase and use the same flawed `check_api_key` static method.

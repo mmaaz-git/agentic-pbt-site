@@ -1,0 +1,38 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug reported for numpy.rec.fromrecords with empty lists.
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The Hypothesis test from the bug report correctly fails with an empty list:
+- Test: @given(st.lists(st.tuples(...), min_size=0, max_size=10))
+- Failing input: records=[]
+- Error: IndexError: list index out of range
+- Location: numpy/_core/records.py line 624 in fromarrays
+
+2. SIMPLE REPRODUCTION:
+Direct call to np.rec.fromrecords([]) crashes exactly as reported:
+- Code: np.rec.fromrecords([], names='x,y')
+- Error: IndexError: list index out of range
+- The error occurs inside fromarrays() which is called by fromrecords()
+
+3. RELATED FUNCTIONS TESTING:
+Confirmed that other NumPy functions handle empty inputs correctly:
+- np.recarray(shape=(0,), dtype=[...]) - Works fine, creates empty record array
+- np.rec.fromarrays([[], []], names='a,b') - Works fine, creates empty record array
+- np.array([], dtype=[...]) - Works fine, creates empty structured array
+
+4. ROOT CAUSE ANALYSIS:
+The crash occurs in numpy/_core/records.py:
+- fromrecords() converts empty list to empty arrlist
+- Calls fromarrays(arrlist, ...) with empty list
+- fromarrays() at line 624 tries to access arrayList[0].shape without checking if list is empty
+- This causes IndexError on empty list
+
+5. VERIFICATION:
+The bug is real and reproducible. The error occurs exactly where the bug report indicates:
+- Empty record arrays are valid in NumPy (as shown by successful np.recarray creation)
+- Other similar functions handle empty inputs correctly
+- The crash is due to missing bounds check before accessing arrayList[0]
+
+The bug report accurately describes the issue and provides correct reproduction steps.

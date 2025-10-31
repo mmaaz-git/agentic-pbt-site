@@ -1,0 +1,28 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+1. Bug Confirmation: The bug exists exactly as described.
+
+2. Test Results:
+   - The Hypothesis test FAILS as expected, confirming that no deprecation warning is emitted when accessing NBitBase via `getattr(npt, "NBitBase")`
+   - Direct access via `npt.NBitBase` produces 0 warnings
+   - Calling `npt.__getattr__("NBitBase")` directly produces 1 warning with the expected message
+
+3. Root Cause Verification:
+   - Confirmed that 'NBitBase' exists in `npt.__dict__` (returns True)
+   - This is because line 160 imports it directly: `from numpy._typing import ArrayLike, DTypeLike, NBitBase, NDArray`
+   - Python's attribute lookup mechanism finds NBitBase in the module's __dict__ before ever calling __getattr__
+   - The deprecation warning code in __getattr__ (lines 173-184) is therefore unreachable for normal attribute access
+
+4. Impact:
+   - Users who are using the deprecated NBitBase class will never see the deprecation warning
+   - This defeats the purpose of the deprecation process, as users won't know to migrate their code before NBitBase is removed in a future NumPy version
+   - The deprecation mechanism was clearly intended to work (as evidenced by the __getattr__ implementation) but is bypassed by the direct import
+
+5. Behavior Observed:
+   - When accessing `npt.NBitBase`: No warning (bug)
+   - When calling `npt.__getattr__("NBitBase")`: Warning is shown (correct behavior, but not how users access the attribute)
+
+The bug is real and affects the intended deprecation workflow for NBitBase.

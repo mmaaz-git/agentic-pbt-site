@@ -1,0 +1,47 @@
+TRIAGE ANALYSIS
+===============
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is working as designed, using numpy's standard floating-point comparison with tolerances. Many numerical libraries use approximate comparisons for floating-point values to handle representation errors, and this could be considered standard behavior. The user might be misunderstanding how floating-point comparisons typically work in numerical computing.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that null_value is "Value that denotes non-edges", which strongly suggests exact comparison. There's no mention of tolerance or approximate matching. Users have a reasonable expectation that only the exact null_value would be treated as non-edges, not a range of values. The bug report correctly identifies that legitimate edge values are being lost.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Changing this behavior could break existing code that relies on the approximate comparison. The tolerance values (rtol=1e-5, atol=1e-8) are numpy defaults and changing them might affect consistency with other numpy/scipy functions. The case of having edge values within 1e-5 relative difference from null values is arguably an edge case that rarely occurs in practice.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it causes silent data loss where valid edges are incorrectly removed. The example of edge=1.0 with null=1.00001 is a reasonable use case, especially in normalized graphs where edges might have values close to 1.0. The bug affects data correctness, not just performance or aesthetics.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The behavior is consistent and intentional (using numpy.ma.masked_values with its default tolerances). The real issue is that the documentation doesn't explain this behavior. Adding documentation about the tolerance-based comparison would let users know what to expect and work around it. This preserves backward compatibility while fixing the user confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting this behavior doesn't solve the fundamental problem that users cannot reliably use edge values close to null_value. If a user legitimately needs edges with value 1.0 and null edges marked as 1.00001, documentation won't help them - they need the functionality to work differently.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for exact comparison functionality that doesn't currently exist. A new parameter like `exact_comparison=True` or `tolerance=None` could be added to support both exact and approximate comparison modes. This would be a new feature rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The documentation already implies this functionality should exist (exact value matching). The user isn't asking for something new but expecting the documented behavior to work. The function should work as documented without needing additional parameters.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation clearly states null_value is the "Value that denotes non-edges" without mentioning any tolerance. The current behavior silently drops legitimate edges, causing data loss. The behavior is undocumented and surprising - users have no way to know this will happen without reading the source code. The fix would be straightforward: either use exact comparison or document the tolerance behavior.
+
+**Why it might not be BUG:**
+The function uses standard numpy behavior (masked_values) which has well-defined tolerance defaults. Floating-point approximate comparison is common in numerical computing. The function technically works - it just uses a different definition of equality than the user expected.
+
+## Overall Consideration
+
+After careful analysis, this issue presents a clear disconnect between documented behavior and actual implementation. The documentation uses language that strongly implies exact value matching ("Value that denotes non-edges"), while the implementation uses approximate floating-point comparison with undocumented tolerance values (rtol=1e-5, atol=1e-8).
+
+The core problem is that users have no way to know from the documentation that values within the tolerance range will also be treated as non-edges. This leads to silent data loss when legitimate edge values happen to fall within the tolerance of null_value. The example case (edge=1.0, null=1.00001) represents a reasonable scenario, particularly in normalized graphs.
+
+While the underlying numpy.ma.masked_values behavior is standard for floating-point comparisons, its use here is problematic because: (1) it's completely undocumented in the context of this function, (2) users cannot control or disable the tolerance, and (3) the tolerance is too large for many practical applications (1e-5 relative tolerance means a range of ±0.001% around the null value).
+
+The most appropriate resolution would be DOCUMENTATION_FIX. The current behavior, while surprising, is consistent with numpy's standard floating-point comparison practices. Many numerical libraries use tolerance-based comparisons to handle floating-point representation issues. Changing the behavior could break existing code that inadvertently relies on this tolerance. The documentation should be updated to clearly explain that values close to null_value (within numpy's default tolerance) will also be treated as non-edges, and provide the specific tolerance values being used. This allows users to make informed decisions about their null_value choice while preserving backward compatibility.

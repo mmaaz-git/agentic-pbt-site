@@ -1,0 +1,80 @@
+TRIAGE ANALYSIS
+===============
+
+Evaluation of each possible categorization:
+
+1. BUG - Arguments FOR:
+   ✓ The behavior is inconsistent - positive integers hash the same across dtypes, negative don't
+   ✓ Violates the principle of value-based hashing that users expect
+   ✓ The documentation says "deterministic integers" without mentioning dtype-dependency
+   ✓ Real-world impact on deduplication, grouping, and comparison operations
+   ✓ The asymmetry between positive and negative values is clearly unintentional
+   ✓ No reasonable use case would require different hashes for -1 as int32 vs int64
+   ✓ The example in documentation uses simple integers without dtype specification
+
+   Arguments AGAINST:
+   - Could argue the function is technically "deterministic" (same input bytes = same output)
+   - Implementation directly hashes byte representation, which is working as coded
+
+2. INVALID - Arguments FOR:
+   - The code is working exactly as implemented (hashing raw bytes)
+   - Documentation doesn't explicitly promise dtype-independence
+
+   Arguments AGAINST:
+   ✓ The inconsistency between positive and negative values proves this is not intended behavior
+   ✓ Users have reasonable expectations that values should hash consistently
+   ✓ The bug causes real problems in practice
+   ✓ "Deterministic" in documentation implies value-based, not representation-based
+
+3. WONTFIX - Arguments FOR:
+   - Could argue changing this might break backward compatibility
+   - The issue only affects negative numbers
+
+   Arguments AGAINST:
+   ✓ This is not an obscure edge case - negative numbers are common
+   ✓ The inconsistency affects core pandas operations (groupby, merge, drop_duplicates)
+   ✓ The asymmetry between positive/negative is clearly wrong
+   ✓ This is a correctness issue, not a minor inconvenience
+
+4. DOCUMENTATION_FIX - Arguments FOR:
+   - Could document that hashes are dtype-dependent
+   - Would preserve backward compatibility
+
+   Arguments AGAINST:
+   ✓ The inconsistent behavior (positive vs negative) suggests a bug, not a feature
+   ✓ No reasonable use case requires dtype-dependent hashing
+   ✓ Documenting broken behavior doesn't make it correct
+   ✓ Users need value-based hashing for practical applications
+
+5. FEATURE_REQUEST - Arguments FOR:
+   - Could frame as "add support for dtype-independent hashing"
+
+   Arguments AGAINST:
+   ✓ This is fixing broken behavior, not adding new functionality
+   ✓ The current behavior is inconsistent and unexpected
+   ✓ Value-based hashing is the expected default, not a new feature
+
+DECISION RATIONALE:
+-------------------
+This is clearly a BUG because:
+
+1. The behavior is INCONSISTENT - positive values hash the same across dtypes while negative
+   values don't. This asymmetry cannot be intentional design.
+
+2. It violates fundamental hashing principles - equal values should produce equal hashes.
+
+3. The documentation implies value-based hashing with "deterministic integers" but doesn't
+   warn about dtype-dependency.
+
+4. There's no reasonable use case where you'd want -1 to hash differently based on dtype
+   while 1 hashes the same.
+
+5. The root cause (viewing bytes directly without normalization) explains why it happens
+   but doesn't justify the behavior.
+
+6. It has real impact on pandas operations that rely on hashing for correctness.
+
+This is not INVALID because the expectation of consistent hashing is reasonable.
+This is not WONTFIX because it affects common use cases with negative numbers.
+This is not DOCUMENTATION_FIX because the inconsistent behavior is clearly wrong.
+This is not FEATURE_REQUEST because it's fixing broken behavior, not adding features.

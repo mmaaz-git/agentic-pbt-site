@@ -1,0 +1,65 @@
+BUG REPRODUCTION REPORT
+
+## Test Execution Results
+
+### Original Bug Report Test Case
+I successfully reproduced the bug exactly as described in the report:
+
+Input: DataFrame with column name '\x08' (backspace character)
+Output after round-trip:
+- Original column: '\x08'
+- After round-trip: '_x0008_'
+- Result: Columns are NOT equal
+
+### Hypothesis Test
+The property-based test with failing input col_names=['\x08'] correctly fails with an assertion error, confirming that the round-trip property is violated.
+
+### Comprehensive Control Character Testing
+
+I tested various control characters with both engines:
+
+**xlsxwriter Engine Results:**
+- '\x00' (null) → '_x0000_' [CHANGED]
+- '\x01' (start of heading) → '_x0001_' [CHANGED]
+- '\x02' (start of text) → '_x0002_' [CHANGED]
+- '\x07' (bell) → '_x0007_' [CHANGED]
+- '\x08' (backspace) → '_x0008_' [CHANGED]
+- '\x0b' (vertical tab) → '_x000B_' [CHANGED]
+- '\x0c' (form feed) → '_x000C_' [CHANGED]
+- '\x0e' (shift out) → '_x000E_' [CHANGED]
+- '\x0f' (shift in) → '_x000F_' [CHANGED]
+- '\x10' (data link escape) → '_x0010_' [CHANGED]
+- '\x1f' (unit separator) → '_x001F_' [CHANGED]
+- '\t' (tab) → '\t' [PRESERVED]
+- '\n' (newline) → '\n' [PRESERVED]
+- '\r' (carriage return) → '_x000D_' [CHANGED]
+
+**openpyxl Engine Results:**
+- All control characters except tab, newline, and carriage return raise an error:
+  "cannot be used in worksheets"
+- Tab, newline, and carriage return are preserved correctly
+
+## Technical Analysis
+
+1. **The bug is real**: Control characters in column names are silently transformed during Excel round-trip operations.
+
+2. **The transformation follows OOXML specification**: The _xHHHH_ escape format is the standard OOXML mechanism for representing XML-invalid characters.
+
+3. **Engine behavior differs**:
+   - xlsxwriter: Silently escapes invalid characters
+   - openpyxl: Raises an error and refuses to write
+
+4. **The transformation is one-way**: pandas does not reverse the escaping when reading the Excel file back.
+
+5. **Impact**: Any code that relies on specific column names will break after a round-trip if those names contain control characters.
+
+## Verification of Bug Report Claims
+
+✓ Column names with control characters ARE transformed (confirmed)
+✓ The transformation uses _xHHHH_ format (confirmed)
+✓ The transformation is silent with xlsxwriter (confirmed)
+✓ Different engines handle it differently (confirmed)
+✓ The round-trip property is violated (confirmed)
+✓ This behavior is undocumented in pandas (confirmed)
+
+The bug report is technically accurate in all its claims.

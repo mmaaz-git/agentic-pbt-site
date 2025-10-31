@@ -1,0 +1,48 @@
+## Bug Reproduction Results
+
+### Test Setup
+I attempted to reproduce the reported bug using the provided test cases that demonstrate the infinite loop in `cymeit` when using float timers that return values less than 0.2.
+
+### Reproduction Attempts
+
+#### Test 1: Direct cymeit call with zero-returning float timer
+- **Result**: The test timed out after 5-10 seconds, indicating the function entered an infinite loop
+- **Observation**: The function began compiling the Cython code but never completed
+- **Conclusion**: This confirms the infinite loop behavior
+
+#### Test 2: Simulation of autorange() logic
+I created a direct simulation of the `autorange()` function to better understand the issue:
+
+**Float timer returning 0.0**:
+- The loop ran indefinitely (stopped at 100 iterations for safety)
+- Each iteration increased the `number` variable exponentially (1, 10, 100, 1000...)
+- The timer value (0.0) never exceeded min_runtime (0.2)
+- No sanity check was triggered because `timer_returns_nanoseconds` was False
+- **Result**: CONFIRMED INFINITE LOOP
+
+**Integer timer returning 0**:
+- The sanity check at line 377-379 triggered after iteration 2
+- When number=10 and time_taken=0, the condition `(time_taken < 10 and number >= 10)` was met
+- Raised RuntimeError: "Timer seems to return non-ns timings"
+- **Result**: Properly caught and terminated
+
+**Float timer returning 0.1**:
+- Similar to the 0.0 case, ran indefinitely
+- Value of 0.1 is still less than min_runtime (0.2)
+- **Result**: CONFIRMED INFINITE LOOP
+
+### Technical Analysis
+The bug occurs because:
+1. Line 366 sets `min_runtime = one_second / 5 = 0.2` for float timers
+2. Line 375 checks `if time_taken >= min_runtime` to exit the loop
+3. If a float timer consistently returns < 0.2, this condition is never met
+4. The sanity check at lines 377-379 only applies when `timer_returns_nanoseconds` is True
+5. There is no maximum iteration limit or timeout for float timers
+
+### Bug Confirmation
+**The bug is CONFIRMED**. The `autorange()` function in `cymeit` will enter an infinite loop when:
+- A float timer is used (not integer/nanosecond)
+- The timer consistently returns values less than 0.2 seconds
+- This includes broken timers, mocked timers in tests, or timer implementation bugs
+
+The issue is a missing termination condition for float timers that consistently return small values.

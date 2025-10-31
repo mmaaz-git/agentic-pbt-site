@@ -1,0 +1,56 @@
+DOCUMENTATION ANALYSIS REPORT
+=============================
+
+## Function Documentation Review
+
+The read_bytes function in dask.bytes.core has the following documented behavior:
+
+### Purpose
+"Given a path or paths, return delayed objects that read from those paths."
+"This cleanly breaks data by a delimiter if given, so that block boundaries start directly after a delimiter and end on the delimiter."
+
+### not_zero Parameter Documentation
+From the docstring (line 45-46):
+```
+not_zero : bool
+    Force seek of start-of-file delimiter, discarding header.
+```
+
+The parameter is intended to skip header data at the beginning of files by starting reads from position 1 instead of 0.
+
+### Return Values
+The function returns blocks which are documented as:
+```
+blocks : list of lists of ``dask.Delayed``
+    Each list corresponds to a file, and each delayed object computes to a
+    block of bytes from that file.
+```
+
+## Critical Invariants (Inferred from Implementation)
+
+While not explicitly documented, the implementation strongly suggests these invariants:
+
+1. **Offsets should be strictly increasing**: The code generates offsets using:
+   ```python
+   while size - place > (blocksize1 * 2) - 1:
+       place += blocksize1
+       off.append(int(place))
+   ```
+   This creates a strictly increasing sequence.
+
+2. **Blocks should be non-overlapping**: The length calculation `length.append(off[-1] - off[-2])` assumes each block starts where the previous one ended.
+
+3. **Complete file coverage**: The blocks should collectively cover the entire file without gaps.
+
+## Documentation Gap
+
+The documentation does NOT explicitly state that:
+- Offsets must be strictly increasing
+- Blocks must be non-overlapping
+- How not_zero interacts with small files or edge cases
+
+However, these properties are fundamental to the correct operation of byte-level file reading. The function's purpose of "cleanly breaking data" implies non-overlapping, complete coverage of the file.
+
+## Conclusion
+
+While the documentation doesn't explicitly state the "strictly increasing offsets" invariant, this is an implicit requirement for correct file reading behavior. The bug violates a reasonable and necessary invariant that any file reading system must maintain - that blocks don't overlap and reading positions are sequential.

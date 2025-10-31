@@ -1,0 +1,31 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmed
+The bug occurs exactly as described when running the provided test case:
+
+1. **Test Input**: Creating a time series with 10 data points over 10 hours, partitioned into 4 partitions
+2. **Resampling**: Attempting to resample to '1D' (one day) frequency
+3. **Result**: AssertionError is raised at line 192 in `/home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/dask_expr/_repartition.py`
+
+### Error Details
+The specific error occurs in the `_partitions_boundaries` method with the assertion:
+```python
+assert npartitions_input > npartitions
+```
+
+The traceback shows this happens when:
+- `npartitions_input` = 4 (the original number of partitions)
+- `npartitions` is likely 1 or less (the target number after resampling to daily frequency)
+
+### Pandas vs Dask Behavior
+- **Pandas**: Successfully resamples the data and returns a Series with one value (the sum for the single day)
+- **Dask**: Crashes with AssertionError before completing the operation
+
+### Impact
+This is a real bug that prevents users from:
+1. Resampling time series data when the output frequency results in fewer time bins than input partitions
+2. Common time series operations like aggregating hourly data to daily/weekly/monthly summaries when the data is partitioned
+
+The bug violates the documented API contract that Dask's resampler should match pandas' behavior, as indicated by the `@derived_from(pd_Resampler)` decorator mentioned in the bug report.

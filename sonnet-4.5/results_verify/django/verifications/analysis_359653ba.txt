@@ -1,0 +1,61 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG (Valid Bug)
+
+**Strong evidence this is a valid bug:**
+
+1. **Clear Contract Violation**: The method's documented purpose is to "Return a string of the query last executed by the given cursor, with placeholders replaced with actual values." Using `dict.fromkeys()` prevents this from happening correctly when duplicates exist.
+
+2. **Incorrect Behavior**: When parameters contain duplicates, the method:
+   - Fails to replace all placeholders (e.g., `:arg3` remains unreplaced)
+   - Substitutes wrong values for some placeholders (e.g., `:arg2` gets 200 instead of 'active')
+   - Produces misleading debugging output
+
+3. **Inconsistent with Other Backends**: MySQL and PostgreSQL implementations correctly handle all parameters including duplicates. Oracle's manual substitution should achieve the same result.
+
+4. **Real-World Impact**: Duplicate parameter values are common in SQL queries (e.g., date ranges, status codes, user IDs). This bug makes debugging such queries difficult and confusing.
+
+5. **Simple Fix Available**: Removing `dict.fromkeys()` fixes the issue without any negative side effects.
+
+### Consideration for INVALID
+
+**Why it might be considered invalid (weak arguments):**
+
+1. The Oracle cursor.statement documentation doesn't explicitly define how placeholders should be mapped - but Django's own documentation does.
+
+2. Someone might argue this is an "implementation detail" - but it's a user-facing debugging method that produces incorrect output.
+
+### Consideration for WONTFIX
+
+**Why it might be WONTFIX (unlikely):**
+
+1. Could be argued as an edge case - but duplicate parameters are actually common in real queries.
+
+2. The method is primarily for debugging, not production use - but incorrect debugging information is still a bug.
+
+3. Has existed for a long time without complaints - but this doesn't make it correct.
+
+### Consideration for DOCUMENTATION_FIX
+
+**Why it might be DOCUMENTATION_FIX (very unlikely):**
+
+1. The documentation could be updated to say "duplicate parameters will be deduplicated" - but this would be documenting a bug rather than fixing it.
+
+2. The behavior is undocumented - but the current behavior contradicts the stated purpose of the method.
+
+### Consideration for FEATURE_REQUEST
+
+**Why it might be FEATURE_REQUEST (very unlikely):**
+
+1. Supporting duplicate parameters could be seen as a "new feature" - but this is clearly expected behavior based on the method's purpose.
+
+2. The fix could be considered an "enhancement" - but it's fixing broken functionality, not adding new capabilities.
+
+### Verdict
+
+This is clearly a **BUG**. The method fails to fulfill its documented purpose when parameters contain duplicates. The use of `dict.fromkeys()` is an implementation error that causes:
+- Incomplete placeholder substitution
+- Wrong values in substituted placeholders
+- Misleading debugging information
+
+The bug has a clear reproduction case, affects real-world usage, and has a simple fix. It should be categorized as BUG and fixed by removing the `dict.fromkeys()` call.

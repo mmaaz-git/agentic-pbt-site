@@ -1,0 +1,35 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the reported bug. The bug is real and occurs exactly as described in the report.
+
+### Reproduction Steps
+
+1. **Simple Test Case**:
+   - Created a DataFrame with values [1, 2, 3, 4, 5]
+   - Used percentiles=[0.01, 0.010000000000000002]
+   - Result: `ValueError: cannot reindex on an axis with duplicate labels`
+
+2. **Root Cause Verification**:
+   - Called `format_percentiles([0.01, 0.010000000000000002])` directly
+   - Output: `['1%', '1%']` - duplicate labels created
+   - The two input values are distinct floats (verified with !=)
+   - But they both format to '1%' creating duplicates
+
+3. **Edge Case Testing**:
+   Multiple test cases confirmed the issue:
+   - [0.01, 0.010000000000000002]: Creates duplicates ['1%', '1%'] -> describe() fails
+   - [0.01, 0.0100001]: Creates duplicates ['1%', '1%'] -> describe() fails
+   - [0.01, 0.01001]: Works correctly ['1%', '1.001%'] -> describe() succeeds
+   - [0.01, 0.011]: Works correctly ['1%', '1.1%'] -> describe() succeeds
+
+### Key Findings
+
+1. The bug occurs when percentiles differ by less than the achievable decimal precision
+2. The values pass through `_refine_percentiles` validation (which uses `np.unique()` to detect duplicates)
+3. `np.unique()` correctly identifies them as distinct values
+4. But `format_percentiles` rounds them to the same string representation
+5. This causes a downstream error in `describe()` which cannot handle duplicate index labels
+
+### Impact
+The bug causes a complete failure of the `describe()` method when given percentiles that are mathematically distinct but round to the same display value. This is a real bug that violates the documented behavior of the function.

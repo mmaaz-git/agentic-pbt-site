@@ -1,0 +1,51 @@
+Reproduction Analysis for sorted_columns Bug
+=============================================
+
+Bug Reproduction Results:
+
+1. EXACT REPRODUCTION - CONFIRMED
+   The bug report's test case reproduces exactly as described:
+   - Input: statistics=[{"columns": [{"name": "0", "min": "00", "max": "0"}]}]
+   - Result: AssertionError at line 442 in sorted_columns
+   - Cause: '00' > '0' lexicographically, creating unsorted divisions ['00', '0']
+
+2. ADDITIONAL TEST CASES - ALL REPRODUCE
+   The bug occurs in multiple scenarios:
+
+   a) String values where min > max lexicographically:
+      - min='00', max='0' → AssertionError
+      - min='d', max='c' → AssertionError
+
+   b) Numeric values where min > max numerically:
+      - min=10, max=5 → AssertionError
+
+   c) Multiple row groups with any having min > max:
+      - Even if first row group is valid, invalid second row group causes crash
+
+3. HYPOTHESIS TEST - CONFIRMS BUG
+   The property-based test from the bug report successfully finds multiple failing cases
+   The test correctly identifies that the function crashes when divisions aren't sorted
+
+4. REAL PARQUET FILES - NEVER HAVE THIS ISSUE
+   Testing with actual Parquet files created by pyarrow shows:
+   - Real statistics always have min <= max
+   - This is because min/max are computed from actual data
+   - When we manually corrupt real statistics to have min > max, the same crash occurs
+
+5. ROOT CAUSE ANALYSIS
+   The function's algorithm assumes:
+   - Within each row group: min <= max (NOT VALIDATED)
+   - Across row groups: checks if next_min >= prev_max for sorting
+
+   When min > max within a row group:
+   - Divisions list gets [min, max] where min > max
+   - This violates the sorted property
+   - The assertion fails
+
+6. TECHNICAL CORRECTNESS
+   The bug report is technically accurate:
+   - The code does crash with AssertionError
+   - The crash occurs exactly where stated (line 442)
+   - The cause is correctly identified (unsorted divisions due to min > max)
+
+The bug is 100% reproducible and the technical details in the report are correct.

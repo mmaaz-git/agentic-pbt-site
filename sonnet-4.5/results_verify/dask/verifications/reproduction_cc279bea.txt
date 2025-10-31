@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+### Test Results
+
+I successfully reproduced the behavior described in the bug report:
+
+1. **Specific Examples Verification:**
+   - n=1234: format_bytes(1234) = "1.21 kiB", parse_bytes("1.21 kiB") = 1239 (not 1234) ✓ Confirmed
+   - n=5000: format_bytes(5000) = "4.88 kiB", parse_bytes("4.88 kiB") = 4997 (not 5000) ✓ Confirmed (small error)
+   - n=12345: format_bytes(12345) = "12.06 kiB", parse_bytes("12.06 kiB") = 12349 (not 12345) ✓ Confirmed
+   - n=123456: format_bytes(123456) = "120.56 kiB", parse_bytes("120.56 kiB") = 123453 (not 123456) ✓ Confirmed
+
+2. **Hypothesis Test Results:**
+   - Out of 1000 random test cases, 785 failed the round-trip test (78.5% failure rate)
+   - This confirms that round-trip failure is the common case, not the exception
+
+3. **Mathematical Verification:**
+   - The bug report's mathematical explanation is correct:
+     - 1234 / 1024 = 1.205078125
+     - Formatted to 2 decimal places: 1.21
+     - 1.21 * 1024 = 1239.04
+     - int(1239.04) = 1239 (not 1234)
+
+4. **Working Cases:**
+   - Round-trip DOES work for exact multiples of powers of 2:
+     - 1024 -> "1.00 kiB" -> 1024 ✓
+     - 2048 -> "2.00 kiB" -> 2048 ✓
+     - 1048576 -> "1.00 MiB" -> 1048576 ✓
+   - This happens when the division results in a number that rounds to exactly 2 decimal places
+
+### Technical Accuracy of Bug Report
+
+The bug report is technically accurate in its description:
+- The functions do not provide round-trip conversion in most cases
+- The root cause analysis is correct (2 decimal place formatting)
+- The mathematical explanation is accurate
+- The failure examples are reproducible
+
+### Behavior Analysis
+
+The observed behavior is:
+1. format_bytes() formats with 2 decimal places for human readability
+2. This rounding loses precision
+3. parse_bytes() multiplies the rounded value back, accumulating the rounding error
+4. The result is often different from the original value
+
+The errors are typically small in percentage terms (usually < 1%), but they are non-zero, which violates the mathematical property of round-trip conversion that the bug reporter expects.

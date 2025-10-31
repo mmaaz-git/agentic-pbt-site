@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states how AlwaysGreaterThan instances should compare with each other. The comment only says these are "Equivalence to np.inf (-np.inf) for object-type" without specifying the comparison behavior between instances. Since there's no documented specification that these classes must follow mathematical ordering properties when comparing with themselves, claiming it's a bug based on undocumented expectations could be considered invalid. The classes work correctly for their documented purpose of being sentinel values greater/less than other objects.
+
+**Why it might not be INVALID:**
+The use of @functools.total_ordering decorator implies an intent to create a properly ordered type. Basic mathematical properties of comparison operators are fundamental expectations that don't need explicit documentation - any programmer would expect that if a == b, then a > b should be False. The violation of irreflexivity (a > a being True) is particularly egregious as it breaks universal expectations about comparison operators.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+These classes are internal implementation details used as sentinel values in xarray. They may never actually be compared with each other in practice - the use case is comparing them with regular values in arrays. The current implementation is simple and works for the intended use case. Fixing this edge case adds complexity for a scenario that likely never occurs in real usage, as there's typically only one INF and one NINF singleton instance used throughout the codebase.
+
+**Why it might not be WONTFIX:**
+The violation of comparison invariants could cause subtle bugs in sorting algorithms or ordered containers. Python's sorting implementation and other tools may rely on these mathematical properties. Even if rare, having comparison operators that violate basic mathematical properties is a correctness issue that should be addressed. The fix is trivial (checking isinstance before returning True) and doesn't significantly complicate the code.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior could be considered "working as designed" if the design intent was simply "always returns True for __gt__" without considering self-comparison. The documentation could be updated to explicitly state that these sentinel values have unusual comparison semantics and should not be compared with other instances of the same type. This would clarify the behavior without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't that the documentation is wrong or misleading - it's that the implementation violates fundamental properties that any comparison operator should satisfy. Documenting broken behavior doesn't make it correct. The use of @functools.total_ordering specifically implies the intent to create properly ordered types, and documenting that these don't actually follow ordering properties would be contradictory.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that "proper comparison between AlwaysGreaterThan instances" is a new feature that was never implemented. The original implementation focused only on comparison with other types, and adding self-comparison logic would be extending functionality. The request could be framed as "Add support for comparing AlwaysGreaterThan instances with each other."
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing broken existing functionality. The comparison operators already exist and return results - they just return incorrect results. When a == b is True but a > b is also True, that's not a missing feature but a logic error in the existing implementation.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of fundamental mathematical properties that comparison operators must satisfy. The irreflexivity violation (a > a returns True) is objectively wrong by any reasonable standard. The @functools.total_ordering decorator expects classes to implement comparisons that follow ordering properties, and this implementation breaks that contract. The bug could cause real issues in sorting or any algorithm that relies on comparison transitivity and consistency. The fix is straightforward and the current behavior is indefensible from a correctness standpoint.
+
+**Why it might not be BUG:**
+The classes work correctly for their intended and documented use case as sentinel values. There's no explicit documentation stating these classes should follow mathematical ordering properties when compared with themselves. The issue only manifests in an edge case (comparing two AlwaysGreaterThan instances) that may never occur in practice since the code uses singleton instances INF and NINF. Without clear documentation of expected behavior, this could be considered undefined behavior rather than a bug.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug that should be filed. The use of @functools.total_ordering decorator creates a strong expectation that the class will implement mathematically sound comparison operations. The violation of irreflexivity (where a > a returns True) is particularly problematic as this breaks a fundamental property that all strict comparison operators must satisfy. No reasonable implementation should have an object be greater than itself.
+
+While it's true that the documentation doesn't explicitly state how AlwaysGreaterThan instances should compare with each other, certain behaviors are so fundamental they don't require documentation. Just as we don't need documentation to state that 1 + 1 should equal 2, we don't need documentation to state that a > a should be False. These are axiomatic properties of the operators themselves.
+
+The fact that this might be a rare edge case doesn't diminish its validity as a bug. The fix is trivial (adding an isinstance check), maintains backward compatibility for the intended use case, and ensures mathematical correctness. Even if the current code happens to work because these instances are rarely compared with each other, having latent bugs waiting to manifest when someone does compare them is poor engineering practice. This is exactly the kind of issue that property-based testing is designed to catch - violations of invariants that might not show up in typical usage but represent fundamental correctness problems.

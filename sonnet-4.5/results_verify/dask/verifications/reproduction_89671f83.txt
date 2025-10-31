@@ -1,0 +1,38 @@
+# Bug Reproduction Analysis
+
+## Summary
+I have successfully reproduced the bug described in the report. The bug is real and consistent with what was reported.
+
+## Reproduction Steps and Results
+
+### 1. Hypothesis Test Reproduction
+The property-based test failed exactly as described in the bug report:
+- Failing input: `data=[0, 0], write_index=True`
+- The test expects round-trip preservation when `write_index=True` but the index is lost
+- AssertionError shows the index values are different (50% mismatch)
+- Expected index: [0, 1]
+- Actual index: [0, 0]
+
+### 2. Manual Test Reproduction
+Running the manual reproduction code confirmed the bug:
+- Original DataFrame has index [0, 1]
+- After ORC round-trip, the index becomes [0, 0]
+- The index values are reset to default sequential values starting from 0
+
+### 3. Further Investigation
+I conducted additional tests to understand the issue:
+
+When using a custom index (e.g., [100, 200]):
+- The index IS written to the ORC file as a column named `__index_level_0__`
+- When reading back with `read_orc()` without parameters, this column appears as a regular data column
+- The DataFrame gets a default RangeIndex instead of using the saved index values
+- When explicitly specifying `index='__index_level_0__'` in `read_orc()`, the index is correctly restored
+
+### 4. Comparison with Parquet
+To understand if this is expected behavior, I compared with Parquet format:
+- Parquet DOES preserve the index automatically in round-trips
+- Writing with `write_index=True` and reading with `read_parquet()` correctly restores the index
+- This shows an inconsistency between ORC and Parquet handling in Dask
+
+## Conclusion
+The bug is confirmed. When using `to_orc(write_index=True)` followed by `read_orc()` without explicitly specifying the index parameter, the index information is not automatically restored, despite being present in the file. This breaks the expected round-trip property and is inconsistent with how Parquet format works in Dask.

@@ -1,0 +1,26 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Here's what I found:
+
+### Test Case 1: 5.960464477539063e-08
+- **Input**: 5.960464477539063e-08 (scientific notation for a very small positive number)
+- **Expected**: The normalized representation should parse back to the same float value
+- **Actual Result**: The function returns "596046447.00000007539063"
+- **Error**: When parsed as float, this gives 596046447.0000001, which is ~10 billion times larger than the original value
+
+### Test Case 2: -3.0929648190816446e-178
+- **Input**: -3.0929648190816446e-178 (negative number with very large negative exponent)
+- **Expected**: The normalized representation should parse back to the same float value
+- **Actual Result**: The function returns a malformed string with 177 leading zeros followed by a misplaced minus sign: ".00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-30929648190816446"
+- **Error**: This string cannot be parsed as a valid float (ValueError)
+
+### Property-Based Testing with Hypothesis
+Running the property-based test with Hypothesis immediately found similar failures. The test failed on the first negative float with a large negative exponent it tried: -3.588683812854411e-96, producing a similarly unparseable result with a minus sign in the middle of the number.
+
+### Root Cause
+Looking at the source code (lines 679-685 in Cython/Utils.py), the bug is in the logic that handles the exponent:
+1. The code doesn't properly handle negative exponents (numbers < 1)
+2. For negative numbers, the minus sign gets placed incorrectly when reconstructing the string
+3. The calculation of where to place the decimal point is incorrect for negative exponents
+
+The function clearly has a logic error in handling scientific notation with negative exponents, producing outputs that either represent completely different values or cannot be parsed as floats at all.

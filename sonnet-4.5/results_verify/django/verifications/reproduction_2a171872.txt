@@ -1,0 +1,66 @@
+Bug Reproduction Results
+========================
+
+PLATFORM: Linux (posix)
+
+BUG CLAIM:
+The validate_file_name function has inconsistent backslash handling between allow_relative_path=True and allow_relative_path=False modes on Unix systems, allowing backslashes in filenames when they should be rejected as path separators.
+
+REPRODUCTION RESULTS:
+
+1. MAIN BUG REPRODUCTION - CONFIRMED
+   Input: 'file\\name' with allow_relative_path=False
+   Expected (per bug report): SuspiciousFileOperation exception
+   Actual: Returns 'file\\name' (no exception)
+   ✓ Bug reproduced successfully
+
+2. SINGLE BACKSLASH TEST - CONFIRMED
+   Input: '\\' with allow_relative_path=False
+   Expected (per bug report): SuspiciousFileOperation exception
+   Actual: Returns '\\' (no exception)
+   ✓ Bug reproduced successfully
+
+3. MULTIPLE BACKSLASHES - CONFIRMED
+   Input: 'path\\to\\file.txt' with allow_relative_path=False
+   Expected behavior: Should reject as path elements
+   Actual: Returns 'path\\to\\file.txt' (accepted)
+   ✓ Confirms the bug pattern
+
+4. FORWARD SLASHES - WORKING AS EXPECTED
+   Input: 'dir/file' with allow_relative_path=False
+   Result: Raises SuspiciousFileOperation "File name 'dir/file' includes path elements"
+   ✓ Forward slashes correctly rejected
+
+5. MIXED SLASHES - PARTIALLY WORKING
+   Input: 'dir/sub\\file.txt' with allow_relative_path=False
+   Result: Raises SuspiciousFileOperation (because of the forward slash)
+   Note: Rejected for the forward slash, not the backslash
+
+6. HYPOTHESIS TEST - FAILED AS EXPECTED
+   The hypothesis test from the bug report failed with AssertionError
+   Multiple inputs with backslashes were incorrectly accepted
+   ✓ Confirms the bug exists
+
+KEY FINDING - PLATFORM DEPENDENCY:
+os.path.basename('file\\name') behavior:
+- On Unix/Linux: Returns 'file\\name' (backslash NOT treated as separator)
+- On Windows: Would return 'name' (backslash IS treated as separator)
+
+This confirms the platform-dependent behavior described in the bug report.
+
+INCONSISTENCY VERIFIED:
+With allow_relative_path=True:
+- The code explicitly does: str(name).replace("\\", "/")
+- This shows Django intends to treat backslashes as path separators
+
+With allow_relative_path=False:
+- The code only checks: name != os.path.basename(name)
+- On Unix, this misses backslashes since os.path.basename doesn't treat them as separators
+
+PROPOSED FIX TESTING:
+The proposed fix (adding "or '\\' in name" check) was tested:
+- Successfully rejects 'file\\name'
+- Successfully rejects '\\'
+- Successfully rejects 'path\\to\\file'
+- Does not affect normal filenames or forward slash handling
+✓ The proposed fix appears to work correctly

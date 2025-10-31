@@ -1,0 +1,42 @@
+REPRODUCTION OF BUG REPORT
+
+Test Results:
+
+1. BASIC REPRODUCTION - CONFIRMED
+   - Input: cat_core([['hello'], ['world']], '\x00')
+   - Expected: 'hello\x00world'
+   - Actual: 'helloworld'
+   - The null byte is completely dropped from the output
+
+2. COMPARATIVE TESTING - BUG ISOLATED TO NULL BYTES
+   - All other separators work correctly (pipe, tab, newline, space, SOH)
+   - Only null byte (\x00) fails
+   - Empty string separator works as expected
+   - Even \x01 (SOH) works fine, showing this is specific to \x00
+
+3. PROPERTY-BASED TEST - FAILS AS REPORTED
+   - The Hypothesis test fails on the minimal case (array_length=1, num_arrays=2)
+   - Confirms the bug exists across various input configurations
+
+4. ROOT CAUSE INVESTIGATION - NUMPY INTERACTION
+   - The bug occurs when numpy.sum is called on a mixed object array containing:
+     * numpy arrays (the column data)
+     * scalar string containing null byte (the separator)
+   - numpy.sum correctly handles null bytes when:
+     * All elements are plain strings
+     * The separator is also a numpy array
+   - The issue is specifically the mixed types scenario
+
+5. EDGE CASES TESTED:
+   - Double null bytes (\x00\x00): Also fails, both bytes dropped
+   - Null byte within separator ('X\x00Y'): Works correctly! The null is preserved
+   - Empty strings with null separator: Null byte is dropped
+
+Technical Details:
+- The bug is reproducible and consistent
+- It's a silent data corruption issue - no error is raised
+- The proposed fix in the bug report (converting separator to array) would work but has the wrong implementation
+- The actual fix would be simpler: np.array([sep], dtype=object) instead of np.full(array_length, sep, dtype=object)
+
+Conclusion:
+The bug is REAL and REPRODUCIBLE. Null bytes are silently dropped when used as separators in cat_core due to a numpy.sum quirk with mixed object arrays.

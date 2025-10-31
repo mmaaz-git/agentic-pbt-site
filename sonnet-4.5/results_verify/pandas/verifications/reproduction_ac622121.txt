@@ -1,0 +1,56 @@
+REPRODUCTION RESULTS
+
+1. BUG REPRODUCTION - CONFIRMED:
+The bug report is technically accurate. When reading CSV files with quoted strings like "Inf", pandas does convert them to float infinity:
+
+Test case:
+- Original: DataFrame with string 'Inf'
+- CSV output with QUOTE_ALL: '"col"\n"Inf"\n'
+- After read_csv: np.float64(inf)
+
+This happens for multiple values:
+- 'Inf', 'inf' -> np.float64(inf)
+- 'NaN', 'nan' -> np.float64(nan)
+- 'NA', 'null', 'None' -> np.float64(nan)
+- 'infinity' -> np.float64(inf)
+- '-inf' -> np.float64(-inf)
+
+2. ROUND-TRIP PROPERTY - BROKEN:
+The round-trip property IS broken as claimed. A DataFrame cannot be reliably round-tripped through CSV when it contains these special string values, even with explicit quoting.
+
+3. BEHAVIOR WITH AND WITHOUT QUOTES:
+Both quoted and unquoted values are converted:
+- With QUOTE_ALL: '"Inf"' -> np.float64(inf)
+- With QUOTE_MINIMAL: 'Inf' -> np.float64(inf)
+
+The presence of quotes does NOT affect the type inference behavior.
+
+4. WORKAROUNDS TESTED:
+
+a) dtype='str':
+- Preserves 'Inf' and 'infinity' as strings
+- Still converts 'NaN', 'nan', 'NA', 'null' to nan
+- Partial workaround only
+
+b) keep_default_na=False:
+- Preserves 'NaN', 'nan', 'NA', 'null' as strings
+- Still converts 'Inf' and 'infinity' to float infinity
+- Partial workaround only
+
+c) na_filter=False:
+- Has no effect on infinity conversion
+- 'Inf' and 'infinity' still become float infinity
+
+d) keep_default_na=False + na_filter=False:
+- Preserves 'NaN', 'nan', 'NA', 'null' as strings
+- Still converts 'Inf' and 'infinity' to float infinity
+
+5. SPECIAL FINDING - INFINITY CONVERSION:
+The conversion of 'Inf'/'infinity' to float infinity appears to be SEPARATE from the NA handling system. Even with all NA processing disabled, infinity values are still converted. This conversion appears to be hardcoded and not controlled by any documented parameter.
+
+6. TECHNICAL ACCURACY:
+The bug report's technical claims are accurate:
+- The behavior does occur as described
+- Round-trip property is indeed broken
+- Quoted values are not preserved as strings
+- The conversions happen silently without warning

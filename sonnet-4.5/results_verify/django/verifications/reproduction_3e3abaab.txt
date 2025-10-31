@@ -1,0 +1,47 @@
+REPRODUCTION ANALYSIS
+
+BUG REPORT CLAIMS:
+The bug report claims that static() has incomplete prefix validation - it rejects empty strings
+but allows slash-only strings like "/" which become empty after lstrip("/") processing.
+
+REPRODUCTION RESULTS:
+
+1. BEHAVIOR CONFIRMED:
+   - static('') raises ImproperlyConfigured: "Empty static prefix not permitted" ✓
+   - static('/') does NOT raise an error and returns pattern: ^(?P<path>.*)$ ✓
+   - static('//') does NOT raise an error and returns pattern: ^(?P<path>.*)$ ✓
+   - static('///') does NOT raise an error and returns pattern: ^(?P<path>.*)$ ✓
+
+2. HYPOTHESIS TEST RESULTS:
+   The hypothesis test FAILED as expected by the bug report.
+   When testing slash-only strings, the function does NOT raise ImproperlyConfigured.
+   Instead, it returns a URLPattern with regex ^(?P<path>.*)$
+
+3. PATTERN ANALYSIS:
+   - Normal prefix '/media/' produces: ^media/(?P<path>.*)$
+   - Slash-only prefix '/' produces: ^(?P<path>.*)$
+
+   The pattern ^(?P<path>.*)$ will match ANY path, which is significantly broader than intended.
+   This is functionally equivalent to having no prefix at all.
+
+4. LSTRIP BEHAVIOR VERIFIED:
+   '/'.lstrip('/') = ''
+   '//'.lstrip('/') = ''
+   '///'.lstrip('/') = ''
+
+   All slash-only strings become empty strings after lstrip('/').
+
+5. INCONSISTENCY CONFIRMED:
+   The validation at line 21 checks: if not prefix
+   This catches '' but not '/', '//', etc.
+
+   After lstrip('/') at line 28, these all become empty, creating the same pattern
+   that an empty prefix would have created (if it were allowed).
+
+TECHNICAL ACCURACY:
+The bug report is technically accurate in all its claims:
+- The code does check for empty prefix
+- The code does process prefix.lstrip("/")
+- Slash-only prefixes do bypass the validation
+- The resulting pattern does match all paths
+- This creates an inconsistency in the validation logic

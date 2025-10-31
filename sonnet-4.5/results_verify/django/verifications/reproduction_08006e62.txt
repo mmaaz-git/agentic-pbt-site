@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+### Summary
+The bug described in the report has been successfully reproduced and confirmed. When the same check function is registered multiple times with different tags using `CheckRegistry.register()`, the second registration overwrites the tags from the first registration instead of accumulating them.
+
+### Hypothesis Test Results
+
+The property-based test failed as expected with the specific input provided in the bug report:
+- Input: tag1="first", tag2="second"
+- Result: AssertionError: Tag 'first' should still be available
+
+The Hypothesis test also found additional failing cases, confirming this is a general issue:
+- Example failing case: tag1='0', tag2='1'
+- The first tag is consistently lost when the same function is registered with a different tag
+
+### Manual Reproduction Results
+
+The manual reproduction code output matched exactly what the bug report claimed:
+
+```
+After first registration - tags: ('tag1',)
+After second registration - tags: ('tag2',)
+Available tags: {'tag2'}
+Checks with tag1: 0
+Checks with tag2: 1
+```
+
+This confirms:
+1. After first registration, the check function has tags=('tag1',)
+2. After second registration with 'tag2', the tags attribute is overwritten to ('tag2',), completely losing 'tag1'
+3. The `tags_available()` method only returns {'tag2'}, indicating that 'tag1' is no longer accessible
+4. Running checks with tag='tag1' returns 0 results (the check is not found)
+5. Running checks with tag='tag2' returns 1 result (the check is found)
+
+### Root Cause Analysis
+
+Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/core/checks/registry.py`:
+
+1. Line 56: `check.tags = tags` - This directly overwrites the tags attribute
+2. Line 62: `checks.add(check)` - Since checks is a set, adding the same function object again does nothing (sets only store unique objects)
+
+The problem is that when the same function object is registered twice:
+- The first registration adds the function to the set and assigns tags
+- The second registration attempts to add the same function object to the set (which has no effect since it's already there) and overwrites the tags attribute
+
+### Impact
+This bug means that check functions cannot be registered under multiple tags by calling `register()` multiple times. The earlier tags become inaccessible, which could break code that relies on running checks by specific tags.

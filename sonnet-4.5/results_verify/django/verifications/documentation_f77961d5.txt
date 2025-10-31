@@ -1,0 +1,58 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## Django Documentation
+
+The base `quote_name` method documentation in Django states:
+- "Return a quoted version of the given table, index, or column name. Do not quote the given name if it's already been quoted."
+- Location: `/django/db/backends/base/operations.py` line 396-402
+
+The documentation does NOT specify:
+- How to handle special characters within identifiers
+- How to escape embedded quotes
+- What constitutes "proper" quoting beyond adding surrounding quotes
+
+## SQLite Documentation
+
+According to official SQLite documentation and the SQL standard:
+- Double quotes are used to delimit identifiers (table names, column names, etc.)
+- To include a literal double quote character within a double-quoted identifier, you must DOUBLE the quote character
+- Example: The identifier `foo"bar` should be quoted as `"foo""bar"`
+- This is confirmed by SQLite's actual behavior (tested empirically)
+
+Source: SQLite documentation on lexical structure and identifier quoting
+
+## PostgreSQL Documentation
+
+PostgreSQL follows the same SQL standard:
+- From PostgreSQL's official lexical structure guide: "Quoted identifiers can contain any character, except the character with code zero. (To include a double quote, write two double quotes.)"
+- This means PostgreSQL has the EXACT same requirement as SQLite
+- The bug report correctly noted that PostgreSQL's Django backend has the same issue
+
+Source: PostgreSQL Documentation Section 4.1: Lexical Structure
+
+## SQL Standard
+
+Both SQLite and PostgreSQL follow the SQL standard for identifier quoting:
+- Double quotes delimit identifiers
+- Double quotes within identifiers are escaped by doubling them (`""`)
+- This is consistent across SQL-compliant databases
+
+## Django's Current Implementation
+
+Django's implementation for both SQLite and PostgreSQL backends:
+```python
+def quote_name(self, name):
+    if name.startswith('"') and name.endswith('"'):
+        return name  # Quoting once is enough.
+    return '"%s"' % name
+```
+
+This implementation:
+1. Checks if already quoted (correct)
+2. Wraps unquoted names in double quotes (correct)
+3. **FAILS to escape embedded double quotes** (incorrect)
+
+## Conclusion
+
+The documentation from both SQLite and PostgreSQL clearly specifies that double quotes within identifiers must be escaped by doubling them. Django's current implementation violates this requirement, creating malformed SQL when identifiers contain embedded double quotes. While Django's own documentation doesn't explicitly state how to handle embedded quotes, it must follow the SQL standard and database-specific requirements to generate valid SQL.

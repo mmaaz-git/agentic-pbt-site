@@ -1,0 +1,57 @@
+DOCUMENTATION ANALYSIS
+======================
+
+1. XARRAY RANGEINDEX.LINSPACE DOCUMENTATION
+-------------------------------------------
+From xarray/indexes/range_index.py, lines 228-289:
+
+The docstring for RangeIndex.linspace() explicitly states:
+- Line 250-251: "endpoint : bool, optional - If True (default), the ``stop`` value is included in the interval."
+
+This documentation creates a clear contract that when endpoint=True:
+- The stop value should be included in the interval
+- By "included", it's reasonable to expect the last value equals stop exactly
+
+The function's docstring also states it's similar to numpy.linspace (line 119-120):
+"use :py:meth:`~xarray.indexes.RangeIndex.linspace`, which are similar to :py:func:`numpy.linspace`"
+
+2. NUMPY.LINSPACE DOCUMENTATION
+--------------------------------
+According to numpy's official documentation:
+- When endpoint=True (default), "stop is the last sample"
+- This guarantees that the last value in the array will be exactly the stop value
+- numpy.linspace is the de facto standard for generating linearly spaced values in Python
+
+3. USER EXPECTATIONS
+--------------------
+Based on the documentation:
+a) The function is named "linspace" and explicitly compared to numpy.linspace
+b) The parameter is named "endpoint" with the same semantics as numpy
+c) The documentation says the stop value is "included" when endpoint=True
+
+Users would reasonably expect:
+- Exact endpoint matching (values[-1] == stop)
+- Behavior consistent with numpy.linspace
+- No floating-point drift at the boundaries
+
+4. IMPLEMENTATION VS DOCUMENTATION
+----------------------------------
+The current implementation:
+- Uses a formula that accumulates floating-point errors: `labels = self.start + positions * self.step`
+- Does not guarantee exact endpoint values
+- Contradicts the documented behavior
+
+The documentation promises behavior that the implementation does not deliver.
+
+5. RELATED CODE ANALYSIS
+------------------------
+Looking at how RangeIndex.linspace adjusts the stop value (lines 282-283):
+```python
+if endpoint:
+    stop += (stop - start) / (num - 1)
+```
+This adjustment is meant to make the internal representation work with the step-based formula, but it introduces precision issues.
+
+CONCLUSION
+----------
+The documentation clearly states that when endpoint=True, the stop value should be included in the interval. Given the explicit comparison to numpy.linspace and the parameter naming, users rightfully expect exact endpoint values. The current implementation fails to meet this documented contract, making this a legitimate bug rather than a documentation issue.

@@ -1,0 +1,27 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in `normalise_float_repr` from Cython.Utils.
+
+### Test Results:
+
+1. **Hypothesis Test**: The property-based test immediately fails with negative floats that have negative exponents. The test found multiple failing cases, confirming the bug is not limited to a single edge case.
+
+2. **Specific Failing Case**: The reported case `-3.833509682449162e-128` produces the malformed output:
+   - Input: `-3.833509682449162e-128`
+   - Output: `.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-3833509682449162`
+
+   This output cannot be converted back to a float, raising a ValueError.
+
+3. **Pattern of Failure**: Testing additional cases shows that ALL negative numbers with negative exponents fail:
+   - `-1e-10` → `.00000000-1` (INVALID)
+   - `-2.5e-50` → `.000000000000000000000000000000000000000000000000-25` (INVALID)
+   - `-9.9e-100` → `.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-99` (INVALID)
+
+4. **When It Works**: Negative numbers with positive exponents work correctly:
+   - `-5e10` → `-50000000000.` (VALID)
+   - `-3.14e5` → `-314000.` (VALID)
+
+### Root Cause:
+The bug occurs because on line 665, the function calls `float_str.lower().lstrip('0')` which strips leading zeros. For a negative number like `-0.000...123`, this strips the zeros but leaves the minus sign orphaned, resulting in the minus appearing in the middle of the output string instead of at the beginning.
+
+The bug is 100% reproducible and affects all negative floating-point numbers with negative exponents when represented in scientific notation.

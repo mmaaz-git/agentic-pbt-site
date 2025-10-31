@@ -1,0 +1,66 @@
+## Bug Triage Analysis
+
+### Evaluation Against Each Category
+
+#### BUG (Valid Bug Report)
+**Arguments For:**
+- Violates Python's fundamental hash-equality contract: if a == b, then hash(a) must equal hash(b)
+- This is not an obscure edge case - it affects all ExtensionDtype subclasses
+- Can cause real bugs in production code when using dtypes in dictionaries or sets
+- The violation is in core functionality, not some rarely-used feature
+- Python's data model documentation explicitly requires this invariant
+- The bug affects pandas' built-in dtypes (CategoricalDtype, PeriodDtype, IntervalDtype, etc.)
+
+**Arguments Against:**
+- The string equality feature is documented and intentional
+- Could be considered a design choice rather than a bug
+
+#### INVALID
+**Arguments For:**
+- The __eq__ behavior with strings is explicitly documented
+- The feature works as documented (strings do compare equal to dtypes)
+
+**Arguments Against:**
+- Violating Python's hash-equality contract is never "working as intended"
+- This is not about undocumented behavior - it's about violating Python's core requirements
+- Even if string comparison is intentional, the hash implementation is objectively incorrect
+
+#### WONTFIX
+**Arguments For:**
+- Fixing this might break backward compatibility
+- Users may rely on the current string comparison behavior
+
+**Arguments Against:**
+- This is not an obscure edge case - it's a fundamental contract violation
+- The bug can cause silent failures in real applications
+- This affects core functionality, not some trivial feature
+
+#### FEATURE_REQUEST
+**Arguments For:**
+- Could argue that proper hash-equality support is a "new feature"
+
+**Arguments Against:**
+- Hash-equality contract is a Python requirement, not an optional feature
+- The current implementation is broken, not merely missing functionality
+
+#### DOCUMENTATION_FIX
+**Arguments For:**
+- The documentation could be updated to warn about this limitation
+- Could document that dtypes and strings shouldn't be used interchangeably as dict keys
+
+**Arguments Against:**
+- This is a code bug, not a documentation issue
+- Documenting broken behavior doesn't make it correct
+- Python's hash-equality contract is non-negotiable
+
+### Final Assessment
+
+This is clearly a **BUG**. The implementation violates Python's fundamental hash-equality contract, which states that equal objects must have equal hash values. This is not a matter of opinion or design choice - it's a core Python requirement that ensures correct behavior of hash-based collections.
+
+The fact that string comparison is documented doesn't excuse the hash violation. If pandas wants to support `dtype == string`, then it must also ensure `hash(dtype) == hash(string)` when they are equal, or remove the string comparison feature entirely.
+
+The bug is:
+1. **Correctness issue**: Violates Python's data model
+2. **Not trivial**: Affects all ExtensionDtype subclasses
+3. **Has real impact**: Can cause dictionary/set lookup failures
+4. **Has clear fix**: Either update __hash__ or remove string comparison from __eq__

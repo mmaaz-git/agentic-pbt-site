@@ -1,0 +1,48 @@
+BUG REPRODUCTION REPORT
+
+Test Setup:
+- scipy.sparse.csgraph.laplacian with form='lo' to return LinearOperator
+- Simple 2x2 symmetric graph matrix: [[0, 1], [1, 0]]
+- Test vector: [1.0, 2.0]
+
+Reproduction Results:
+
+1. Simple Test Case (from bug report):
+   - Created LinearOperator with csgraph.laplacian(graph, form='lo')
+   - Attempted lap_lo @ test_vec where test_vec has shape (2,)
+   - RESULT: ValueError: cannot reshape array of size 4 into shape (2,)
+   - The error matches the bug report exactly
+
+2. Comparison with form='array':
+   - Same graph with form='array' works correctly
+   - lap_array @ test_vec returns [-1., 1.] with shape (2,)
+   - This demonstrates the expected behavior
+
+3. Direct matvec Method Test:
+   - lap_lo.matvec(test_vec) also fails with same error
+   - This confirms the issue is in the matvec implementation
+
+4. 2D Input Test (matmat):
+   - lap_lo @ test_mat where test_mat has shape (2, 1)
+   - Works correctly, returns [[-1.], [1.]] with shape (2, 1)
+   - This shows matmat functionality is working
+
+5. Root Cause Analysis:
+   - The lambda function uses: v * d[:, np.newaxis] - m @ v
+   - When v is 1D (shape (2,)), v * d[:, np.newaxis] produces shape (2, 2)
+   - When v is 2D (shape (2, 1)), v * d[:, np.newaxis] produces shape (2, 1)
+   - The LinearOperator wrapper expects matvec to return 1D for 1D input
+
+6. Property-Based Test:
+   - Hypothesis test fails immediately on first example
+   - Confirms the bug occurs for all cases with form='lo' and 1D vectors
+   - The test correctly identifies that lap_lo @ test_vec should equal lap_array @ test_vec
+
+Technical Details:
+- The issue is in _laplace family functions (lines 381-400 in _laplacian.py)
+- These functions use broadcasting that adds dimensions for 1D inputs
+- The _linearoperator function assigns the same lambda to both matvec and matmat
+- LinearOperator's internal reshape fails when matvec returns wrong dimensions
+
+Conclusion:
+The bug is 100% reproducible and matches the report exactly. The LinearOperator's matvec method returns a 2D array when given a 1D input, violating the scipy.sparse.linalg.LinearOperator contract.

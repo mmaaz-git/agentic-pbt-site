@@ -1,0 +1,30 @@
+Bug Reproduction Analysis
+
+I successfully reproduced the reported bug. Here are the findings:
+
+1. EXACT REPRODUCTION CONFIRMED:
+   - Running `_convert_datetimes(pd.Series([1e20]), 's')` does indeed raise OverflowError
+   - The error message matches: "Python int too large to convert to C long"
+
+2. BEHAVIOR PATTERNS OBSERVED:
+   - Values up to about 9.223e15 (9223372036854775) work fine
+   - Values around 1e16 to 1e18 raise OutOfBoundsDatetime errors (more descriptive)
+   - Values at 1e19 and above raise OverflowError (less descriptive)
+   - The transition between error types depends on the specific value
+
+3. ROOT CAUSE:
+   - The function calls cast_from_unit_vectorized which converts seconds to milliseconds
+   - For very large values (>1e19), the multiplication causes integer overflow when converting to C long
+   - For moderately large values (1e16-1e18), pandas' datetime validation catches them first
+
+4. CURRENT ERROR HANDLING:
+   - The function does not validate input ranges before attempting conversion
+   - Two different exception types can occur for essentially the same problem (value too large)
+   - OverflowError is less informative than OutOfBoundsDatetime
+
+5. PRACTICAL IMPACT:
+   - This is an internal function called when reading SAS files
+   - If a SAS file contains corrupt or extreme datetime values, the entire read operation crashes
+   - The error message "Python int too large to convert to C long" gives no indication this is a datetime issue
+
+The bug report's technical details are accurate - the function does crash with OverflowError on large values instead of handling them gracefully.

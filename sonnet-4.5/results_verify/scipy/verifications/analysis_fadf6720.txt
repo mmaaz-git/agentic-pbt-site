@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never specifies how the function should handle floating-point precision issues. The warning message says columns with "standard deviation zero" will not change, but it doesn't promise to handle near-zero standard deviations caused by floating-point arithmetic. The function works exactly as coded - it divides by the computed standard deviation, whatever that value may be.
+
+**Why it might not be INVALID:**
+The function explicitly promises through its warning message that constant columns "will not change." A column where all values are identical is clearly constant, regardless of floating-point representation issues. Users have a reasonable expectation that constant columns should be detected and handled properly, especially when the function explicitly mentions this case.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case involving floating-point precision with large constant values. Most real-world data would not have this specific issue. The problem only occurs with certain large values where floating-point arithmetic produces tiny non-zero standard deviations. The workaround is simple - users can pre-check for constant columns or use smaller values. The issue is more of a numerical curiosity than a practical problem.
+
+**Why it might not be WONTFIX:**
+The bug produces wildly incorrect results (values inflated by a factor of 2^34) which could severely impact any downstream analysis. The function already has code to handle zero standard deviation, so this isn't asking for new functionality. The issue can occur with legitimate data values and the massive error (1.6e+15 instead of 93206) is not a minor numerical discrepancy.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about how the function determines "zero standard deviation" and that it uses exact floating-point equality. Adding a note about potential floating-point precision issues with large constant values would help users understand this limitation. The function technically works as implemented, but users need better guidance about its limitations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The warning message explicitly states that columns with zero standard deviation "will not change," which is violated in this case. This isn't just a documentation clarity issue - the function fails to deliver on its documented promise. Constant columns should remain unchanged, but they're being transformed to astronomical values.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation doesn't have tolerance-based checking for near-zero standard deviations. Adding a tolerance parameter or smart epsilon detection would be a new feature. The function was likely designed before considering floating-point precision edge cases, and handling them robustly would be an enhancement rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle constant columns - it's not asking for new functionality but fixing existing functionality that doesn't work correctly due to numerical issues. The code at lines 141-142 shows clear intent to handle zero standard deviation cases, so making it work properly isn't a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function explicitly promises that constant columns will not change, as stated in its warning message. The code has specific logic to handle zero standard deviation (lines 141-142), showing clear intent to preserve constant columns. The actual behavior violates this documented promise - constant columns are transformed to wildly incorrect values (off by a factor of 2^34). This is not a minor numerical error but a fundamental failure of the function to handle a case it explicitly claims to handle.
+
+**Why it might not be BUG:**
+The function technically works as coded - it computes standard deviation and divides by it. The issue only occurs due to floating-point precision limitations that are inherent to numerical computing. The documentation doesn't specify tolerance levels or promise to handle floating-point precision edge cases. The exact equality check for zero might be intentional to avoid false positives.
+
+## Overall Consideration
+
+This case presents a clear violation of the function's documented behavior. The whiten function explicitly states through its warning message that columns with standard deviation zero "will not change." The code at lines 141-142 shows deliberate intent to handle this case by detecting zero standard deviation and replacing it with 1.0 to preserve the original values.
+
+However, due to floating-point precision issues, constant columns with large values produce tiny non-zero standard deviations (e.g., 5.82e-11) that fail the exact equality check. This causes the function to divide by these tiny values, producing astronomically incorrect results - values inflated by factors like 2^34. This is not a minor numerical discrepancy but a catastrophic failure that could corrupt any downstream analysis.
+
+While one could argue this is a floating-point precision edge case, the function already has code specifically designed to handle constant columns, and that code fails due to an overly strict equality check. The fix would be trivial (using a tolerance instead of exact equality), and the current behavior produces objectively wrong results that violate the function's documented promise. The fact that the function works correctly for small constant values but fails for large ones indicates an implementation oversight rather than intentional behavior. This is a legitimate bug that should be fixed to ensure the function handles all constant columns correctly, regardless of their magnitude.

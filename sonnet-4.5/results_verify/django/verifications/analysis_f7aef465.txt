@@ -1,0 +1,58 @@
+## Bug Triage Analysis
+
+### Consideration for BUG (Valid Bug Report)
+
+**Arguments for BUG:**
+1. **Semantic violation**: MAX_ENTRIES semantically means "maximum entries" - a hard limit that should not be exceeded
+2. **Implementation intent**: The code checks `if len(self._cache) >= self._max_entries` before culling, showing clear intent to prevent exceeding the limit
+3. **Inconsistent behavior**: The cache can exceed MAX_ENTRIES in some configurations (when MAX_ENTRIES < CULL_FREQUENCY) but not others
+4. **Mathematical bug**: The integer division `len(self._cache) // self._cull_frequency` can return 0 when it should cull at least one item
+5. **User expectations**: Users configuring MAX_ENTRIES=2 would reasonably expect the cache to never hold more than 2 items
+
+**This appears to be the correct categorization.**
+
+### Consideration for WONTFIX
+
+**Arguments for WONTFIX:**
+1. This only occurs with unusual configurations where MAX_ENTRIES < CULL_FREQUENCY
+2. The default values (MAX_ENTRIES=300, CULL_FREQUENCY=3) don't trigger this bug
+3. It could be argued that misconfiguring these values is user error
+
+**Counter-arguments:**
+- The code should handle all valid configurations correctly
+- There's no documentation stating that MAX_ENTRIES must be >= CULL_FREQUENCY
+- The fix is simple and doesn't impact performance
+
+### Consideration for INVALID
+
+**Arguments for INVALID:**
+1. The documentation could be interpreted as MAX_ENTRIES being a "soft limit" that triggers culling
+2. The phrase "before old values are deleted" might mean it's the point at which deletion begins, not a hard cap
+
+**Counter-arguments:**
+- The word "maximum" strongly implies a hard upper bound
+- The implementation clearly tries to enforce this as a limit (checking >= before culling)
+- The FileBasedCache has similar logic that prevents exceeding the limit
+
+### Consideration for DOCUMENTATION_FIX
+
+**Arguments for DOCUMENTATION_FIX:**
+1. If the intended behavior is to allow exceeding MAX_ENTRIES temporarily, the documentation should clarify this
+2. The documentation could specify that MAX_ENTRIES should be >= CULL_FREQUENCY
+
+**Counter-arguments:**
+- The bug is in the code, not the documentation
+- The code's intent (checking >= MAX_ENTRIES) shows this is an implementation bug
+
+### Consideration for FEATURE_REQUEST
+
+**Arguments for FEATURE_REQUEST:**
+1. Could be seen as requesting better handling of edge case configurations
+
+**Counter-arguments:**
+- This is fixing broken existing functionality, not adding new features
+- The current behavior violates the reasonable interpretation of MAX_ENTRIES
+
+## Final Assessment
+
+This is a **BUG**. The code has a clear mathematical error where integer division can return 0 when culling is needed, causing the cache to exceed its documented maximum size. The fix is straightforward (ensuring at least one item is culled when the cache is full), and the current behavior violates both the semantic meaning of MAX_ENTRIES and the apparent implementation intent.

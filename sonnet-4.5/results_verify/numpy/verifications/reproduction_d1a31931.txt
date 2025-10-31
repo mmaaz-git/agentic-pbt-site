@@ -1,0 +1,29 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is confirmed as reproducible. numpy.char.partition() and numpy.char.rpartition() do not handle null bytes (\x00) correctly when compared to Python's str.partition() and str.rpartition() methods.
+
+### Test Results
+
+1. **Hypothesis Test**: The property-based test fails, confirming that NumPy's behavior diverges from Python's standard library.
+
+2. **Manual Reproduction**: Confirmed the specific example provided in the bug report:
+   - Input: '\x00' with separator '0'
+   - Python partition result: ('\x00', '', '')
+   - NumPy partition result: ('', '', '')
+   - The null byte is completely lost in NumPy's output
+
+3. **Additional Testing**: Extended testing revealed inconsistent null byte handling:
+   - '\x00abc' partitioned on 'b': NumPy preserves the null byte (matches Python)
+   - 'a\x00bc' partitioned on 'b': NumPy strips the null byte (doesn't match Python)
+   - 'abc\x00' partitioned on 'b': NumPy strips the null byte (doesn't match Python)
+   - 'a\x00b\x00c' partitioned on 'b': NumPy strips some null bytes (doesn't match Python)
+
+### Technical Details
+The issue manifests as silent data loss - null bytes are removed from the output without any warning or error. This behavior is inconsistent:
+- Sometimes null bytes are preserved (e.g., at the beginning of the first part)
+- Often they are stripped (e.g., in middle positions or when alone)
+- The behavior differs from Python's standard str.partition/rpartition which always preserves null bytes
+
+### Impact
+This is a real data corruption issue that affects any code using numpy.char.partition/rpartition with strings containing null bytes, which are valid characters in Python strings and important in many data formats (binary protocols, file formats, etc.).

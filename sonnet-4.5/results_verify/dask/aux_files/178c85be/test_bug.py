@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Test the reported bug in dask.widgets.widgets.key_split"""
+
+from hypothesis import given, strategies as st
+from dask.widgets.widgets import key_split
+
+# First test the regular case that should work
+print("Testing regular case with valid UTF-8 bytes:")
+try:
+    result = key_split(b'hello-world-1')
+    print(f"key_split(b'hello-world-1') = '{result}'")
+    print("✓ Valid UTF-8 bytes work correctly")
+except Exception as e:
+    print(f"✗ Unexpected error: {e}")
+
+print("\n" + "="*50 + "\n")
+
+# Now test the failing case with invalid UTF-8
+print("Testing invalid UTF-8 bytes (b'\\x80'):")
+try:
+    result = key_split(b'\x80')
+    print(f"key_split(b'\\x80') = '{result}'")
+    print("✓ Invalid UTF-8 bytes handled gracefully")
+except UnicodeDecodeError as e:
+    print(f"✗ UnicodeDecodeError raised: {e}")
+except Exception as e:
+    print(f"✗ Unexpected error: {e}")
+
+print("\n" + "="*50 + "\n")
+
+# Test with hypothesis
+print("Running hypothesis property test:")
+failures = []
+
+@given(st.binary(min_size=0, max_size=100))
+def test_key_split_bytes(b):
+    try:
+        result = key_split(b)
+        assert isinstance(result, str), f"Result should be string, got {type(result)}"
+    except Exception as e:
+        failures.append((b, e))
+        raise
+
+# Run a limited number of examples
+import hypothesis.strategies as st
+from hypothesis import settings
+
+with settings(max_examples=100):
+    try:
+        test_key_split_bytes()
+        print("✓ Hypothesis test passed for 100 examples")
+    except Exception as e:
+        print(f"✗ Hypothesis test failed")
+        if failures:
+            print(f"First failure: bytes={failures[0][0]!r}")
+            print(f"Error: {failures[0][1]}")
+
+print("\n" + "="*50 + "\n")
+
+# Test that None returns "Other" as documented
+print("Testing None input:")
+try:
+    result = key_split(None)
+    print(f"key_split(None) = '{result}'")
+    if result == "Other":
+        print("✓ None correctly returns 'Other'")
+    else:
+        print(f"✗ Expected 'Other', got '{result}'")
+except Exception as e:
+    print(f"✗ Unexpected error: {e}")

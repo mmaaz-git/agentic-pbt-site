@@ -1,0 +1,41 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report.
+
+### Test Results
+
+1. **Direct method call reproduction**:
+   - Calling `GetLanguageInfoListNode.get_language_info('')` raises `IndexError: string index out of range`
+   - Calling `GetLanguageInfoListNode.get_language_info(())` raises `IndexError: tuple index out of range`
+   - Calling `GetLanguageInfoListNode.get_language_info([])` raises `IndexError: list index out of range`
+
+2. **Hypothesis test reproduction**:
+   - The provided Hypothesis test correctly fails with `IndexError` on the first example (empty string)
+   - The test accurately captures the bug
+
+3. **Template usage reproduction**:
+   - Using the template tag `{% get_language_info_list for languages as langs %}` with an empty list works correctly (returns `[]`)
+   - Using the same tag with a list containing an empty string `['']` crashes with `IndexError: string index out of range`
+
+### Root Cause
+
+The bug is located at line 43 of `/django/templatetags/i18n.py`:
+```python
+if len(language[0]) > 1:
+```
+
+This line accesses `language[0]` without first checking if `language` is empty. When `language` is:
+- An empty string `''`: accessing `[0]` raises `IndexError: string index out of range`
+- An empty tuple `()`: accessing `[0]` raises `IndexError: tuple index out of range`
+- An empty list `[]`: accessing `[0]` raises `IndexError: list index out of range`
+
+### How the Bug Manifests
+
+The bug occurs when the `get_language_info_list` template tag processes a list containing empty strings or empty sequences. This could happen in real-world scenarios when:
+1. Data is dynamically generated and includes empty values due to data processing errors
+2. User input is not properly validated before being passed to the template
+3. A language list is filtered and some entries become empty but aren't removed
+
+The current code crashes with an unhelpful `IndexError` instead of either:
+- Handling empty values gracefully (skipping them or using a default)
+- Raising a more informative error message

@@ -1,0 +1,38 @@
+## Bug Reproduction Results
+
+### Bug Report Claims
+The bug report claims that in `dask/diagnostics/profile.py`, the `_update_pids` method has a type mismatch where it compares an integer PID with a Process object, causing the tracker process to never be filtered out.
+
+### Verification of Technical Details
+
+#### 1. Code Analysis
+I examined the actual dask code at `/home/npc/miniconda/lib/python3.13/site-packages/dask/diagnostics/profile.py`:
+
+- **Line 261**: `pid = current_process()` - This indeed returns a `multiprocessing.Process` object, NOT an integer
+- **Line 271**: `self._update_pids(pid)` - The Process object is passed to _update_pids
+- **Line 252**: `p.pid != pid` - This compares an integer (p.pid) with a Process object (pid)
+
+#### 2. Bug Reproduction Test
+I ran the provided reproduction code and confirmed:
+- `current_process()` returns a Process object of type `<class 'multiprocessing.process._MainProcess'>`
+- `current_process().pid` returns an integer
+- When comparing `p.pid != pid` where p.pid is an integer and pid is a Process object, the comparison ALWAYS returns True
+- This means the tracker process with matching PID is never filtered out
+
+#### 3. Impact Analysis
+The bug causes:
+- The tracker process itself is included in resource monitoring
+- Resource measurements include the overhead of the monitoring process
+- This distorts the actual resource usage being profiled
+
+### Technical Accuracy
+The bug report is technically accurate:
+1. The type mismatch exists exactly as described
+2. The line numbers referenced are correct
+3. The consequence (tracker never filtered out) is correct
+4. The proposed fix (comparing p.pid != pid.pid) would resolve the issue
+
+### Expected vs Actual Behavior
+**Expected**: A resource profiler should measure only the target code's resource usage, not including its own monitoring overhead
+**Actual**: Due to the bug, the profiler includes its own resource usage in the measurements
+**Documentation**: While not explicitly documented, it's reasonable to expect a profiler not to include itself in measurements

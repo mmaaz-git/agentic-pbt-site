@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that SecurityScopes should support round-tripping for any arbitrary list of strings, including whitespace-only strings. However, the OAuth2 specification (RFC 6749) clearly defines that scope strings must contain printable ASCII characters excluding spaces (character set %x21 / %x23-5B / %x5D-7E). Whitespace-only "scopes" are not valid OAuth2 scopes. The class is working correctly by not preserving invalid inputs that violate the OAuth2 specification. Additionally, the documentation states that this parameter "will be filled by FastAPI", suggesting it's not meant for direct user instantiation with arbitrary values.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies a technical inconsistency where the class accepts inputs that it cannot properly handle. The class constructor does accept [' '] without raising an error, creates an internal state with it, but then produces a scope_str that cannot be parsed back to the original input. This is a genuine inconsistency in the class's behavior, even if the input is technically invalid per OAuth2 spec.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs with inputs that violate the OAuth2 specification - whitespace-only strings are not valid OAuth2 scopes. In normal FastAPI usage, scopes come from OAuth2PasswordRequestForm which uses split() to parse scopes, automatically filtering out whitespace. The SecurityScopes class is primarily an internal FastAPI component (documentation says "This will be filled by FastAPI"), and direct instantiation with invalid inputs is an edge case that would never occur in proper OAuth2 flows. The maintainers might reasonably decide this edge case isn't worth fixing since it only affects misuse of the API.
+
+**Why it might not be WONTFIX:**
+The class is part of the public API and can be instantiated directly by users. If it accepts certain inputs, it should handle them consistently. The fact that it silently produces incorrect results rather than failing fast could lead to confusing bugs in user code. Even if the use case is rare, the principle of least surprise suggests the class should either validate inputs or handle them correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current documentation doesn't specify that SecurityScopes should only accept valid OAuth2 scope strings. It doesn't mention that whitespace-only strings are invalid or that the class assumes inputs follow OAuth2 specification requirements. Adding documentation to clarify that scopes must be non-empty, non-whitespace strings conforming to OAuth2 spec would help users understand the expected inputs and avoid this issue. The docstring could explicitly state that this class is meant for internal FastAPI use and manual instantiation should follow OAuth2 scope requirements.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about unclear documentation - there's an actual behavioral inconsistency where the class accepts inputs it can't properly handle. Simply documenting the limitation doesn't fix the fact that the class silently produces incorrect results. Users might still accidentally pass invalid inputs and get confusing behavior. The code should either validate inputs or handle them correctly, not just document the limitation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding input validation to reject invalid OAuth2 scopes would be a new feature that enhances the robustness of the API. The bug report even provides implementation suggestions for this validation. This could be seen as a request to add defensive programming features that validate inputs according to OAuth2 spec, which isn't currently implemented. The class currently works fine for its intended use case (internal FastAPI usage with valid scopes), and adding validation would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but pointing out that existing functionality is broken for certain inputs. The class already accepts these inputs - it just handles them incorrectly. The issue is about fixing inconsistent behavior, not adding new capabilities. A feature request would be asking for something the class doesn't currently attempt to do, but here it does attempt to handle these inputs and fails.
+
+## BUG Considerations
+**Why it might be BUG:**
+The class exhibits objectively inconsistent behavior: it accepts whitespace-only strings in the scopes list, stores them, but then produces a scope_str that cannot be correctly parsed back to the original scopes list. This violates the principle of round-trip consistency. The class should either reject invalid inputs with an error or handle them in a way that maintains internal consistency. The current behavior of silently producing incorrect results is a clear bug that could cause confusion and errors in user code.
+
+**Why it might not be BUG:**
+The inputs that cause the problem (whitespace-only strings) are explicitly invalid according to the OAuth2 specification that this class is designed to support. The class is behaving correctly by not preserving invalid inputs that shouldn't exist in the first place. The documentation indicates this is meant to be filled by FastAPI internally, not instantiated directly with arbitrary values. This is more of a case of "garbage in, garbage out" rather than a bug in the implementation.
+
+## Overall Consideration
+
+After careful analysis, this bug report describes behavior that is technically incorrect but involves inputs that violate the OAuth2 specification and likely represent misuse of the API. The SecurityScopes class is documented as being "filled by FastAPI" internally, and the issue only manifests when users manually instantiate it with invalid OAuth2 scope values (whitespace-only strings).
+
+The OAuth2 specification (RFC 6749) defines valid scope characters as %x21 / %x23-5B / %x5D-7E, which explicitly excludes whitespace characters. The bug report is testing the class with inputs that are fundamentally invalid for the domain it operates in. While the class could handle these invalid inputs more gracefully (by validating and rejecting them), the current behavior of not preserving invalid scopes during round-tripping is not necessarily wrong - it's just not explicitly validated.
+
+The most appropriate resolution would be to update the documentation to clarify that SecurityScopes expects valid OAuth2 scope strings and is primarily meant for internal FastAPI use. The class works correctly for all valid OAuth2 inputs, and the "bug" only appears with invalid inputs that violate the specification the class is designed to support. This makes it more of a documentation issue than a code bug.

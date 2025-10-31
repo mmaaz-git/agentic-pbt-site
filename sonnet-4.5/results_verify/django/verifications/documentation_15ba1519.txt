@@ -1,0 +1,48 @@
+## Documentation Analysis for Django Q Objects
+
+### Official Django Documentation Findings
+
+After reviewing the official Django documentation for Q objects, the following key points were identified:
+
+1. **Purpose and Usage**: The documentation clearly states that Q objects are meant to "encapsulate filters as objects that can then be combined logically (using `&` and `|`)". This is documented both in the code docstring and the official documentation.
+
+2. **Logical Operations**: The documentation explicitly describes support for:
+   - `&` (AND) operator
+   - `|` (OR) operator
+   - `^` (XOR) operator
+   - `~` (NOT) operator for negation
+
+3. **No Explicit Equality Semantics**: The Django documentation does NOT specify:
+   - How Q objects should behave with respect to equality comparisons
+   - Whether logical equivalence should be considered in equality
+   - Whether commutativity is guaranteed (i.e., whether `Q1 & Q2` should equal `Q2 & Q1`)
+   - Whether idempotence is guaranteed (i.e., whether `Q & Q` should equal `Q`)
+   - How Q objects should behave when used in sets or as dictionary keys
+
+4. **Implementation Details**: The Q class docstring states it can "encapsulate filters" and that they can be "combined logically", but does not make explicit promises about Boolean algebra properties.
+
+### Code Analysis Findings
+
+Looking at the implementation:
+
+1. **Q class inherits from tree.Node**: The base Node class implements structural equality (line 71-77 of tree.py), comparing children in order.
+
+2. **Q overrides equality**: The Q class overrides `__eq__` and `__hash__` to use an `identity` property that preserves structural differences.
+
+3. **Children ordering in __init__**: Line 54 of query_utils.py sorts kwargs.items() when initializing, but this only affects keyword arguments, not the order of Q objects combined with `&` or `|`.
+
+4. **No normalization in _combine**: The `_combine` method (lines 59-70) which implements `&` and `|` operators does not normalize or sort the children, maintaining the order in which operations are performed.
+
+### Contract Analysis
+
+The bug report claims this violates an "API contract", but upon examination:
+
+1. **No explicit contract exists**: The documentation never promises Boolean algebra properties like commutativity or idempotence.
+
+2. **Hashability is intentional**: The Q class explicitly implements `__hash__` and `__eq__`, suggesting it's designed to be hashable and comparable, but the documentation doesn't specify the semantics of these comparisons.
+
+3. **Logical vs Structural equality**: The implementation clearly uses structural equality (comparing the exact structure of the tree) rather than logical equality (comparing the logical meaning).
+
+### Conclusion
+
+While the behavior reported is technically correct according to the current implementation, the documentation is silent on whether this is the intended behavior. The lack of commutativity and idempotence could be surprising to users familiar with Boolean algebra, but Django has never explicitly promised these properties for Q objects.

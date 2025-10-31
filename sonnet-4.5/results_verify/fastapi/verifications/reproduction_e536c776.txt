@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+### Bug Summary
+The TrustedHostMiddleware in Starlette incorrectly accepts hostnames that start with a dot (e.g., `.example.com`) when using wildcard patterns like `*.example.com`.
+
+### Reproduction Steps Taken
+
+1. **Hypothesis Test Reproduction**
+   - Ran the provided property-based test with domain="example.com"
+   - Result: Test FAILED - The invalid host '.example.com' incorrectly matches pattern '*.example.com'
+   - The test confirms that the pattern matching logic incorrectly accepts '.example.com'
+
+2. **Manual Test Case Reproduction**
+   - Created and ran the manual test case as provided in the bug report
+   - Confirmed that `is_valid_host` is True when it should be False
+   - The condition `".example.com".endswith(".example.com")` evaluates to True (since the string equals itself)
+   - This causes the invalid hostname to be accepted
+
+3. **Real Middleware Testing**
+   - Created an async test using the actual TrustedHostMiddleware
+   - Tested both valid subdomain ('sub.example.com') and invalid hostname ('.example.com')
+   - Results:
+     * Valid subdomain 'sub.example.com': Status = 200 (Correctly accepted)
+     * Invalid hostname '.example.com': Status = 200 (INCORRECTLY accepted - should be 400)
+   - This confirms the bug exists in the actual middleware implementation
+
+4. **Code Analysis**
+   - Examined the source code at line 44 of trustedhost.py
+   - The problematic logic: `if host == pattern or (pattern.startswith("*") and host.endswith(pattern[1:])):`
+   - When pattern is `*.example.com`, `pattern[1:]` becomes `.example.com`
+   - The hostname `.example.com` indeed ends with `.example.com` (they're equal), causing it to pass validation
+
+### Bug Impact
+The bug allows invalid hostnames starting with a dot to bypass host validation. This is a security concern because:
+1. Hostnames starting with dots are invalid per DNS standards
+2. This could potentially be exploited to bypass security controls
+3. The middleware's purpose is to "guard against HTTP Host Header attacks" but it's accepting malformed hosts
+
+### Conclusion
+The bug is confirmed and reproducible. The pattern matching logic needs to be fixed to reject hostnames that start with a dot, as these are invalid according to DNS standards and should not match wildcard patterns.

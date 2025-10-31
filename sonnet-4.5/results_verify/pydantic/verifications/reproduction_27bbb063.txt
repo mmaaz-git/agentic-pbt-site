@@ -1,0 +1,29 @@
+REPRODUCTION ANALYSIS
+====================
+
+I successfully reproduced the bug reported in the issue. The test case provided by the reporter correctly demonstrates the problem.
+
+Test Results:
+-------------
+1. The property-based test failed as expected with the assertion error:
+   "Expected 0 plugins with '__all__,plugin1', but got 1"
+
+2. The reproduction script output confirmed the behavior:
+   - '__all__' alone: 0 plugins (works correctly - disables all plugins)
+   - '__all__,plugin1': 1 plugins (BUG - should disable all, but loads plugin2)
+   - 'plugin1,__all__': 1 plugins (BUG - should disable all, but loads plugin2)
+   - 'plugin1' alone: 1 plugins (works correctly - only disables plugin1, loads plugin2)
+
+Code Analysis:
+--------------
+Looking at the implementation in /home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/plugin/_loader.py:
+
+Line 32: `elif disabled_plugins in ('__all__', '1', 'true'):`
+
+This line only checks if the ENTIRE string exactly matches '__all__', '1', or 'true'. It does not check if '__all__' appears as part of a comma-separated list.
+
+Line 45: `if disabled_plugins is not None and entry_point.name in disabled_plugins.split(','):`
+
+This line handles comma-separated plugin names but treats '__all__' as a literal plugin name when it appears in a list, not as a special keyword.
+
+The bug is confirmed: When '__all__' appears in a comma-separated list, it is not recognized as the special keyword to disable all plugins but is instead treated as a literal plugin name to disable.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function could be interpreted as being designed specifically for masked arrays, and the example in the docstring only shows masked array usage. One could argue that "array-like" in this context implicitly means "masked array-like" given the function's behavior and the presence of mask-specific parameters like `ignoremask`. If the function was never intended to work with regular arrays, then the current behavior is correct and the bug report is invalid.
+
+**Why it might not be INVALID:**
+The documentation explicitly states the parameter is "array-like" which has a well-established meaning in NumPy that includes regular arrays. There is no statement anywhere that the input must be a masked array. The function processes the input with `np.asanyarray(a)` which suggests it's meant to accept any array-like input. The presence of `ignoremask` parameter actually suggests the function should handle cases where there is no mask (regular arrays), not that it requires masked arrays.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One could argue this is an obscure edge case since users working with structured arrays often use masked arrays anyway for handling missing data. The function has likely existed for years with this limitation, and fixing it now might risk breaking existing code that depends on the current behavior. The workaround is simple - just convert regular arrays to masked arrays before calling the function.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - the function completely crashes with a clear error when given valid NumPy structured arrays. It's not an obscure edge case but rather a fundamental incompatibility with standard NumPy arrays. The fix is simple and backward compatible (both proposed fixes work correctly with masked arrays too). This directly impacts usability for anyone trying to find duplicates in regular structured arrays.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The simplest solution would be to update the documentation to clarify that the function requires masked arrays, changing "array-like" to "masked array" and adding a note that regular structured arrays are not supported. This would align the documentation with the current implementation without changing any code behavior. The function name and module location don't explicitly indicate it's mask-only.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The parameter documentation saying "array-like" is not ambiguous - it has a specific meaning in NumPy that includes regular arrays. The implementation appears to be buggy rather than the documentation being unclear. The function is in `recfunctions` module (not `ma.recfunctions`), suggesting it should work with regular record/structured arrays. The ignoremask parameter's existence suggests the intention was to handle both masked and non-masked cases.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If the original implementation only considered masked arrays, then adding support for regular structured arrays could be seen as a new feature rather than fixing a bug. The user is essentially asking for the function to be enhanced to handle a broader range of inputs than it was originally designed for. This would be similar to asking a function that only handles integers to also handle floats.
+
+**Why it might not be FEATURE_REQUEST:**
+The documentation already claims to support "array-like" inputs, which includes regular arrays. This isn't asking for new functionality but rather asking for the function to work as documented. The implementation bug (calling `.filled()` unconditionally) is clearly an oversight rather than an intentional limitation. Supporting regular arrays isn't an enhancement but rather fixing broken basic functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation clearly states the function accepts "array-like" input, which by NumPy conventions includes regular structured arrays. The function crashes with an AttributeError when given valid structured arrays, which is clearly not intended behavior. The error occurs due to calling `.filled()` on regular arrays that don't have this method. The fix is simple and maintains backward compatibility. The `ignoremask` parameter's existence strongly suggests the function was intended to handle non-masked arrays.
+
+**Why it might not be BUG:**
+The only example provided uses masked arrays, which might indicate the intended usage. The function is in a module that often deals with masked operations. One could argue that the documentation's use of "array-like" was imprecise rather than the implementation being wrong. The fact that it's only ever been tested/demonstrated with masked arrays might suggest that was the original intent.
+
+## Overall consideration
+
+Looking at the evidence holistically, this appears to be a legitimate bug in the implementation rather than a documentation issue or invalid report. The key evidence supporting this conclusion:
+
+First, the documentation unambiguously states the parameter accepts "array-like" input. In NumPy's documentation standards, "array-like" has a specific meaning that includes lists, tuples, regular arrays, and masked arrays - essentially anything that can be converted via `np.asanyarray()`. If the function only supported masked arrays, the documentation should explicitly state "masked array" or "MaskedArray", not "array-like". The function even calls `np.asanyarray(a)` at line 1446, which confirms it's trying to handle any array-like input.
+
+Second, the presence of the `ignoremask` parameter with a default value of `True` strongly indicates the function was designed to handle cases where masks might not be present. If the function only worked with masked arrays, this parameter would be meaningless in its default state. The parameter suggests the developers anticipated both masked and non-masked inputs.
+
+Third, the implementation error is a clear bug, not a design choice. The code unconditionally calls `.filled()` at line 1458 and accesses `.recordmask` at line 1463, both of which are MaskedArray-specific attributes. This is clearly an oversight where the developer assumed the array would always be a MaskedArray after processing, but forgot that `np.asanyarray()` preserves regular arrays as regular arrays. The proposed fixes are simple, maintain backward compatibility, and allow the function to work as documented.

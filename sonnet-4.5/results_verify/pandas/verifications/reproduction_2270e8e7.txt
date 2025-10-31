@@ -1,0 +1,36 @@
+## Reproduction of the Bug
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Test Results
+
+1. **Hypothesis Test**: The hypothesis test failed as expected with the exact error message reported:
+   - Error: `'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+   - This confirms that the function cannot handle arbitrary binary data
+
+2. **Specific Failing Case (b'\x80')**:
+   - Confirmed to raise `UnicodeDecodeError` exactly as described in the bug report
+   - Error message matches: `'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+
+3. **Additional Test Cases**: I tested several other invalid UTF-8 sequences:
+   - `b'\x80'` - Invalid start byte (fails)
+   - `b'\xc0\x80'` - Overlong encoding (fails)
+   - `b'\xed\xa0\x80'` - Surrogate half (fails)
+   - `b'Hello\x80World'` - Valid UTF-8 with invalid byte in middle (fails)
+
+   All cases resulted in UnicodeDecodeError, confirming the function cannot handle any invalid UTF-8 sequences.
+
+4. **Display Encoding**: Confirmed that `get_option('display.encoding')` returns 'utf-8'
+
+### Code Analysis
+
+The current implementation at line 15 of `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/computation/common.py`:
+```python
+s = s.decode(get_option("display.encoding"))
+```
+
+This calls decode without any error handling parameter, which causes it to raise UnicodeDecodeError on invalid byte sequences. The default error handling is 'strict', which raises an exception on any decoding error.
+
+### Conclusion
+
+The bug is confirmed and reproducible. The `ensure_decoded` function crashes with UnicodeDecodeError when given bytes containing invalid UTF-8 sequences, exactly as reported.

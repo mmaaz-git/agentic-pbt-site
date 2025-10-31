@@ -1,0 +1,48 @@
+BUG REPRODUCTION RESULTS
+
+1. REPRODUCTION OF THE EXACT BUG REPORT:
+   The bug report's code example was tested and CONFIRMED to produce the exact error described:
+   - Input: allow_headers=['Ā'] (character U+0100, Latin Extended-A)
+   - Error: UnicodeEncodeError: 'latin-1' codec can't encode character '\u0100' in position 57
+   - The error occurs exactly as described in the bug report
+
+2. STACK TRACE ANALYSIS:
+   The error occurs in this sequence:
+   a) CORSMiddleware.__init__ accepts the Unicode header 'Ā' without validation
+   b) The header is added to preflight_headers dictionary as part of "Access-Control-Allow-Headers" value
+   c) When preflight_response() is called, it creates a PlainTextResponse with these headers
+   d) PlainTextResponse.__init__ calls self.init_headers()
+   e) init_headers() attempts to encode all header values as latin-1: v.encode("latin-1")
+   f) This encoding fails for the Unicode character 'Ā' (U+0100)
+
+3. ADDITIONAL TESTING:
+   Tested with various non-latin-1 characters, ALL FAILED with the same error:
+   - 'Ā' (U+0100) - Latin Extended-A: UnicodeEncodeError
+   - 'Ω' (U+03A9) - Greek: UnicodeEncodeError
+   - '♥' (U+2665) - Symbol: UnicodeEncodeError
+   - '你' (U+4F60) - Chinese: UnicodeEncodeError
+   - '😀' (U+1F600) - Emoji: UnicodeEncodeError
+
+4. CONTROL TEST:
+   Tested with normal ASCII/latin-1 compatible headers:
+   - 'X-Custom-Header': Works perfectly, returns 200 OK
+   - Standard headers work as expected
+
+5. BEHAVIOR VERIFICATION:
+   - The middleware DOES accept non-latin-1 characters during initialization
+   - The middleware DOES NOT validate encoding compatibility
+   - The crash DOES occur when trying to send the response
+   - The crash happens consistently and deterministically
+   - This is NOT a random or intermittent issue
+
+6. IMPACT:
+   - Any user who passes non-latin-1 characters in allow_headers will experience a crash
+   - The crash occurs at response time, not at configuration time
+   - This could cause production services to fail if configured with Unicode headers
+
+TECHNICAL ACCURACY OF BUG REPORT:
+The bug report is technically accurate in all aspects:
+- The code reproduces the exact error
+- The error message matches exactly
+- The root cause analysis (latin-1 encoding requirement) is correct
+- The failing input example is valid and causes the described crash

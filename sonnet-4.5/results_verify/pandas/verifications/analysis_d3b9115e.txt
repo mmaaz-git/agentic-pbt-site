@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation examples clearly show that when using methodtype="classmethod", you should pass cls (the class), not self (an instance). The user is misusing the API by passing an instance where a class is expected. The parameter is even named "class_instance" suggesting it could be either, and the examples demonstrate the correct usage pattern. Users who follow the documented examples would never encounter this issue.
+
+**Why it might not be INVALID:**
+The API accepts the incorrect input without any validation or error, and only fails later when converting to string. The documentation never explicitly states that passing an instance with methodtype="classmethod" is forbidden - it only shows examples of correct usage. The parameter name "class_instance" is ambiguous and could reasonably be interpreted as accepting either a class or instance.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only occurs when users misuse the API in a way that doesn't match the documented examples. The error is being raised from internal error handling code that most users will never directly interact with. The fix would add extra validation overhead for a case that shouldn't occur in properly written code. Additionally, the error message itself is internal to exception handling and wouldn't normally be user-facing in production code.
+
+**Why it might not be WONTFIX:**
+The crash is a clear bug where valid Python code that successfully creates an object later crashes when that object is converted to string. This violates basic expectations that if an object can be created, it should be usable. The fix is trivial (either validation or handling both cases) and would prevent confusing crashes for users who make this mistake.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never explicitly states the requirement that methodtype="classmethod" requires a class object, not an instance. The examples show the pattern but don't explain the requirement. Adding clear documentation about which methodtypes require classes vs instances would prevent this confusion. The code's actual behavior (crashing) could be considered the intended behavior if it's properly documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just unclear documentation - there's an actual implementation inconsistency where the code accepts invalid input in __init__ but crashes in __str__. Simply documenting "don't do this" doesn't fix the underlying problem that the API accepts invalid states. The examples already show correct usage, so the documentation is technically sufficient.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for the API to be more flexible and handle both classes and instances for all methodtypes. The proposed "Option 2" fix would make __str__ work with both cases, which could be seen as adding a new feature for more permissive input handling. This would make the API more user-friendly and forgiving of mistakes.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality - the user is reporting that existing functionality crashes. The ability to create an error and convert it to string isn't a new feature, it's basic expected behavior. The bug report is about fixing a crash, not adding new capabilities to the system.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code has a clear inconsistency where __init__ accepts any input without validation, but __str__ makes assumptions that cause crashes. This violates the principle that objects that can be created should be usable. The Hypothesis test demonstrates this is a systematic issue, not a random edge case. The implementation has different assumptions in different methods, which is a classic bug pattern.
+
+**Why it might not be BUG:**
+The user is misusing the API by passing incorrect types that don't match the documented examples. The parameter name and examples make it clear what should be passed. This is user error, not a code defect. Many Python APIs will crash if you pass the wrong types - this is expected behavior in a dynamically typed language.
+
+## Overall Consideration
+
+This case presents an interesting dilemma between strict API enforcement and defensive programming. The code clearly has an internal inconsistency - it accepts input in __init__ that will cause __str__ to crash. However, this only happens when users deviate from the documented examples.
+
+Looking at the implementation, there's also an inconsistency with how staticmethod is handled - logically it should behave like classmethod (expecting a class), but it falls into the else branch and accidentally works with instances. This suggests the implementation wasn't carefully designed around these type constraints.
+
+While the documentation could be clearer about the requirements, the fundamental issue is that the code allows creating an object in an invalid state that will crash on basic operations. In well-designed APIs, validation should happen at construction time, not at usage time. The fact that creating the error succeeds but using it fails violates the principle of least surprise and makes debugging harder for users who make this mistake. Given that the fix is simple and would prevent confusing crashes, this appears to be a legitimate bug rather than just a documentation or user error issue.

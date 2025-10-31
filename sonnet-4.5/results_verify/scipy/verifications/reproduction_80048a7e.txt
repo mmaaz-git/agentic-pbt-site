@@ -1,0 +1,35 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Both the Hypothesis property test and the standalone minimal example demonstrate the exact TypeError described.
+
+### Test Results
+
+1. **Hypothesis Test**: Failed with the exact error at n=5
+   - Error: `TypeError: unsupported operand type(s) for //: 'NoneType' and 'int'`
+   - Location: `scipy/odr/_odrpack.py`, line 1100
+
+2. **Standalone Example**: Failed with identical error
+   - The minimal example using ODR with delta0 parameter but no job parameter crashes
+   - Error occurs when calling `odr_obj.run()`
+
+### Root Cause Analysis
+
+The bug is located in the `ODR.run()` method at line 1100:
+```python
+if self.delta0 is not None and (self.job // 10000) % 10 == 0:
+```
+
+The issue occurs because:
+1. The `job` parameter is optional in ODR.__init__() with default value None
+2. When users provide `delta0` but not `job` (a common scenario), `self.job` remains None
+3. The code attempts integer division on None: `self.job // 10000`
+4. This causes a TypeError crash
+
+### Code Flow
+- ODR.__init__() sets `self.job = job` where job defaults to None
+- For explicit models (the common case), set_job() is never called automatically
+- set_job() would initialize job to 0 if called, but it's not called by default
+- When run() is called with delta0 set but job=None, the TypeError occurs
+
+### Impact
+This is a crash on valid user inputs. Users who want to provide initial error estimates (delta0) shouldn't need to understand the internal job parameter encoding to use this feature. The bug prevents normal usage of a documented parameter.

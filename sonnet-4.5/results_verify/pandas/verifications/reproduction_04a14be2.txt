@@ -1,0 +1,37 @@
+REPRODUCTION OF BUG REPORT FOR pandas.io.sas.sas7bdat._parse_datetime
+
+1. CONFIRMING THE FUNCTION EXISTS:
+✓ The _parse_datetime function exists at line 67 of /home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/io/sas/sas7bdat.py
+✓ The function has the exact signature reported: def _parse_datetime(sas_datetime: float, unit: str)
+
+2. CONFIRMING IT'S DEAD CODE:
+✓ Comprehensive grep search confirms _parse_datetime is NEVER called anywhere in the pandas codebase
+✓ The only occurrence is its definition
+✓ The actual datetime conversion is handled by _convert_datetimes() which is called in lines 598 and 600 of SAS7BDATReader
+
+3. REPRODUCING THE OVERFLOW ERROR:
+✓ _parse_datetime(253717920000.0, "s") raises: OverflowError: date value out of range
+✓ _parse_datetime(2936550.0, "d") raises: OverflowError: date value out of range
+✓ The error occurs because Python's datetime.datetime has a maximum year of 9999, and these values exceed that limit
+
+4. TESTING THE HYPOTHESIS TEST:
+The property-based test correctly identifies the overflow issue. When sas_datetime=253717919999.0:
+- This represents approximately 8040 years after 1960, putting us well beyond year 9999
+- The function crashes with OverflowError rather than handling the overflow gracefully
+
+5. CONFIRMING _convert_datetimes HANDLES THIS CORRECTLY:
+✓ _convert_datetimes(pd.Series([253717920000.0]), "s") returns: 10000-01-01 00:00:00
+✓ _convert_datetimes uses numpy's datetime64 which has a much larger range than Python's datetime
+✓ This function handles the same inputs without errors
+
+6. BASIC FUNCTIONALITY TESTING:
+For valid inputs, _parse_datetime works correctly:
+✓ _parse_datetime(0, "s") returns: 1960-01-01 00:00:00
+✓ _parse_datetime(86400, "s") returns: 1960-01-02 00:00:00
+✓ _parse_datetime(1, "d") returns: 1960-01-02 00:00:00
+✓ _parse_datetime(nan, "s") returns: NaT (Not a Time)
+
+CONCLUSION:
+The bug report is technically accurate on both counts:
+1. _parse_datetime is indeed dead code (never called)
+2. If it were called, it would fail with OverflowError for large but mathematically valid inputs that the replacement function _convert_datetimes handles correctly

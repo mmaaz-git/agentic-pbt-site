@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function assert_duckarray_equal never explicitly promised to support 0-dimensional arrays. One could argue that "duck arrays" might refer only to arrays with at least one dimension, and that scalar comparisons should be done differently. The internal _format_message function is not part of the public API, so its behavior might be considered implementation detail. Additionally, the user could work around this by reshaping 0-d arrays to 1-d arrays before comparison.
+
+**Why it might not be INVALID:**
+The function explicitly claims to be "like np.testing.assert_array_equal, but for duckarrays," and numpy's assert_array_equal handles 0-dimensional arrays perfectly well. The function is part of the public API (included in __all__), and 0-dimensional numpy arrays are valid duck arrays that implement the numpy array interface. The crash is not a graceful failure but an unhandled exception with an unhelpful error message. Most importantly, the function works fine when 0-d arrays are equal but crashes when they differ, showing inconsistent behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+0-dimensional arrays might be considered an edge case that rarely occurs in practice. The fix requires changing internal implementation details that might affect other code paths. The error only occurs when arrays differ, so successful tests still pass. Users encountering this could be told to simply use regular assert statements for scalar comparisons instead of array assertion functions.
+
+**Why it might not be WONTFIX:**
+0-dimensional arrays are common in scientific computing, especially when extracting single values from arrays or performing reductions. The fix is trivial (changing max to np.max) and would make the code more robust overall. The function already handles 0-d arrays in the equality check, so it should handle them in error reporting too. The inconsistency between working for equal arrays but crashing for unequal arrays is a clear defect, not just a limitation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the intended behavior is that assert_duckarray_equal should not support 0-dimensional arrays, then the documentation should explicitly state this limitation. The current documentation doesn't mention any restrictions on array dimensions, leading users to assume all array types are supported. Adding a note about this limitation would prevent user confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The crash is clearly unintended behavior - the function doesn't gracefully reject 0-d arrays but instead crashes with an obscure error message. The code shows no intentional check to prevent 0-d arrays, and they work fine when equal. The issue is not about documenting a limitation but fixing a bug in the implementation. The comparison to np.testing.assert_array_equal in the docstring implies equivalent functionality.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting 0-dimensional arrays could be seen as adding new functionality that wasn't originally designed. The current implementation might have been intended only for arrays with dimensions. Adding support for 0-d arrays would be extending the function's capabilities to handle a new class of inputs.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but fixing existing broken functionality. The function already attempts to handle 0-d arrays (it works when they're equal) but fails due to a bug. The issue is not about adding a feature but correcting an implementation error. 0-dimensional arrays are standard numpy arrays, not some special new type requiring feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with a TypeError when given valid numpy arrays (0-dimensional arrays are legitimate numpy arrays). The error occurs due to using Python's max() instead of numpy's np.max(), which is clearly a programming error. The function works inconsistently - succeeding for equal 0-d arrays but crashing for unequal ones. The docstring claims similarity to np.testing.assert_array_equal which handles 0-d arrays correctly. The fix is straightforward and makes the code more robust for all array types. The error message "'numpy.float64' object is not iterable" provides no useful information to users about what went wrong.
+
+**Why it might not be BUG:**
+One could argue that internal helper functions like _format_message aren't required to handle all edge cases perfectly. The function might have been designed with the assumption that it would only receive iterable arrays. 0-dimensional arrays could be considered outside the intended use case.
+
+## Overall Consideration
+
+After examining all aspects, this is clearly a BUG. The evidence is overwhelming:
+
+First, the technical analysis proves this is an implementation error. The code uses Python's built-in max() function on numpy arrays, when it should use numpy's np.max(). This is a classic mistake when working with numpy arrays - Python's built-in functions often don't work correctly with numpy's data structures, especially edge cases like 0-dimensional arrays. The fix is trivial and correct: replace max(abs(diff)) with np.max(np.abs(diff)).
+
+Second, the behavioral inconsistency is indefensible. The function successfully compares equal 0-dimensional arrays but crashes on unequal ones. This means the function partially supports 0-d arrays but fails at the crucial moment of generating an error message. No reasonable API design would intentionally behave this way - either 0-d arrays should be rejected upfront or handled throughout.
+
+Third, the function's documented contract supports fixing this. It claims to be "like np.testing.assert_array_equal, but for duckarrays." Since numpy's assert_array_equal handles 0-dimensional arrays correctly, users reasonably expect assert_duckarray_equal to do the same. The function is also part of the public API (listed in __all__), making its correct operation important for users. 0-dimensional arrays are legitimate duck arrays that implement the numpy interface, so excluding them would violate the "duck array" concept.
+
+This is not a documentation issue (the code is wrong, not the docs), not a missing feature (the functionality exists but is broken), not something to ignore (the fix is trivial and the use case legitimate), and not invalid (0-d arrays are real numpy arrays used in scientific computing). It's a straightforward bug caused by using the wrong function for the task.

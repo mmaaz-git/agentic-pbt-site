@@ -1,0 +1,105 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## Evaluation Against Each Category
+
+### BUG (Valid Bug Report)
+**Strong Evidence For:**
+- The implementation clearly violates standard LRU cache semantics
+- The bug is reproducible with the exact code provided
+- The behavior contradicts the docstring "evicting... when full" - updating an existing key doesn't make the cache fuller
+- The proposed fix is correct and follows standard patterns
+- This affects cache correctness and efficiency
+- Other parts of Dask rely on this LRU implementation working correctly
+
+**Evidence Against:**
+- This is an internal utility class, not public API
+- No explicit tests exist for this class in the codebase
+- The minimal documentation could be interpreted differently
+
+**Verdict: LIKELY**
+
+### INVALID (Incorrect Report)
+**Evidence For:**
+- None. The bug is real and reproducible.
+
+**Evidence Against:**
+- The report correctly identifies the problem
+- The test cases accurately demonstrate the issue
+- The analysis of the root cause is correct
+
+**Verdict: UNLIKELY**
+
+### WONTFIX (Trivial/Uninteresting)
+**Evidence For:**
+- This is an internal utility class not exposed as public API
+- The cache size is small (maxsize=10 in actual usage)
+- May not significantly impact performance in practice
+
+**Evidence Against:**
+- This is a fundamental correctness issue in a data structure
+- Incorrect LRU behavior can lead to unexpected performance degradation
+- The fix is simple and low-risk
+- Even internal code should be correct
+
+**Verdict: UNLIKELY**
+
+### FEATURE_REQUEST (Not Currently Supported)
+**Evidence For:**
+- Could argue that "proper LRU update semantics" is a feature not originally implemented
+
+**Evidence Against:**
+- The docstring implies this should already work correctly
+- This is standard, expected behavior for any LRU cache
+- The bug report isn't asking for new functionality, but fixing broken functionality
+
+**Verdict: VERY UNLIKELY**
+
+### DOCUMENTATION_FIX (Documentation Wrong)
+**Evidence For:**
+- Could argue the docstring should say "evicting... when adding new keys that exceed capacity"
+
+**Evidence Against:**
+- The documentation is actually correct - it should evict "when full"
+- The code is wrong, not the documentation
+- Changing docs to match broken behavior would be backwards
+
+**Verdict: UNLIKELY**
+
+## Technical Analysis
+
+### Severity Assessment
+- **Impact**: Medium - Affects cache efficiency and correctness
+- **Scope**: Limited - Internal utility class
+- **Fix Complexity**: Low - Simple 3-line change
+- **Risk**: Low - Well-understood fix with clear semantics
+
+### Code Quality Issues
+1. The current implementation has a logic error in the eviction check
+2. Missing check for whether key already exists
+3. Doesn't properly maintain LRU ordering on updates
+
+### Proposed Fix Evaluation
+The suggested fix is correct:
+```python
+if key in self:
+    cast(OrderedDict, self.data).move_to_end(key)
+elif len(self) >= self.maxsize:
+    cast(OrderedDict, self.data).popitem(last=False)
+super().__setitem__(key, value)
+```
+
+This properly:
+1. Checks if key exists first
+2. If it exists, moves to MRU position without eviction
+3. Only evicts when adding NEW keys that exceed capacity
+
+## Final Recommendation
+
+This is a **BUG** that should be fixed. The report is:
+- Technically accurate
+- Well-documented with reproducible test cases
+- Includes a correct fix
+- Identifies a real violation of expected LRU semantics
+
+The bug violates both the documented behavior and universal LRU cache conventions. While it's in an internal class, correctness matters for maintainability and preventing subtle issues in the parts of Dask that use this cache.

@@ -1,0 +1,52 @@
+BUG REPRODUCTION RESULTS
+
+## Test Execution Summary
+
+I successfully reproduced the bug described in the report. Here are the detailed results:
+
+## Test 1: Basic Reproduction
+- Input: Variable name 'Ā' (U+0100) with a numpy array
+- Result: UnicodeEncodeError: 'latin-1' codec can't encode character '\u0100' in position 0
+- This EXACTLY matches the error described in the bug report
+
+## Test 2-3: Control Tests
+- ASCII character 'A': SUCCESS (works as expected)
+- Latin1 character 'ÿ' (U+00FF): SUCCESS (works as expected)
+- These confirm that ASCII and latin1 characters work fine
+
+## Test 4: Extended Unicode Tests
+All characters outside the latin1 range (U+0000 to U+00FF) failed with UnicodeEncodeError:
+- Ā (U+0100) - Latin Extended-A: FAILED
+- 中 (U+4E2D) - Chinese: FAILED
+- α (U+03B1) - Greek: FAILED
+- π (U+03C0) - Greek: FAILED
+- Д (U+0414) - Cyrillic: FAILED
+- א (U+05D0) - Hebrew: FAILED
+- あ (U+3042) - Japanese: FAILED
+
+## Test 5: Property-Based Test
+The Hypothesis test from the bug report also failed with UnicodeEncodeError, confirming the issue occurs for any Unicode character outside latin1.
+
+## Error Analysis
+
+The error occurs at exactly the point indicated in the bug report:
+- File: scipy/io/matlab/_mio5.py
+- Lines 896 and 901: `name.encode('latin1')`
+- No try/except block to handle encoding errors
+- No validation before attempting to encode
+
+## Comparison with Underscore Handling
+
+The code DOES properly handle underscore-prefixed names:
+- Checks if name[0] == '_'
+- Issues a clear warning message
+- Skips the variable gracefully
+
+But does NOT handle Unicode encoding issues:
+- No check for latin1 compatibility
+- No helpful error message
+- Crashes with generic UnicodeEncodeError
+
+## Conclusion
+
+The bug is 100% reproducible and behaves exactly as described in the bug report. The error message is indeed unhelpful - it doesn't explain that MATLAB requires latin1-encodable variable names, leaving users confused about why their valid Python variable names don't work.

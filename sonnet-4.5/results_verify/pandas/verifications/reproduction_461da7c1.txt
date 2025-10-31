@@ -1,0 +1,44 @@
+## Bug Reproduction Report
+
+I successfully reproduced the reported bug. The issue is confirmed in pandas.core.util.hashing._hash_ndarray function.
+
+### Test Results
+
+1. **Direct reproduction test:**
+   - complex64 arrays produce different hash values than expected
+   - complex64 hash: [14559484286230537508, 13875018978056565111]
+   - Expected (using real + 23*imag formula): [1566622401970978605, 9473140185629080060]
+   - Match: False
+
+   - complex128 arrays hash correctly using the formula
+   - complex128 hash matches expected values
+   - Match: True
+
+2. **Hypothesis test:**
+   - The property-based test fails immediately with simple inputs like [1j]
+   - complex64 arrays are not hashed using the same formula as complex128
+
+### Root Cause Analysis
+
+The bug is in line 294 of pandas/core/util/hashing.py:
+```python
+if np.issubdtype(dtype, np.complex128):
+```
+
+This condition only matches complex128 (16 bytes), not complex64 (8 bytes):
+- np.issubdtype(complex64, np.complex128) returns False
+- np.issubdtype(complex128, np.complex128) returns True
+
+As a result:
+- complex128 arrays are correctly hashed as: hash(real) + 23 * hash(imag)
+- complex64 arrays fall through to line 305-306 and are treated as generic 8-byte numbers
+- complex64 values are viewed directly as uint64, losing the semantic structure of real/imaginary parts
+
+### Impact
+
+The bug causes:
+1. Inconsistent hashing between complex64 and complex128 arrays with same values
+2. complex64 values being hashed based on their raw byte representation rather than their mathematical structure
+3. Violation of the principle that mathematically equivalent values should hash consistently
+
+The bug is easily reproducible and affects all complex64 arrays in pandas hashing operations.

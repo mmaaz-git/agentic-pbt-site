@@ -1,0 +1,36 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the Cython.Compiler.Options.parse_variable_value function.
+
+### Manual Reproduction
+
+The bug occurs exactly as described when passing Unicode digit characters to parse_variable_value:
+
+```python
+from Cython.Compiler import Options
+result = Options.parse_variable_value('²')
+```
+
+This results in:
+```
+ValueError: invalid literal for int() with base 10: '²'
+```
+
+### Hypothesis Test Reproduction
+
+The hypothesis-based property test also confirms the bug. When running with various text inputs, it consistently fails on Unicode digit characters like '²', '³', and other similar characters.
+
+### Root Cause Verification
+
+I verified the root cause by testing several Unicode characters:
+- '²' (superscript 2): isdigit()=True, isdecimal()=False → crashes
+- '³' (superscript 3): isdigit()=True, isdecimal()=False → crashes
+- '①' (circled one): isdigit()=True, isdecimal()=False → crashes
+- '೧' (Kannada digit): isdigit()=True, isdecimal()=True → would work with int()
+- '₁' (subscript 1): isdigit()=True, isdecimal()=False → crashes
+
+The issue is confirmed: Python's str.isdigit() returns True for many Unicode digit characters that int() cannot parse, causing a ValueError when the code tries to convert them to integers.
+
+### Impact
+
+The bug is real and affects the parse_variable_value function, which is used by parse_compile_time_env() in the command-line argument parsing (CmdLine.py). This means users could trigger this crash by providing Unicode digits in compile-time environment variables through the command line.

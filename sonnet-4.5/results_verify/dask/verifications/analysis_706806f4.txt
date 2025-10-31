@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if we argue that parquet statistics with None max values are malformed or invalid input. The function clearly expects both min and max to be present (line 421-424 checks for this), and one could argue that having min=0 but max=None represents corrupted or incomplete statistics that shouldn't occur in valid parquet files. The documentation doesn't explicitly state that None values should be handled in the max field when min is not None.
+
+**Why it might not be INVALID:**
+The function explicitly handles None values for min (line 427, 430-432), showing that the developers anticipated None values in statistics. The check at lines 421-424 only verifies that the keys "min" and "max" exist in the dictionary, not that their values are non-None. Real-world parquet files can have incomplete statistics where some values are None, especially in edge cases or with certain writers. The crash is a clear TypeError, not a deliberate validation error.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an obscure edge case that rarely occurs in practice. Most parquet writers would either provide both min and max statistics or neither. Having a valid min but None max might indicate a corrupted file or a non-standard parquet writer. The maintainers might consider this too edge-case to fix, especially since the function is internal (not part of the public API) and used primarily for optimization purposes.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (checking if max is None before appending it), and the crash is unhandled, which is poor user experience. Even if this is rare, crashing with a TypeError in an assertion is not graceful error handling. The function already has logic to handle None values, so completing that logic is consistent with the existing design. Other parts of dask handle incomplete statistics gracefully.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what types of values are valid for min/max in statistics, or how None values should be handled. If the intended behavior is to reject statistics with None max values when min is present, this should be documented. The current docstring only says it finds sorted columns from statistics but doesn't specify the requirements for valid statistics.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code crashes with an unhandled exception rather than returning an empty result or raising a meaningful error. This suggests the behavior is unintended rather than poorly documented. The function already has code to handle None values (just incompletely), suggesting the intent was to support them. A documentation fix alone wouldn't prevent the crash.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting parquet files with partial statistics (None max values) could be seen as a new feature rather than a bug fix. The current implementation might have been designed only for complete statistics, and adding support for incomplete statistics would be extending functionality. This would require new logic to handle these edge cases gracefully.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle None values in the min field, showing this isn't new functionality but incomplete implementation of existing functionality. The crash is due to a bug in the existing code, not a missing feature. The suggested fix doesn't add new capabilities but rather prevents a crash in existing code paths.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case where valid input (a dictionary with the required keys "min" and "max") causes an unhandled crash. The function has partial logic for handling None values but fails to complete that logic, resulting in a TypeError when trying to sort a list containing None. The assertion at line 442 assumes all values in divisions are comparable, but the code allows None to be added to divisions. The fix is straightforward and makes the function's None-handling consistent.
+
+**Why it might not be BUG:**
+One could argue that statistics with min=0 and max=None represent invalid or corrupted data that shouldn't be passed to this function. The function might have been designed with the assumption that if min is not None, max should also not be None for valid statistics. The crash could be seen as exposing invalid input rather than a bug in the logic.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though not a critical one. The function has explicit logic to handle None values in the min field (lines 427, 430-432), demonstrating that the developers intended to handle incomplete statistics. However, the implementation is incomplete - it checks for None min values but fails to handle None max values, leading to a crash when trying to sort a list containing None.
+
+The key evidence that this is a bug rather than invalid input is that the function already has a success flag and logic to handle None values. If None values were truly invalid, the function would reject them outright rather than having partial handling. The current behavior suggests an oversight where the developer checked for None min but forgot to check for None max before appending it to the divisions list.
+
+While this might be considered an edge case (parquet files with min but no max statistics are unusual), the fix is trivial and would make the function more robust. The crash occurs in an assertion that checks if divisions are sorted, but Python 3 cannot sort lists containing None mixed with other types. The proper behavior would be to either skip columns with incomplete statistics (set success = False when max is None) or handle None values in divisions differently. Given the existing pattern in the code, setting success = False when max is None (as suggested in the bug report's fix) is the most consistent approach.

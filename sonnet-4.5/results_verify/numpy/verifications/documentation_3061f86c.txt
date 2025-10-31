@@ -1,0 +1,60 @@
+## Documentation Analysis
+
+### Module Purpose
+According to the module docstring and comments in `numpy/f2py/symbolic.py`:
+
+1. **Module Description**: "Fortran/C symbolic expressions"
+2. **Purpose**: The module implements "a minimal symbolic engine for parsing expressions into a tree of expression instances"
+3. **Supported Operations**: The documentation explicitly states it supports "arithmetic expressions involving integers and operations like addition (+), subtraction (-), multiplication (*), division (Fortran / is Python //, Fortran // is concatenate), and **exponentiation (**).**"
+4. **Language Support**: ".pyf files may contain C expressions that support here is implemented as well"
+
+### Key Documentation Findings
+
+1. **Exponentiation is explicitly listed** as a supported operation with the `**` operator notation (line 20 of the source).
+
+2. **Language Enum Documentation**: The module defines three languages - Python, Fortran, and C - that can be used for parsing and string generation.
+
+3. **tostring() Method Documentation**:
+   - Signature: `tostring(self, parent_precedence=Precedence.NONE, language=Language.Fortran)`
+   - Description: "Return a string representation of Expr"
+   - The default language is Fortran, not C (important!)
+
+4. **fromstring() Function Documentation**:
+   - Default language parameter is C: `fromstring(s, language=Language.C)`
+   - Described as a "lazy" parser
+
+### Expected Behavior Based on Documentation
+
+Given that:
+1. Exponentiation with `**` is explicitly documented as supported
+2. The module handles both Fortran and C expressions
+3. The tostring() method should return valid string representations
+
+The expected behavior would be:
+- **Fortran/Python**: Should output `x**2` (since both languages support the `**` operator)
+- **C**: Should output `pow(x, 2)` (since C doesn't have a `**` operator and uses the pow() function)
+
+### What the Code Actually Does
+
+Looking at the tostring implementation for Op.FACTORS (lines 333-349):
+- For C language: Uses `pow(base, exp)` for exponents outside range 2-9
+- For other languages: Uses `base ** exp` format
+
+This is correct! The problem is in the **parsing** stage, not the output stage.
+
+### Documentation Gaps
+
+1. **No explicit documentation** about how `**` should be handled differently between C and Fortran/Python during parsing
+2. **No warning** that parsing C code with `**` operator (which doesn't exist in C) would produce incorrect results
+3. **No specification** of what constitutes valid input for each language mode
+
+### Conclusion on Documentation
+
+The documentation implies that `**` is a supported operation, but doesn't clarify that:
+- In C mode, `**` is not a valid C operator and will be misparsed
+- The parser treats `**` as two multiplication operators in C mode
+- Users should use the appropriate language mode when parsing expressions
+
+The behavior could be considered either:
+1. A bug - because the module claims to support exponentiation but produces invalid output
+2. User error - for using `**` notation when parsing in C mode where it's not valid C syntax

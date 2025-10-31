@@ -1,0 +1,47 @@
+## Reproduction Analysis for _read_orc Mutation Bug
+
+### Successful Reproduction
+The bug report is technically correct. The `_read_orc` function does mutate its `columns` input parameter by appending the `index` value to it.
+
+### Test Results
+
+1. **Exact reproduction from bug report**: CONFIRMED
+   - Input: `columns=['col1', 'col2'], index='col1'`
+   - Result: `columns` becomes `['col1', 'col2', 'col1']`
+   - The list is mutated in-place
+
+2. **Specific failing case**: CONFIRMED
+   - Input: `columns=['0'], index='0'`
+   - Result: `columns` becomes `['0', '0']`
+   - The mutation occurs even when index equals an existing column
+
+3. **Property-based testing**: CONFIRMED
+   - The hypothesis tests fail, confirming that the function mutates its input
+   - This happens for various combinations of columns and index values
+
+### How the Bug Manifests
+
+The mutation occurs at line 113 of `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/dataframe/io/orc/core.py`:
+
+```python
+def _read_orc(parts, *, engine, fs, schema, index, columns=None):
+    if index is not None and columns is not None:
+        columns.append(index)  # <-- This mutates the input list
+```
+
+### Impact Analysis
+
+1. **Multiple Partitions Problem**: When `dd.from_map` calls `_read_orc` multiple times for different partitions with the same `columns` list reference, the index gets appended repeatedly. With 3 partitions, the columns list grows from `['col1', 'col2']` to `['col1', 'col2', 'idx', 'idx', 'idx']`.
+
+2. **Current Mitigation**: The public `read_orc` function sometimes creates a new list (line 98) when it needs to remove the index from columns, which can prevent the mutation from affecting the user's original list in some cases. However, this doesn't protect against all scenarios.
+
+3. **Private Function**: `_read_orc` is a private function (prefixed with underscore), but it's still called by the framework internally through `dd.from_map`.
+
+### Technical Assessment
+
+The bug report accurately identifies:
+- The location of the mutation (line 113)
+- The nature of the problem (in-place list mutation)
+- A valid fix (creating a new list instead of mutating)
+
+The proposed fix in the bug report (`columns = columns + [index]`) would indeed solve the problem by creating a new list instead of mutating the input.

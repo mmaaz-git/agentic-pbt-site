@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly guarantee numerical precision for extreme values or specify that the rolling mean must satisfy mathematical invariants like min ≤ mean ≤ max. The behavior with large numbers (near 2^32) combined with very small numbers (1e-21) could be considered outside the expected operating range. Additionally, floating-point arithmetic inherently has precision limitations that are well-known in numerical computing, and users working with such extreme value ranges might be expected to use specialized numerical libraries.
+
+**Why it might not be INVALID:**
+The violation of a fundamental mathematical property (mean outside min/max bounds) is so severe that it cannot be dismissed as expected behavior. The error magnitude (14 orders of magnitude, or 2.86×10^16% relative error) is catastrophic, not a minor precision issue. The function silently returns completely incorrect results without any warning, which violates basic expectations of correctness regardless of documentation specifics.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving extreme values (-4294967297 and 1.6675355247098508e-21) that span approximately 30 orders of magnitude, which is unlikely in typical data analysis scenarios. The pandas maintainers have already acknowledged similar precision issues in GitHub issues #37051 and #19308, suggesting they view this as a known limitation of floating-point arithmetic. Fixing this would require significant changes to the underlying Cython implementation and might impact performance for the vast majority of users who don't encounter such extreme cases.
+
+**Why it might not be WONTFIX:**
+The bug causes silent data corruption with no warning, which could lead to completely wrong analytical conclusions. The error persists across multiple windows even after the problematic large value is no longer in the window, contaminating subsequent calculations. This is not a trivial edge case but a fundamental correctness issue that violates mathematical laws. The magnitude of error (wrong by 14 orders of magnitude) makes this a serious reliability concern for any scientific or financial computing application.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The pandas documentation makes no mention of numerical precision limitations, expected behavior with extreme values, or potential violations of mathematical invariants. Users have no warning that rolling calculations can produce results that are mathematically impossible. Adding documentation about these limitations would at least inform users of the risks when working with values of vastly different magnitudes.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting that "the rolling mean might be completely wrong by 14 orders of magnitude" is not acceptable for a widely-used data analysis library. The issue is not that the documentation is incomplete, but that the implementation is fundamentally broken for certain inputs. A mathematical function returning values outside the theoretical bounds is a bug in the code, not a documentation oversight.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting extreme numerical ranges with high precision could be seen as a new feature request for enhanced numerical stability. The request for using Kahan summation or other numerically stable algorithms could be viewed as an enhancement rather than a bug fix. Adding options for users to choose between fast (current) and precise (new) algorithms could be a feature addition.
+
+**Why it might not be FEATURE_REQUEST:**
+Correctly calculating the mean of three numbers is not a feature request - it's the basic functionality that the method claims to provide. The current implementation doesn't just lack precision; it produces results that are mathematically impossible. This is not asking for new functionality but for the existing functionality to work correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of fundamental mathematical properties - the mean of a set of numbers must be between the minimum and maximum. The function returns a result that is wrong by 14 orders of magnitude without any warning. The error is reproducible and deterministic, not a random floating-point quirk. The bug corrupts subsequent calculations even after the problematic value leaves the window. This represents a serious correctness issue that could lead to completely wrong analytical results in production systems.
+
+**Why it might not be BUG:**
+The pandas maintainers might argue this is expected behavior given the inherent limitations of floating-point arithmetic when dealing with extreme value ranges. The documentation doesn't explicitly guarantee numerical stability for all possible inputs. Similar issues have been known and discussed in the community for years (as evidenced by the GitHub issues), suggesting this might be considered a known limitation rather than a bug.
+
+## Overall Consideration
+
+After careful analysis, this issue represents a catastrophic failure in numerical computation that cannot be dismissed as a minor precision issue or documentation gap. The rolling mean calculation produces a result that violates fundamental mathematical laws - returning a mean value that is greater than the maximum value in the window. This is not a small rounding error but a complete breakdown of the calculation, with the result being wrong by approximately 14 orders of magnitude.
+
+While it's true that the issue involves extreme values, the magnitude of the error and the violation of mathematical invariants make this a serious correctness bug. The fact that pandas developers have acknowledged similar issues in the past (GitHub #37051, #19308) actually strengthens the case that this is a known problem that should be fixed, not accepted as inevitable. Modern numerical libraries have techniques like Kahan summation specifically designed to handle such cases.
+
+Most critically, the error occurs silently with no warning to the user, potentially leading to completely wrong analytical conclusions. In fields like scientific computing or financial analysis where pandas is widely used, such errors could have serious consequences. The persistence of the error into subsequent windows that don't even contain the large value makes this particularly insidious. This is a legitimate bug that represents a failure of the software to perform its stated function correctly.

@@ -1,0 +1,62 @@
+Bug Reproduction Results
+========================
+
+1. HYPOTHESIS TEST:
+The property-based test from the bug report FAILS as claimed:
+- Test: Assert that compress_rows always returns 2D arrays
+- Failure: When input is ma.array([[999]], mask=[[True]]), the result has ndim=1 with shape (0,)
+- The test correctly identifies the dimensionality loss issue
+
+2. MANUAL REPRODUCTION:
+
+Test Case 1: Single masked element (1x1 array)
+Input: ma.array([[999]], mask=[[True]])
+- Input shape: (1, 1), ndim=2
+- compress_rows result: shape=(0,), ndim=1
+- compress_cols result: shape=(0,), ndim=1
+- compress_rowcols result: shape=(0,), ndim=1
+All three functions return 1D arrays instead of 2D when all data is masked.
+
+Test Case 2: Fully masked 2x2 array
+Input: ma.array([[1, 2], [3, 4]], mask=[[True, True], [True, True]])
+- Input shape: (2, 2), ndim=2
+- compress_rows result: shape=(0,), ndim=1
+- compress_cols result: shape=(0,), ndim=1
+- compress_rowcols result: shape=(0,), ndim=1
+Again, all return 1D arrays.
+
+Test Case 3: Partially masked array (control case)
+Input: ma.array([[1, 2], [3, 4]], mask=[[True, False], [False, False]])
+- compress_rows result: shape=(1, 2), ndim=2, content=[[3, 4]]
+- compress_cols result: shape=(2, 1), ndim=2, content=[[2], [4]]
+- compress_rowcols result: shape=(1, 1), ndim=2, content=[[4]]
+When data remains, functions correctly return 2D arrays.
+
+3. DOWNSTREAM IMPACT:
+The bug report's claim about breaking downstream code is CONFIRMED:
+```python
+result = ma.compress_rows(arr)
+num_cols = result.shape[1]
+```
+This raises IndexError: "tuple index out of range" when the result is 1D.
+
+4. COMPARISON WITH NUMPY CONVENTIONS:
+Standard numpy array slicing preserves dimensionality:
+- Regular 2D array: shape (2, 2), ndim=2
+- Empty slice of 2D array: shape (0, 2), ndim=2
+This shows numpy's general convention is to preserve array dimensions even when empty.
+
+5. ROOT CAUSE IDENTIFIED:
+In numpy/ma/extras.py, the compress_nd function at line 948:
+```python
+if m.all():
+    return nxarray([])  # Returns np.array([]) - always 1D
+```
+This explicitly returns a 1D empty array regardless of input dimensions.
+
+6. TECHNICAL ACCURACY:
+The bug report's technical details are CORRECT:
+- The failing test case is valid
+- The reproduction code works as described
+- The behavior is inconsistent (2D when data remains, 1D when all masked)
+- The proposed fix location (extras.py around line 948) is accurate

@@ -1,0 +1,55 @@
+REPRODUCTION OF BUG REPORT FOR scipy.sparse COO Matrix
+
+TEST EXECUTION SUMMARY:
+I successfully reproduced the reported bug using both the specific test case and the hypothesis-based property test.
+
+1. SPECIFIC TEST CASE RESULTS:
+For a simple COO matrix with data=[1.0], rows=[0], cols=[0], shape=(100, 100):
+- Original COO has_canonical_format: False (expected, fresh COO matrices start with False)
+- After converting COO -> CSR -> COO:
+  - has_canonical_format: False
+  - Actual duplicate check: No duplicates found (len(coords) == len(set(coords)))
+
+This confirms the bug: the flag says False but there are no duplicates.
+
+2. MULTIPLE ELEMENT TEST:
+For COO matrix with 3 diagonal elements (no duplicates):
+- Original COO has_canonical_format: False
+- After COO -> CSR -> COO has_canonical_format: False
+- Actually has duplicates: False
+
+Again, the flag is incorrectly False when there are no duplicates.
+
+3. DUPLICATE HANDLING TEST:
+For COO matrix with actual duplicates at (0,0):
+- Original COO with 3 entries (2 at same position)
+- CSR conversion correctly sums duplicates: nnz goes from 3 to 2
+- After CSR -> COO: has_canonical_format: False, no duplicates present
+- This shows CSR correctly handles duplicates by summing them
+
+4. CANONICAL FORMAT BEHAVIOR:
+- Fresh COO matrices always have has_canonical_format=False, regardless of duplicates
+- Calling sum_duplicates() on a COO matrix sets has_canonical_format=True
+- This is the only way documented to get has_canonical_format=True
+
+5. HYPOTHESIS TEST RESULTS:
+The property-based test failed on multiple examples including:
+- data=[0.0], rows=[0], cols=[0] - FAILED
+- data=[1.0], rows=[0], cols=[0] - FAILED
+All cases where the converted COO has no duplicates fail the assertion.
+
+TECHNICAL CORRECTNESS:
+The bug report is technically correct:
+1. CSR format cannot contain duplicate coordinates by definition
+2. COO matrices created from CSR have no duplicates (verified by checking coordinates)
+3. The has_canonical_format flag should be True but is False
+4. The flag's False value does not match the actual state (no duplicates)
+
+IMPACT:
+The incorrect flag could cause:
+- Unnecessary calls to sum_duplicates() by code checking the flag
+- Performance degradation in operations that optimize based on canonical format
+- Incorrect assumptions by libraries using this as an optimization hint
+
+CONCLUSION:
+The bug is reproducible and the technical details in the report are accurate. The has_canonical_format flag is indeed incorrectly set to False when converting from CSR to COO, even though the resulting COO matrix has no duplicate coordinates.

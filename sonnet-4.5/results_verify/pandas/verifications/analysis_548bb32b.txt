@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior is actually documented in pandas' own test suite. The tests explicitly show that ujson intentionally raises ValueError for integers outside the int64 range. The JSON specification (RFC 8259) explicitly allows implementations to set limits on numeric range. The pandas documentation never promises round-trip capability for arbitrary precision integers. The user is passing values that are known to be outside the supported range of the underlying ujson library.
+
+**Why it might not be INVALID:**
+The asymmetry is real - pandas allows serialization but fails on deserialization. Users have a reasonable expectation that if data can be serialized to JSON, it should be deserializable. The error occurs even though Python natively supports arbitrary precision integers, and the standard json module handles these values correctly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving extremely large integers that are rarely encountered in typical data analysis. The ujson library is used for performance reasons and has intentional limitations. Changing this behavior would require either switching away from ujson (performance impact) or adding complex workarounds. The test suite shows this is known and accepted behavior. Most users working with such large integers would use string representation instead.
+
+**Why it might not be WONTFIX:**
+The issue affects legitimate use cases like database IDs or cryptographic values. The crash is ungraceful and provides no workaround. The error message doesn't guide users on how to handle this case. The asymmetry creates data loss scenarios where serialized data cannot be recovered.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The pandas documentation doesn't mention this limitation anywhere. Users have no way to know in advance that integers outside int64 range will cause problems. Adding a warning to the to_json() and read_json() documentation about int64 limits would prevent user confusion. The behavior is consistent and predictable once understood, just not documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about documentation - there's actual broken functionality where data is lost or corrupted. Documentation alone won't fix the asymmetric behavior. Users would still face the problem even if warned about it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrary precision integers in JSON round-trips would be a new feature, not a bug fix. The current implementation works as designed within its stated limits (even if not well documented). Adding a fallback to Python's json module for large integers would be an enhancement. A new parameter could be added to control this behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for existing functionality (JSON serialization) to work correctly. Round-trip serialization is a basic expectation, not a feature request. The ability to serialize already exists; the issue is with deserialization.
+
+## BUG Considerations
+**Why it might be BUG:**
+There's clear asymmetry - data that can be written cannot be read back. The reproduction shows data corruption (returning NaT instead of the actual value for boundary cases). The error provides no recovery mechanism or workaround. This violates the principle of least surprise for users. The issue causes data loss in a silent way for some cases.
+
+**Why it might not be BUG:**
+The ujson library's behavior is intentional and tested. The JSON spec allows numeric limits. This is a known limitation of the underlying library, not a bug. The test suite explicitly validates that this error should occur. The behavior is consistent with the design choices of using ujson for performance.
+
+## Overall consideration
+Looking at the evidence holistically, this appears to be primarily a DOCUMENTATION issue with aspects that could be considered WONTFIX. The ujson library has explicit, tested limitations on integer ranges as shown in test_ujson.py. These tests (test_dumps_ints_larger_than_maxsize, test_decode_too_extreme_numbers) demonstrate that raising ValueError for integers outside int64 range is intentional behavior, not a bug. The JSON specification explicitly permits implementations to set numeric limits, and ujson has chosen to limit to int64 for performance reasons.
+
+However, the complete absence of this limitation from pandas' user-facing documentation is problematic. Users have no warning that their data might not round-trip successfully. The asymmetry where to_json() succeeds but read_json() fails is confusing without context. The documentation should clearly state that integer values must be within int64 range for successful JSON round-trips.
+
+The fact that this is tested behavior in pandas' own test suite strongly indicates this is not a bug but an accepted limitation. The appropriate response would be to update the documentation to clearly state this limitation, making this a DOCUMENTATION_FIX. While one could argue for WONTFIX since the behavior is intentional, the lack of documentation makes this a documentation problem that should be addressed.

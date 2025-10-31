@@ -1,0 +1,27 @@
+## Documentation Analysis for scipy.cluster.vq.whiten
+
+### Official Documentation
+The official scipy documentation for whiten states:
+- Purpose: "Normalize a group of observations on a per feature basis" by rescaling each feature to have unit variance
+- Method: Divides each feature column by its standard deviation
+- Returns: A new ndarray with features scaled by the standard deviations
+
+The online documentation DOES NOT mention:
+- What happens when columns have zero standard deviation
+- Any special handling for columns with all identical values
+- Any warnings that might be raised
+
+### Source Code Documentation and Implementation
+Looking at the actual source code in vq.py (lines 140-147), I found:
+1. The function checks for zero standard deviation using exact equality: `zero_std_mask = std_dev == 0`
+2. When zero std is detected, it sets the std_dev to 1.0 to prevent division by zero
+3. It raises a RuntimeWarning that states: "Some columns have standard deviation zero. The values of these columns will not change."
+
+### Key Finding
+The warning message in the source code explicitly promises: "The values of these columns will not change" for columns with zero standard deviation. This is a clear behavioral contract that the function establishes with users through its warning system.
+
+### The Gap
+The bug report correctly identifies that the function uses exact equality (`std_dev == 0`) to detect zero standard deviation columns. Due to floating-point precision issues, columns with all identical values can have a computed standard deviation that is extremely small (e.g., 8.88e-16) but not exactly zero. This causes:
+1. The warning not to be triggered
+2. The column to be divided by the near-zero value, producing astronomical results
+3. A violation of the documented behavior promised in the warning message

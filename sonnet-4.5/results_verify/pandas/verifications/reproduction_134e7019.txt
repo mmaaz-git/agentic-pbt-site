@@ -1,0 +1,39 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Reproduction
+The provided Hypothesis test failed as expected with the exact input mentioned in the bug report:
+- Input: `target_list=[], slice_start=None, slice_stop=-1, slice_step=None`
+- Expected length: 0 (the actual length of `[][:−1]`)
+- Computed length: -1 (incorrectly returned by `length_of_indexer`)
+
+### Manual Reproduction
+The manual reproduction code confirms the bug:
+- For `target=[]` and `indexer=slice(None, -1, None)`:
+  - Python's built-in slicing: `len([][:-1]) = 0`
+  - `length_of_indexer` function: returns `-1`
+
+### Pattern Analysis
+Additional test cases reveal a clear pattern:
+1. Empty list with negative stop indices always returns negative values:
+   - `[][:−1]` → actual=0, computed=-1
+   - `[][:−2]` → actual=0, computed=-2
+
+2. When the list is too small for the negative index:
+   - `[1][:−2]` → actual=0, computed=-1 (list has 1 element, -2 would be before start)
+   - `[1,2][:−3]` → actual=0, computed=-1 (list has 2 elements, -3 would be before start)
+
+3. When the list is large enough for the negative index, it works correctly:
+   - `[1][:−1]` → actual=0, computed=0 ✓
+   - `[1,2][:−1]` → actual=1, computed=1 ✓
+   - `[1,2][:−2]` → actual=0, computed=0 ✓
+
+### Root Cause
+The bug occurs when converting negative indices to positive indices. When `stop` is negative and `|stop| > len(target)`, the conversion `stop + target_len` results in a negative number, which is then incorrectly returned as the slice length.
+
+For example, with `target=[]` and `stop=-1`:
+- `stop + target_len = -1 + 0 = -1`
+- This negative value is used in length calculation, resulting in negative length
+
+The bug report accurately describes this issue and the proposed fix (clamping to 0) appears correct.

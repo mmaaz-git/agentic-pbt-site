@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation states that categorize is for "efficiency" when arrays contain duplicates, but it doesn't explicitly guarantee that the hash values will be identical between categorize=True and categorize=False. The function still returns deterministic integers as documented. One could argue that the user's assumption that both modes should produce identical results is not explicitly stated in the documentation.
+
+**Why it might not be INVALID:**
+The documentation specifically uses the word "efficient" which strongly implies this is a performance optimization, not a different algorithm. A reasonable user would expect that an efficiency optimization produces the same results, just faster. The fact that different input values ('' and '\x00') get the same hash violates the fundamental property of hash functions.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This edge case involves empty strings and null bytes, which are rarely used together in practice. The behavior only manifests when there are duplicates AND special characters like null bytes mixed with empty strings. The workaround is simple (use categorize=False), and fixing this might require significant changes to the categorization logic.
+
+**Why it might not be WONTFIX:**
+This is the default behavior (categorize=True is the default), affecting all users who don't explicitly set categorize=False. The bug causes silent data corruption in hash-based operations. Hash functions are fundamental utilities that must work correctly for all inputs, not just common ones.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior appears to be that when categorize=True and there are duplicates, all array elements get assigned the hash of the most frequent value. This is a specific algorithm choice that could be documented. The documentation could be updated to clarify that categorize=True uses a different hashing strategy that may produce different results.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already describes this as an "efficiency" optimization, which clearly implies same results with better performance. If the behavior is intentionally different, the documentation is fundamentally misleading by calling it "efficient" rather than "alternative." This would require a complete rewrite of the parameter description, not just a clarification.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that making categorize=True produce identical results to categorize=False is a new feature request. Currently, the two modes operate differently, and requesting them to be identical could be seen as asking for new functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality - they're reporting that the existing functionality doesn't work as the documentation implies. The expectation that a hash function produces different hashes for different inputs is fundamental, not a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation describes categorize as "more efficient," which clearly implies it's an optimization that should produce the same results. Different values ('' and '\x00') receiving identical hashes violates the fundamental property of hash functions. This is the default behavior, silently producing incorrect results that could lead to data corruption in applications relying on these hashes.
+
+**Why it might not be BUG:**
+The behavior is consistent and deterministic within each mode. The function still returns deterministic integers as documented. The documentation doesn't explicitly guarantee that categorize=True and categorize=False produce identical results.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a DOCUMENTATION_FIX rather than a BUG. Here's why:
+
+The current behavior shows a clear pattern: when categorize=True is used with arrays containing duplicates, the hash values are influenced by the categorization process in a way that can assign the same hash to different values. Specifically, when there are duplicate empty strings and a null byte, all values get the hash of the majority element (the empty string). When the order is reversed (duplicate null bytes with one empty string), all get the null byte's hash.
+
+This suggests the categorization optimization is actually changing the hashing algorithm in a fundamental way, not just making it more efficient. The word "efficient" in the documentation is misleading because it implies same results with better performance. However, the behavior is consistent and deterministic - it's just different from what the documentation implies.
+
+The most appropriate resolution would be to update the documentation to clearly state that categorize=True uses a different hashing strategy that may produce different hash values than categorize=False, especially for arrays with duplicates and special characters. The documentation should warn users that if consistent hashing across different modes is required, they should use categorize=False.

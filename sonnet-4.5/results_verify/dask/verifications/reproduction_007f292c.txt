@@ -1,0 +1,46 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug reported in the dask.dataframe.tseries.resample._resample_bin_and_out_divs function.
+
+## Bug Confirmation
+
+The bug is reproducible with the exact parameters specified in the report:
+- n_divisions=88
+- rule='10D'
+- closed='right'
+- label='left'
+
+When executed with these parameters, the function produces duplicate timestamps at the end of the `outdivs` tuple.
+
+## Observed Behavior
+
+1. The function creates `outdivs` with 75 elements
+2. The last two elements are both Timestamp('2021-12-21 00:00:00')
+3. This creates a duplicate at indices 73 and 74
+
+## Root Cause
+
+The bug occurs in the "Adjust ends" section of the code (lines 89-102). The specific issue happens when:
+1. `len(newdivs) < len(divs)` is True (74 < 88)
+2. This triggers the use of `append` instead of `__setitem__`
+3. When `outdivs[-1] < divisions[-1]` is True
+4. The code appends `temp.index[-1]` to `outdivs`
+5. However, `temp.index[-1]` equals `outdivs[-1]` (both are 2021-12-21 00:00:00)
+6. This creates a duplicate value in the output
+
+## Property-Based Testing Results
+
+The property-based test successfully found multiple failing cases with similar parameters:
+- n_divisions in range [75, 97] with rule='10D', closed='right', label='left' consistently produce duplicates
+- The duplicate always appears at index 73
+- All failures show the same pattern: appending an already-existing value
+
+## Impact
+
+This bug violates the invariant that divisions should be monotonically increasing unique values. According to Dask's documentation, divisions are expected to be "in ascending order" which implies uniqueness. Duplicate values in divisions can lead to:
+- Incorrect partition boundaries
+- Potential errors in downstream operations like loc, merge, and groupby
+- Unpredictable behavior in time series resampling operations
+
+The bug is confirmed and matches exactly what was described in the bug report.

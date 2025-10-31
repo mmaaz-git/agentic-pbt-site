@@ -1,0 +1,41 @@
+## Documentation Analysis for numpy.char.mod
+
+### Official NumPy Documentation
+The numpy.char.mod function documentation states:
+- **Description**: "Return (a % i), that is pre-Python 2.6 string formatting (interpolation), element-wise for a pair of array_likes of str or unicode."
+- **Parameters**:
+  - `a`: array_like, with np.bytes_ or np.str_ dtype
+  - `values`: array_like of values to be element-wise interpolated into the string
+- **Returns**: Output ndarray of StringDType, bytes_, or str_ dtype
+
+The documentation provides two examples:
+1. Single format specifier: `np.strings.mod(["NumPy is a %s library"], values=["Python"])`
+2. Single format specifier with numbers: `np.strings.mod([b'%d bytes', b'%d bits'], [8, 64])`
+
+**Critical observation**: Both examples in the documentation only show single format specifier usage. There are no examples demonstrating multiple format specifiers in a single string.
+
+### Python % Operator Documentation
+According to Python's official documentation for printf-style string formatting:
+- If the format requires a single argument, you can use a non-tuple object
+- For multiple arguments, you must use a tuple with exactly the number of items specified
+- Example: `'%s has %d quote types.' % ('Python', 2)` correctly produces "Python has 2 quote types."
+
+### Key Documentation Findings
+1. The NumPy documentation claims that char.mod performs "pre-Python 2.6 string formatting (interpolation)" which implies it should behave like Python's % operator.
+2. The documentation says it performs this operation "element-wise for a pair of array_likes", suggesting the string formatting should work the same as Python's % operator on each element.
+3. The documentation does not explicitly state any limitations about multiple format specifiers.
+4. The parameter description for `values` is vague - it says "array_like of values to be element-wise interpolated" but doesn't clarify how tuples should be handled for multiple format specifiers.
+5. The lack of examples with multiple format specifiers in the documentation is notable, but this doesn't mean the functionality shouldn't work - the documentation claims compatibility with Python's % operator.
+
+### Implementation Analysis
+Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/numpy_env/lib/python3.13/site-packages/numpy/_core/strings.py:268`:
+```python
+return _to_bytes_or_str_array(
+    _vec_string(a, np.object_, '__mod__', (values,)), a)
+```
+
+The implementation wraps `values` in a tuple `(values,)` before passing it to `_vec_string`. This means:
+- If `values` is a single value like `5`, it becomes `(5,)` - works correctly
+- If `values` is a tuple like `(5, 10)`, it becomes `((5, 10),)` - causes the error
+
+This wrapping behavior breaks compatibility with Python's % operator for multiple format specifiers.

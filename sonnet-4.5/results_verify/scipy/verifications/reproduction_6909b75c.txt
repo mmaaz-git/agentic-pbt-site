@@ -1,0 +1,37 @@
+REPRODUCTION OF BUG REPORT: scipy.stats.quantile Integer p Values
+
+1. BUG CONFIRMATION
+The reported bug has been confirmed. scipy.stats.quantile raises a ValueError when passed integer values for the probability parameter p, even though these are mathematically valid and reasonable inputs.
+
+2. TEST RESULTS
+
+Basic Reproduction:
+- scipy.stats.quantile(x, 0) → ValueError: `p` must have real floating dtype.
+- scipy.stats.quantile(x, 0.0) → 1.0 (works correctly)
+- scipy.stats.quantile(x, 1) → ValueError: `p` must have real floating dtype.
+- scipy.stats.quantile(x, 1.0) → 5.0 (works correctly)
+
+Hypothesis Test:
+The provided property-based test fails immediately when using integer 0 as the p value, confirming that the issue affects all calls with integer p values, not just specific edge cases.
+
+3. COMPARISON WITH NUMPY
+NumPy's equivalent functions handle integer p values without issue:
+- np.quantile(x, 0) → 1.0 (works)
+- np.quantile(x, 1) → 5.0 (works)
+- np.percentile(x, 0) → 1.0 (works)
+- np.percentile(x, 100) → 5.0 (works)
+
+4. ROOT CAUSE
+The issue is in scipy/stats/_quantile.py, line 16:
+```python
+if not xp.isdtype(xp.asarray(p).dtype, 'real floating'):
+    raise ValueError("`p` must have real floating dtype.")
+```
+
+This check explicitly rejects integer types, even though:
+- Integer 0 and 1 are valid probability values
+- The next line (18) calls xp_promote with force_floating=True, which would handle the conversion
+- NumPy's isdtype correctly identifies integers as 'integral' but not 'real floating'
+
+5. IMPACT
+The bug affects all uses of scipy.stats.quantile with integer p values, which is a common use case when computing minimum (p=0) or maximum (p=1) quantiles. The error message is technically accurate but unnecessarily restrictive.

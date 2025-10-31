@@ -1,0 +1,56 @@
+## Documentation Analysis
+
+### Official Documentation for `not_zero` Parameter
+
+From the dask.bytes.core.read_bytes docstring (lines 45-46):
+```
+not_zero : bool
+    Force seek of start-of-file delimiter, discarding header.
+```
+
+### Interpretation
+
+The documentation states that `not_zero=True` should:
+1. Force a seek past the start-of-file delimiter
+2. Discard the header
+
+The documentation is somewhat ambiguous but implies that:
+- The first byte should be skipped (as a "header")
+- The remaining content should be returned in blocks
+
+### Expected Behavior
+
+Based on the documentation, when `not_zero=True`:
+1. The function should skip the first byte of the file
+2. All subsequent data should be returned in appropriately sized blocks
+3. No empty blocks should be created
+
+### Actual Behavior
+
+The current implementation:
+1. Adjusts the first block's offset to 1 (skipping first byte) ✓
+2. Reduces the first block's length by 1
+3. This can result in empty blocks when the first block is only 1 byte long
+
+### Documentation Gaps
+
+The documentation does not explicitly specify:
+1. What happens when the first block is exactly 1 byte
+2. Whether empty blocks are acceptable output
+3. The exact semantics of "discarding header" in edge cases
+
+### Related Functions
+
+The fsspec `read_block` function documentation confirms:
+- When given offset and length, it reads exactly those bytes
+- Reading 0 bytes (length=0) will return an empty result
+- This is working as designed for fsspec
+
+### Conclusion
+
+While the documentation is not perfectly clear about edge cases, the reasonable interpretation is that:
+1. `not_zero=True` should skip the first byte
+2. All returned blocks should contain data (non-empty)
+3. If a block would be empty after adjustment, it should be removed entirely
+
+The current behavior of returning empty blocks appears to be an unintended consequence of the implementation rather than a documented feature. The documentation does not suggest that empty blocks are an expected output.

@@ -1,0 +1,68 @@
+## Triage Analysis for numpy.random.gamma Zero Values Bug
+
+### Consideration for BUG (Valid Bug)
+**Arguments For:**
+- The behavior is mathematically questionable - most statistical software treats gamma distribution as having support (0, ∞) excluding zero
+- This is clearly a numerical underflow issue that could be addressed with better handling
+- The behavior could lead to incorrect statistical analyses where log(gamma) is computed (would give -inf)
+- Other major statistical packages (R, MATLAB) typically don't produce exact zeros for gamma distributions
+- The issue affects a significant portion of samples (55% zeros) making it a practical problem
+
+**Arguments Against:**
+- Wikipedia defines gamma support as [0, ∞), technically allowing zero
+- NumPy documentation doesn't explicitly promise support will be (0, ∞)
+
+### Consideration for WONTFIX
+**Arguments For:**
+- This only occurs with extremely small shape parameters (< 0.001) which are rarely used in practice
+- This is a fundamental floating-point precision limitation, not a coding error
+- The values that aren't zero are on the order of 1e-13 to 1e-14, showing this is deep underflow territory
+- Fixing this might require significant performance penalties for all gamma sampling
+
+**Arguments Against:**
+- 55% of values being zero is not an obscure edge case - it's a majority of the output
+- Small shape parameters are valid mathematically and might be used in specialized applications
+
+### Consideration for INVALID
+**Arguments For:**
+- Wikipedia states the support is [0, ∞), so zeros are technically allowed
+- NumPy documentation doesn't explicitly state the support excludes zero
+- The documentation doesn't promise any specific behavior for extreme parameters
+
+**Arguments Against:**
+- Even if support includes zero, having 55% of samples be exactly zero is not the correct probability distribution
+- The gamma distribution has zero probability mass at exactly zero for any positive shape parameter
+- This is clearly unintended behavior from floating-point underflow
+
+### Consideration for DOCUMENTATION_FIX
+**Arguments For:**
+- The NumPy documentation should clarify what the support of the distribution is
+- The documentation should warn about numerical limitations with extreme parameters
+- This would help users understand the limitations without requiring code changes
+- The behavior is somewhat reasonable (underflow to zero) but needs to be documented
+
+**Arguments Against:**
+- Simply documenting this doesn't fix the incorrect distribution being generated
+- Users would still get mathematically incorrect results
+
+### Consideration for FEATURE_REQUEST
+**Arguments For:**
+- Handling extreme parameter values better could be seen as a new feature
+- Adding warnings or parameter validation could be a feature addition
+
+**Arguments Against:**
+- This is fixing incorrect behavior, not adding new functionality
+- The function already claims to implement gamma distribution
+
+### Final Assessment
+This is a case where the implementation produces mathematically incorrect results due to numerical underflow. While the support of the gamma distribution is debatable ([0, ∞) vs (0, ∞)), having 55% of samples be exactly zero is clearly not the correct gamma distribution for any positive shape parameter. The probability of getting exactly zero from a continuous distribution should be zero.
+
+However, this occurs only with extreme parameter values that are at the edge of floating-point representation. The non-zero values produced (1e-13 to 1e-14) show we're in deep underflow territory where standard floating-point arithmetic breaks down.
+
+The most appropriate categorization is **WONTFIX** because:
+1. This only affects extremely small shape parameters (<0.001) rarely used in practice
+2. It's a fundamental floating-point limitation, not a simple bug
+3. Fixing it properly would likely require arbitrary precision arithmetic with significant performance costs
+4. The mathematical ambiguity about whether support includes zero gives some cover
+
+A close second choice would be DOCUMENTATION_FIX to at least warn users about these limitations.

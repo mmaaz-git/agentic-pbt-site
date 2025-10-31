@@ -1,0 +1,31 @@
+# Bug Reproduction Analysis
+
+## Summary
+The bug report is CONFIRMED and reproducible. The `pandas.core.util.hashing.hash_array` function fails when using UTF-16 encoding with the default hash_key parameter.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test Reproduction
+The provided hypothesis test was executed successfully and immediately triggered the bug:
+- Test case: `test_hash_array_different_encodings` with `values=[0]`
+- Result: ValueError raised when trying to use UTF-16 encoding
+- Error message: "key should be a 16-byte string encoded, got b'\xff\xfe0\x001\x002\x003\x004\x005\x006\x007\x008\x009\x001\x002\x003\x004\x005\x006\x00' (len 34)"
+
+### 2. Direct Reproduction
+The direct reproduction code confirmed the issue:
+- UTF-8 encoding works correctly with the default hash_key '0123456789123456'
+- UTF-16 encoding fails with the same hash_key
+- Verification showed:
+  - '0123456789123456' encoded as UTF-8: 16 bytes ✓
+  - '0123456789123456' encoded as UTF-16: 34 bytes (includes 2-byte BOM + 2 bytes per character) ✗
+
+## Root Cause
+The error occurs in `pandas._libs.hashing.hash_object_array` (line 63 in the Cython module), which validates that the hash_key must be exactly 16 bytes when encoded. The problem is:
+
+1. The default hash_key '0123456789123456' is designed for UTF-8 encoding (16 ASCII characters = 16 bytes in UTF-8)
+2. When using UTF-16 encoding:
+   - The same string becomes 34 bytes (2-byte BOM + 16 characters × 2 bytes each)
+   - This violates the 16-byte requirement hardcoded in the Cython implementation
+
+## Impact
+Users cannot use the hash_array function with non-UTF-8 encodings (like UTF-16, UTF-32) when using the default hash_key, even though the encoding parameter suggests this should be supported. This is a clear API contract violation where the function accepts an encoding parameter but fails to work correctly with valid encoding choices.

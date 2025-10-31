@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is an internal helper that's not part of the public API, and there's no documentation specifying what should happen with overflow conditions. The interchange protocol specification doesn't define behavior for extreme datetime values. The input value (4.7 quintillion days, or 13 quintillion years) is astronomically beyond any practical use case - it's over 900,000 times the age of the universe. Since the function isn't documented to handle such extreme values and they have no practical application, the bug could be considered invalid as it's testing undefined behavior.
+
+**Why it might not be INVALID:**
+The function does produce objectively incorrect output - it silently converts positive day values into negative datetime values without any warning or error. This is a clear data corruption issue. The code comment "converting to uint64 to avoid overflow" suggests the developers were aware of potential overflow issues but the implementation doesn't actually prevent them. Silent data corruption is generally considered a bug regardless of whether the specific behavior is documented.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The failing inputs are extreme edge cases that would never occur in practice - 106 trillion days is approximately 292 billion years, which exceeds any reasonable datetime use case. The cost of adding validation for such extreme values might not be worth the performance overhead for all normal operations. The function is internal to the interchange protocol implementation, not a public API that users directly call. The interchange protocol is already being deprecated in favor of the Arrow C Data Interface, so investing effort in fixing edge cases in deprecated code might not be worthwhile.
+
+**Why it might not be WONTFIX:**
+Silent data corruption is a serious issue that violates basic principles of data integrity. Even if the values are extreme, the function should either handle them correctly or explicitly reject them with an error rather than producing wrong results. The fix is relatively simple (adding a range check) and wouldn't significantly impact performance. Other parts of pandas properly handle or reject extreme datetime values, so this inconsistency should be addressed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The interchange protocol specification doesn't define what should happen with datetime values that exceed representable ranges. The function's behavior for extreme values is undocumented, and the comment about "avoiding overflow" is misleading since overflow still occurs. Adding documentation to specify the valid input range and expected behavior for out-of-range values would clarify the function's limitations without changing its behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is an internal function not exposed in the public API, so there's no user-facing documentation to fix. The issue isn't about unclear documentation but about actual incorrect behavior (silent data corruption). Simply documenting that the function produces wrong results for large values doesn't fix the underlying problem of data integrity.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation doesn't validate input ranges, which could be seen as a missing feature rather than a bug. Adding overflow detection and proper error handling for extreme values would be a new capability. The interchange protocol doesn't specify this behavior, so implementing it would be going beyond the basic requirements to add additional validation features.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't about adding new functionality but fixing existing functionality that produces incorrect results. The function already attempts to handle day-to-second conversion, it just does it incorrectly for large values. Fixing data corruption is a bug fix, not a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function silently produces incorrect output for valid int64 input values, which is textbook data corruption. The code comment explicitly states it's "converting to uint64 to avoid overflow" but the implementation still overflows, indicating the current behavior wasn't intended. Silent failures that produce wrong data are among the most serious types of bugs because users might not realize their data has been corrupted. The fix is straightforward and would prevent data integrity issues.
+
+**Why it might not be BUG:**
+The failing inputs are so extreme they have no practical application - they represent time periods hundreds of thousands of times longer than the age of the universe. The function is internal to the interchange protocol, not a public API. The interchange protocol specification doesn't define behavior for such extreme values, so technically the function isn't violating any specification. The protocol is already deprecated in favor of newer alternatives.
+
+**Overall consideration**
+This bug report presents a technically valid case of integer overflow leading to silent data corruption in the `parse_datetime_format_str` function. The reproduction clearly demonstrates that positive day values exceeding approximately 106 trillion days produce negative datetime values due to overflow in the multiplication operation. While the comment in the code suggests awareness of potential overflow issues, the implementation doesn't actually prevent them.
+
+However, several factors suggest this should not be treated as a high-priority bug. First, the function is internal to the interchange protocol implementation and not part of the public API. Second, the failing inputs are astronomically large - representing time periods of quintillions of years that have no practical application in any real-world scenario. Third, the interchange protocol is already being deprecated in favor of the Arrow C Data Interface, making this legacy code that's being phased out.
+
+While silent data corruption is generally a serious issue, the extreme impracticality of the inputs combined with the internal nature of the function and its deprecated status strongly suggest this is a WONTFIX issue. The values that trigger the overflow (>106 trillion days or >292 billion years) are so far beyond any conceivable use case that adding validation code would provide no practical benefit while potentially adding unnecessary overhead to normal operations. The proper solution for users needing robust datetime handling is to use the recommended Arrow C Data Interface instead of the deprecated interchange protocol.

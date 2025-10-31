@@ -1,0 +1,44 @@
+REPRODUCTION REPORT FOR pandas.plotting.scatter_matrix
+
+1. BUG REPRODUCTION
+
+I have successfully reproduced the reported bug. The bug report is accurate in its description.
+
+1.1 Property-based test execution:
+The property-based test runs and finds two distinct failure modes:
+a) ValueError when axis limits cannot be set to NaN or Inf (when DataFrame contains inf values)
+b) ValueError: "Too many bins for data range. Cannot create 10 finite-sized bins" - occurs with single-row DataFrames containing large numeric values
+
+1.2 Specific failing example:
+The exact example from the bug report was reproduced:
+- DataFrame: {'A': [0.0], 'B': [-1.297501e+16], 'C': [-1.297501e+16]}
+- Result: ValueError: Too many bins for data range. Cannot create 10 finite-sized bins.
+
+2. ROOT CAUSE ANALYSIS
+
+The failure occurs in matplotlib's histogram function (called at line 81 of pandas/plotting/_matplotlib/misc.py) when:
+- The DataFrame has a single row (or multiple rows with identical values)
+- The values are large in magnitude (approximately >= 1e15)
+
+The issue arises because:
+- When all values are identical, the data range is 0
+- For large values, floating-point precision issues prevent matplotlib from creating finite-sized bins
+- The threshold appears to be around 1e14 to 1e15
+
+3. BEHAVIOR OBSERVATIONS
+
+Testing revealed:
+- Single-row DataFrames with small values (e.g., 1.0, 2.0, 3.0) work but generate warnings
+- Single-row DataFrames with values of 0 work
+- Single-row DataFrames with large values (>= 1e15) fail with ValueError
+- Multiple-row DataFrames with identical large values also fail
+- The failure occurs in both positive and negative large values
+
+4. SCOPE OF ISSUE
+
+This affects:
+- Single-row DataFrames with large numeric values
+- Multi-row DataFrames where all values in a column are identical and large
+- The issue is not specific to pandas but is a limitation of matplotlib's histogram implementation
+
+The bug report correctly identifies the issue and provides an accurate reproduction case.

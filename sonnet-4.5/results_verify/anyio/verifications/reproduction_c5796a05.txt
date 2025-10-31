@@ -1,0 +1,41 @@
+## Bug Reproduction Results
+
+### Test 1: Using create_memory_object_stream with fractional buffer
+- Result: **ValueError: max_buffer_size must be either an integer or math.inf**
+- The public API correctly rejects fractional values
+- This means the bug CANNOT occur through normal API usage
+
+### Test 2: Using MemoryObjectStreamState directly with max_buffer_size=10.5
+- Successfully created stream with fractional buffer size
+- Added 11 items successfully (indices 0-10)
+- 12th item raised WouldBlock
+- **Confirmed**: Buffer accepts ceil(10.5) = 11 items, not floor(10.5) = 10 items
+- Bug report's claim is technically correct for direct usage of MemoryObjectStreamState
+
+### Test 3: Using MemoryObjectStreamState with max_buffer_size=1.5
+- Added 1st item successfully
+- Added 2nd item successfully
+- **Confirmed**: Buffer accepts ceil(1.5) = 2 items, not floor(1.5) = 1 item
+
+### Hypothesis Test Results
+- Ran property-based testing with various fractional values
+- ALL fractional values failed the test as written in the bug report
+- Examples tested: 0.1, 0.5, 1.5, 10.5, 99.9, etc.
+- Consistent behavior: buffer always accepts ceil(max_buffer_size) items
+
+### Technical Analysis of the Bug
+The issue occurs at line 223 in memory.py:
+```python
+if len(self._state.buffer) < self._state.max_buffer_size:
+    self._state.buffer.append(item)
+```
+
+When max_buffer_size is fractional (e.g., 10.5):
+- With 10 items: `10 < 10.5` → True (allows 11th item)
+- With 11 items: `11 < 10.5` → False (blocks 12th item)
+
+### Important Context
+1. **The bug only manifests when directly instantiating MemoryObjectStreamState**
+2. **The public API (create_memory_object_stream) prevents this scenario entirely**
+3. The validation exists at the API level but not at the internal class level
+4. MemoryObjectStreamState is an internal implementation detail, not a public API

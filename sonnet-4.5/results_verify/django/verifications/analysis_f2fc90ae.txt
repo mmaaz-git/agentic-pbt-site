@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report claims that decorators should behave "consistently" and wrap functions the same way, but this is not a documented requirement. The Django documentation doesn't specify that decorators must create wrapper functions or maintain object identity in any particular way. The decorator's primary purpose is to mark variables as sensitive for error reporting, which it accomplishes for both sync and async functions through different internal mechanisms. The implementation details of how this is achieved (wrapping vs global dictionary) are not part of the public API contract.
+
+**Why it might not be INVALID:**
+The inconsistent behavior is real and measurable. The decorator literally returns different types of objects for sync vs async functions - one wrapped, one not. This creates observable differences in behavior that users can encounter, such as identity checks and attribute presence. The fact that sensitive_post_parameters in the same file wraps both consistently suggests this inconsistency may be unintentional.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal implementation detail that doesn't affect the decorator's core functionality of hiding sensitive variables in error reports. The global dictionary approach for async functions may be necessary for technical reasons related to async error handling in Django. The inconsistency only matters for edge cases like identity checks or attribute introspection that most users won't encounter. Fixing this would require changes to working code with no clear benefit to end users.
+
+**Why it might not be WONTFIX:**
+The inconsistency affects observable behavior that users might rely on. The bug report provides valid use cases where this matters (testing, introspection). The fact that sensitive_post_parameters handles this correctly shows it's technically feasible to fix. The issue is not trivial as it affects the fundamental behavior of a security-related decorator.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation states the decorator works with "both synchronous and asynchronous view functions" without clarifying that the internal implementation differs. Users reading this would reasonably expect consistent behavior. The documentation could be updated to explain that async functions use a different mechanism (global dictionary) and won't have the same wrapper behavior as sync functions. This would set proper expectations without requiring code changes.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation is technically correct - the decorator does work with both function types for its stated purpose of hiding sensitive variables. The documentation doesn't make any claims about wrapping behavior or implementation details, so it's not wrong or misleading. Adding implementation details to user-facing documentation might be inappropriate and confusing.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for a new behavior - consistent wrapping for async functions. The current implementation works as designed; it just uses different mechanisms for sync and async. Adding consistent wrapping behavior would be an enhancement to make the decorator more predictable for advanced use cases like testing and introspection. This would be adding new functionality rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The inconsistency appears to be an oversight rather than intentional design. The sensitive_post_parameters decorator in the same file already implements consistent wrapping, suggesting this is the expected pattern. This is fixing an inconsistency rather than adding new functionality. The decorator should have been consistent from the start.
+
+## BUG Considerations
+**Why it might be BUG:**
+The inconsistent behavior violates the principle of least surprise. When the same decorator is applied to similar functions, users expect similar results. The sensitive_post_parameters decorator in the same file demonstrates that Django's pattern is to wrap both consistently. The proposed fix is straightforward and maintains backward compatibility while adding the wrapper for consistency. This appears to be an implementation oversight that should be corrected.
+
+**Why it might not be BUG:**
+The decorator fulfills its documented purpose of marking sensitive variables for both sync and async functions. The different implementation approaches don't prevent the decorator from working correctly. No documented behavior is violated. The wrapping behavior is an implementation detail not promised by the API. The code works as intended for its primary use case.
+
+## Overall consideration
+
+After careful analysis, this appears to be a WONTFIX issue rather than a BUG. While the technical inconsistency is real and the bug report is accurate in its findings, several factors suggest this is not worth fixing:
+
+First, the decorator accomplishes its documented purpose successfully for both sync and async functions - hiding sensitive variables in error reports. The different internal implementations (wrapping vs global dictionary) don't interfere with this core functionality. The documentation makes no promises about wrapping behavior, object identity, or attribute presence.
+
+Second, the impacts described in the bug report are edge cases that few users would encounter. Most Django users apply decorators and expect them to work for their intended purpose, not to perform identity checks or attribute introspection on the decorated functions. The scenarios where this inconsistency matters (testing decorator behavior, introspection tools) are advanced use cases outside the decorator's primary purpose.
+
+Third, while the sensitive_post_parameters decorator does wrap consistently, it has a different use case that requires accessing the request object directly. The sensitive_variables decorator's async implementation using a global dictionary may be intentional for technical reasons related to Python's async implementation and error handling. Changing this behavior could introduce risk to working code for minimal benefit. The inconsistency, while aesthetically unpleasing to those who notice it, doesn't rise to the level of a bug that needs fixing.

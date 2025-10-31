@@ -1,0 +1,67 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Django installation path: `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages`
+- Python version: 3.13
+- Function tested: `django.core.management.utils.handle_extensions`
+
+### Reproduction Test Results
+
+All test cases from the bug report were successfully reproduced:
+
+1. **Empty String Input**: `handle_extensions([''])`
+   - Result: `{'.'}`
+   - Confirms: A single dot '.' is returned
+
+2. **Double Comma**: `handle_extensions(['html,,css'])`
+   - Result: `{'.html', '.css', '.'}`
+   - Confirms: Double comma creates empty segment, resulting in '.'
+
+3. **Trailing Comma**: `handle_extensions(['html,'])`
+   - Result: `{'.html', '.'}`
+   - Confirms: Trailing comma creates empty segment, resulting in '.'
+
+4. **Leading Comma**: `handle_extensions([',html'])`
+   - Result: `{'.html', '.'}`
+   - Confirms: Leading comma creates empty segment, resulting in '.'
+
+### Hypothesis Test Results
+The hypothesis test failed as expected with all three example inputs:
+- `[',']` → produces `{'.'}`
+- `['html,,css']` → produces `{'.html', '.css', '.'}`
+- `['']` → produces `{'.'}`
+
+### Technical Analysis of the Bug
+
+Looking at the source code (lines 47-53):
+```python
+ext_list = []
+for ext in extensions:
+    ext_list.extend(ext.replace(" ", "").split(","))
+for i, ext in enumerate(ext_list):
+    if not ext.startswith("."):
+        ext_list[i] = ".%s" % ext_list[i]
+return set(ext_list)
+```
+
+The bug occurs because:
+1. When splitting by comma, empty strings are created (e.g., `'html,,css'.split(',')` → `['html', '', 'css']`)
+2. The code unconditionally adds a dot prefix to any item that doesn't start with a dot
+3. An empty string doesn't start with a dot, so it becomes `'.' + '' = '.'`
+4. The single dot '.' is then included in the returned set
+
+### Is '.' a Valid File Extension?
+
+The single dot '.' is NOT a valid file extension:
+- In file systems, '.' refers to the current directory, not a file extension
+- File extensions are meant to identify file types (e.g., '.py', '.html')
+- A file cannot have just a dot as its extension - it would be interpreted as a hidden file with no name on Unix systems
+- When used in file matching operations, '.' would not match any actual files with extensions
+
+### Real-World Impact
+The bug could manifest when:
+- Users accidentally type double commas in command-line arguments
+- Programmatic generation of extension lists has bugs leading to empty strings
+- Copy-paste errors introduce extra commas
+
+The result would be that file matching operations might behave unexpectedly or fail silently.

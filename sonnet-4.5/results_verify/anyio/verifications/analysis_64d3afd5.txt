@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The docstring explicitly uses the word "moved" when describing what happens to nested MultiListeners: "Any MultiListeners in the given collection of listeners will have their listeners moved into this one." The word "moved" in programming contexts often implies transfer of ownership or resources, similar to move semantics in languages like Rust or C++. Since the documentation states the listeners are "moved," the destructive modification could be considered documented and intended behavior. The user's expectation that objects shouldn't be modified when passed to constructors is not universally true - many APIs have move constructors or transfer ownership patterns.
+
+**Why it might not be INVALID:**
+While the word "moved" appears in the documentation, it's ambiguous and doesn't explicitly state that the source MultiListener will be cleared and become unusable. Python developers generally expect immutability of arguments unless very clearly documented otherwise. The principle of least surprise suggests that constructors shouldn't destructively modify their arguments without clear warnings. The documentation could be interpreted as meaning the listeners are logically moved (copied and reorganized) rather than physically moved (transferred with destruction of source).
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal implementation detail of a specialized class that likely has few users. The behavior has probably been this way since the class was created, and existing code may depend on this behavior for memory efficiency or to prevent accidental reuse of nested MultiListeners. The workaround is simple - users can pass copies of the listeners list instead of the MultiListener objects themselves. The destructive behavior might be intentional to prevent resource leaks or double-serving of connections. The type annotation comment `# type: ignore[attr-defined]` suggests this was a deliberate choice by the developers.
+
+**Why it might not be WONTFIX:**
+The issue is not trivial - it violates fundamental expectations about object construction in Python. The behavior makes the API harder to use correctly and could lead to subtle bugs in user code. The fix is simple (just remove the `del` line) and wouldn't break the flattening functionality. This isn't just a minor inconvenience but a design that makes objects unusable after passing them to another object, which is surprising behavior that could affect any user of this API.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior might be intentional for good reasons (preventing double-serving, ensuring clean ownership transfer), but the documentation doesn't adequately explain this. The word "moved" is too subtle and doesn't clearly communicate that the source MultiListeners will be emptied and become unusable. A documentation fix could explicitly warn users that nested MultiListeners will be cleared after being passed to a new MultiListener, explaining this is move semantics similar to other languages. This would keep the current behavior but make it clear and expected.
+
+**Why it might not be DOCUMENTATION_FIX:**
+If the destructive modification is genuinely unexpected and problematic behavior, simply documenting it better doesn't address the underlying API design issue. The fact that the developers needed `# type: ignore[attr-defined]` suggests they were working around type system complaints, which might indicate this isn't ideal behavior. Good API design shouldn't require extensive warnings about surprising side effects.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for non-destructive nesting of MultiListeners, which the current implementation doesn't support. This could be viewed as requesting a new feature where MultiListeners can be combined without modifying the originals. The request could be reframed as adding a parameter like `move=False` to control whether nested MultiListeners are destructively consumed or copied. This would maintain backward compatibility while allowing the behavior the user expects.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality but pointing out that the current implementation violates reasonable expectations. They're not requesting an enhancement but reporting that the existing behavior is problematic. The ability to nest MultiListeners without destroying them isn't a new feature but fixing what they see as incorrect behavior in the existing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior violates the principle of least surprise in Python, where objects passed to constructors generally aren't modified unless it's extremely clear (like with explicit `move` methods). The destructive modification happens silently without any warning or indication in the method name that this will occur. The fact that a type ignore comment is needed suggests this might be unintended behavior or a workaround. Most Python developers would not expect `MultiListener([multi1, multi2])` to empty multi1 and multi2. This could easily lead to bugs where code tries to use the original MultiListeners afterward and gets mysterious failures.
+
+**Why it might not be BUG:**
+The documentation does use the word "moved," which in many programming contexts implies transfer of ownership. The behavior is consistent and deterministic - it always flattens and clears nested MultiListeners. The implementation might be deliberate to prevent issues like serving the same listeners multiple times or resource management problems. The clear intent in the code (with an explicit del operation) suggests this was a conscious design decision, not an accident. Move semantics exist in many languages and frameworks, so this pattern isn't unprecedented.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be primarily a DOCUMENTATION_FIX issue. The behavior is clearly intentional based on the code implementation - the `del listener.listeners[:]` line is explicit and deliberate, not accidental. The docstring does mention that listeners are "moved," but this is too subtle for Python developers who don't typically expect destructive operations in constructors.
+
+The key evidence that this is intentional behavior includes: (1) the explicit deletion operation in the code, (2) the use of the word "moved" in the documentation, (3) the type ignore comment suggesting the developers knew they were doing something unusual, and (4) the clear flattening logic that prevents nested MultiListener hierarchies. The behavior might exist to prevent double-serving of connections or to ensure clean ownership transfer in async contexts.
+
+However, the documentation is inadequate. Python developers reasonably expect that passing an object to a constructor won't modify that object unless very clearly documented. The word "moved" alone is insufficient warning that the MultiListeners will be emptied and become unusable. The documentation should explicitly state something like: "Warning: Nested MultiListener objects will have their listeners list cleared and will become unusable after being passed to a new MultiListener. This implements move semantics to ensure each listener is only served once." This would make the behavior expected rather than surprising, addressing the user's legitimate concern about violating the principle of least surprise while preserving what appears to be intentional behavior.

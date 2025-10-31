@@ -1,0 +1,51 @@
+## Documentation Analysis
+
+### Official pandas Documentation
+
+After reviewing the official pandas documentation for `read_csv` and `to_csv`, I found:
+
+1. **No explicit guarantees about CSV round-trip preservation**: The documentation does not promise that DataFrames written to CSV and read back will maintain exact type fidelity, especially for edge cases like integers beyond int64 range.
+
+2. **Limited discussion of large integer handling**: The documentation mentions:
+   - Type inference attempts to coerce columns to appropriate types
+   - Mixed-type columns default to `object` dtype
+   - Users can specify `dtype` parameter explicitly
+   - But no specific mention of behavior for integers exceeding int64 range
+
+3. **No documented warnings about type corruption**: The documentation does not warn users that integers beyond int64 range will be converted to strings upon CSV round-trip.
+
+4. **Object dtype behavior**: The documentation mentions object dtype for mixed types but doesn't specify how pure-integer object dtype columns should behave during CSV I/O.
+
+### GitHub Issues and Known Problems
+
+Searching the pandas GitHub repository revealed multiple related issues:
+
+1. **Issue #52505**: "BUG: incorrect reading of CSV containing large integers"
+   - Confirms large integers are problematic in CSV parsing
+   - Different parsing engines produce inconsistent results
+   - Silent data corruption was acknowledged as a critical issue
+   - A fix was merged but focused on precision loss within int64 range
+
+2. **Issue #14983, #11440**: uint64 overflow issues
+   - Shows long-standing problems with integers at the boundary of int64/uint64
+   - Workarounds suggested using python parser or manual conversion
+
+3. **Issue #31821**: Automatic string-to-numeric conversion
+   - Shows pandas aggressively tries to convert to numeric types
+   - But fails to handle edge cases properly
+
+### Key Finding
+
+The documentation **does not specify** expected behavior for integers beyond int64 range in CSV round-trips. This is a documentation gap, but more importantly, the actual behavior (silent conversion to string) is:
+
+1. **Inconsistent**: The original DataFrame stores it as int (in object dtype), but reading back stores it as string
+2. **Unexpected**: No reasonable user would expect numeric data to become string data
+3. **Silent**: No warning is given about the type corruption
+4. **Data-corrupting**: Arithmetic operations fail, comparisons break
+
+### Conclusion on Documentation
+
+While the documentation doesn't explicitly promise round-trip preservation for large integers, the current behavior violates reasonable expectations:
+- If pandas can store a Python int in an object dtype column (which it does when creating the DataFrame), it should restore it as the same type when reading from CSV
+- The silent conversion to string is undocumented and unexpected
+- This is not merely undefined behavior - it's actively harmful behavior that corrupts data integrity

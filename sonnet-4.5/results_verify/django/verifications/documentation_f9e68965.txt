@@ -1,0 +1,30 @@
+DOCUMENTATION ANALYSIS FOR CSRF_TRUSTED_ORIGINS
+
+1. **Official Django Documentation (Django 4.0):**
+   - The CSRF_TRUSTED_ORIGINS setting is a list of trusted origins for unsafe requests (e.g., POST requests)
+   - Values should be in the format: 'https://subdomain.example.com' or 'https://*.example.com' for wildcards
+   - As of Django 4.0, the values MUST include a scheme (http:// or https://)
+   - The setting is used to validate the Origin or Referer headers against trusted origins
+
+2. **Error Message in the Check Function:**
+   - The error message states: "As of Django 4.0, the values in the CSRF_TRUSTED_ORIGINS setting must start with a scheme (usually http:// or https://)"
+   - This indicates that the check is specifically looking for a scheme in the origin
+
+3. **Current Implementation:**
+   - The check function only verifies that "://" is present in the string
+   - It does NOT verify that the URL is properly formatted with both scheme and netloc
+   - The check is line 10: `if "://" not in origin:`
+
+4. **Middleware Implementation:**
+   - The CSRF middleware uses `urlsplit()` to parse the origins
+   - It extracts the scheme and netloc components from the parsed URL
+   - The middleware expects both scheme and netloc to be valid for proper functionality
+   - Lines 175-198 in csrf.py show the middleware relies on urlsplit() to extract netloc and scheme
+
+5. **Contract Between Check and Middleware:**
+   - The check function is supposed to validate that CSRF_TRUSTED_ORIGINS values are properly formatted
+   - The middleware assumes that if the check passes, the origins will have valid scheme and netloc
+   - This contract is broken when malformed URLs like "://" pass the check but have no usable components
+
+CONCLUSION:
+The documentation and error messages clearly state that CSRF_TRUSTED_ORIGINS values must have a valid scheme (and implicitly, a valid netloc for the origin to be meaningful). The current check implementation is insufficient as it only checks for the presence of "://" rather than validating that the URL is properly formatted with extractable components that the middleware can use.

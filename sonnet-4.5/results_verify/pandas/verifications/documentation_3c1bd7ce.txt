@@ -1,0 +1,43 @@
+## Documentation Analysis for pandas.core.computation.eval
+
+### Official Documentation
+The pandas.eval() function is documented to evaluate Python expressions as strings. Key points from the official documentation:
+
+1. **expr parameter**: Described as "The expression to evaluate. This string cannot contain any Python statements, only Python expressions."
+
+2. **ValueError exceptions**: The documentation explicitly states that ValueError is raised in several scenarios, including:
+   - target=None with multiline expressions
+   - Multiline expressions without proper item assignment
+   - inplace=True without item assignment
+   - Target doesn't support string item assignment
+
+However, the documentation does NOT explicitly mention behavior for empty strings or whitespace-only strings.
+
+### Source Code Analysis
+Looking at the actual implementation in pandas/core/computation/eval.py:
+
+1. **_check_expression function** (lines 108-123):
+   - Docstring states: "Make sure an expression is not an empty string"
+   - Raises ValueError "If expr is an empty string"
+   - Implementation: `if not expr: raise ValueError("expr cannot be an empty string")`
+
+2. **eval function flow**:
+   - Line 306: Calls `_check_expression(expr)` for string inputs
+   - Line 307: Then splits by lines and strips whitespace: `[e.strip() for e in expr.splitlines() if e.strip() != ""]`
+   - Line 327: Each expression goes through `_convert_expression(expr)` which also calls `_check_expression`
+
+### Key Finding
+The documentation (both in docstrings and the implementation) indicates that empty strings should raise a ValueError. The _check_expression function's docstring explicitly says it raises ValueError "If expr is an empty string".
+
+However, the implementation uses `if not expr` which is a truthiness check. In Python:
+- `not ""` evaluates to True (empty string)
+- `not "   "` evaluates to False (whitespace string is truthy)
+
+This means whitespace-only strings bypass the empty check, even though they contain no actual expression content.
+
+### Documentation Gap
+The documentation doesn't explicitly specify whether whitespace-only strings should be treated as empty or not. The error message says "expr cannot be an empty string" but doesn't clarify if "empty" means:
+1. Zero-length string only
+2. Semantically empty (no meaningful content after stripping whitespace)
+
+The fact that line 307 filters out empty lines after stripping (`if e.strip() != ""`) suggests the code expects to handle whitespace, but the initial check doesn't account for this.

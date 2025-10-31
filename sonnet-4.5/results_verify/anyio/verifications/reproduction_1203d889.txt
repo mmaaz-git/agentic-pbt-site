@@ -1,0 +1,34 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The MultiListener class in anyio.streams.stapled indeed mutates nested MultiListener objects passed as input by clearing their listeners list.
+
+### Hypothesis Test Reproduction
+The provided Hypothesis test was executed and failed as expected:
+- Test output: `AssertionError: MultiListener mutated input: expected 1 listeners, but found 0`
+- The test failed with the simplest case (num_listeners=1), confirming the bug affects all nested MultiListeners
+
+### Simple Example Reproduction
+The simple example code was executed with the following results:
+- Output before creating outer MultiListener: "Before: 2 listeners"
+- Output after creating outer MultiListener: "After: 0 listeners"
+- Expected behavior: Both should print "2 listeners"
+- Actual behavior: The nested MultiListener's listeners list is cleared (becomes 0)
+
+### Source Code Verification
+I examined the source code at /home/npc/miniconda/lib/python3.13/site-packages/anyio/streams/stapled.py and confirmed:
+1. Line 116 contains: `del listener.listeners[:]  # type: ignore[attr-defined]`
+2. This line is inside the `__post_init__` method (lines 111-120)
+3. When a MultiListener is passed as a listener to another MultiListener:
+   - Line 115 extends the parent's list with the nested listener's items
+   - Line 116 then clears the nested listener's list completely
+4. This mutation happens during object initialization, making the nested MultiListener unusable
+
+### Impact
+The bug causes unexpected side effects where:
+1. Creating a MultiListener modifies the state of input MultiListener objects
+2. Nested MultiListener objects become empty after being used to construct a parent MultiListener
+3. This violates the principle of least surprise - constructors should not modify their arguments
+4. Any code that retains references to nested MultiListeners will find them unexpectedly empty
+
+The bug is real, reproducible, and matches exactly what was described in the report.

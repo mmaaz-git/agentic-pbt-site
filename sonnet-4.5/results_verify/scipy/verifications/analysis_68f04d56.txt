@@ -1,0 +1,77 @@
+## Triage Analysis
+
+### Considering BUG:
+**Arguments FOR:**
+- The function violates the mathematical identity property JS(P,P) = 0 by returning NaN for all-zero inputs
+- The documentation promises normalization ("will normalize p and q if they don't sum to 1.0") but fails silently with NaN
+- The function generates RuntimeWarnings but still returns NaN instead of handling the error properly
+- Other SciPy functions typically validate inputs and raise clear errors for invalid cases
+- The issue causes downstream problems for users who may not expect NaN values
+
+**Arguments AGAINST:**
+- All-zero vectors are not valid probability distributions mathematically
+- The function technically works for all valid probability distributions
+- Users shouldn't be passing invalid inputs in the first place
+
+### Considering INVALID:
+**Arguments FOR:**
+- All-zero vectors are mathematically invalid probability distributions
+- The Jensen-Shannon divergence is only defined for proper probability distributions
+- The user is testing with invalid inputs that violate the mathematical domain
+
+**Arguments AGAINST:**
+- The function accepts these inputs without error
+- The documentation doesn't explicitly state all-zero vectors are invalid
+- The normalization claim suggests the function should handle non-standard inputs
+- Returning NaN silently is poor API design even for invalid inputs
+
+### Considering WONTFIX:
+**Arguments FOR:**
+- This is an extreme edge case (all zeros) unlikely in real usage
+- The mathematical invalidity of the input makes this low priority
+- The RuntimeWarning provides some indication of the problem
+
+**Arguments AGAINST:**
+- Silent NaN returns can cause hard-to-debug issues
+- The fix is simple and improves robustness
+- Other users have reported related issues (#19436, #20083)
+
+### Considering DOCUMENTATION_FIX:
+**Arguments FOR:**
+- The code behavior (returning NaN) could be considered "correct" for invalid inputs
+- The main issue is the documentation doesn't warn about this edge case
+- Adding documentation about valid inputs would clarify expectations
+
+**Arguments AGAINST:**
+- The function promises normalization but fails to deliver
+- Silent NaN returns are generally poor API design
+- Documentation alone doesn't fix the poor error handling
+
+### Considering FEATURE_REQUEST:
+**Arguments FOR:**
+- Adding validation for all-zero inputs is a new feature
+- The original implementation didn't include this edge case handling
+- This is requesting enhanced error checking beyond original scope
+
+**Arguments AGAINST:**
+- The identity property JS(P,P) = 0 is fundamental, not a feature
+- This is fixing broken behavior, not adding new functionality
+- Proper error handling is expected, not an enhancement
+
+## Recommendation: BUG
+
+This should be classified as a **BUG** for the following reasons:
+
+1. **Violates fundamental property**: The identity property (distance to self = 0) is mathematically fundamental and should hold even for edge cases, either by returning 0 or raising a clear error.
+
+2. **Silent failure is poor design**: Returning NaN without proper error handling violates principles of good API design. The function should either:
+   - Raise a clear ValueError for invalid inputs, OR
+   - Handle the edge case gracefully (though this would be mathematically questionable)
+
+3. **Documentation promises normalization**: The claim "will normalize p and q if they don't sum to 1.0" creates an expectation that the function handles non-standard inputs, but it fails for zero-sum cases.
+
+4. **Practical impact**: Users may encounter this in real scenarios (e.g., empty categories in classification, uninitialized arrays) and the silent NaN can propagate causing hard-to-debug issues.
+
+5. **Simple fix available**: The bug report provides a straightforward fix that improves robustness without breaking valid use cases.
+
+The proposed fix (raising ValueError for all-zero inputs) is appropriate and aligns with good API design principles.

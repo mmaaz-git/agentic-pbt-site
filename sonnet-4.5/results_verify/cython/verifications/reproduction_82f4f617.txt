@@ -1,0 +1,47 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report.
+
+### Hypothesis Test Results
+
+Running the provided hypothesis test with inputs consisting of quotes and spaces confirmed the bug. The test discovered multiple failing cases, including:
+- Single quote: `'` -> KeyError: '__Pyx_L1'
+- Single double-quote: `"` -> KeyError: '__Pyx_L1'
+- Empty quotes: `''` -> KeyError: ''
+- Empty double quotes: `""` -> KeyError: ''
+- Quotes with spaces: `' "` -> Various KeyError exceptions
+
+### Direct Reproduction
+
+The exact example from the bug report was confirmed:
+```python
+from Cython.Build.Dependencies import parse_list
+parse_list("'")
+```
+
+This produces:
+```
+KeyError: '__Pyx_L1'
+```
+
+The traceback matches the bug report exactly, occurring in the `unquote` function at line 132 of Dependencies.py.
+
+### Root Cause Analysis
+
+I investigated the issue and confirmed the root cause described in the bug report:
+
+1. When `strip_string_literals("'")` is called, it returns:
+   - Transformed string: `"'__Pyx_L1_"`
+   - Literals dictionary: `{'__Pyx_L1_': ''}`
+
+2. The `unquote` function then:
+   - Detects the leading quote character
+   - Tries to look up `literal[1:-1]` which is `"__Pyx_L1"` (missing the trailing underscore)
+   - The actual key in the dictionary is `"__Pyx_L1_"` (with trailing underscore)
+   - This mismatch causes the KeyError
+
+The bug occurs because unclosed/unbalanced quotes result in a mismatch between the placeholder format used by `strip_string_literals` and the key extraction logic in `unquote`.
+
+### Impact
+
+This is a crash bug that occurs when parsing malformed input. The function `parse_list` is called from user-facing code that parses special comment directives in Cython source files (e.g., `# distutils: extra_compile_args = -O2 -Wall`). When users accidentally include unbalanced quotes in these directives, they get an obscure KeyError instead of a helpful error message.

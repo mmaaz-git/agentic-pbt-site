@@ -1,0 +1,30 @@
+## Documentation Analysis for Jinja2Templates.TemplateResponse
+
+### Official Documentation
+The Starlette documentation at https://www.starlette.io/templates/ states that:
+- "Note that the incoming `request` instance must be included as part of the template context."
+- The documentation shows examples where the request is passed as a parameter, not explicitly showing context=None usage
+- The documentation does not explicitly state whether context can be None or not
+
+### Type Signatures in Source Code
+Looking at the source code in starlette/templating.py, the method has two overloaded type signatures:
+
+1. Lines 135-144: First overload with explicit parameters including:
+   - `context: dict[str, Any] | None = None`
+   This explicitly allows None as a valid value for context
+
+2. Lines 147-157: Second overload (deprecated usage) also includes:
+   - `context: dict[str, Any] | None = None`
+   Again explicitly allowing None
+
+### Implementation Details
+The actual implementation (lines 159-217) shows:
+- Line 182 (new style): `context = args[2] if len(args) > 2 else kwargs.get("context", {})`
+- Line 197 (kwargs only): `context = kwargs.get("context", {})`
+
+The key issue is that when context=None is explicitly passed:
+- `kwargs.get("context", {})` will return None (not the default {}) because "context" key exists in kwargs
+- Line 205: `context.setdefault("request", request)` then fails because context is None
+
+### Documentation vs Implementation Discrepancy
+The type hints explicitly allow `None` as a valid value for the context parameter (with a default of None), but the implementation doesn't handle the case when None is explicitly passed. This is a clear inconsistency between the documented API (via type hints) and the actual implementation.

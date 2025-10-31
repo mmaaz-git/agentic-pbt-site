@@ -1,0 +1,33 @@
+## Reproduction Analysis
+
+### Test Results
+
+I successfully reproduced the bug described in the report. The issue is confirmed:
+
+1. **Hypothesis Test Failure**: The property-based test fails as expected with the assertion error:
+   - Gt has 0 validators but Ge has 2 validators
+
+2. **Schema Examination**: Direct inspection of the pydantic core schemas confirms the double validation:
+   - **Gt schema**: `{'type': 'int', 'gt': 10}` (single native constraint)
+   - **Ge schema**: `{'function': {...}, 'schema': {'type': 'int', 'ge': 10}, 'type': 'function-after'}` (native constraint + function-after validator)
+   - **Lt schema**: Same pattern as Ge (native constraint + function-after validator)
+   - **Le schema**: Same pattern as Ge (native constraint + function-after validator)
+
+3. **Source Code Verification**: Examined the actual implementation in `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/experimental/pipeline.py`:
+   - Lines 448-463: Gt implementation has an `else` clause (line 458) that ensures _check_func is only called when schema type is NOT numeric
+   - Lines 464-478: Ge implementation has NO else clause - _check_func is ALWAYS called
+   - Lines 479-493: Lt implementation has NO else clause - _check_func is ALWAYS called
+   - Lines 494-508: Le implementation has NO else clause - _check_func is ALWAYS called
+
+4. **Performance Impact**: The double validation causes measurable performance degradation:
+   - ModelGe is approximately 13% slower than ModelGt (0.0678s vs 0.0600s for 100k iterations)
+   - This confirms the unnecessary overhead from double validation
+
+5. **Functional Correctness**: Both models validate correctly from a functional perspective:
+   - Values below/above thresholds are properly rejected
+   - Valid values are properly accepted
+   - The bug is purely about performance and code structure, not correctness
+
+### Conclusion
+
+The bug report is accurate and verifiable. The Ge, Lt, and Le constraints in pydantic's experimental pipeline API do apply validation twice on numeric types, while Gt correctly applies validation only once. This is clearly a logic bug in the implementation where the else clause is missing for three of the four comparison operators.

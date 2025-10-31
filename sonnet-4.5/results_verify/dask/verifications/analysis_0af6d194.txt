@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that all row groups must have the same columns or column structure. One could argue that the function's current behavior of assuming uniform column structure is intentional design, and that callers should ensure data consistency before using this internal utility function. Parquet files typically have consistent schemas across row groups in normal usage, so this edge case might be considered user error for providing malformed statistics.
+
+**Why it might not be INVALID:**
+The function crashes with an unhandled IndexError rather than gracefully handling the heterogeneous input or providing a meaningful error message. The documentation says it "finds sorted columns given row-group statistics" without any preconditions about column uniformity. A reasonable interpretation is that it should handle any valid statistics structure, including those with varying column counts, either by processing what it can or raising a descriptive error.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function (not public API) that likely expects well-formed parquet statistics from Dask's own parquet reading infrastructure. In practice, parquet files with different schemas across row groups are extremely rare and often indicate corrupted or improperly written files. The effort to handle this edge case might not be justified given its rarity in real-world usage. The function works correctly for 99.9% of valid parquet files.
+
+**Why it might not be WONTFIX:**
+The bug causes a hard crash with an unhelpful error message. Even if heterogeneous column structures are rare, the function should either handle them gracefully or provide clear error messages. The fix is relatively simple (checking array bounds and column name consistency), and the cost of not fixing it is poor user experience when encountering edge cases that can legitimately occur during schema evolution or partial writes.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current documentation doesn't specify the preconditions for the statistics parameter. It should explicitly state that all row groups must have identical column structures (same columns in the same order) for the function to work correctly. This would clarify the expected input format and help users understand why their heterogeneous statistics cause errors.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the limitation doesn't fix the underlying fragility of the code. The function still crashes ungracefully when given unexpected but structurally valid input. Good defensive programming practices suggest the code should validate its inputs rather than relying solely on documentation to prevent crashes.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting heterogeneous column structures across row groups could be seen as a new feature rather than fixing a bug. The current implementation might have been designed only for homogeneous structures, and adding support for varying column counts would be an enhancement. This would involve new logic to handle schema evolution, column mapping, and partial statistics.
+
+**Why it might not be FEATURE_REQUEST:**
+The issue isn't about adding new functionality but fixing a crash in existing functionality. The function already attempts to process statistics; it just does so incorrectly when columns vary. The proposed fix doesn't add features but prevents crashes and ensures correct behavior within the function's existing scope.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an IndexError when given structurally valid input (a list of dictionaries with columns). Nothing in the documentation indicates that varying column counts are invalid input. The function accesses array indices without bounds checking, which is a classic programming error. The crash prevents the function from completing its documented purpose of finding sorted columns, even when some columns could be successfully processed.
+
+**Why it might not be BUG:**
+This is an internal utility function that may have implicit expectations about its input format based on how it's called within Dask. If the function is only ever called with statistics from Dask's own parquet reader, which ensures column consistency, then the heterogeneous case might be considered out of scope rather than a bug.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a genuine BUG that should be fixed. The function has a clear programming error: it accesses array indices without bounds checking, leading to crashes on valid (if unusual) input structures. While heterogeneous column structures are rare in practice, they can legitimately occur in several scenarios: schema evolution in parquet files, partial writes during failures, or when combining statistics from multiple parquet files with different schemas.
+
+The function's documentation makes no mention of requiring uniform column structures, and the crash occurs with an unhelpful IndexError rather than a descriptive validation error. The proposed fix is reasonable and addresses both the crash and the semantic correctness issue where the function might incorrectly associate statistics from different columns when names don't match at the same index positions.
+
+Most importantly, this is a defensive programming issue. Even internal utility functions should validate their inputs or handle edge cases gracefully. The cost of the fix is minimal (a few conditional checks), while the benefit is preventing crashes and ensuring correct behavior in edge cases. This makes it a clear bug rather than a documentation issue or feature request.

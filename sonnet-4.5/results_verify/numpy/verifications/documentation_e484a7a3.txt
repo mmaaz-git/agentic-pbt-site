@@ -1,0 +1,60 @@
+DOCUMENTATION ANALYSIS
+======================
+
+## Official Documentation for numpy.strings.slice
+
+The function signature is:
+```
+slice(a, start=None, stop=None, step=None, /)
+```
+
+### Key Documentation Points:
+
+1. **Special Case Explicitly Documented**:
+   The documentation states: "Like in the regular Python `slice` object, if only `start` is specified then it is interpreted as the `stop`."
+
+2. **Parameter Descriptions**:
+   - start: "None, an integer or an array of integers" - The start of the slice
+   - stop: "None, an integer or an array of integers" - The end of the slice
+   - step: "None, an integer or an array of integers" - The step for the slice
+
+3. **Examples in Documentation**:
+   - `np.strings.slice(a, 2)` returns `['he', 'wo']` - treating 2 as stop, not start
+   - `np.strings.slice(b, None, None, -1)` shows that None can be used for parameters
+
+## Analysis of Documentation vs. Bug Report
+
+### The Core Issue:
+
+The documentation describes a special case: "if only `start` is specified then it is interpreted as the `stop`."
+
+However, the implementation appears to check if `stop is None` rather than checking if stop was actually provided as an argument. This creates an ambiguity:
+
+1. When calling `slice(arr, 1)` - only start is specified, so 1 should be treated as stop ✓
+2. When calling `slice(arr, 1, None)` - BOTH start AND stop are specified, so this special case should NOT apply
+
+### Python Slicing Behavior:
+
+Regular Python slicing treats `None` as "no limit":
+- `s[1:None]` equals `s[1:]` equals "slice from 1 to end"
+- `s[None:2]` equals `s[:2]` equals "slice from start to 2"
+
+### Documentation Interpretation:
+
+The documentation says the function should behave "Like in the regular Python `slice` object". In Python:
+- `slice(1)` creates a slice object with stop=1
+- `slice(1, None)` creates a slice object with start=1, stop=None (meaning to end)
+
+These are fundamentally different behaviors, and Python's slice() correctly distinguishes them.
+
+### Conclusion:
+
+The documentation clearly states the function should behave like Python's slice object. Python's slice object DOES distinguish between:
+- Only providing one argument (treated as stop)
+- Providing two arguments where the second is None (treated as start=first, stop=end)
+
+The current numpy.strings.slice implementation violates this documented behavior by treating `slice(arr, 1, None)` the same as `slice(arr, 1)`, which is incorrect according to both:
+1. The stated goal of behaving "Like in the regular Python `slice` object"
+2. User expectations based on Python's standard slicing semantics
+
+The bug report correctly identifies this as a violation of the documented behavior.

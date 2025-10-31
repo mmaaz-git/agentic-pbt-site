@@ -1,0 +1,45 @@
+## Documentation Analysis
+
+### Django Documentation
+The Django documentation does not provide any public documentation for the `quote_etag` function. This function appears to be an internal utility function.
+
+### Function Docstring
+The only documentation available is the docstring in the code:
+```python
+"""
+If the provided string is already a quoted ETag, return it. Otherwise, wrap
+the string in quotes, making it a strong ETag.
+"""
+```
+
+This docstring clearly states that:
+1. If the input is already a quoted ETag, it should be returned unchanged
+2. Otherwise, it should be wrapped in quotes
+
+This implies idempotence: applying the function multiple times should produce the same result as applying it once.
+
+### RFC 9110 Specification
+According to RFC 9110 (HTTP Semantics), the ABNF grammar for ETags is:
+```
+entity-tag = [ weak ] opaque-tag
+weak = %s"W/"
+opaque-tag = DQUOTE *etagc DQUOTE
+etagc = %x21 / %x23-7E / obs-text
+```
+
+The key point is that `etagc` specifically excludes double quotes (%x22). This means:
+- Valid ETags cannot contain unescaped quote characters inside the quoted string
+- The pattern `[^"]*` in Django's ETAG_MATCH regex correctly implements this specification
+
+### Key Findings
+
+1. **The docstring promises idempotence**: "If the provided string is already a quoted ETag, return it" strongly implies that `quote_etag(quote_etag(x))` should equal `quote_etag(x)`.
+
+2. **RFC-compliant ETags cannot contain quotes**: The specification explicitly excludes quote characters from the content between the outer quotes.
+
+3. **The function violates its documented behavior**: For inputs containing quotes (like `'"'`), the function is not idempotent as promised.
+
+4. **The regex is correct**: The ETAG_MATCH pattern correctly implements RFC 9110 by expecting `[^"]*` (no quotes inside).
+
+### Conclusion
+The bug report correctly identifies a violation of the function's documented behavior. While the input `'"'` would never be a valid ETag according to RFC 9110, the function's docstring promises idempotence without qualifying that promise with input restrictions.

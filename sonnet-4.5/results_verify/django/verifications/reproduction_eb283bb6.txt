@@ -1,0 +1,45 @@
+## Bug Reproduction Results
+
+I successfully reproduced the bug described in the report. Here are the key findings:
+
+### Test Results
+
+1. **Basic Reproduction**: Confirmed the exact behavior described in the bug report:
+   - `Variable('42.')` creates a Variable object successfully
+   - After creation: `literal = 42.0` and `lookups = ('42', '')`
+   - Calling `resolve(ctx)` raises `VariableDoesNotExist: Failed lookup for key [42]`
+
+2. **Pattern Confirmation**: The issue affects all integer strings with trailing dots:
+   - '42.' fails (literal=42.0, lookups=('42', ''))
+   - '0.' fails (literal=0.0, lookups=('0', ''))
+   - '123.' fails (literal=123.0, lookups=('123', ''))
+
+3. **Working Cases for Comparison**:
+   - '42' works correctly (literal=42, lookups=None, resolves to 42)
+   - '42.0' works correctly (literal=42.0, lookups=None, resolves to 42.0)
+   - '.42' works correctly (literal=0.42, lookups=None, resolves to 0.42)
+   - '42e2' works correctly (literal=4200.0, lookups=None, resolves to 4200.0)
+
+### Traced Execution
+
+The detailed trace confirms the exact sequence described in the bug report:
+
+1. `float('42.')` succeeds and sets `self.literal = 42.0`
+2. The check `if var[-1] == "."` raises ValueError (with comment "# '2.' is invalid")
+3. The ValueError handler sets `self.lookups = ('42', '')`
+4. **Bug**: `self.literal` is NOT cleared, leaving both fields set
+
+### Impact
+
+The resolve() method checks `if self.lookups is not None` first (line 852), so:
+- It attempts to resolve through lookups instead of returning the literal
+- The lookup fails because the second component is an empty string
+- This causes a VariableDoesNotExist exception even though the Variable was created successfully
+
+### Verification of the Fix
+
+The proposed fix of adding `self.literal = None` in the ValueError handler would correctly ensure that only one of `literal` or `lookups` is set, maintaining the class invariant.
+
+### Conclusion
+
+The bug is real and reproducible. The issue is that the Variable class violates its own internal invariant by having both `literal` and `lookups` set simultaneously when processing numeric strings ending with a dot. This causes Variables that are successfully created to fail during resolution.

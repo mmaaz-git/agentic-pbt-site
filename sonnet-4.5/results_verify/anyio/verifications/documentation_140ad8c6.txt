@@ -1,0 +1,40 @@
+## Documentation Analysis
+
+### Function Status
+`_validate_socket` is a **private/internal function** (indicated by the leading underscore) in the anyio library. It's not part of the public API and is only used internally by public methods like:
+- `SocketStream.from_socket()`
+- `SocketListener.from_socket()`
+- `UDPSocket.from_socket()`
+- `ConnectedUDPSocket.from_socket()`
+- `UNIXSocketStream.from_socket()`
+- etc.
+
+### Public API Documentation
+The public methods that use `_validate_socket` have docstrings that specify:
+1. They accept "a socket object or file descriptor" as input
+2. For connected sockets: "The existing socket must already be connected"
+3. For listeners: No specific requirement about binding is mentioned in docstring
+4. For UDP sockets: "The existing socket must be bound to a local address"
+
+### What the Documentation Does NOT Specify
+1. **Error behavior for invalid file descriptors**: The documentation doesn't specify what happens when an invalid file descriptor is passed. It only says the function accepts "a socket object or file descriptor" but doesn't define behavior for invalid descriptors.
+
+2. **Specific exceptions to expect**: The docstrings don't specify what exceptions will be raised for various error conditions.
+
+3. **Error message content**: There's no documentation about what error messages users should expect.
+
+### Python Socket Documentation
+The Python `socket.socket(fileno=...)` constructor accepts a file descriptor parameter. When given an invalid file descriptor, it raises `OSError` with various error codes:
+- `errno.EBADF` (9): Bad file descriptor
+- `errno.ENOTSOCK` (88): Socket operation on non-socket
+
+### Analysis
+The lack of documentation about error behavior means:
+1. Users have no contractual expectation about specific error messages
+2. However, users reasonably expect error messages to be **accurate and helpful**
+3. The current implementation violates the principle of least surprise by giving misleading error messages
+
+### Key Finding
+While the documentation doesn't explicitly specify error message behavior, there's a strong implicit expectation that error messages should correctly describe the actual problem. Telling users "the socket must be connected" when the real issue is "bad file descriptor" is misleading regardless of documentation.
+
+The bug report's claim that this "violates the API contract" is slightly overstated since there's no explicit contract about error messages. However, the misleading nature of the error messages is a legitimate usability issue that affects debugging and developer experience.

@@ -1,0 +1,44 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug described in the report. The issue is in the `is_valid_tag` function in `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Debugger/DebugWriter.py`.
+
+### Current Implementation
+The function currently only checks for one specific pattern:
+```python
+def is_valid_tag(name):
+    """
+    Names like '.0' are used internally for arguments
+    to functions creating generator expressions,
+    however they are not identifiers.
+
+    See https://github.com/cython/cython/issues/5552
+    """
+    if isinstance(name, EncodedString):
+        if name.startswith(".") and name[1:].isdecimal():
+            return False
+    return True
+```
+
+### Test Results
+Running the Hypothesis test found failures immediately, with the empty string ('') being the first failing case.
+
+When testing the specific examples from the bug report:
+- `is_valid_tag('0')` returns `True`, but XML rejects it with `ValueError: Invalid tag name '0'`
+- `is_valid_tag('123')` returns `True`, but XML rejects it
+- `is_valid_tag('-invalid')` returns `True`, but XML rejects it
+- `is_valid_tag('with space')` returns `True`, but XML rejects it
+- `is_valid_tag('with:colon')` returns `True`, but XML rejects it
+- `is_valid_tag('.')` returns `True`, but XML rejects it
+- `is_valid_tag('')` returns `True`, but XML rejects it
+
+### The Issue
+The function is used in `CythonDebugWriter` methods (`start()`, `end()`, and `add_entry()`) to filter out invalid tag names before passing them to the XML TreeBuilder. However, it only filters out one very specific pattern (EncodedStrings like ".0", ".1", etc.) while allowing through many other invalid XML tag names.
+
+When these invalid names are passed to `self.tb.start(name, attrs or {})`, the XML TreeBuilder raises a `ValueError` with the message "Invalid tag name".
+
+### Impact
+This causes crashes when CythonDebugWriter tries to write debug information with tag names that pass `is_valid_tag` but are not valid XML element names. XML element names must:
+- Not be empty
+- Start with a letter or underscore (not digits, hyphens, or other characters)
+- Not contain spaces
+- Follow other XML naming rules

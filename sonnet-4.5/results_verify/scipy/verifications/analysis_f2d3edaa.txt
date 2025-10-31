@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior could be considered technically correct according to the MINPACK implementation that scipy wraps. The hybr method's convergence criteria explicitly includes "delta <= xtol*xnorm" as a valid convergence condition, meaning it can declare success when step sizes are small even if residuals are large. The documentation doesn't explicitly promise that success=True means residuals will be small, only that "the algorithm exited successfully" according to its internal criteria.
+
+**Why it might not be INVALID:**
+The documentation clearly states the function's purpose is to "Find a root of a vector function," and a root mathematically means f(x) = 0. When success=True with residuals of magnitude 1.0, this violates the fundamental purpose of the function. Users reasonably expect that success=True means a root was actually found, not just that the algorithm gave up due to small step sizes.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior only occurs in edge cases with singular or near-singular Jacobians at specific starting points. Most users won't encounter this issue with reasonable starting points. The workaround is simple - users can either check residuals manually or use a different starting point. The issue stems from the underlying MINPACK library that scipy wraps, so fixing it would require modifying decades-old Fortran code or breaking compatibility.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it's a fundamental correctness issue where the function reports false success. The bug could lead to serious errors in scientific computations where users trust the success flag. The fact that setting tol=1e-10 correctly returns success=False shows the issue is fixable within the current framework.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never explicitly states that success=True guarantees small residuals. It only says the algorithm "exited successfully" which could mean it terminated according to its convergence criteria, even if those criteria are step-based rather than residual-based. Adding a warning about checking residuals when using hybr/lm methods would clarify the behavior without changing code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The phrase "Find a root of a vector function" has a clear mathematical meaning - finding x where f(x) = 0. No reasonable interpretation of "finding a root" includes returning success with residuals of magnitude 1.0. The documentation's examples all show cases where actual roots are found. This is a code bug, not a documentation ambiguity.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding a residual check to the convergence criteria would be a new feature that enhances the robustness of the hybr/lm methods. The current implementation faithfully follows MINPACK's original behavior, and adding residual checking would be an enhancement beyond the original specification. Users who want residual-based convergence can already use other methods like broyden1.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality - it's asking for the existing functionality to work correctly. The function already claims to "find a root," which has a specific mathematical meaning. Making it actually find roots rather than falsely reporting success is a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function explicitly claims to "Find a root of a vector function" but returns success=True when no root has been found (residuals ≈ 1.0). This is objectively incorrect behavior that violates the function's documented purpose. The fact that other methods (broyden1) and even the same method with explicit tolerance (tol=1e-10) work correctly shows this is a fixable defect. Users relying on the success flag for critical calculations could get completely wrong results.
+
+**Why it might not be BUG:**
+The behavior matches the underlying MINPACK implementation that scipy wraps. The convergence criteria are working as designed in the original Fortran code from 1980. The issue only occurs with pathological starting points that lead to singular Jacobians, which could be considered user error. The documentation doesn't explicitly guarantee residual-based convergence.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though one that stems from the underlying MINPACK implementation rather than scipy's wrapper. The core issue is that scipy.optimize.root with hybr/lm methods can report success=True when it has objectively failed to find a root, with residuals remaining at their initial magnitude of 1.0.
+
+The mathematical definition of "finding a root" is unambiguous - it means finding x such that f(x) ≈ 0. When a function claims to find roots and reports success while f(x) ≈ 1.0, this is incorrect behavior regardless of implementation details. The fact that users must manually check residuals to verify actual convergence undermines the purpose of having a success flag.
+
+While the bug only manifests with certain starting points that lead to singular Jacobians, this is not an unreasonable scenario. The starting point [0, 1.4e-11, 0] is not pathological - it's close to the origin with one near-zero component. Users cannot be expected to know in advance which starting points will trigger this false convergence. The potential for silently returning incorrect results in scientific computations makes this a serious issue that should be addressed rather than documented away.

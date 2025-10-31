@@ -1,0 +1,44 @@
+## Bug Reproduction Results
+
+### Test Case 1: Original Bug Report Example
+Input:
+- arr = np.array([''], dtype=object)
+- hash_key = '000000000000000\x80' (16 characters with \x80 non-ASCII character)
+
+Result:
+- hash_key length: 16 characters (as expected)
+- hash_key encoded length: 17 bytes (due to UTF-8 encoding of \x80 as \xc2\x80)
+- Error: ValueError: key should be a 16-byte string encoded, got b'000000000000000\xc2\x80' (len 17)
+- **Bug confirmed**: The function crashes exactly as described in the report
+
+### Test Case 2: Valid ASCII Key
+Input:
+- arr = np.array([''], dtype=object)
+- hash_key = '0123456789123456' (16 ASCII characters)
+
+Result:
+- hash_key length: 16 characters
+- hash_key encoded length: 16 bytes
+- Successfully returns: [1760245841805064774]
+- Works correctly because ASCII characters are 1 byte each
+
+### Test Case 3: Another Multi-byte Character
+Input:
+- arr = np.array([''], dtype=object)
+- hash_key = '000000000000000ñ' (16 characters with ñ)
+
+Result:
+- hash_key length: 16 characters
+- hash_key encoded length: 17 bytes (ñ encodes as \xc3\xb1 in UTF-8)
+- Error: ValueError: key should be a 16-byte string encoded, got b'000000000000000\xc3\xb1' (len 17)
+- Confirms the issue occurs with any multi-byte UTF-8 character
+
+### Hypothesis Test Results
+The provided hypothesis test would fail when hash_key1 contains multi-byte characters:
+- The test expects different hash keys to produce different hashes
+- When hash_key1='000000000000000\x80', it crashes before comparison
+- When hash_key2='000000000000000x' (modified last char), it works fine
+- This demonstrates the inconsistency in handling 16-character strings
+
+### Summary
+The bug is 100% reproducible. Any 16-character string containing non-ASCII characters that require more than 1 byte in UTF-8 encoding will cause hash_array() to crash with a ValueError. The error message from the C layer clearly states it expects a 16-byte encoded string, but the Python API accepts any 16-character string without validation.

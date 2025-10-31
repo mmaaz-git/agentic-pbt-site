@@ -1,0 +1,54 @@
+## Documentation Findings
+
+### Starlette StaticFiles Documentation
+
+The Starlette StaticFiles class provides functionality for serving static files with HTTP cache validation support. The `is_not_modified` method is documented as:
+
+```
+Given the request and response headers, return `True` if an HTTP
+"Not Modified" response could be returned instead.
+```
+
+The implementation handles ETag-based cache validation by:
+1. Extracting the `If-None-Match` header from the request
+2. Extracting the `ETag` header from the response
+3. Checking if the response ETag matches any of the ETags in If-None-Match
+4. Returning True if there's a match (indicating content hasn't changed)
+
+There has been recent work (PR #2334) to properly handle weak ETags (W/"...") in addition to strong ETags ("..."), addressing previous issues where the ETag format didn't comply with HTTP standards.
+
+### RFC 7232 ETag Specification
+
+According to RFC 7232 (HTTP/1.1 Conditional Requests):
+
+1. **ETag Format**: ETags are opaque quoted strings, formatted as:
+   - Strong ETag: `"opaque-tag"`
+   - Weak ETag: `W/"opaque-tag"`
+
+2. **Opaque Tag Content**: The opaque-tag can contain any ASCII characters except for the quote character itself. This means ETags CAN legitimately contain characters like 'W', '/', commas, and other special characters within the quotes.
+
+3. **If-None-Match Header**: Can contain multiple ETags separated by commas:
+   - Example: `"etag1", W/"etag2", "etag3"`
+
+4. **ETag Comparison**:
+   - Strong comparison: ETags must match exactly and neither can be weak
+   - Weak comparison: ETags match if opaque-tags are identical (W/ prefix ignored)
+
+### Key Documentation Points Relevant to the Bug Report
+
+1. **ETags are quoted strings**: The quotes are part of the ETag format and protect the content from parsing operations.
+
+2. **Commas are list separators**: In If-None-Match, commas separate multiple ETags, but commas CAN also appear within an ETag's opaque-tag value.
+
+3. **The W/ prefix**: Only appears at the beginning of weak ETags, outside the quotes. It's not part of the opaque-tag itself.
+
+4. **strip() behavior**: Python's `str.strip(" W/")` removes any of the characters ' ', 'W', '/' from BOTH ends of a string, but only if they're at the string boundaries. With quoted ETags like `"abcW"`, the quote character protects the inner content.
+
+### Documentation Gaps
+
+The Starlette documentation doesn't explicitly state:
+- How ETags containing commas are handled
+- Whether the implementation properly parses quoted strings before splitting on commas
+- The specific algorithm used for parsing If-None-Match headers
+
+The current implementation appears to have a parsing issue with ETags containing commas, which is a legitimate bug, but NOT the bug claimed in the report about trailing W or / characters.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation explicitly states that nested MultiListeners will have their listeners "moved" into the parent. The word "moved" could be interpreted as implying the source is emptied, similar to how std::move works in C++. The behavior might be intentional to prevent multiple MultiListeners from managing the same underlying listeners, which could lead to resource management issues or double-close problems.
+
+**Why it might not be INVALID:**
+The documentation doesn't explicitly state that the input MultiListener will be destructively modified. In Python, most operations that take objects as arguments don't mutate those objects unless very clearly documented (like list.sort() vs sorted()). The term "moved" is ambiguous and could just mean the listeners are now managed by the new MultiListener without implying mutation of the source.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior has likely been in the codebase for a long time and changing it could break existing code that relies on this mutation behavior. Some users might be intentionally using this as a way to transfer ownership of listeners. The mutation happens only with nested MultiListeners, which is a relatively rare use case that most users wouldn't encounter.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it violates the principle of least surprise and makes MultiListener objects unsafe to reuse after passing them to another MultiListener. The fix is simple (remove one line) and wouldn't break the core functionality. The current behavior is counterintuitive and could lead to hard-to-debug issues in production code.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current documentation says listeners are "moved" but doesn't explicitly warn about the destructive mutation. If this behavior is intentional, the documentation should clearly state: "Warning: When a MultiListener is passed to another MultiListener, its listeners list will be cleared." The code works as designed, but the documentation doesn't adequately explain the side effects.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about documentation clarity - the behavior itself is problematic. Even if we document it better, the destructive mutation is still unexpected in Python and violates common programming principles. Most Python developers wouldn't expect a constructor to mutate its arguments, regardless of documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user might be requesting a new feature where MultiListeners can be safely nested without mutation. This could be implemented as a new parameter like `MultiListener(listeners=[nested], copy=True)` to allow both behaviors. The current behavior might be by design for performance reasons, and the user wants an alternative non-mutating version.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality - they're reporting that the existing functionality has an unexpected and problematic side effect. The expected behavior (non-mutating construction) is the standard in Python, not a new feature. The fix doesn't add complexity or new capabilities, it just removes a surprising mutation.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of Python conventions where constructors shouldn't mutate their arguments unless absolutely necessary and clearly documented. The mutation makes MultiListener objects unexpectedly stateful and unsafe to reuse. The behavior contradicts the principle of least surprise and can lead to subtle bugs. The documentation doesn't clearly warn about this destructive behavior. The proposed fix is simple and maintains all the intended functionality without the problematic side effect.
+
+**Why it might not be BUG:**
+The documentation does use the word "moved" which could imply the source is modified. The behavior might be intentional to prevent complex ownership scenarios with nested listeners. The code includes a deliberate `del` statement with a type-ignore comment, suggesting the developers knew what they were doing. The behavior has likely existed for a while without many complaints.
+
+## Overall Consideration
+
+Looking at the evidence, this appears to be a genuine bug that violates Python programming conventions. The destructive mutation of constructor arguments is highly unusual in Python and goes against the principle of least surprise. While the documentation mentions "moving" listeners, this doesn't clearly communicate that the source MultiListener will be rendered unusable.
+
+The key factors that make this a bug rather than intentional behavior are: (1) Python convention strongly favors non-mutating operations unless explicitly documented as mutating, (2) The mutation makes MultiListener objects unsafe to reuse in unexpected ways, (3) The fix is trivial and doesn't break the core flattening functionality - the listeners are still successfully combined without needing to clear the source.
+
+The fact that the code has a type-ignore comment suggests the developers had to work around type checking to implement this mutation, which is often a code smell. The proper Python pattern would be to copy the references to the listeners without mutating the source object. Since the proposed fix maintains all functionality while removing the surprising side effect, this should be classified as a BUG rather than a documentation issue or intentional design choice.

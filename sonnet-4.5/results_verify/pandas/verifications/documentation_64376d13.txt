@@ -1,0 +1,68 @@
+## Documentation Analysis for import_optional_dependency
+
+Based on examining the source code and documentation, here's what I found:
+
+### Function Signature and Documentation
+The function `import_optional_dependency` is defined in pandas/compat/_optional.py with the following docstring:
+
+```
+Import an optional dependency.
+
+By default, if a dependency is missing an ImportError with a nice
+message will be raised. If a dependency is present, but too old,
+we raise.
+
+Parameters
+----------
+name : str
+    The module name.
+extra : str
+    Additional text to include in the ImportError message.
+errors : str {'raise', 'warn', 'ignore'}
+    What to do when a dependency is not found or its version is too old.
+
+    * raise : Raise an ImportError
+    * warn : Only applicable when a module's version is to old.
+      Warns that the version is too old and returns None
+    * ignore: If the module is not installed, return None, otherwise,
+      return the module, even if the version is too old.
+      It's expected that users validate the version locally when
+      using ``errors="ignore"`` (see. ``io/html.py``)
+min_version : str, default None
+    Specify a minimum version that is different from the global pandas
+    minimum version required.
+Returns
+-------
+maybe_module : Optional[ModuleType]
+    The imported module, when found and the version is correct.
+    None is returned when the package is not found and `errors`
+    is False, or when the package's version is too old and `errors`
+    is ``'warn'`` or ``'ignore'``.
+```
+
+### Key Documentation Points
+
+1. **For `errors='ignore'` behavior**:
+   - Documentation states: "If the module is not installed, return None, otherwise, return the module, even if the version is too old."
+   - This clearly specifies that when `errors='ignore'`, the function should return the module even if version checking fails or the version is too old.
+   - It explicitly notes that users are expected to validate versions locally when using `errors='ignore'`.
+
+2. **For `errors='warn'` behavior**:
+   - Documentation states: "Only applicable when a module's version is to old. Warns that the version is too old and returns None"
+   - This indicates that `errors='warn'` should warn and return None, not raise an exception.
+
+3. **The get_version helper function**:
+   - Looking at line 74-82, the `get_version` function raises an `ImportError` with message "Can't determine version for {module.__name__}" if it cannot find a `__version__` attribute.
+   - This is an internal helper function not exposed in the public API.
+
+### Documentation vs Implementation Issue
+
+The bug report claims that when `errors='ignore'` or `errors='warn'` is used with a module that doesn't have a determinable version (like 'sys'), the function raises an ImportError instead of handling it gracefully as documented.
+
+Looking at the implementation (lines 149-150), when a minimum_version is specified, the code calls `get_version(module_to_get)` directly without any exception handling. The `get_version` function can raise an ImportError at line 78 if the module doesn't have a `__version__` attribute.
+
+The documentation clearly states that:
+- With `errors='ignore'`: should return the module even if version is too old (or in this case, undeterminable)
+- With `errors='warn'`: should warn and return None, not raise
+
+The current implementation doesn't handle the case where `get_version` raises an ImportError before the `errors` parameter can be evaluated. This appears to be a violation of the documented contract.

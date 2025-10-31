@@ -1,0 +1,49 @@
+## Documentation Analysis
+
+### VariableCoder Documentation (xarray/coding/common.py)
+
+The VariableCoder base class documentation explicitly states (lines 29-30):
+
+"Subclasses should implement encode() and decode(), which should satisfy
+the identity ``coder.decode(coder.encode(variable)) == variable``."
+
+This is a clear contract that ALL coders extending VariableCoder must maintain the round-trip property. The CFDatetimeCoder is a subclass of VariableCoder and therefore inherits this requirement.
+
+### CFDatetimeCoder Implementation
+
+The implementation shows that the code is aware of potential precision loss:
+
+1. Lines 1093-1098: The code detects when precision will be lost and emits a warning:
+   "Times can't be serialized faithfully to int64 with requested units 'days since 2000-01-01'.
+   Resolution of 'microseconds' needed. Serializing times to floating point instead."
+
+2. Lines 1099-1109: When dtype is integer and allow_units_modification=True, it automatically adjusts units to preserve precision.
+
+3. The code has mechanisms to:
+   - Detect needed precision (lines 1086-1087)
+   - Warn about precision loss
+   - Optionally modify units to preserve precision
+
+### Xarray User Documentation
+
+The xarray documentation:
+- States that it "automatically decodes datetime and timedelta arrays using CF conventions"
+- Does not explicitly guarantee perfect round-trip precision
+- Mentions limitations with datetime64[ns] range (1678-2262)
+- Does not warn users about potential precision loss when using coarse units
+
+### CF Conventions
+
+The CF conventions define how time should be encoded but do not appear to mandate perfect round-trip precision. They focus on the format and interpretation of time units and calendars.
+
+### Key Finding
+
+The critical issue is that CFDatetimeCoder violates the explicitly documented contract in its parent class VariableCoder. The documentation clearly states that encode/decode must satisfy the round-trip identity, but the implementation knowingly violates this when it:
+1. Emits a warning about precision loss
+2. Continues with lossy encoding anyway
+
+The warning acknowledges the violation but does not prevent it. Users relying on the documented contract would expect either:
+1. The round-trip to work correctly (by auto-adjusting units or using appropriate dtype)
+2. An error to be raised if the round-trip cannot be guaranteed
+
+Instead, the code proceeds with silent data corruption after a warning.

@@ -1,0 +1,82 @@
+BUG REPORT ANALYSIS AND CATEGORIZATION
+=======================================
+
+CATEGORIZATION OPTIONS:
+
+1. BUG:
+   PROS:
+   - The behavior violates the principle of least surprise - users expect round-trip operations to preserve data structure
+   - Duplicate indices create a malformed DataFrame that could lead to incorrect results
+   - The bug report provides a valid use case where data integrity is compromised
+   - Silent data corruption (duplicate indices) is a serious issue
+
+   CONS:
+   - This behavior is consistent across all Dask file formats (Parquet, CSV, ORC)
+   - Existing tests explicitly avoid checking indices with `check_index=False`
+   - The code appears to be working as designed (each partition gets local index)
+
+2. INVALID:
+   PROS:
+   - The behavior is consistent across all file formats, suggesting it's intentional
+   - When you explicitly say "don't write the index", it's reasonable that you lose index information
+   - Tests in the codebase specifically avoid checking indices in this scenario
+
+   CONS:
+   - No documentation states this is expected behavior
+   - Creates duplicate indices which is fundamentally problematic for DataFrames
+   - Users have a reasonable expectation that indices should be unique
+
+3. WONTFIX:
+   PROS:
+   - The behavior has existed across multiple file formats and versions
+   - Changing it might break existing code that depends on this behavior
+   - Workaround exists (use write_index=True or reset_index after loading)
+
+   CONS:
+   - This is not an obscure edge case - it's a common operation
+   - Silent data corruption is too serious to ignore
+   - The fix is relatively simple
+
+4. FEATURE_REQUEST:
+   PROS:
+   - Could be viewed as requesting new functionality to handle index recreation
+   - The current behavior might be considered "working as designed"
+
+   CONS:
+   - This is about fixing incorrect behavior, not adding new features
+   - Round-trip integrity is a fundamental expectation, not a feature
+
+5. DOCUMENTATION_FIX:
+   PROS:
+   - The code might be working as intended but poorly documented
+   - Documentation could warn users about this behavior
+   - Existing tests suggest developers are aware of the behavior
+
+   CONS:
+   - Duplicate indices are objectively incorrect for DataFrames
+   - Documentation alone won't fix the data integrity issue
+   - Users shouldn't need warnings for basic round-trip operations
+
+DETAILED ANALYSIS:
+
+The core issue is that when writing a multi-partition DataFrame without index (`write_index=False`), each partition gets a local RangeIndex starting from 0. Upon reading, these local indices are preserved, resulting in duplicate index values across partitions.
+
+Key considerations:
+1. This violates DataFrame semantics where indices should be unique (or at least meaningful)
+2. The behavior is consistent across all Dask file formats (not ORC-specific)
+3. Existing tests deliberately avoid checking indices in this scenario
+4. No documentation specifies this as expected behavior
+5. The proposed fix (resetting index on read) would create correct behavior
+
+While the behavior appears intentional (consistent across formats, tests avoid checking it), it creates objectively incorrect DataFrames with duplicate indices. This is not merely a documentation issue or missing feature - it's a correctness problem that can lead to silent data corruption and incorrect downstream operations.
+
+FINAL ASSESSMENT:
+
+This should be categorized as a BUG because:
+1. It produces DataFrames with duplicate indices, which violates basic DataFrame semantics
+2. It causes silent data corruption that could lead to incorrect analysis results
+3. Users have a reasonable expectation that round-trip operations preserve data integrity
+4. The lack of documentation doesn't excuse incorrect behavior
+5. Even if consistent across formats, consistently wrong is still wrong
+
+The fact that tests use `check_index=False` suggests awareness of the issue but doesn't justify it. The behavior should either be fixed or, at minimum, prominently documented with warnings.

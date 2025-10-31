@@ -1,0 +1,67 @@
+REPRODUCTION RESULTS FOR validate_integer BUG
+
+## Test Results:
+
+### Direct Function Tests:
+
+1. **validate_integer("test", -1.0, 0)**:
+   - Expected: ValueError (since -1 < 0)
+   - Actual: Returns -1 without raising an exception
+   - **BUG CONFIRMED**
+
+2. **validate_integer("chunksize", -1.0, 1)**:
+   - Expected: ValueError (since -1 < 1)
+   - Actual: Returns -1 without raising an exception
+   - **BUG CONFIRMED**
+
+3. **validate_integer("test", 5.0, 1)**:
+   - Expected: Returns 5 (since 5 >= 1)
+   - Actual: Returns 5
+   - Works correctly
+
+4. **validate_integer("test", -1, 0)** (integer input):
+   - Expected: ValueError (since -1 < 0)
+   - Actual: ValueError raised with message "'test' must be an integer >=0"
+   - Works correctly for integer inputs
+
+5. **validate_integer("test", 1.5, 0)** (non-lossless float):
+   - Expected: ValueError
+   - Actual: ValueError raised with message "'test' must be an integer >=0"
+   - Works correctly
+
+### Real-World Impact Test:
+
+**pd.read_csv(io.StringIO(csv_data), chunksize=-1.0)**:
+- Expected: Should raise ValueError since chunksize must be >= 1
+- Actual: Succeeds and creates a reader object
+- The reader even successfully reads chunks (though with shape (0, 3) due to negative chunksize)
+- **BUG CONFIRMED IN REAL USAGE**
+
+### Property-Based Test:
+
+The Hypothesis test failed as expected, finding the counterexample val=-1.0, min_val=0, confirming that the function does not raise a ValueError when a float value that can be losslessly converted to an integer is below the minimum value.
+
+## Root Cause Analysis:
+
+Looking at the code (lines 549-554):
+```python
+if is_float(val):
+    if int(val) != val:
+        raise ValueError(msg)
+    val = int(val)
+elif not (is_integer(val) and val >= min_val):
+    raise ValueError(msg)
+```
+
+The bug is clear: When `val` is a float that can be losslessly converted to int (like -1.0):
+1. The code enters the `if is_float(val)` branch
+2. It checks if int(val) != val (which is False for -1.0)
+3. It converts val to int
+4. **IT NEVER CHECKS if val >= min_val in this branch**
+5. The `elif` branch that contains the min_val check is skipped
+
+For integer inputs, the code enters the `elif` branch and correctly checks both conditions.
+
+## Conclusion:
+
+The bug report is accurate. The function fails to validate the minimum value constraint for float inputs that can be losslessly converted to integers, violating the documented contract that states "val < min_val will result in a ValueError".

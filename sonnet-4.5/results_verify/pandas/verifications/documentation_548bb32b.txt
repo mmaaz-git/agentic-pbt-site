@@ -1,0 +1,39 @@
+DOCUMENTATION ANALYSIS
+
+1. PANDAS DOCUMENTATION ON JSON SERIALIZATION/DESERIALIZATION:
+
+The pandas documentation for `to_json()` and `read_json()` does NOT specify:
+- How integers outside the int64 range are handled
+- Any warnings or errors that might occur with large integers
+- Any guarantees about round-trip serialization/deserialization
+
+The documentation mentions:
+- NaNs and None convert to null
+- Datetime handling
+- Float precision controls (double_precision parameter)
+- The precise_float parameter for higher precision float parsing
+- But NO specific documentation about integer overflow or int64 limits
+
+2. UJSON TESTING:
+
+The pandas test suite (test_ujson.py) contains EXPLICIT tests showing that ujson INTENTIONALLY raises ValueError for integers outside int64 range:
+
+- test_dumps_ints_larger_than_maxsize (line 571): Tests that 2^64 and -(2^63)-1 raise ValueError
+- test_decode_too_extreme_numbers (line 999): Tests that decoding these values raises "Value is too big" or "Value is too small"
+- test_decode_array_with_big_int (line 1014): Tests that arrays with big integers raise errors
+
+These tests confirm that ujson's behavior is INTENTIONAL and EXPECTED.
+
+3. JSON SPECIFICATION (RFC 8259):
+
+The JSON specification (RFC 8259 Section 6) states:
+- "An implementation may set limits on the range and precision of numbers accepted"
+- Recommends IEEE 754 binary64 (double precision) for good interoperability
+- For integers in range -(2^53)+1 to (2^53)-1, implementations should agree exactly
+- Larger numbers "may indicate potential interoperability problems"
+
+The specification explicitly ALLOWS implementations to set numeric limits.
+
+4. SUMMARY:
+
+The pandas documentation does not promise round-trip capability for integers outside int64 range. The ujson library (used by pandas) intentionally rejects such values as shown by its own test suite. The JSON specification explicitly allows implementations to set numeric limits. The behavior observed in the bug report is consistent with documented test cases in pandas' own test suite.

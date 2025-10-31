@@ -1,0 +1,61 @@
+Bug Report Triage Analysis
+===========================
+
+## INVALID - Why it might be invalid
+- Could argue that returning None is a valid Python pattern for "no work done"
+- The base class only raises NotImplementedError, doesn't enforce the return type
+However: The documentation clearly states the return value must be "the number of email messages sent"
+Verdict: NOT INVALID - The documentation is explicit about return type
+
+## WONTFIX - Why it might be wontfix
+- Only affects empty lists, which might be considered an edge case
+- Developers could work around it by checking for None
+- The bug has existed for a long time without major issues reported
+However: This violates the Liskov Substitution Principle - code that works with other backends fails here
+Verdict: NOT WONTFIX - This is a contract violation that breaks polymorphism
+
+## DOCUMENTATION_FIX - Why it might be a documentation fix
+- Could update docs to say "returns number of messages sent or None if empty"
+- Could document that console backend has different behavior
+However: All other backends correctly return an integer, making console the outlier
+Verdict: NOT DOCUMENTATION_FIX - The code is wrong, not the documentation
+
+## FEATURE_REQUEST - Why it might be a feature request
+- Could be seen as requesting new behavior (returning 0 instead of None)
+- Might be considered an enhancement rather than a bug
+However: This is fixing broken behavior to match documented contract, not adding new functionality
+Verdict: NOT FEATURE_REQUEST - This is fixing existing broken behavior
+
+## BUG - Why it IS a bug
+1. Clear Contract Violation:
+   - BaseEmailBackend documentation states: "return the number of email messages sent"
+   - An empty list means 0 messages sent, not None messages sent
+   - The type should be int, not NoneType
+
+2. Inconsistency Across Backends:
+   - SMTP backend: returns 0 for empty list
+   - Dummy backend: returns 0 for empty list
+   - Locmem backend: returns 0 for empty list
+   - Console backend: returns None (INCONSISTENT)
+   - Filebased backend: returns None (inherits bug from console)
+
+3. Breaks Liskov Substitution Principle:
+   - Code written for email backends expects integer return
+   - Example: `count = backend.send_messages([])` followed by `total += count` will fail
+   - Backend swapping (a core Django feature) breaks with console/filebased
+
+4. Simple Fix Available:
+   - Change `return` to `return 0` on line 31 of console.py
+   - This matches the pattern used by SMTP backend
+
+5. Real-World Impact:
+   - Any code that processes the return value will fail with TypeError
+   - Monitoring/logging code that tracks sent emails will break
+   - Test code using console backend behaves differently than production (SMTP)
+
+## Final Assessment
+
+This is clearly a BUG that should be fixed. The console backend violates the documented
+contract of the BaseEmailBackend class by returning None instead of 0 when given an
+empty list of messages. This creates inconsistent behavior across Django's email backends
+and can cause runtime errors in code that expects an integer return value.

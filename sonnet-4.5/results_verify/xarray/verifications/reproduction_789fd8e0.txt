@@ -1,0 +1,43 @@
+REPRODUCTION ANALYSIS
+=====================
+
+BUG CONFIRMATION
+----------------
+The bug report is accurate and reproducible. The PandasIndex.roll method crashes with a ZeroDivisionError when called on an empty index.
+
+REPRODUCTION STEPS
+------------------
+1. Hypothesis Test Result:
+   - Ran the provided property-based test with Hypothesis
+   - Test FAILED with ZeroDivisionError on first example (shift=0)
+   - Error occurs for ANY shift value when the index is empty
+   - Traceback confirms line 914 in indexes.py: shift = shifts[self.dim] % self.index.shape[0]
+
+2. Manual Reproduction:
+   - Created empty pandas Index: Index([], dtype='object')
+   - Wrapped in PandasIndex with dimension 'x'
+   - Called roll({'x': 1})
+   - Result: ZeroDivisionError: integer modulo by zero
+   - Exact same error and line number as reported
+
+ROOT CAUSE
+----------
+The issue is in line 914 of xarray/core/indexes.py:
+```python
+shift = shifts[self.dim] % self.index.shape[0]
+```
+
+When the index is empty, self.index.shape[0] is 0, causing division by zero in the modulo operation.
+
+EXPECTED BEHAVIOR
+-----------------
+Based on testing similar operations in related libraries:
+- pandas Series.shift() on empty Series: Returns empty Series (no error)
+- numpy.roll() on empty array: Returns empty array (no error)
+- pandas DataFrame.rolling() on empty DataFrame: Returns empty DataFrame (no error)
+
+All these operations handle empty inputs gracefully by returning empty results.
+
+IMPACT
+------
+This bug causes a crash instead of graceful handling of a valid edge case. Empty indexes can legitimately occur in data processing pipelines after filtering operations or when working with subsets. The crash prevents xarray from working correctly in these scenarios.

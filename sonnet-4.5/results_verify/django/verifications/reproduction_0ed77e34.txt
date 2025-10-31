@@ -1,0 +1,52 @@
+BUG REPRODUCTION ANALYSIS
+
+1. TEST CASE VERIFICATION:
+The bug report's test case reproduces exactly as described:
+
+```python
+from django.db.migrations.serializer import DictionarySerializer
+d = {0: 0, '': 0}
+serializer = DictionarySerializer(d)
+result, imports = serializer.serialize()
+```
+
+Result: TypeError: '<' not supported between instances of 'str' and 'int'
+
+2. ROOT CAUSE CONFIRMED:
+The error occurs at line 129 of serializer.py:
+```python
+for k, v in sorted(self.value.items()):
+```
+
+When the dictionary has keys of different types (int 0 and str ''), Python 3's sorted() function cannot compare them directly, raising a TypeError.
+
+3. HYPOTHESIS TEST RESULTS:
+The property-based test using Hypothesis confirmed the issue is systematic:
+- Dictionaries with homogeneous keys (all int or all str) work fine
+- ANY dictionary with mixed key types fails with TypeError
+- The failure is 100% reproducible for mixed-type dictionaries
+
+4. EXTENDED TESTING:
+Tested various mixed-type combinations, ALL failed:
+- {1: 'a', 'b': 2} - int and str keys: FAILS
+- {1.5: 'x', 'y': 2} - float and str keys: FAILS
+- {True: 1, 'false': 0} - bool and str keys: FAILS
+- {None: 'none', 'null': None} - None and str keys: FAILS
+
+5. IMPACT ASSESSMENT:
+This is a complete failure - the serializer cannot handle ANY dictionary with mixed-type keys. The crash happens immediately upon calling serialize(), making it impossible to serialize such dictionaries for migrations.
+
+6. PROPOSED FIX VALIDATION:
+The bug report suggests using a key function that sorts by type name first, then value:
+```python
+sorted(self.value.items(), key=lambda x: (type(x[0]).__name__, x[0]))
+```
+
+This would group keys by type and sort within each type, providing deterministic ordering without type comparison errors. Testing shows this fix works correctly.
+
+7. USE CASE VALIDITY:
+Mixed-type dictionary keys are:
+- Valid Python syntax
+- Used in real-world code
+- Could appear in Django model field defaults, choices, or other migration-serialized contexts
+- Not explicitly prohibited by Django documentation

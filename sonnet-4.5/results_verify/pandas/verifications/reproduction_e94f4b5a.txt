@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Successful Reproduction
+I have successfully reproduced the bug described in the report using both the simple test case and the property-based test.
+
+### Simple Test Case Results
+Running the provided simple test case for `freq = 'Y-JAN'`:
+- `is_superperiod('Y-JAN', 'Y-JAN')` returns `True`
+- `is_subperiod('Y-JAN', 'Y-JAN')` returns `False`
+- This violates the expected behavior that when comparing a frequency to itself, both functions should return the same value.
+
+### Property-Based Test Results
+The property-based test with Hypothesis fails immediately, finding a counterexample with `source='Y', target='Y'`:
+- `is_superperiod('Y', 'Y')` returns `True`
+- `is_subperiod('Y', 'Y')` returns `False`
+
+### Extended Testing
+I tested all annual frequencies and found the bug affects:
+- All standard annual frequencies: Y, Y-JAN through Y-DEC (13 frequencies total)
+  - For all of these: `is_superperiod(freq, freq) = True` but `is_subperiod(freq, freq) = False`
+- However, YS, BY, and BYS return `False` for both functions (consistent but arguably incorrect)
+
+For non-annual frequencies tested (D, W, h, min):
+- These correctly return `True` for both functions when comparing to self
+
+Monthly (M) and Quarterly (Q, Q-JAN) frequencies:
+- These return `False` for both functions (consistent behavior)
+
+### Root Cause Analysis
+Looking at the source code:
+- `is_superperiod` has explicit logic at line 510-512 to handle annual-to-annual comparisons:
+  ```python
+  if _is_annual(source):
+      if _is_annual(target):
+          return get_rule_month(source) == get_rule_month(target)
+  ```
+- `is_subperiod` lacks this logic at line 455-460, falling through to a default check that returns `False`
+
+The bug is exactly as described in the report - `is_subperiod` is missing the check for when both source and target are annual frequencies with the same month anchor.

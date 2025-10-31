@@ -1,0 +1,31 @@
+## Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmation
+1. **The bug is real**: When `cap_length` receives a string longer than `max_len` containing non-ASCII characters, it crashes with `UnicodeEncodeError`.
+
+2. **Exact error**: `'ascii' codec can't encode character '\x80' in position 63: ordinal not in range(128)`
+   - This occurs on line 5707: `hash_prefix = hashlib.sha256(s.encode('ascii')).hexdigest()[:6]`
+
+3. **Test results**:
+   - The specific failing input from the bug report (`'000000000000000000000000000000000000000000000000000000000000000\x80'`) does indeed crash
+   - ASCII-only strings work fine regardless of length
+   - Unicode strings shorter than or equal to max_len work fine (they're returned unchanged)
+   - Unicode strings longer than max_len crash when trying to encode them as ASCII for hashing
+
+### Technical Details
+The function works correctly in these cases:
+- ASCII strings of any length (e.g., 100 'a's gets properly truncated with hash prefix)
+- Unicode strings that are <= max_len (e.g., "hello世界" is returned unchanged)
+- Unicode strings exactly at max_len (e.g., 62 zeros + "世" is returned unchanged)
+
+The function fails when:
+- String length > max_len AND contains non-ASCII characters
+- This triggers the hashing code path which uses `s.encode('ascii')`
+
+### Root Cause
+The bug occurs because when the string exceeds `max_len`, the function attempts to create a hash prefix using `s.encode('ascii')`. This assumes the input string contains only ASCII characters. However, if the string contains Unicode characters (like '\x80' or '世'), the ASCII encoding fails.
+
+### Context from Code Analysis
+Interestingly, when examining the actual usage of `cap_length` within Cython's codebase, the function is always called AFTER sanitizing the input to be ASCII-safe. For example, in `type_identifier_from_declaration`, non-alphanumeric characters are converted to hex representations before calling `cap_length`. This suggests the function was designed with the assumption that it would only receive ASCII-safe input, but this assumption is not documented or enforced.

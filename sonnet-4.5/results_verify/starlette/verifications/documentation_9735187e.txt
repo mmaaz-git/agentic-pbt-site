@@ -1,0 +1,49 @@
+# Documentation Analysis
+
+## Starlette Documentation Review
+
+### Official Documentation
+The Starlette official documentation at https://www.starlette.io/routing/ provides minimal information about FloatConvertor:
+- It lists `float` as one of the available path convertors
+- States it "returns a Python float"
+- Provides a simple example: `Route('/floating-point/{number:float}', floating_point)`
+- **Does NOT specify**:
+  - Precision limitations
+  - Round-trip guarantees
+  - Behavior with very small or very large values
+  - Format requirements or restrictions
+
+### Source Code Documentation
+The source code in `starlette/convertors.py` contains:
+- No docstrings for the FloatConvertor class
+- No comments explaining the precision limitations
+- Assertions that specify constraints (no negatives, no NaN, no Infinity)
+- The regex pattern `[0-9]+(\.[0-9]+)?` which accepts any number of decimal places
+
+### Implementation Details
+From the source code:
+1. The `convert()` method simply calls `float(value)` - no restrictions on input
+2. The `to_string()` method uses `"%0.20f"` formatting - hard-coded 20 decimal places limit
+3. There is an inherent mismatch: the regex and convert() accept unlimited precision, but to_string() only preserves 20 decimal places
+
+### Expected Behavior Analysis
+**Round-trip property expectation**:
+While not explicitly documented, URL routing systems typically require round-trip capability for path parameters. This is a reasonable expectation because:
+1. URLs generated from route parameters should preserve the original values
+2. The Convertor base class has both `convert()` and `to_string()` methods, suggesting bidirectional conversion
+3. The routing.py code uses `to_string()` to generate URLs from path parameters
+4. Other convertors (IntegerConvertor, UUIDConvertor) maintain round-trip properties
+
+### Documentation Gaps
+The documentation fails to mention:
+1. The 20-decimal place limitation in `to_string()`
+2. That values smaller than 1e-20 will be lost during round-trip
+3. Any precision guarantees or limitations
+4. The intended use cases and boundaries for float values in URLs
+
+## Conclusion
+The documentation does not explicitly guarantee round-trip behavior, but:
+- The design pattern (convert/to_string methods) strongly implies it
+- The usage in routing.py requires it for correct URL generation
+- Other convertors maintain this property
+- The lack of documentation about this limitation is itself a documentation bug

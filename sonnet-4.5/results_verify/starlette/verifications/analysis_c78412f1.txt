@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that whitespace should be normalized or trimmed from method names. A developer providing "GET " in the configuration is technically providing a different string than "GET", and the middleware is correctly treating them as different. The behavior is consistent - it does exact string matching without any implicit normalization. If a developer wants to match "GET", they should configure "GET", not "GET ".
+
+**Why it might not be INVALID:**
+The bug is real and reproducible - the middleware does fail to match methods when there's whitespace. HTTP method names by definition don't include whitespace, and the browser will never send " GET " as a method. The inconsistency with header handling (which does strip whitespace) suggests this might be an oversight rather than intentional behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that only occurs when developers accidentally include whitespace in their configuration. It's easily avoided by proper configuration. The fix is trivial for users - just remove the whitespace. Adding normalization would add a small performance overhead to every CORS check. The current behavior is at least predictable and consistent within the methods handling.
+
+**Why it might not be WONTFIX:**
+This isn't an obscure edge case - trailing whitespace in configuration is a common mistake, especially when config comes from environment variables or YAML files. The fix is trivial (one line change to strip whitespace). The middleware already does this normalization for headers, so there's precedent. Silent failures in CORS can be very frustrating to debug.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify that method names must be exact matches without whitespace. Adding a note to the documentation warning developers to ensure no whitespace in method names would prevent this confusion. The code behavior is technically correct - it does what it's coded to do. Documentation could clarify that unlike headers, methods are not normalized.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't really about documentation - it's about unexpected behavior. Developers wouldn't expect to need to worry about trailing whitespace in their configuration. The inconsistency with header handling suggests this is a code bug, not a documentation issue. Documenting a quirk doesn't make it less of a quirk.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current code doesn't support whitespace-tolerant method matching, and adding this would be a new feature. The user is asking for the middleware to be more forgiving of configuration mistakes. This would be an enhancement to make the middleware more user-friendly. It's adding new behavior rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality - CORS preflight checking already exists. The request is to fix inconsistent normalization behavior. The middleware already normalizes headers, so normalizing methods would be fixing an inconsistency, not adding a feature. Users expect consistent behavior across similar configuration parameters.
+
+## BUG Considerations
+**Why it might be BUG:**
+The middleware shows inconsistent behavior - it normalizes headers (lowercases them and strips whitespace) but doesn't normalize methods. This inconsistency is confusing and error-prone. HTTP method names never contain whitespace, so accepting "GET " in configuration but not matching it with "GET" requests is a logic error. The fix is trivial and makes the behavior more robust. The current behavior silently breaks CORS for what is likely a configuration typo.
+
+**Why it might not be BUG:**
+The code does exactly what it's programmed to do - exact string matching. There's no actual malfunction, just strict matching. The documentation doesn't promise whitespace normalization. Different parameters might intentionally have different normalization rules. The developer is responsible for providing clean configuration values.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though not a critical one. The strongest evidence for this being a bug rather than intended behavior is the inconsistency within the same class. The CORSMiddleware already normalizes headers by lowercasing them (line 67) and strips whitespace when checking them (line 129), but it doesn't apply any normalization to methods. This inconsistency is problematic for three reasons:
+
+First, HTTP method names are well-defined tokens that never include whitespace. Browsers will always send "GET", never " GET " or "GET ". Having configuration that appears to allow "GET" (to a human reader) but actually requires "GET " (exact match) is counterintuitive and error-prone. The principle of least surprise suggests that trailing whitespace in configuration shouldn't cause silent failures.
+
+Second, the fix is trivial and has precedent within the same code. The suggested fix (`self.allow_methods = [method.strip() for method in allow_methods]`) mirrors the normalization already done for origins in some example code and partially done for headers. This would make the behavior consistent across all configuration parameters and more robust against common configuration mistakes. The inconsistent normalization pattern (headers normalized, methods not) appears to be an oversight rather than intentional design, especially since there's no documented reason for the difference.

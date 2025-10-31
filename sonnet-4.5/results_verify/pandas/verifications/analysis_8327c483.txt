@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that qcut must handle denormalized float values (like 5e-324) correctly. One could argue that using such extreme values is outside the intended use case of the function, and the behavior with denormalized floats is undefined. The function works correctly for normal float ranges that users would typically encounter in real data analysis scenarios.
+
+**Why it might not be INVALID:**
+The error creates a catch-22 situation where pandas explicitly tells users to use duplicates='drop' to fix the issue, but then fails with a different error when they follow that advice. This violates the documented contract that duplicates='drop' should handle non-unique bin edges. The function accepts float values without documented restrictions on their range.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs with extremely small denormalized float values (5e-324) that are essentially zero for most practical purposes. Such values are unlikely to appear in real-world data analysis scenarios. The effort to fix this edge case may not be justified given its obscurity. Most users would never encounter this issue, and those who do could work around it by filtering out or rounding such tiny values.
+
+**Why it might not be WONTFIX:**
+The error message creates user confusion by suggesting a solution that doesn't work. Even if the edge case is rare, when it does occur, users have no clear path forward. The fix appears straightforward (capping the digits parameter) and would prevent the confusing error cascade. Property-based testing found this issue, suggesting it could affect more cases than just the extreme example.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to note that qcut may not handle denormalized float values correctly and users should preprocess such values. This would set proper expectations about the function's limitations. The documentation currently doesn't warn about precision issues with extremely small values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not just a documentation problem - it's a genuine bug in the code logic. The function tells users to use duplicates='drop' but then fails when they do. Simply documenting this limitation would not resolve the catch-22 situation users face. The code behavior contradicts its own error messages, which is more than a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting denormalized floats properly could be seen as a new feature rather than fixing a bug. The current implementation wasn't designed with such extreme values in mind. Adding proper handling for denormalized floats would extend the function's capabilities beyond its original scope.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts float inputs without restrictions and attempts to process them. It's not asking for new functionality but rather fixing existing functionality that fails in an inconsistent way. The duplicates='drop' parameter already exists and should work as documented. This is about fixing broken existing behavior, not adding new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function creates a clear catch-22 where it tells users to use duplicates='drop' to fix an issue, but then fails with a different error when they follow that instruction. The root cause is a calculation overflow in _round_frac that produces NaN values, breaking the downstream logic. The fix is straightforward (capping digits to a reasonable maximum like 15). The behavior directly contradicts the function's own error messages and documented behavior of the duplicates parameter.
+
+**Why it might not be BUG:**
+The issue only manifests with denormalized float values that are so small they're essentially indistinguishable from zero in most contexts. One could argue this is expected behavior when pushing floating-point arithmetic to its limits. The function works correctly for all reasonable input ranges that would appear in actual data analysis.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a WONTFIX issue rather than a valid bug. While the error messaging creates a confusing catch-22 situation, the core issue stems from using denormalized float values (5e-324) that are at the extreme edge of floating-point representation. Such values are essentially zero for all practical purposes and would never appear in real-world data analysis scenarios.
+
+The pandas library is primarily designed for data analysis tasks where such extreme precision edge cases are irrelevant. The value 5e-324 is the smallest positive denormalized float possible in IEEE 754 double precision - it's approximately 0.000...000 with 323 zeros before the first significant digit. For context, this is smaller than the Planck length when measured in meters, making it physically meaningless for any real measurement or calculation.
+
+While the proposed fix (capping digits in _round_frac) would be simple to implement, it addresses an issue so obscure that the maintenance burden and potential side effects aren't justified. Users encountering this issue can easily work around it by preprocessing their data to remove or round such extreme values. The fact that hypothesis testing found this issue doesn't make it practically relevant - property-based testing is specifically designed to find edge cases that may never occur in practice. This is a case where the mathematical correctness at extreme boundaries isn't worth the engineering effort, especially in a data analysis library where such values have no meaningful interpretation.

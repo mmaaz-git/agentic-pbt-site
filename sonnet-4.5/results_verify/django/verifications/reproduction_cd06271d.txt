@@ -1,0 +1,57 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+### Test Results
+
+1. **Hypothesis Test with Empty String Choice**
+   - Input: `choices=[('', '')], value=''`
+   - Expected: Validation should pass (empty string is in choices)
+   - Actual: ValidationError raised with message "This field cannot be blank."
+   - Status: BUG CONFIRMED
+
+2. **CharField with Empty String in Choices (blank=False)**
+   - Field: `CharField(choices=[('', 'Empty choice'), ('a', 'A choice')], blank=False)`
+   - Testing: `field.validate('', None)`
+   - Result: ValidationError "This field cannot be blank."
+   - Status: BUG CONFIRMED
+
+3. **IntegerField with None in Choices (null=False)**
+   - Field: `IntegerField(choices=[(None, 'None choice'), (1, 'One')], null=False)`
+   - Testing: `field2.validate(None, None)`
+   - Result: ValidationError "This field cannot be null."
+   - Status: BUG CONFIRMED
+
+4. **Control Tests**
+   - Non-empty value 'a' in choices: PASSES correctly
+   - Value 'b' not in choices: FAILS correctly with "Value 'b' is not a valid choice."
+   - Empty string with blank=True: PASSES correctly
+
+### Root Cause Analysis
+
+Looking at the Django source code (django/db/models/fields/__init__.py, lines 807-827), the validation logic is:
+
+```python
+if self.choices is not None and value not in self.empty_values:
+    # Check if value is in choices
+    ...
+if value is None and not self.null:
+    raise exceptions.ValidationError(...)
+if not self.blank and value in self.empty_values:
+    raise exceptions.ValidationError(...)
+```
+
+The bug occurs because:
+1. Line 807: When `value=''` or `value=None`, the condition `value not in self.empty_values` is False
+2. This causes the choice validation to be SKIPPED entirely for empty values
+3. Lines 823-827: The blank/null checks then run and reject the empty value
+4. Result: Empty values are rejected even when explicitly included in choices
+
+### Impact
+
+This is a real bug that prevents developers from:
+- Using empty string as a valid choice option (e.g., "No selection" option)
+- Using None as a valid choice in IntegerFields
+- Having fields where empty/null is a meaningful choice alongside other options
+
+The bug report's claim is valid: if a value is explicitly included in choices, it should be accepted regardless of blank/null field settings, as the choices constraint is more specific.

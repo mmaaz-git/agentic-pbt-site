@@ -1,0 +1,54 @@
+BUG REPRODUCTION RESULTS
+
+Testing environment: NumPy version 2.3.0
+
+1. CONFIRMED BUG BEHAVIORS:
+
+Bug 1: Null byte as 'old' parameter when string doesn't contain null bytes
+- Input: char.replace('test', '\x00', 'X')
+- Expected (Python): 'test' (no replacement since '\x00' not in 'test')
+- Actual (NumPy): 'XtXeXsXtX' (inserts X between every character)
+- STATUS: CONFIRMED - NumPy incorrectly treats '\x00' as empty string
+
+Bug 2: Removing null bytes from string
+- Input: char.replace('te\x00st', '\x00', '')
+- Expected (Python): 'test' (removes the null byte)
+- Actual (NumPy): 'te\x00st' (null byte not removed)
+- STATUS: CONFIRMED - NumPy fails to remove actual null bytes
+
+Bug 3: Inserting null bytes as replacement
+- Input: char.replace('test', 'e', '\x00')
+- Expected (Python): 't\x00st' (replaces 'e' with null byte)
+- Actual (NumPy): 'tst' (strips the null byte from result)
+- STATUS: CONFIRMED - NumPy strips null bytes from replacement string
+
+2. ROOT CAUSE ANALYSIS:
+
+The testing revealed that NumPy has TWO distinct bugs:
+
+A) When '\x00' is used as the 'old' parameter:
+   - NumPy treats it identically to empty string ('')
+   - This causes it to insert the replacement between every character
+   - Verified: char.replace('test', '', 'X') produces same result as char.replace('test', '\x00', 'X')
+
+B) When actual null bytes exist in strings:
+   - NumPy cannot properly detect or replace them
+   - Null bytes in the 'new' parameter get stripped from output
+   - The function appears to use C-style null-terminated string operations internally
+
+3. ADDITIONAL TEST RESULTS:
+
+- char.replace('\x00', '\x00', 'X') → 'X' (works only because of bug A)
+- char.replace('a\x00b\x00c', '\x00', '-') → '-a-\x00-b-\x00-c-' (combines both bugs)
+- Multiple null bytes are handled inconsistently
+- Empty string replacement works correctly when not involving null bytes
+
+4. IMPACT ASSESSMENT:
+
+This is a severe data corruption bug that:
+- Silently produces incorrect results without warnings or errors
+- Makes it impossible to properly handle strings containing null bytes
+- Violates the expected behavior based on Python's str.replace
+- Could cause serious issues in data processing pipelines
+
+The bug report's claims are accurate and reproducible.

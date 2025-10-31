@@ -1,0 +1,78 @@
+## Bug Report Analysis and Categorization
+
+### Consideration for BUG
+
+**Arguments FOR:**
+1. The function produces empty blocks when `not_zero=True` and the first block is 1 byte
+2. Empty blocks violate the reasonable expectation that blocks contain data
+3. The behavior is inconsistent - larger files work correctly but edge cases fail
+4. Downstream code may fail when encountering unexpected empty blocks
+5. The proposed fix is reasonable and maintains backward compatibility for normal cases
+
+**Arguments AGAINST:**
+1. The documentation doesn't explicitly promise non-empty blocks
+2. The code is technically doing what it says (skipping first byte, adjusting length)
+
+### Consideration for INVALID
+
+**Arguments FOR:**
+1. The documentation doesn't explicitly state blocks must be non-empty
+2. fsspec's read_block correctly returns empty when asked to read 0 bytes
+3. The caller could check for and filter empty blocks
+
+**Arguments AGAINST:**
+1. Empty blocks are unexpected and likely to cause issues
+2. The behavior is clearly an edge case oversight, not intentional design
+3. No reasonable use case exists for returning empty blocks
+
+### Consideration for WONTFIX
+
+**Arguments FOR:**
+1. This is an extreme edge case (1-byte blocks with not_zero=True)
+2. Users can work around it by using larger block sizes
+3. The fix might introduce other edge cases
+
+**Arguments AGAINST:**
+1. The bug can cause data processing failures
+2. The fix is straightforward and low-risk
+3. Property-based testing revealed this issue, suggesting it could occur in practice
+
+### Consideration for FEATURE_REQUEST
+
+**Arguments FOR:**
+1. Could be seen as requesting enhanced edge case handling
+2. The current behavior is technically what the code does
+
+**Arguments AGAINST:**
+1. This is clearly a bug, not a missing feature
+2. The function already attempts to handle not_zero, just incorrectly for edge cases
+3. Users expect consistent behavior regardless of block size
+
+### Consideration for DOCUMENTATION_FIX
+
+**Arguments FOR:**
+1. The documentation could clarify edge case behavior
+2. Could document that empty blocks may occur with small block sizes
+
+**Arguments AGAINST:**
+1. The empty blocks are clearly unintended behavior
+2. Documenting a bug doesn't make it correct
+3. The fix should be in the code, not the documentation
+
+### Final Assessment
+
+This is a **BUG** for the following reasons:
+
+1. **Violates Reasonable Expectations**: Functions that read data in blocks should return blocks containing data. Empty blocks serve no purpose and are likely to cause downstream failures.
+
+2. **Inconsistent Behavior**: The function works correctly for most cases but fails on a specific edge case. This inconsistency indicates a bug rather than intentional design.
+
+3. **Clear Implementation Oversight**: The code blindly subtracts 1 from length[0] without checking if this would result in 0. This is a classic edge case bug.
+
+4. **Practical Impact**: While the edge case is rare, it can cause real failures in data processing pipelines. The property-based test demonstrates this is not just theoretical.
+
+5. **Simple Fix Available**: The proposed fix is straightforward, maintains backward compatibility, and properly handles the edge case.
+
+6. **Not a Documentation Issue**: The documentation's intent is clear - skip the header byte and return the rest. Returning empty blocks contradicts this intent.
+
+The bug should remain open and be fixed as proposed in the report.

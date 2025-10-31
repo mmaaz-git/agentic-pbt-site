@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue affects both `waitForPaste` and `waitForNewPaste` functions in pandas.io.clipboard.
+
+### Reproduction Results:
+
+1. **NaN Timeout**: When `float('nan')` is passed as the timeout value:
+   - The function hangs indefinitely
+   - This is because `startTime + NaN = NaN`, and `time.time() > NaN` always returns False
+   - The timeout condition never triggers, causing an infinite loop
+
+2. **Infinity Timeout**: When `float('inf')` is passed as the timeout value:
+   - The function also hangs indefinitely
+   - This is because `startTime + inf = inf`, and `time.time() > inf` always returns False
+   - The timeout condition never triggers, causing an infinite loop
+
+3. **Negative Timeout**: When a negative value like `-1.0` is passed:
+   - The function immediately raises PyperclipTimeoutException
+   - This happens because `time.time() > startTime + (-1.0)` is immediately true
+   - While not a hang, this is arguably unexpected behavior
+
+4. **Normal Timeout**: When a valid positive number is passed:
+   - The function works correctly, raising PyperclipTimeoutException after the specified time
+
+### Code Examination:
+
+Looking at the source code (lines 694-733), both functions use the same pattern:
+```python
+if timeout is not None and time.time() > startTime + timeout:
+    raise PyperclipTimeoutException(...)
+```
+
+The bug occurs because:
+- NaN comparisons always return False in Python (per IEEE 754 standard)
+- No number is greater than infinity
+- The functions don't validate the timeout parameter before using it
+
+The bug report is accurate in its description of the problem and the root cause.

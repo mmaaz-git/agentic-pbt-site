@@ -1,0 +1,46 @@
+## Reproduction Results
+
+### Test Case Verification
+
+I successfully reproduced the reported behavior. The bug report is technically accurate in its description:
+
+1. **Empty DataFrame with columns loses column information:**
+   - Created DataFrame: `pd.DataFrame({'a': pd.Series([], dtype='int64'), 'b': pd.Series([], dtype='float64')})`
+   - Original columns: `['a', 'b']`
+   - After `to_dict(orient='index')`: Returns `{}`
+   - After `from_dict({}, orient='index')`: Results in DataFrame with `[]` columns
+   - The round-trip fails: `df.equals(reconstructed)` returns `False`
+
+2. **Hypothesis test confirms the issue:**
+   - The property test fails immediately on empty DataFrames
+   - Empty DataFrames with columns consistently fail the round-trip test
+   - The failure is specifically: Original shape (0, 2) becomes (0, 0)
+
+3. **Non-empty DataFrames work correctly:**
+   - Non-empty DataFrames round-trip successfully with orient='index'
+   - Example: DataFrame with data `{'a': [1, 2], 'b': [3.0, 4.0]}` preserves all information
+
+4. **Other orient modes have different behaviors:**
+   - `orient='tight'` preserves column names but loses dtype information for empty DataFrames
+   - `orient='split'` also preserves column names but loses dtype information
+   - Neither 'tight' nor 'split' provide perfect round-trip for empty DataFrames due to dtype loss
+
+### Technical Details
+
+The core issue is that `to_dict(orient='index')` produces output in the format `{row_index: {col: value}}`. For an empty DataFrame with no rows:
+- There are no row indices to use as keys
+- Therefore, the output is an empty dictionary `{}`
+- This empty dictionary contains no information about columns
+
+When `from_dict({}, orient='index')` is called:
+- An empty dictionary is interpreted as having no rows AND no columns
+- There's no way to recover the original column structure from `{}`
+
+### Behavior Consistency
+
+The behavior is consistent and deterministic:
+- Always occurs with empty DataFrames
+- Never occurs with non-empty DataFrames
+- The issue is specifically with the 'index' orientation
+
+The bug report's code examples and outputs are accurate and reproducible.

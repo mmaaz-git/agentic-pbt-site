@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for SparseArray.max() and min() doesn't explicitly state that the methods must return NaN when skipna=False and NaN values are present. The parameter description only says "Whether to ignore NA values" without specifying the exact return value semantics. One could argue that the implementation is free to define its own behavior as long as it's internally consistent.
+
+**Why it might not be INVALID:**
+The parameter name "skipna" has well-established semantics in both NumPy and pandas ecosystems. When skipna=False, the universal expectation is that NaN values are NOT skipped, which means they should affect the result. Both NumPy's np.max() and pandas Series.max(skipna=False) return NaN when the data contains NaN values. The current SparseArray behavior violates this established convention and creates an inconsistency within the pandas library itself.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+SparseArrays are a specialized data structure designed for efficiency with sparse data. The current implementation may have performance optimizations that make it expensive to check for NaN values when has_nonnull_fill_vals is True. Fixing this might require additional computation that could impact performance for the common case where users typically use skipna=True. The issue only affects a specific edge case (non-null fill_value with NaN in data and skipna=False).
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case but a fundamental correctness issue that breaks compatibility with NumPy and dense pandas arrays. The inconsistency makes SparseArray unreliable for users who need proper NaN handling. The bug can lead to incorrect statistical computations where the presence of missing data needs to be propagated. The fix is straightforward and doesn't require major architectural changes.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the current behavior is intentional for performance reasons, the documentation could be updated to explicitly state that SparseArray.max/min with skipna=False may not return NaN when the array contains NaN values and has a non-null fill_value. This would at least make the deviation from standard pandas/NumPy behavior clear to users.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation already implies the correct behavior through the skipna parameter description. The issue is not that the documentation is wrong, but that the implementation doesn't follow the documented contract. Changing the documentation to match the buggy behavior would be documenting a bug rather than fixing it, and would create a permanent inconsistency in the pandas API.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper NaN handling with skipna=False for SparseArrays with non-null fill_values is a new feature that was never implemented. The current implementation might have been designed with the assumption that users of SparseArrays would always use skipna=True or use NaN as fill_value. Adding proper skipna=False support could be seen as extending functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The skipna parameter already exists and is documented. This is not about adding new functionality but about fixing existing functionality that doesn't work correctly. The max() and min() methods with skipna parameter are core aggregation functions that should behave consistently across all pandas array types. This is a bug in existing functionality, not a request for something new.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is objectively incorrect and inconsistent with established NumPy and pandas conventions. When skipna=False, aggregation functions should return NaN if the data contains NaN values - this is a fundamental rule in numerical computing for propagating missing data indicators. The bug is reproducible, well-defined, and the fix is straightforward. The current behavior silently produces incorrect results that could lead to wrong statistical conclusions. The inconsistency between SparseArray and Series for the same operation with the same parameters is a clear API contract violation.
+
+**Why it might not be BUG:**
+There are no explicit unit tests in pandas that enforce this specific behavior for SparseArrays. The implementation has been this way presumably for some time without complaints. One could argue that SparseArrays are allowed to have different semantics due to their specialized nature and performance considerations.
+
+## Overall Consideration
+
+After careful analysis of the documentation, code behavior, and comparison with established conventions, this is clearly a **BUG** that should be fixed. The evidence is overwhelming:
+
+First, the behavior violates the fundamental contract of the skipna parameter. The parameter name and documentation clearly indicate that when skipna=False, NA values should NOT be ignored. In numerical computing, not ignoring NaN values means they should propagate through the computation, resulting in NaN output. This is universally understood behavior demonstrated by NumPy's np.max() returning NaN for arrays containing NaN, and pandas Series.max(skipna=False) doing the same. The current SparseArray implementation silently ignores NaN values even when explicitly told not to, which is objectively incorrect.
+
+Second, the inconsistency within pandas itself is problematic. Users reasonably expect that converting between Series and SparseArray representations of the same data should yield the same results for basic operations like max() and min(). The fact that Series([1.0, np.nan, 0.0]).max(skipna=False) returns NaN while SparseArray([1.0, np.nan, 0.0], fill_value=0.0).max(skipna=False) returns 1.0 breaks this fundamental expectation. This inconsistency makes it dangerous to use SparseArrays as a drop-in replacement for dense arrays in statistical computations.
+
+Third, the root cause is clear and the fix is straightforward. The bug occurs because _min_max() always uses self._valid_sp_values which filters out NaN values regardless of the skipna parameter. The proposed fix correctly conditions this behavior on the skipna parameter value. This is not a complex architectural issue but a simple logic error where the skipna=False case wasn't properly handled for arrays with non-null fill_values. The bug affects data integrity in statistical computations where proper NaN propagation is critical for identifying missing or invalid data in results.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying what should happen when chunk_size > size. This is an edge case that may not have been considered in the original design, and the function behavior in this scenario is technically undefined. The function is an internal utility (not part of the public API), and there's no specification saying chunks must sum to the size parameter. Without clear documentation of the expected behavior, calling this a bug assumes an implicit contract that was never explicitly stated.
+
+**Why it might not be INVALID:**
+The fundamental purpose of a chunking function is to divide data into pieces, and it's a basic mathematical invariant that the pieces should sum to the whole. The existing test cases all demonstrate that chunks sum to the size parameter, establishing a clear pattern of expected behavior. The function name "build_grid_chunks" and its usage context (zarr backend storage) strongly implies it should create chunks that correctly represent the entire data dimension.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This edge case (chunk_size > size) is extremely unlikely to occur in real-world usage. When working with zarr and dask arrays, chunk sizes are typically chosen to be reasonable subdivisions of the data, not larger than the data itself. The scenario of having a chunk size larger than the total data size represents a configuration error that would likely be caught elsewhere in the stack. The impact is minimal since this is an internal function, and fixing it might introduce unnecessary complexity for a case that shouldn't happen.
+
+**Why it might not be WONTFIX:**
+Data corruption in storage backends is a serious issue, and even edge cases should be handled correctly. The bug report explicitly mentions this could "lead to data corruption or out-of-bounds access in zarr backends," which are critical failures. The fix is simple (adding a min() call) and doesn't add significant complexity. If this function is used in production code paths, even rare edge cases should be handled correctly to prevent data loss.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks any documentation or docstring explaining its purpose, parameters, or expected behavior. Adding documentation that explicitly states the function assumes chunk_size <= size would clarify that this is expected behavior, not a bug. The issue is really about unclear expectations rather than incorrect code - the code works fine for its intended use cases.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The mathematical invariant that chunks should sum to the total size is so fundamental that it doesn't need to be documented - it's inherent in the concept of chunking. The existing test cases already establish this invariant without needing explicit documentation. Adding documentation that says "chunk_size must be <= size" would be documenting a limitation that shouldn't exist in properly designed code.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current function doesn't support the case where chunk_size > size, which could be seen as a missing feature rather than a bug. Adding support for this case would be extending the function's capabilities to handle a new scenario. The proposed fix essentially adds a new feature: automatic chunk size adjustment when the chunk size exceeds the data size.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't about adding new functionality but fixing existing broken behavior. The function already attempts to handle all size/chunk_size combinations but produces incorrect results for some inputs. A feature request implies the current behavior is correct but limited; here the current behavior is mathematically incorrect. The invariant that chunks sum to the size should hold for all inputs, not just some.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates a fundamental mathematical invariant: chunks representing a dimension of size N should sum to N. This is not a matter of interpretation or edge case handling - it's objectively wrong for chunks to sum to 3 when representing data of size 1. The bug is reproducible, has a clear fix, and could lead to data corruption in production systems. The existing tests establish the expected behavior (chunks sum to size), and this case violates that established pattern.
+
+**Why it might not be BUG:**
+The function is an internal utility without public documentation, and the case of chunk_size > size might be considered invalid input that should never occur. The function may have been designed with the implicit assumption that chunk_size <= size, making this more of a missing input validation issue than a logic bug. Without explicit documentation of requirements, it's arguable whether this constitutes a bug or just undefined behavior for invalid inputs.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a clear **BUG** that should be fixed. Three key factors support this conclusion:
+
+First, the mathematical invariant that chunks should sum to the total size is fundamental and non-negotiable. When a function named `build_grid_chunks` produces chunks that don't correctly represent the data dimension, it's objectively incorrect regardless of documentation. This is similar to a sort function that returns [1, 2, 9, 3] - even without documentation, this is clearly wrong. The existing test cases all validate this invariant, establishing it as expected behavior.
+
+Second, the potential consequences are severe. The bug report correctly identifies that this could lead to "data corruption or out-of-bounds access in zarr backends." When dealing with data storage systems, even edge cases must be handled correctly to prevent data loss. The fact that this is an internal function used in production code paths makes correct behavior even more critical. A simple arithmetic error in chunk calculation could cascade into serious data integrity issues.
+
+Third, the fix is trivial and safe. The proposed solution (adding `min(size, ...)` to line 146) is a one-line change that ensures the first chunk never exceeds the total size. This doesn't add complexity or change behavior for normal cases - it only corrects the edge case. The fix is mathematically sound and maintains backward compatibility for all valid use cases. There's no reasonable argument against implementing such a simple fix for such a clear error.

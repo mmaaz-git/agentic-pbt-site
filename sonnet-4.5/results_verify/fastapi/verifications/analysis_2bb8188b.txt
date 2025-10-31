@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify what should be returned when the Authorization header contains "Bearer" without a token. This is an edge case that falls into undefined behavior territory. The current behavior of returning an empty string could be considered valid since the function is documented to return the token portion of the header, and when there's no token, an empty string accurately represents that. Additionally, an empty string is still a falsy value in Python, so code checking truthiness would work correctly.
+
+**Why it might not be INVALID:**
+The documentation clearly states that when auto_error=False, the function should return None when "authentication is not available". An Authorization header with "Bearer" but no token clearly represents a case where authentication is not available - there's no valid token present. The inconsistency between returning None for a missing header versus "" for an empty token violates the principle of least surprise and the documented contract that None indicates unavailable authentication.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a minor edge case that only affects users who send malformed Authorization headers with "Bearer" but no token. Most clients wouldn't send such headers in practice. The difference between None and "" is subtle, and both are falsy in Python, so most code patterns like "if token:" would work correctly regardless. The issue has existed for a long time without causing major problems, suggesting it's not critical to fix.
+
+**Why it might not be WONTFIX:**
+This inconsistency affects the fundamental contract of a security-critical component. The difference between None and "" matters for type checking and for code that explicitly checks "is not None". Security code should be predictable and consistent. The fix is simple and non-breaking (changing "" to None makes the behavior more restrictive, not less). The issue affects a core authentication mechanism used by many FastAPI applications.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that the function returns the token portion of the Authorization header, which may be an empty string if no token is provided after "Bearer". This would document the current behavior rather than changing it. The documentation could explicitly state that None is only returned when the header is missing or has the wrong scheme, while an empty string is returned for "Bearer" without a token.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation already implies that None should be returned when authentication is not available, and an empty token clearly falls into this category. The issue isn't that the documentation is unclear, but that the implementation doesn't match the reasonable interpretation of the documentation. Documenting this inconsistent behavior would perpetuate a confusing API design rather than fixing the underlying problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that the current behavior is working as designed, and the request is for new behavior - to treat empty tokens the same as missing headers. This would be adding a new validation feature to check for empty tokens and handle them specially. The user is essentially asking for enhanced input validation that wasn't originally part of the design.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for consistent behavior in an existing feature. The function already has logic to return None for invalid authentication scenarios when auto_error=False. The request is to fix an inconsistency in that existing logic, not to add new capabilities. The proposed change aligns the behavior with the already-documented contract.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function exhibits inconsistent behavior for semantically equivalent cases - both a missing Authorization header and an Authorization header with "Bearer" but no token represent the absence of valid authentication credentials, yet they return different values (None vs ""). This violates the documented contract that auto_error=False returns None when authentication is not available. The inconsistency can cause subtle bugs in user code, especially when using type checking or explicit None checks. The RFC 6750 implies that a bearer token must contain actual token characters, making an empty token invalid.
+
+**Why it might not be BUG:**
+The function technically returns what it's supposed to - the param portion of the Authorization header, which happens to be an empty string. The documentation doesn't explicitly promise that an empty token should return None. The behavior has been consistent within the codebase and hasn't changed unexpectedly. Some might argue this is just an undocumented edge case rather than incorrect behavior.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug. The core issue is an inconsistency in how the OAuth2PasswordBearer class handles different scenarios that all represent "authentication is not available." When auto_error=False, the documented behavior is to return None for cases where authentication cannot be established.
+
+The current implementation correctly returns None when the Authorization header is missing entirely or when it uses a different scheme (like "Basic" instead of "Bearer"). However, it returns an empty string when the header is "Bearer" without an accompanying token. This creates an inconsistency because all three cases represent the same semantic condition: no valid bearer token is available for authentication.
+
+This inconsistency has practical implications for developers. Code that checks "if token is not None:" will incorrectly treat an empty string as a valid token, potentially leading to security issues or unexpected behavior. While both None and "" are falsy in Python, they are distinct values with different semantic meanings in the context of authentication. The type hint Optional[str] suggests that None is the intended sentinel value for "no authentication," not an empty string. The proposed fix is minimal, non-breaking, and aligns the behavior with both the documented contract and developer expectations.

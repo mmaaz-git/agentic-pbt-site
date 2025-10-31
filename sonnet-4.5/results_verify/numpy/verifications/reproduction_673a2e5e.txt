@@ -1,0 +1,41 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug in numpy.strings.count when counting null characters ('\x00'). The function demonstrates incorrect behavior when searching for null characters in strings.
+
+## Reproduction Results
+
+### Direct Test Case Reproduction
+Running the provided test cases confirms the bug:
+
+```
+count(''        , '\x00'): Python=0, NumPy=1
+count('abc'     , '\x00'): Python=0, NumPy=4
+count('a\x00b'  , '\x00'): Python=1, NumPy=4
+count('\x00\x00', '\x00'): Python=2, NumPy=1
+```
+
+All test cases show mismatches between Python's str.count() and NumPy's strings.count():
+- Empty string: NumPy returns 1 instead of 0
+- 'abc' (no nulls): NumPy returns 4 (len+1) instead of 0
+- 'a\x00b' (1 null): NumPy returns 4 (len+1) instead of 1
+- '\x00\x00' (2 nulls): NumPy returns 1 instead of 2
+
+### Property-Based Test with Hypothesis
+The property-based test with Hypothesis confirms the failure when explicitly tested with the null character example:
+- Test case: arr = np.array(['abc'], dtype=str), sub = '\x00'
+- Expected: 0 (Python's count result)
+- Actual: 4 (NumPy's count result)
+
+## Pattern Analysis
+The bug exhibits a clear pattern:
+1. For strings without null characters: NumPy returns len(string) + 1
+2. For strings with null characters: NumPy returns unpredictable incorrect values
+3. The behavior suggests null characters are being treated as special markers or zero-width patterns rather than regular characters
+
+## Impact
+This is a significant bug because:
+1. It produces completely incorrect counts for a valid character
+2. The results are not just off by one but fundamentally wrong
+3. Code relying on accurate null character counts will fail silently with incorrect data
+4. The inconsistency with Python's str.count() violates the principle of least surprise

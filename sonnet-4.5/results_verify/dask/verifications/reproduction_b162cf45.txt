@@ -1,0 +1,47 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The Dask DataFrame resample function returns incorrect results when using quarterly resampling with `closed='right'` and `label='right'` parameters.
+
+## Test Results
+
+### 1. Hypothesis Test
+The hypothesis property-based test confirmed the bug. When running with the specific failing input parameters:
+- npartitions=4
+- rule='Q'
+- closed='right'
+- label='right'
+- method='sum'
+
+The test fails with an AssertionError showing that the last value differs between Pandas and Dask.
+
+### 2. Simple Reproduction
+Running the simple reproduction code confirms the exact bug described:
+
+**Pandas result (correct):**
+```
+              value
+2020-03-31   4095.0
+2020-06-30  12376.0
+2020-09-30  20930.0
+2020-12-31  29394.0
+```
+
+**Dask result (incorrect):**
+```
+              value
+2020-03-31   4095.0
+2020-06-30  12376.0
+2020-09-30  20930.0
+2020-12-31      0.0   # WRONG - should be 29394.0
+```
+
+## Impact
+The bug causes silent data corruption where the last quarter's aggregated value is completely wrong (returns 0.0 instead of 29394.0). This is a significant issue because:
+1. No warning or error is raised
+2. The incorrect result appears valid at first glance
+3. It only affects specific parameter combinations, making it hard to detect
+4. The magnitude of error is severe (100% data loss for the last period)
+
+## Code Analysis
+I verified the source code at `/home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/tseries/resample.py` and confirmed the problematic code exists at lines 93-101 as described in the bug report. The issue is that a single `setter` function is chosen based on `len(newdivs)` but then applied to both `newdivs` and `outdivs`, which can have different lengths, leading to the mismatch described in the report.

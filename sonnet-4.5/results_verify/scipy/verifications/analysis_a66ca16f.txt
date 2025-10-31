@@ -1,0 +1,50 @@
+TRIAGE ANALYSIS FOR scipy.special.gammainccinv BUG REPORT
+=========================================================
+
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify the minimum viable value of `a` for accurate computation. One could argue that for extremely small values of `a` (like 1e-05), the function might be operating outside its intended numerical range. The documentation only states that `a` should be positive, not that it must work accurately for arbitrarily small positive values. Numerical methods often have practical limitations that aren't always documented.
+
+**Why it might not be INVALID:**
+The documentation clearly states that `gammainccinv` is the inverse of `gammaincc`, with no exceptions or limitations mentioned for small `a`. The example in the documentation shows that `gammaincc(a, gammainccinv(a, x))` should return the original `x` values. This fundamental mathematical property should hold for all valid inputs (a > 0, 0 ≤ y ≤ 1). The function works correctly for a = 0.001 but fails for a = 0.0001, suggesting an implementation bug rather than a documentation issue.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+The affected range (a < 0.0005) represents extremely small shape parameters that might be considered edge cases unlikely to occur in practical scientific computing. The computational difficulty of accurately computing the inverse for such small parameters might not justify the development effort, especially if workarounds exist (like using slightly larger `a` values). Additionally, the values that should be returned are extraordinarily small (approaching the limits of floating-point representation).
+
+**Why it might not be WONTFIX:**
+This is a fundamental mathematical function that should work correctly across its entire documented domain. The fact that it works for a = 0.001 but not for a = 0.0001 indicates this isn't a limitation of floating-point arithmetic but rather an implementation issue. Scientific computing often requires handling extreme values, and silently returning incorrect results (0.0 instead of the correct small value) could lead to serious errors in downstream calculations.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+If the implementation has inherent numerical limitations for small `a`, the documentation should clearly state these limitations. The documentation could be updated to specify a minimum recommended value of `a` (e.g., a ≥ 0.001) for reliable results, making users aware of the numerical constraints rather than letting them discover incorrect results unexpectedly.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is mathematically well-defined for all a > 0, and other implementations (or even this implementation for slightly larger `a`) handle these cases correctly. The issue isn't that the behavior is undocumented but that the implementation doesn't match the documented mathematical definition. Changing the documentation to match the buggy behavior would be papering over an implementation problem.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+One could argue that support for extremely small shape parameters (a < 0.0005) is a new feature that hasn't been implemented yet. The current implementation might only be designed for "reasonable" values of `a`, and extending it to handle extreme cases could be considered an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to compute the inverse of `gammaincc` for positive `a` values, which includes small values. The mathematical relationship is well-defined, and the function should implement it correctly. This isn't asking for new functionality but for the existing functionality to work correctly across its stated domain. The fact that it returns 0.0 (wrong answer) rather than raising an exception suggests it's attempting to handle these values but doing so incorrectly.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+This is a clear violation of the documented inverse relationship between `gammainccinv` and `gammaincc`. The function returns mathematically incorrect results (0.0) for valid inputs (a = 1e-05, y = 0.5), causing `gammaincc(a, gammainccinv(a, y))` to return 1.0 instead of the expected 0.5. The function works correctly for a = 0.001 but fails for a = 0.0001, suggesting a threshold or underflow bug in the implementation. The silent failure (returning wrong values rather than raising an exception) makes this particularly problematic for users who might not realize their results are incorrect.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if there's an undocumented but intentional limitation on the minimum value of `a`. However, even in this case, the function should raise an exception rather than silently returning incorrect results. The fact that it returns 0.0 for all y values when a is small strongly suggests an implementation error rather than a deliberate design choice.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate BUG in the scipy.special.gammainccinv implementation. The function is documented as computing the inverse of gammaincc, and this mathematical relationship should hold for all valid inputs within the stated parameter ranges (a > 0, 0 ≤ y ≤ 1). The implementation correctly handles a = 0.001 but fails for smaller values like a = 0.0001 or a = 1e-05, returning 0.0 when it should return very small positive values.
+
+The bug is particularly serious because it silently returns incorrect results rather than raising an exception. When gammainccinv(1e-05, 0.5) returns 0.0, the subsequent call to gammaincc(1e-05, 0.0) returns 1.0, which is completely wrong (expected 0.5). This represents a 50% error in the inverse relationship, which could cause significant problems in scientific calculations that depend on this function.
+
+The implementation likely has an underflow or threshold issue where very small expected return values are incorrectly rounded to exactly 0.0. Since the function successfully computes similarly small values for a = 0.001 (returning ~5e-302), this is clearly an implementation bug rather than a fundamental limitation of floating-point arithmetic. The fix would involve better handling of small parameter values, possibly using asymptotic expansions or higher precision intermediate calculations.

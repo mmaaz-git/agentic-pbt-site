@@ -1,0 +1,46 @@
+# Triage Analysis
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying its behavior with glob wildcards in brace expansions. It's an internal utility function without a public API contract. The behavior could be considered "working as designed" since each brace item is independently passed to iglob(), which correctly interprets wildcards. There's no specification stating that brace items should be treated as literals rather than patterns. The user's expectation that `{a,?}` should produce exactly two distinct paths is an assumption not backed by documentation.
+
+**Why it might not be INVALID:**
+The function already implements duplicate detection for `**/` patterns, suggesting that avoiding duplicates is a design goal. The inconsistency between handling duplicates in recursive globbing versus brace expansion seems unintentional. Most users would expect each unique filesystem path to appear only once in the results, regardless of how the pattern matches it. The test suite doesn't cover this edge case, suggesting it wasn't considered during design.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case - using glob wildcards as literal directory names (like a directory actually named '?') is highly unusual. The performance cost of adding duplicate detection to all brace expansions might not be justified for such a rare scenario. The function is internal and not part of the public API, so there's less obligation to fix edge cases. Users can work around this by avoiding glob wildcards in brace expansions or by using set() on the results.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (adding duplicate detection) and matches what's already done for `**/` patterns. The inconsistency makes the code harder to understand and maintain. Even if rare, returning duplicates is objectively incorrect behavior for a glob expansion function. The proposed fix in the bug report is clean and follows existing patterns in the same function.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks any documentation about its behavior, so this could be addressed by documenting that brace expansion items are treated as glob patterns, not literals, and may produce duplicates. This would clarify the expected behavior without changing the code. Adding a note that users should deduplicate results if using wildcards in braces would be helpful.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is internal and undocumented by design - it's not meant for public use. Adding documentation for an edge case in an internal function seems unnecessary. The behavior is more likely a bug than an intentional design choice that needs documenting. The existing code already shows intent to avoid duplicates in the `**/` case.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding duplicate detection for brace expansion could be seen as a new feature rather than fixing a bug, since the current behavior isn't explicitly wrong according to any specification. The request is essentially asking for the function to be "smarter" about handling an edge case. This could be framed as "enhance extended_iglob to deduplicate all results, not just recursive globs."
+
+**Why it might not be FEATURE_REQUEST:**
+Avoiding duplicates is standard behavior for glob functions - it's fixing incorrect behavior, not adding new functionality. The function already has duplicate detection for one case, so extending it to all cases is more of a bug fix than a feature. Users wouldn't expect a glob function to return the same path multiple times.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns duplicate paths, which is inconsistent with standard glob behavior and its own behavior for `**/` patterns. The inconsistency suggests this is an oversight rather than intentional design. The fix is straightforward and follows patterns already in the codebase. Returning each filesystem path exactly once is the expected behavior for glob expansion functions. The bug has a clear reproduction case and a simple fix.
+
+**Why it might not be BUG:**
+The function is internal and undocumented, so there's no specification being violated. The behavior could be considered correct from a certain perspective - each brace item is independently expanded, and `?` correctly matches `a`. The test suite doesn't check for this case, suggesting it might not be considered important. Using glob wildcards as literal directory names is an edge case that might not merit a fix.
+
+## Overall Consideration
+
+This bug report describes a real inconsistency in the `extended_iglob` function where duplicate paths can be returned when brace expansion items contain glob wildcards. However, several factors make this less compelling as a bug:
+
+First, `extended_iglob` is an internal utility function without public documentation or API guarantees. It's not exposed as part of Cython's public interface, and users aren't meant to call it directly. The lack of documentation means there's no specification being violated - the behavior is technically undefined for this edge case.
+
+Second, the scenario is extremely contrived. Having directories literally named with glob wildcard characters like '?' or '*' is highly unusual in practice. The bug only manifests when: (1) you use brace expansion, (2) one of the brace items is a glob wildcard, and (3) there are other directories that match that wildcard. This combination is unlikely to occur in real-world usage of Cython's build system.
+
+Third, while the function does implement duplicate detection for `**/` patterns, this could be seen as a special case rather than a general principle. The recursive glob handling has different performance characteristics and explicitly needs deduplication due to how it generates multiple overlapping searches. The brace expansion, by contrast, is simply splitting a pattern and running each part independently - a simpler operation where deduplication might not have been considered necessary.

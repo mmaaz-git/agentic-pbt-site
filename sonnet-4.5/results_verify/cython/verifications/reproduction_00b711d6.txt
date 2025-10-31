@@ -1,0 +1,47 @@
+BUG REPRODUCTION RESULTS
+
+I successfully reproduced the bug using multiple test approaches:
+
+1. SIMPLE REPRODUCTION TEST:
+   Test case: Extension("test", ["test.pyx"], pyrex_gdb=True, cython_gdb=False)
+   Expected: cython_gdb=False (the explicit parameter value)
+   Actual: cython_gdb=True (the pyrex_gdb value)
+   Result: BUG CONFIRMED
+
+2. REVERSE TEST:
+   Test case: Extension("test", ["test.pyx"], pyrex_gdb=False, cython_gdb=True)
+   Expected: cython_gdb=True
+   Actual: cython_gdb=False
+   Result: BUG CONFIRMED - pyrex value overrides explicit cython value
+
+3. LIST PARAMETER TEST:
+   Test case: Extension("test", ["test.pyx"], pyrex_include_dirs=['old'], cython_include_dirs=['new'])
+   Expected: cython_include_dirs=['new']
+   Actual: cython_include_dirs=['old']
+   Result: BUG CONFIRMED - affects all cython_ parameters, not just booleans
+
+4. HYPOTHESIS TESTING:
+   The hypothesis test failed immediately on the first generated example
+   Failing case: pyrex_gdb=False, cython_gdb=True
+   The test correctly identified that explicit cython parameters are being overridden
+
+5. SOURCE CODE ANALYSIS:
+   Traced through the execution flow:
+   - Line 45: pyrex_gdb gets converted to cython_gdb in the **kw dict
+   - Lines 47-63: Recursive call to Extension.__init__ passes **kw but NOT the explicit cython_gdb parameter
+   - Line 64: Early return prevents lines 83-92 from executing
+   - Result: The explicit cython_gdb parameter is never used when pyrex options are present
+
+6. CONTROL TESTS:
+   - When only pyrex_gdb is provided: Works correctly (translated to cython_gdb)
+   - When only cython_gdb is provided: Works correctly
+   - Problem only occurs when BOTH are provided
+
+TECHNICAL DETAILS:
+The bug is caused by a flawed implementation of the backward compatibility logic. When pyrex_ options are present, the code:
+1. Converts pyrex_ to cython_ in the kwargs dictionary
+2. Makes a recursive call with the modified kwargs
+3. Returns early, never processing the explicit cython_ parameters
+4. This causes explicit cython_ parameters to be silently discarded
+
+The bug report's description of the problem is ACCURATE and the provided test cases correctly demonstrate the issue.

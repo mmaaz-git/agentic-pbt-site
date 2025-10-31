@@ -1,0 +1,43 @@
+## Bug Reproduction Results
+
+### Bug Confirmation
+The bug report is TECHNICALLY CORRECT. The Template.substitute() method does indeed mutate the input dictionary.
+
+### Test Results
+
+1. **Basic Mutation Test**: CONFIRMED
+   - Input dict {'x': 42} becomes {'x': 42, '__template_name__': 'test.tmpl'}
+   - The '__template_name__' key is added to the original dictionary
+
+2. **Multiple Substitutions**: CONFIRMED
+   - The mutation happens on first call
+   - Subsequent calls with same dict don't add duplicate keys (key already exists)
+
+3. **Namespace Mutation**: CONFIRMED WORSE BEHAVIOR
+   - Not only is '__template_name__' added, but also ALL namespace keys
+   - Input dict {'z': 'test'} becomes {'z': 'test', '__template_name__': None, 'default': 'value'}
+   - This means the entire namespace is merged into the user's dictionary
+
+4. **Property-Based Test**: FAILS AS REPORTED
+   - The hypothesis test fails immediately
+   - Any dictionary passed to substitute() gets mutated
+
+### Code Analysis
+Looking at the implementation (lines 182-185):
+```python
+ns = kw  # Creates an alias, not a copy
+ns['__template_name__'] = self.name  # Mutates the original
+if self.namespace:
+    ns.update(self.namespace)  # Further mutations
+```
+
+### Comparison with string.Template
+Python's standard string.Template.substitute() does NOT mutate the input dictionary. The documentation says Tempita is "like string.Template" which creates an expectation of similar behavior.
+
+### Technical Impact
+The mutation happens because:
+1. Line 182 creates an alias (ns = kw) rather than a copy
+2. All subsequent operations on 'ns' modify the original dictionary
+3. This affects both single-argument dict and **kwargs forms
+
+The bug is real and reproducible exactly as reported.

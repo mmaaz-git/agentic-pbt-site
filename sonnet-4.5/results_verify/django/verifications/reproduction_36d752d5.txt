@@ -1,0 +1,54 @@
+BUG REPRODUCTION RESULTS
+
+## Summary
+The bug report is technically correct. The cache can indeed exceed its configured max_entries limit.
+
+## Test Results
+
+### Bug Reproduction Test
+The exact scenario from the bug report was reproduced:
+- Created LocMemCache with max_entries=1, cull_frequency=3
+- Added two items to the cache
+- Result: Cache size became 2, exceeding max_entries of 1
+- This confirms the bug exists as described
+
+### Root Cause Verification
+The culling calculation was verified:
+- When len(cache) < cull_frequency, integer division results in 0
+- Example: 1 // 3 = 0, 2 // 3 = 0
+- When count = 0, the _cull() method removes 0 items
+- The new item is then added, causing cache to exceed max_entries
+
+### Systematic Testing
+Multiple combinations of max_entries and cull_frequency were tested:
+- (1, 2): Cache exceeded max_entries
+- (1, 3): Cache exceeded max_entries
+- (1, 4): Cache exceeded max_entries
+- (2, 3): Cache exceeded max_entries
+- (2, 4): Cache exceeded max_entries
+- (3, 4): Cache exceeded max_entries
+
+All cases where max_entries < cull_frequency resulted in the cache exceeding its limit.
+
+### Hypothesis Test
+The property-based test from the bug report was run:
+- Test failed on first example with max_entries=1, extra=1
+- This confirms the bug is reproducible with the provided test
+
+### Fix Verification
+The proposed fix (using max(1, len(cache) // cull_frequency)) was tested:
+- With the fix applied, all test cases passed
+- Cache no longer exceeded max_entries in any scenario
+- The fix ensures at least one item is always culled when needed
+
+## Technical Details
+
+The bug occurs in the interaction between _set() and _cull():
+
+1. _set() checks if len(cache) >= max_entries
+2. If true, it calls _cull() before adding the new item
+3. _cull() calculates: count = len(cache) // cull_frequency
+4. When this integer division results in 0, no items are removed
+5. The new item is added anyway, exceeding max_entries
+
+The proposed fix ensures that when culling is triggered, at least one item is always removed, preventing the cache from exceeding its configured limit.

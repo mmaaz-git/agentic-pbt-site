@@ -1,0 +1,48 @@
+## Bug Reproduction Analysis
+
+### Test Results
+I successfully reproduced the bug exactly as described in the report:
+
+1. **Specific failing input (b'\x80')**: Confirmed - raises UnicodeDecodeError
+2. **Valid UTF-8 bytes (b'hello')**: Works correctly, returns 'hello'
+3. **Multiple invalid UTF-8 sequences**: All fail with UnicodeDecodeError
+   - b'\xff': Failed
+   - b'\x80\x80': Failed
+   - b'\xc0\x80': Failed (overlong encoding)
+   - b'\xed\xa0\x80': Failed (UTF-16 surrogate)
+   - b'test\x80data': Failed (mixed valid/invalid)
+
+4. **Common binary data use cases**: Mixed results
+   - PNG file header (b'\x89PNG\r\n\x1a\n'): Failed
+   - JPEG file header (b'\xff\xd8\xff'): Failed
+   - Some binary data worked if it happened to be valid UTF-8
+
+### Technical Verification
+The implementation at line 55 of `/home/npc/miniconda/lib/python3.13/site-packages/pydantic/deprecated/json.py` shows:
+```python
+bytes: lambda o: o.decode()
+```
+
+This confirms the bug report's claim that the encoder calls `bytes.decode()` without any parameters, which:
+- Defaults to UTF-8 encoding
+- Uses strict error handling
+- Raises UnicodeDecodeError on invalid UTF-8 sequences
+
+### Error Message Accuracy
+The error message reported matches exactly:
+```
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+```
+
+### Alternative Approaches Tested
+I verified that alternative approaches would work:
+- `decode('utf-8', errors='replace')` returns '�' (replacement character)
+- `decode('utf-8', errors='ignore')` returns '' (empty string)
+- Base64 encoding returns 'gA=='
+- Hex encoding returns '80'
+
+### Hypothesis Test Note
+While I couldn't run the full hypothesis test due to version issues, manual testing with various byte sequences confirmed the pattern: any bytes containing invalid UTF-8 sequences will cause the encoder to crash.
+
+### Conclusion
+The bug is 100% reproducible. The `pydantic_encoder` function crashes with UnicodeDecodeError when given bytes that contain invalid UTF-8 sequences, exactly as described in the bug report.

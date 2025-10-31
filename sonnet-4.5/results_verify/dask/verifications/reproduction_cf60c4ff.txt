@@ -1,0 +1,42 @@
+## Bug Reproduction Results
+
+### Test Results
+I successfully reproduced the bug described in the report. The Django SQLite implementation of LPAD and RPAD functions does indeed behave incorrectly with negative length values.
+
+### Specific Findings
+
+1. **Confirmed Bug Behavior**:
+   - `_sqlite_lpad('00', -1, '0')` returns `'0'` instead of empty string
+   - `_sqlite_rpad('hello', -2, 'X')` returns `'hel'` instead of empty string
+   - The functions consistently return truncated strings for negative lengths
+
+2. **Root Cause Identified**:
+   - The implementation uses `text[:length]` when delta <= 0 (line 394 in _sqlite_lpad)
+   - When length is negative, Python's negative slicing removes characters from the end
+   - For example: `'hello'[:-2]` returns `'hel'` (all but last 2 characters)
+   - This is not intentional SQL behavior but an artifact of Python slicing
+
+3. **Current Implementation Analysis**:
+   ```python
+   def _sqlite_lpad(text, length, fill_text):
+       if text is None or length is None or fill_text is None:
+           return None
+       delta = length - len(text)
+       if delta <= 0:
+           return text[:length]  # BUG: negative length causes Python negative slicing
+       return (fill_text * length)[:delta] + text
+   ```
+
+4. **Edge Cases Tested**:
+   - Zero length: Correctly returns empty string
+   - Positive length: Works correctly
+   - NULL handling: Works correctly (returns None)
+   - Very negative lengths (e.g., -100): Sometimes returns empty string when abs(length) > len(text)
+
+5. **Behavior Pattern**:
+   - When length is negative and abs(length) < len(text): Returns truncated string
+   - When length is negative and abs(length) >= len(text): Returns empty string
+   - This is consistent with Python's slicing behavior but inconsistent with SQL standards
+
+### Technical Correctness
+The bug report is technically accurate. The current implementation does not follow standard SQL behavior for negative lengths, instead accidentally using Python's negative slicing semantics.

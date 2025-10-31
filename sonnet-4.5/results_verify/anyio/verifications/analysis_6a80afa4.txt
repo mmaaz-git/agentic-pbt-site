@@ -1,0 +1,37 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This is an internal/private function (starts with underscore) that is not part of the public API and has no documentation specifying its behavior. Users shouldn't be calling this function directly, and its error messages are implementation details. The function works as coded, even if the error messages could be clearer. Additionally, anyio users would typically not encounter this issue since they use public APIs that handle socket creation properly.
+
+**Why it might not be INVALID:**
+The bug report is technically accurate - the error messages are objectively misleading. When a file descriptor is closed/invalid (EBADF), the function incorrectly reports that "the socket must be connected" or "must be bound" instead of indicating the real problem. This is a logic error in the code, not a documentation issue. The fact that it's a private function doesn't mean it shouldn't work correctly, especially since it's used internally by anyio.
+
+**Why it might be WONTFIX:**
+This is an internal function that regular users should never call directly. The misleading error message only occurs in an edge case (passing a closed file descriptor with require_connected/require_bound flags), which is unlikely to happen in normal usage through the public API. The error still correctly prevents invalid operations, just with a suboptimal message. Since it's not user-facing and the impact is minimal (just a misleading error message in an edge case), maintainers might consider this too trivial to fix.
+
+**Why it might not be WONTFIX:**
+Even internal functions should provide accurate error messages for debugging purposes. When anyio's public functions call this internal function and something goes wrong, developers need accurate error messages to diagnose issues. Misleading errors waste developer time and make debugging harder. The fix is also simple and straightforward - just remove the incorrect assumptions about what non-ENOTSOCK errors mean.
+
+**Why it might be DOCUMENTATION_FIX:**
+Since the function has no documentation or docstring, one could argue that the current behavior is the de facto specification. Adding documentation that explains "when socket creation fails with non-ENOTSOCK errors, the function assumes connection/binding requirements aren't met" would document the current behavior. The lack of specification means the current behavior isn't technically wrong, just undocumented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The error messages are objectively incorrect - they claim something about the socket's connection/binding state when the socket couldn't even be created. No reasonable documentation would specify that "when given an invalid file descriptor, report that the socket isn't connected." The code has a clear logic error where it conflates different types of failures. This isn't a documentation issue; it's incorrect error handling logic.
+
+**Why it might be FEATURE_REQUEST:**
+One could argue that better error messages for invalid file descriptors is a new feature rather than a bug fix. The current code "works" in that it prevents invalid operations, and adding more specific error messages for different OSError types could be seen as an enhancement. The original code might not have been designed to handle closed file descriptors gracefully, making this a request for new functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the function already handles errors and provides error messages. The issue is that the existing error messages are wrong. Fixing incorrect error messages is a bug fix, not a new feature. The function already attempts to provide specific error messages for different conditions; it just does so incorrectly for the EBADF case.
+
+**Why it might be BUG:**
+The error messages are demonstrably incorrect and misleading. When given a closed/invalid file descriptor (EBADF), the function reports connection/binding issues instead of the actual problem. This is a clear logic error in the code that makes debugging harder. The bug report provides accurate reproduction steps, correctly identifies the problematic code, and proposes reasonable fixes. The error handling logic incorrectly assumes that all non-ENOTSOCK errors during socket creation are due to connection/binding issues, which is false.
+
+**Why it might not be BUG:**
+This is a private/internal function not meant for direct use. The misleading error only occurs in edge cases that shouldn't happen through normal API usage. The function still correctly prevents invalid operations, even if the error message is suboptimal. Since there's no documentation specifying what error messages should be shown for invalid file descriptors, the current behavior isn't violating any documented contract.
+
+**Overall consideration**
+This bug report presents a genuine issue with misleading error messages in the _validate_socket function. When a closed or invalid file descriptor is passed with require_connected=True or require_bound=True, the function incorrectly reports that "the socket must be connected" or "must be bound" when the actual problem is that the file descriptor is invalid (EBADF). The reproduction is accurate and the technical analysis is correct - the code at lines 52-55 wrongly assumes that any OSError except ENOTSOCK during socket creation implies connection/binding issues.
+
+However, this is an internal/private function (indicated by the underscore prefix) that is not part of anyio's public API. Regular users should never call this function directly, and would typically only see these errors if something has already gone seriously wrong in the anyio internals. The impact is limited to providing misleading error messages in edge cases, rather than causing incorrect behavior or data corruption. The function still correctly rejects invalid inputs, just with suboptimal error messages.
+
+Given that this is an internal function with misleading but non-critical error messages in edge cases, and considering that fixing internal error messages for scenarios that shouldn't occur in normal usage is typically low priority, this would most appropriately be categorized as WONTFIX. While the error messages are technically incorrect, the trivial nature of the issue in an internal function that users shouldn't access makes it unlikely to be worth the maintenance effort to fix.

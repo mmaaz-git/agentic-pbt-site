@@ -1,0 +1,34 @@
+## Reproduction of Bug
+
+I have successfully reproduced the bug described in the report. When calling `parse_list('["]')`, the function raises a `KeyError: '__Pyx_L1'` exactly as reported.
+
+### Steps taken to reproduce:
+
+1. Ran the exact code provided in the bug report:
+   ```python
+   from Cython.Build.Dependencies import parse_list
+   result = parse_list('["]')
+   ```
+
+2. Confirmed the exact error and stack trace:
+   - Error type: KeyError
+   - Error message: '__Pyx_L1'
+   - Location: Dependencies.py line 132 in the unquote function
+
+### Root cause analysis:
+
+Through debugging, I identified the exact mechanism of the bug:
+
+1. When `parse_list('["]')` is called, the brackets are stripped leaving just `"`
+2. `strip_string_literals('"')` treats this as an unclosed string literal
+3. It creates a placeholder `"__Pyx_L1_` and maps `__Pyx_L1_` (with underscore) to an empty string
+4. The `unquote` function receives `"__Pyx_L1_` and tries to lookup `literal[1:-1]` which is `__Pyx_L1` (without trailing underscore)
+5. Since `__Pyx_L1` doesn't exist in the literals dict (only `__Pyx_L1_` exists), a KeyError is raised
+
+### Additional findings:
+
+I discovered that the bug also occurs with other inputs:
+- `[""]` (empty string in quotes) raises `KeyError: ''`
+- `[a, ""]` (mixed content with empty string) also raises `KeyError: ''`
+
+The bug is consistently reproducible and represents a real issue in the parse_list function's handling of certain quoted strings.

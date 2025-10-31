@@ -1,0 +1,64 @@
+BUG REPRODUCTION RESULTS
+========================
+
+I successfully reproduced the bug described in the report. Here are the technical details:
+
+1. Hypothesis Test Results:
+---------------------------
+The hypothesis test from the bug report FAILS as claimed:
+- When null=False: ValidationError is raised as expected (code: "null")
+- When null=True: ValidationError is STILL raised with code "blank" - This is the bug!
+
+The test correctly expects that null=True should allow None values to pass validation, but it doesn't.
+
+2. Direct Testing Results:
+--------------------------
+Test Case: IntegerField(null=True, blank=False) with value=None
+- Expected: Validation should pass (None is allowed by null=True)
+- Actual: ValidationError raised with message "This field cannot be blank."
+
+Additional test results:
+- IntegerField(null=False, blank=False) + None: Raises "null" error ✓ (correct)
+- IntegerField(null=True, blank=True) + None: Passes validation ✓ (correct)
+- IntegerField(null=False, blank=True) + None: Raises "null" error ✓ (correct)
+- CharField(null=True, blank=False) + None: Raises "blank" error (same issue)
+
+3. Model-Level Behavior:
+------------------------
+Testing with an actual Django model shows inconsistent behavior:
+- Model instance with null=True, blank=False field set to None:
+  - full_clean() FAILS with "This field cannot be blank"
+  - save() SUCCEEDS and stores NULL in database
+  - Retrieved instance from DB with NULL value FAILS validation
+
+This creates a problematic situation where:
+- Data can be saved to the database with NULL values
+- But that same data fails validation when retrieved
+- This breaks the round-trip consistency
+
+4. Root Cause Verification:
+---------------------------
+Confirmed in the source code:
+- EMPTY_VALUES = (None, '', [], (), {})
+- None is included in EMPTY_VALUES
+- The validation logic at line 826-827 checks: "if not self.blank and value in self.empty_values"
+- Since None is in empty_values, it triggers the blank validation error even when null=True
+
+5. Bug Report Accuracy:
+-----------------------
+The bug report is technically accurate:
+- The reproduction code runs correctly
+- The issue exists as described
+- The proposed fix would resolve the immediate problem
+- The explanation of why this is happening is correct
+
+6. Expected vs Actual Behavior:
+-------------------------------
+Expected (based on Django's documentation):
+- null=True should control database NULL acceptance
+- blank=False should control form validation for empty values
+- None should be allowed when null=True regardless of blank setting
+
+Actual behavior:
+- None is rejected at validation level when blank=False, even with null=True
+- This contradicts the documented separation between database (null) and validation (blank) concerns

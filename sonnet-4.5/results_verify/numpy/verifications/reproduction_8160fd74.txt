@@ -1,0 +1,77 @@
+## Bug Reproduction Results
+
+### Test 1: Basic Reproduction
+**Code:**
+```python
+A = np.matrix([[1, 2]])
+result = np.bmat('A', gdict={'A': A})
+```
+**Result:** TypeError: 'NoneType' object is not subscriptable
+**Status:** BUG CONFIRMED - Crashes as reported
+
+### Test 2: Property-based Test from Report
+**Code:**
+```python
+globals_dict = {'A': np.matrix(np.ones((1, 1))), 'B': np.matrix(np.zeros((1, 1)))}
+result = np.bmat('A, B', gdict=globals_dict)
+```
+**Result:** TypeError: 'NoneType' object is not subscriptable
+**Status:** BUG CONFIRMED - Hypothesis test fails on all inputs
+
+### Test 3: With Both ldict and gdict
+**Code:**
+```python
+result = np.bmat('A, B', ldict={'A': A}, gdict={'B': B})
+```
+**Result:** SUCCESS - Works correctly when both parameters provided
+**Status:** This demonstrates the function works when ldict is not None
+
+### Test 4: With Only ldict
+**Code:**
+```python
+result = np.bmat('A', ldict={'A': A}, gdict={})
+```
+**Result:** SUCCESS - Works correctly with only ldict
+**Status:** Shows ldict alone works fine
+
+### Test 5: Root Cause Analysis
+Direct test of the problematic line:
+```python
+ldict = None
+thismat = ldict['A']  # Line 1030 in _from_string
+```
+**Result:** TypeError: 'NoneType' object is not subscriptable
+**Observation:** When ldict is None, accessing ldict[col] raises TypeError, not KeyError
+
+### Stack Trace Analysis
+The error occurs at:
+- File "numpy/matrixlib/defmatrix.py", line 1030, in _from_string
+  `thismat = ldict[col]`
+
+The exception handler only catches KeyError, not TypeError:
+```python
+try:
+    thismat = ldict[col]  # Raises TypeError when ldict is None
+except KeyError:  # This doesn't catch TypeError
+    # fallback to gdict
+```
+
+### Technical Analysis
+
+1. **Bug is Real**: The code crashes exactly as described in the bug report.
+
+2. **Root Cause Confirmed**: The issue is in _from_string() function at line 1030, where it attempts to subscript ldict without checking if it's None first.
+
+3. **Exception Type Mismatch**: The code expects KeyError (for missing keys) but gets TypeError (for None subscript).
+
+4. **Impact**: Any call to np.bmat() with a string argument and only gdict parameter will fail.
+
+5. **Workaround Exists**: Users must provide both ldict and gdict, even if ldict is an empty dict.
+
+### Comparison with Expected Behavior
+
+**Expected** (based on documentation): When gdict alone is provided, variables should be looked up in gdict.
+
+**Actual**: TypeError is raised because the code tries to access None as a dictionary.
+
+The bug report's technical analysis is 100% accurate.

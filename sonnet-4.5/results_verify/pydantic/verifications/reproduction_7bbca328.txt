@@ -1,0 +1,35 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue is confirmed and behaves exactly as described.
+
+### Test Results:
+
+1. **Hypothesis Test**: The property-based test fails immediately, finding a counterexample at `rgba=(0, 0, 0, 0.375)`. The test confirms that the round-trip property `Color(color.as_rgb()) == color` is violated for colors with alpha values that don't round cleanly to 2 decimal places.
+
+2. **Specific Test Case**: The reported case `rgba=(0, 0, 0, 0.625)` produces:
+   - Original: `(0, 0, 0, 0.625)`
+   - RGBA string: `rgba(0, 0, 0, 0.62)`
+   - After round-trip: `(0, 0, 0, 0.62)`
+   - Match: `False`
+
+3. **Additional Case**: The hypothesis-discovered case `rgba=(0, 0, 0, 0.375)` produces:
+   - Original: `(0, 0, 0, 0.375)`
+   - RGBA string: `rgba(0, 0, 0, 0.38)`
+   - After round-trip: `(0, 0, 0, 0.38)`
+   - Match: `False`
+
+### Code Verification:
+
+I examined the source code in `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/color.py` at lines 156-164. The `as_rgb()` method indeed contains the line:
+
+```python
+f'{round(self._alpha_float(), 2)})'
+```
+
+This confirms that alpha values are rounded to 2 decimal places when serializing to RGB string format, causing precision loss for values that don't round cleanly.
+
+### Impact:
+
+The bug causes silent data corruption when colors with precise alpha values are serialized and then deserialized. The round-trip property is violated, which could lead to unexpected behavior in applications that rely on color precision or that save/load color values.
+
+Note: The Color class itself is deprecated in Pydantic V2.0 and will be removed in V3.0, with users directed to use `pydantic_extra_types` instead.

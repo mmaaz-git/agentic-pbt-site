@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior could be considered "working as designed" since pandas has automatic date detection enabled by default (convert_dates=True). The library is attempting to be helpful by detecting what it considers to be Unix timestamps. Users who don't want this behavior can simply set convert_dates=False. Additionally, the bug report assumes round-trip guarantees that were never explicitly promised in the documentation.
+
+**Why it might not be INVALID:**
+The behavior is genuinely surprising and undocumented. The documentation only mentions detecting dates based on column names, not based on numeric values. A user storing legitimate numeric data (like scientific measurements in seconds, financial values, or any number > 31536000) would have their data silently corrupted without warning. The fact that the workaround exists doesn't excuse the undocumented default behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior has likely been in pandas for a long time and changing it would be a breaking change for users who rely on automatic timestamp detection. The threshold of 31536000 (one year in seconds) might be considered reasonable for detecting Unix timestamps. The workaround is simple (convert_dates=False) and the edge case of having numeric values exactly in this range might be rare enough to not warrant fixing.
+
+**Why it might not be WONTFIX:**
+Data integrity issues are not trivial - silently changing data types and values is a serious problem. The fact that it happens by default makes it worse. This isn't an obscure edge case; any dataset with large numeric values (which is common in many domains) will hit this issue. The bug causes actual data corruption, not just inconvenience.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The core issue is that this behavior is completely undocumented. The documentation makes no mention of automatic timestamp detection based on numeric magnitude. If the documentation clearly stated "numeric values greater than 31536000 will be interpreted as Unix timestamps when convert_dates=True", users would know to use convert_dates=False for their numeric data. The code might be working as intended, just poorly documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting bad behavior doesn't make it acceptable. The automatic conversion is too aggressive and happens in cases where it shouldn't (like with a Series that was explicitly created with float64 dtype). Documentation alone won't prevent data corruption for users who don't read every detail. The default behavior itself is problematic.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report essentially asks for better round-trip guarantees that don't currently exist. They want pandas to preserve dtype and values during JSON serialization, which could be considered a new feature. The suggestion to make date conversion opt-in rather than opt-out could be viewed as a feature enhancement request for more conservative default behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's pointing out that existing functionality corrupts data. Round-trip serialization is a basic expectation for any serialization format. The fact that to_json() and read_json() don't round-trip correctly for basic numeric data is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a bug because: 1) It silently corrupts data by changing both dtype and values, 2) The behavior is completely undocumented, 3) It violates reasonable expectations for JSON serialization round-trips, 4) The threshold (31536000) is arbitrary and not communicated to users, 5) There's no warning when this conversion happens, 6) It affects basic numeric data which is extremely common. Data integrity issues of this severity should be considered bugs.
+
+**Why it might not be BUG:**
+The automatic date detection is intentional behavior, not accidental. The convert_dates parameter defaults to True by design, suggesting the library intends to be aggressive about finding dates. A workaround exists and works correctly. The documentation doesn't promise round-trip guarantees for all data types. Some might argue this is just surprising behavior rather than incorrect behavior.
+
+## Overall Consideration
+
+Looking at all considerations, this issue sits at the intersection of several categories. The technical facts are clear: pandas does automatically convert numeric values to dates based on an undocumented threshold, causing both dtype and value changes during what should be a round-trip serialization.
+
+The strongest argument for BUG is the silent data corruption aspect - users' numeric data is being transformed without their knowledge or consent based on undocumented behavior. This violates the principle of least surprise and can cause serious issues in production systems. The fact that financial data, scientific measurements, or any large numeric values could be silently converted to dates is a significant problem.
+
+However, the strongest counter-argument is that this appears to be intentional behavior (even if poorly designed), and the documentation never explicitly promises round-trip fidelity. The existence of convert_dates=True as the default suggests pandas intentionally tries to detect dates aggressively. This points more toward DOCUMENTATION_FIX - the behavior might be intentional but needs to be clearly documented so users know when to use convert_dates=False.
+
+Given that most organizations would likely close this as "working as intended" but acknowledge the documentation gap, and considering the high bar for classifying something as a BUG (only 10% should be), this most likely belongs in the DOCUMENTATION_FIX category. The behavior, while problematic, appears intentional, and the primary issue is that users have no way to know about this behavior from reading the documentation.

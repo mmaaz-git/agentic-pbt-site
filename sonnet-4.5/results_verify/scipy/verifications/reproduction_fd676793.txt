@@ -1,0 +1,27 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug described in the report. The issue is confirmed:
+
+### Hypothesis Test Results
+The hypothesis test fails as expected. When running the property-based test with negative rtol=-0.1, the newton function does NOT raise a ValueError. Instead, it accepts the negative rtol value and returns a root successfully. The test assertion "newton should reject negative rtol" triggers, confirming the bug.
+
+### Manual Reproduction Results
+The manual reproduction code clearly demonstrates the inconsistency:
+
+1. **bisect function**: When given rtol=-0.1, it correctly raises a ValueError:
+   "rtol too small (-0.1 < 8.88178e-16)"
+
+2. **newton function**: When given the same rtol=-0.1, it accepts the value without validation and returns a root (2.0) successfully.
+
+### Effect Analysis
+I investigated what happens when newton uses a negative rtol value:
+
+1. The convergence formula used is: |a - b| <= atol + rtol * max(|a|, |b|)
+2. With negative rtol, the threshold becomes negative (e.g., -0.21 in my test)
+3. Since absolute differences are always non-negative, a negative threshold should make convergence impossible
+4. However, newton still converges, suggesting either:
+   - There's fallback logic that handles this edge case
+   - The rtol parameter might not be used in all code paths
+   - The convergence check has additional conditions
+
+The core issue is confirmed: newton does not validate rtol parameters, allowing mathematically nonsensical negative values, while other root-finding functions (bisect, brentq, etc.) properly validate that rtol >= 4 * np.finfo(float).eps.

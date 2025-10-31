@@ -1,0 +1,38 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The `_read_orc` function in `dask.dataframe.io.orc.core` does indeed mutate the `columns` parameter passed to it.
+
+## Reproduction Results
+
+### Test 1: Simple Reproduction
+- Ran the provided reproduction code with columns=['col1', 'col2'] and index='col1'
+- Result: The columns list was mutated from ['col1', 'col2'] to ['col1', 'col2', 'col1']
+- This confirms the mutation occurs
+
+### Test 2: Hypothesis Test
+- Ran the Hypothesis property-based test from the bug report
+- The test failed with the example column_names=['a'], index_name='a'
+- The columns list was mutated from ['a'] to ['a', 'a']
+- This confirms the bug exists across various inputs
+
+### Test 3: Source Code Verification
+- Located the exact line of code at `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/dataframe/io/orc/core.py:113`
+- The code shows: `columns.append(index)`
+- This directly modifies the input list instead of creating a new list
+
+### Test 4: Public API Impact
+- Tested whether the bug affects users of the public `read_orc` function
+- Found that the public API is NOT affected because it creates a new list before passing to `_read_orc`
+- The public function removes the index from columns with a list comprehension that creates a new list
+
+## Effect of the Bug
+
+The bug causes the `columns` parameter list to be mutated by appending the index column to it. This is a violation of the principle that functions should not have side effects on their input parameters. While the public API `read_orc` is not directly affected due to defensive programming, the internal `_read_orc` function itself does exhibit this problematic behavior.
+
+The mutation could affect:
+1. Direct callers of `_read_orc` (though it's an internal function)
+2. Any code that reuses the columns list after calling `_read_orc`
+3. Future refactorings that might not maintain the defensive copy in `read_orc`
+
+The bug is real and reproducible as described in the report.

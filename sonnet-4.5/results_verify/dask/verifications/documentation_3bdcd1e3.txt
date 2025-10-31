@@ -1,0 +1,45 @@
+DOCUMENTATION ANALYSIS
+=====================
+
+## Documentation Findings
+
+1. **Function Documentation**:
+   - The `_resample_bin_and_out_divs` function has NO docstring
+   - It's an internal/private function (indicated by the leading underscore)
+   - No explicit documentation about the expected return value structure or invariants
+
+2. **Public API Documentation**:
+   - The public resample API is documented in Dask's documentation
+   - It follows pandas' resample API pattern
+   - Parameters like 'rule', 'closed', and 'label' are standard resampling parameters
+
+3. **Implicit Contract from Code Usage**:
+   The function's contract must be inferred from how it's used in the codebase:
+
+   a) In ResampleReduction._lower() (lines 155-171):
+      - Takes the output of _resample_bin_and_out_divs as (newdivs, outdivs)
+      - Uses newdivs for repartitioning (line 157)
+      - Creates BlockwiseDep objects from outdivs slices (lines 162-164):
+        * BlockwiseDep(output_divisions[:-1]) - start points
+        * BlockwiseDep(output_divisions[1:]) - end points
+        * BlockwiseDep(['left'] * (len(output_divisions[1:]) - 1) + [None])
+
+   b) In ResampleAggregation._blockwise_arg() (line 196-199):
+      - Indexes BlockwiseDep arguments using the same index i
+      - This REQUIRES divisions_left and divisions_right to have the same length
+
+4. **Expected Behavior**:
+   Based on the code structure and usage patterns:
+   - The function should return two tuples (newdivs, outdivs)
+   - These tuples represent division boundaries for resampling operations
+   - The downstream code clearly expects these to work as paired start/end points
+   - The indexing pattern in _blockwise_arg requires equal lengths
+
+5. **No Documentation of Edge Cases**:
+   - There's no documentation about how edge cases should be handled
+   - No specification of what should happen when divisions align with resampling boundaries
+   - No explicit invariant stating the lengths must match
+
+## Conclusion
+
+While there's no explicit documentation stating that newdivs and outdivs must have the same length, the code structure and usage patterns make it clear that this is an implicit requirement. The downstream code will fail if they have different lengths, as it indexes both with the same index variable. This is a case where the function's behavior must satisfy an undocumented but essential invariant for the system to work correctly.

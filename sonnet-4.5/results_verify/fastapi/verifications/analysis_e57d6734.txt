@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report claims that `get_typed_annotation` crashes with keyword annotations and that this is a bug. However, Python's typing.ForwardRef explicitly requires that string annotations be valid Python expressions. Keywords like 'if', 'class', 'def' are NOT valid expressions - they are statements or special syntax elements. The ForwardRef class is working exactly as designed by Python's standard library. FastAPI is simply using Python's standard typing facilities correctly. The user is attempting to use invalid type annotations (keywords as types) which makes no semantic sense in Python's type system.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that the code crashes with a SyntaxError when processing certain string annotations. The crash is real and reproducible. Python does allow `def f(x: "if"): pass` syntactically, and FastAPI could potentially handle this case more gracefully rather than crashing. The user's observation about the technical behavior is accurate.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Using Python keywords as type annotations is nonsensical and would never occur in real production code. No one would intentionally write `x: "if"` as a type annotation expecting it to work. This is an extreme edge case that would only occur due to programmer error. The error message, while coming from deep in the stack, is actually quite clear: "Forward reference must be an expression -- got 'if'". Fixing this would add unnecessary complexity to handle a case that should never happen in practice.
+
+**Why it might not be WONTFIX:**
+The error could be confusing to developers who make typos or copy-paste errors. A more helpful error message from FastAPI itself could improve developer experience. The fix suggested in the bug report is relatively simple and would provide better error messages. FastAPI prides itself on good developer experience and helpful error messages.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+FastAPI's documentation doesn't explicitly state that string annotations must be valid Python expressions. The function `get_typed_annotation` is undocumented (being internal), but the behavior could be mentioned in FastAPI's documentation about type annotations. Adding a note that string annotations must be valid Python expressions would clarify this limitation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is a limitation of Python's standard typing module, not FastAPI specifically. The requirement that ForwardRef strings be valid expressions is Python's requirement, not FastAPI's. FastAPI is just using the standard library correctly. It would be redundant to document every limitation of Python's typing system in FastAPI's docs.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report suggests adding error handling to provide better error messages when invalid string annotations are used. This would be a new feature - graceful handling of invalid type annotations with helpful error messages. The proposed fix adds a try-catch block to provide a more user-friendly error message, which is essentially a new feature for better developer experience.
+
+**Why it might not be FEATURE_REQUEST:**
+The current behavior (crashing with SyntaxError) is not a missing feature but rather the expected behavior when using invalid Python syntax. The system is already correctly rejecting invalid input. Adding special handling for this case isn't adding functionality but rather working around user errors.
+
+## BUG Considerations
+**Why it might be BUG:**
+FastAPI crashes during application startup when encountering keyword string annotations, even though Python allows such annotations syntactically. The function unconditionally creates ForwardRef objects without validating the input first. The crash prevents the application from starting, which could be seen as a robustness issue. The error occurs in FastAPI's code path during dependency resolution.
+
+**Why it might not be BUG:**
+The error originates from Python's standard typing.ForwardRef class, not from FastAPI code. FastAPI is correctly using Python's typing facilities as designed. Keywords are not valid type expressions and should never be used as type annotations. The behavior is consistent with Python's typing system requirements. This is user error - providing invalid input to the type system.
+
+## Overall Consideration
+After careful analysis, this bug report should be classified as **INVALID**. The core issue is that the user is attempting to use Python keywords as type annotations, which is fundamentally incorrect usage of Python's type system. While Python syntactically allows string annotations with any content (like `def f(x: "if"): pass`), these strings are meant to be forward references to actual types, not arbitrary strings. When FastAPI processes these annotations, it correctly uses Python's ForwardRef class, which validates that the string is a valid Python expression.
+
+The error message "Forward reference must be an expression -- got 'if'" is accurate and comes from Python's standard library, not FastAPI. FastAPI is using the typing module exactly as intended. The fact that someone could accidentally write `x: "if"` doesn't make it FastAPI's responsibility to handle this invalid case specially. The typing system has clear rules about what constitutes a valid forward reference, and keywords don't meet those requirements.
+
+While the suggested fix would provide a slightly better error message, it would be adding code to handle a case that represents incorrect usage of Python's type system. This is similar to asking a math library to handle the case where someone passes "banana" as a number - yes, it could provide a nicer error message, but the fundamental issue is that the input is invalid for the operation being performed. The current SyntaxError accurately describes the problem: the provided string is not a valid expression for use as a forward reference.

@@ -1,0 +1,44 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Verification
+
+1. **Hypothesis Test Result**: The property-based test failed exactly as described. When provided with the Python keyword 'if', the function `get_typed_annotation` raises a SyntaxError with the message "Forward reference must be an expression -- got 'if'".
+
+2. **Manual Reproduction**: The manual reproduction code also confirms the bug. When calling `get_dependant()` with a function that has a parameter annotated with the string "if", it crashes with the same SyntaxError.
+
+3. **Python Validity Check**: I verified that Python itself DOES allow keywords as string type annotations. The following code is valid Python:
+   ```python
+   def foo(x: "if"):
+       return x
+   ```
+   This function can be defined, inspected, and called without any issues in standard Python. The function signature shows the annotation as the string 'if'.
+
+### Technical Details
+
+The bug occurs at line 249 in `/home/npc/miniconda/lib/python3.13/site-packages/fastapi/dependencies/utils.py`:
+
+```python
+def get_typed_annotation(annotation: Any, globalns: Dict[str, Any]) -> Any:
+    if isinstance(annotation, str):
+        annotation = ForwardRef(annotation)  # <- Crashes here
+        annotation = evaluate_forwardref(annotation, globalns, globalns)
+    return annotation
+```
+
+### ForwardRef Behavior
+
+Testing Python's ForwardRef class directly shows:
+- ForwardRef accepts valid Python identifiers: 'int', 'MyClass', etc.
+- ForwardRef accepts expressions: '1+1'
+- ForwardRef REJECTS Python keywords: 'if', 'class', 'def', etc. with SyntaxError
+
+This is because ForwardRef expects its argument to be a valid Python expression that could appear on the right side of an assignment, and keywords cannot be used in that context.
+
+### Impact
+
+The crash occurs when FastAPI processes endpoint functions with keyword string annotations. While this is an edge case, it represents a situation where:
+1. Valid Python code causes FastAPI to crash
+2. The error message is not helpful to users who may have accidentally used a keyword
+3. The crash happens during dependency resolution, not at import time

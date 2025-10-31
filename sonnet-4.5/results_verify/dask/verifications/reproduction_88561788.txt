@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug reported for `dask.diagnostics.profile_visualize.unquote`.
+
+### Hypothesis Test Reproduction
+
+The provided Hypothesis test successfully identified the bug. Running the test revealed two distinct failures:
+1. A `TypeError` for expression `(set, [(list, [])])` - unhashable type issue
+2. An `IndexError` for expression `(dict, [])` - the reported bug
+
+The IndexError occurs exactly as described in the bug report, with the error message "list index out of range" at line 33 of profile_visualize.py.
+
+### Minimal Example Reproduction
+
+The minimal reproduction case `(dict, [])` raises an IndexError as reported:
+- Error occurs at line 33 in `unquote` function
+- The function tries to access `expr[1][0]` when `expr[1]` is an empty list
+- This causes an IndexError: list index out of range
+
+### Validation of Task Expression
+
+I verified that `(dict, [])` is a valid Dask task expression:
+- `dask.core.istask((dict, []))` returns `True`
+- `dask.get({'x': (dict, [])}, 'x')` successfully returns an empty dictionary `{}`
+- This confirms that creating an empty dictionary via `(dict, [])` is a legitimate Dask operation
+
+### Code Analysis
+
+The bug occurs in the condition checking on line 33:
+```python
+elif (
+    expr[0] == dict
+    and isinstance(expr[1], list)
+    and isinstance(expr[1][0], list)  # BUG: assumes expr[1] is non-empty
+):
+```
+
+The function correctly handles other collection types (tuple, list, set) in lines 28-29, but the dict handling has a special case that assumes the list is non-empty before checking `expr[1][0]`.
+
+The bug is confirmed and the proposed fix of adding `len(expr[1]) > 0` before accessing `expr[1][0]` would resolve the issue.

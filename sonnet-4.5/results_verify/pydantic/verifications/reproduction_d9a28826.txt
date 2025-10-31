@@ -1,0 +1,37 @@
+## Bug Reproduction Results
+
+### Hypothesis Test
+The property-based test failed as reported with the example `rgb=(0, 0, 1)`. This confirms the test correctly identifies cases where round-trip conversion fails.
+
+### Specific Case Analysis: RGB (0, 0, 1)
+- **Original RGB**: (0, 0, 1) - a very dark blue
+- **Actual HSL values** (before formatting):
+  - Hue: 0.6667 (240 degrees)
+  - Saturation: 1.0 (100%)
+  - Lightness: 0.00196 (~0.196%)
+- **Formatted HSL string**: "hsl(240, 100%, 0%)" (lightness rounded down from 0.196% to 0%)
+- **Parsed back RGB**: (0, 0, 0) - pure black
+- **Round-trip equality**: False
+
+### Additional Test Cases
+Testing other very dark colors (RGB values 0-2) showed systematic failures:
+- (0, 1, 0) -> "hsl(120, 100%, 0%)" -> (0, 0, 0) - FAILS
+- (1, 0, 0) -> "hsl(0, 100%, 0%)" -> (0, 0, 0) - FAILS
+- (1, 1, 0) -> "hsl(60, 100%, 0%)" -> (0, 0, 0) - FAILS
+- (0, 0, 2) -> "hsl(240, 100%, 0%)" -> (0, 0, 0) - FAILS
+- (2, 0, 0) -> "hsl(0, 100%, 0%)" -> (0, 0, 0) - FAILS
+
+### Precision Testing
+When parsing HSL strings with decimal precision:
+- "hsl(240, 100%, 0%)" parses to RGB (0, 0, 0)
+- "hsl(240, 100%, 0.1%)" parses to RGB (0, 0, 1)
+- "hsl(240, 100%, 0.2%)" parses to RGB (0, 0, 1)
+
+This confirms that adding one decimal place of precision would resolve the issue for these edge cases.
+
+### Technical Accuracy
+The bug report is technically accurate:
+1. The as_hsl() method does format with 0 decimal places (verified in source code)
+2. Very dark colors with lightness < 0.5% round down to 0%
+3. When parsed back, 0% lightness becomes pure black RGB (0, 0, 0)
+4. The proposed fix (adding one decimal place) would resolve these edge cases

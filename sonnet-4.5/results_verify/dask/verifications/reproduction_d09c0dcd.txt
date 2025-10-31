@@ -1,0 +1,42 @@
+## Reproduction of dask.sizeof dict Non-Determinism Bug
+
+### Test Execution and Results
+
+I successfully reproduced the reported bug. The tests confirm the following:
+
+1. **Hypothesis Test Failure**: The property-based test from the bug report fails, confirming that sizeof(d) does not always equal the expected formula.
+
+2. **Non-Deterministic Behavior Confirmed**:
+   - For a dict with 11 items: Results varied between 1426 and 1427 across 20 calls
+   - For a dict with 10 items: Results were consistent at 1164 across all 20 calls (deterministic)
+   - For a dict with 20 items: Results varied between 2190 and 2198 across 20 calls
+
+3. **Threshold Behavior**: The bug only manifests when dictionaries have more than 10 items, confirming the report's claim about the threshold.
+
+### Root Cause Analysis
+
+Examining the source code in `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/sizeof.py`:
+
+1. **`sizeof_python_dict` (lines 91-98)** calculates dict size as:
+   ```python
+   sys.getsizeof(d) + sizeof(list(d.keys())) + sizeof(list(d.values())) - 2 * sizeof(list())
+   ```
+
+2. **`sizeof_python_collection` (lines 40-59)** implements random sampling:
+   - For collections with ≤10 items: Uses exact calculation (deterministic)
+   - For collections with >10 items: Uses `random.sample()` to estimate size (non-deterministic)
+
+3. **Chain of Non-Determinism**:
+   - When dict has >10 items, `list(d.keys())` and `list(d.values())` each have >10 items
+   - These lists trigger random sampling in `sizeof_python_collection`
+   - Random sampling introduces non-determinism
+   - Therefore, `sizeof(dict)` becomes non-deterministic
+
+### Impact
+
+The non-deterministic behavior means:
+- The same dictionary object returns different size estimates on repeated calls
+- This violates the principle of least surprise for a utility function
+- Could cause inconsistent behavior in memory management, caching decisions, or any code that depends on size estimates
+
+The bug report is accurate and well-documented with clear reproduction steps and correct root cause analysis.

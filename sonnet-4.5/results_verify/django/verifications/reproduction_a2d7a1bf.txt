@@ -1,0 +1,50 @@
+BUG REPRODUCTION RESULTS
+
+I have successfully reproduced the behavior described in the bug report. Here are the results:
+
+1. HYPOTHESIS TEST RESULTS:
+- The Hypothesis property-based test fails immediately
+- Found numerous failing cases where q1 & q2 != q2 & q1
+- Example: Q(id=0) & Q(id=1) != Q(id=1) & Q(id=0)
+
+2. COMMUTATIVITY TEST FOR AND:
+- Q(id=0) & Q(id=1) produces: (AND: ('id', 0), ('id', 1))
+- Q(id=1) & Q(id=0) produces: (AND: ('id', 1), ('id', 0))
+- These are NOT equal according to Q's __eq__ method
+- The order of children in the combined Q object depends on the order of combination
+
+3. IDEMPOTENCE TEST:
+- Q(id=0) & Q(id=0) produces: (AND: ('id', 0), ('id', 0))
+- Q(id=0) alone is: (AND: ('id', 0))
+- These are NOT equal - idempotence doesn't hold
+- The combined version has duplicate children
+
+4. COMMUTATIVITY TEST FOR OR:
+- Q(id=0) | Q(id=1) produces: (OR: ('id', 0), ('id', 1))
+- Q(id=1) | Q(id=0) produces: (OR: ('id', 1), ('id', 0))
+- These are also NOT equal
+
+5. DE MORGAN'S LAW TEST:
+- ~(Q(id=0) & Q(id=1)) produces: (NOT (AND: ('id', 0), ('id', 1)))
+- ~Q(id=0) | ~Q(id=1) produces: (OR: (NOT (AND: ('id', 0))), (NOT (AND: ('id', 1))))
+- These are NOT equal according to Q's equality comparison
+
+6. IDENTITY PROPERTY COMPARISON:
+- (Q(id=0) & Q(id=1)).identity = ('django.db.models.Q', ('id', 0), ('id', 1))
+- (Q(id=1) & Q(id=0)).identity = ('django.db.models.Q', ('id', 1), ('id', 0))
+- The identity tuples differ in the order of children
+
+7. TECHNICAL ACCURACY:
+The bug report's technical claims are CORRECT:
+- The equality comparison is indeed order-dependent
+- The root cause is correctly identified: children are preserved in combination order
+- The identity property includes the ordering, making equality order-dependent
+
+8. IMPORTANT NOTE ABOUT SQL GENERATION:
+While the Q objects are not equal according to __eq__, they would likely generate equivalent SQL queries:
+- Both Q(id=0) & Q(id=1) and Q(id=1) & Q(id=0) would generate SQL like: WHERE id = 0 AND id = 1
+- The SQL database would treat these as logically equivalent
+- The issue is with Python-level equality comparison, not SQL generation
+
+SUMMARY:
+All technical claims in the bug report have been verified and are accurate. The Q object equality comparison does not satisfy boolean algebra properties like commutativity, idempotence, and De Morgan's laws.

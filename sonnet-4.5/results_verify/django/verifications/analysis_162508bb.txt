@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The user might be misusing the API by providing object_count=0 when they know they have objects to serialize. One could argue that if you're going to show a progress bar, you should know how many objects you're processing. The default of 0 might be intended to mean "no progress bar" and users should always provide a proper count when using progress_output.
+
+**Why it might not be INVALID:**
+The code clearly crashes with a mathematical error (division by zero) rather than a helpful error message. The API accepts these parameters without validation, and there's no documentation stating that object_count=0 is invalid when progress_output is provided. The crash happens in normal usage patterns where someone enables progress without counting objects first.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+ProgressBar appears to be an internal utility class without public documentation. The serializer's progress feature might be considered a minor convenience feature that few people use. One could argue that users who want progress bars should always provide an accurate object_count, and this edge case is too obscure to matter.
+
+**Why it might not be WONTFIX:**
+This causes a hard crash with an unhelpful error message in a public API method (Serializer.serialize()). The fix is trivial (a simple if statement), and the crash occurs with the default parameter values, which suggests it's not that obscure. A division by zero error is a serious issue that should be handled gracefully.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+There's no documentation explaining that object_count must be non-zero when using progress_output. The documentation could be updated to state this requirement, making it clear that users must provide a valid count. This would turn the unexpected crash into documented behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code has a clear mathematical bug - division by zero is a programming error, not a documentation issue. Even if documented, the current behavior (crashing with ZeroDivisionError) is poor UX. The serializer accepts the parameters without validation and then crashes internally, which suggests the code is broken, not just poorly documented.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting progress bars with unknown object counts (object_count=0) is a new feature. Perhaps the request is really asking for the progress bar to handle indeterminate progress, showing some kind of spinner or indication without percentage calculation.
+
+**Why it might not be FEATURE_REQUEST:**
+The code already attempts to support this parameter combination (progress_output with object_count=0) but fails due to a bug. This isn't asking for new functionality but rather for existing code to not crash. The suggested fix simply prevents the crash rather than adding new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code crashes with ZeroDivisionError when using valid API parameters. The Serializer.serialize() method accepts progress_output without requiring object_count to be non-zero, then crashes when it tries to update the progress. This is a clear programming error - dividing by zero without checking. The fix is trivial and the crash occurs with default parameter values.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the behavior is intentional to force users to provide object_count when using progress_output. However, there's no validation, no helpful error message, and no documentation of this requirement, making this argument very weak.
+
+## Overall consideration
+
+This appears to be a clear bug in Django's serialization code. The ProgressBar.update() method performs division by self.total_count without checking if it's zero, causing a ZeroDivisionError. This crash can occur through normal use of the public Serializer.serialize() API when someone provides progress_output but uses the default object_count=0.
+
+The mathematical error is unambiguous - dividing by zero is undefined and will always raise an exception in Python. The code path that leads to this error uses default parameter values, making it a realistic scenario. The lack of input validation or defensive programming in ProgressBar.update() represents a clear oversight in the implementation.
+
+While one could argue this should be a DOCUMENTATION_FIX or WONTFIX because ProgressBar seems to be an internal utility, the fact remains that it's used by the public serialize() method and can crash with valid parameter combinations. The fix is trivial (checking for zero before division), and the current behavior provides a poor user experience with an unhelpful error message. This makes it a legitimate bug that should be fixed rather than documented or ignored.

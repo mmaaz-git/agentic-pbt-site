@@ -1,0 +1,33 @@
+## Bug Reproduction Analysis for numpy.ma.intersect1d
+
+### Test Execution Results
+
+1. **Property-based test**: FAILS
+   - The hypothesis test correctly identifies multiple failing cases
+   - Example failure: When ar1=[0, 0] with mask=[True, False] and ar2=[0, 127, 0] with mask=[True, False, True]
+   - Result contains 2 masked values instead of the expected maximum of 1
+
+2. **Simple reproduction case**: CONFIRMED
+   - Input arrays:
+     - mar1: [-- 0] (one masked, one unmasked 0)
+     - mar2: [-- 127 --] (two masked values, one unmasked 127)
+   - Expected result: At most 1 masked value (per documentation)
+   - Actual result: [-- --] (2 masked values)
+
+### Root Cause Analysis
+
+The bug stems from the implementation details:
+
+1. `ma.intersect1d` calls `ma.unique()` on both input arrays when `assume_unique=False`
+2. `ma.unique()` itself has a bug where it can return multiple masked values
+   - For mar2=[-- 127 --], unique(mar2) returns [-- 127 --] (still 2 masked values!)
+3. The algorithm then:
+   - Concatenates the unique arrays: [0 -- -- 127 --]
+   - Sorts them: [0 127 -- -- --]
+   - Finds consecutive equal elements: results in [-- --]
+
+The core issue is that masked values are not being properly deduplicated in either `unique()` or `intersect1d()`.
+
+### Impact
+
+This violates the documented contract that "Masked values are considered equal one to the other". If all masked values are equal, there should only be at most one masked value in the intersection result (present only if both input arrays contain masked values).

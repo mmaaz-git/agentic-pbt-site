@@ -1,0 +1,50 @@
+## Bug Reproduction Results
+
+### Summary
+The bug report is technically correct. The scipy.fftpack.shift function fails to satisfy the fundamental composition property shift(shift(x,a),b) = shift(x,a+b) for ALL even-length arrays while working correctly for ALL odd-length arrays.
+
+### Reproduction of Reported Example
+The specific example from the bug report was successfully reproduced:
+- Input: x = [1.0, 0.0], a = 1.0, b = 1.0
+- shift(shift(x, 1.0), 1.0) = [1.45464871, -0.45464871]
+- shift(x, 2.0) = [0.7465753, 0.2534247]
+- Difference: [0.70807342, -0.70807342]
+- The results match the bug report exactly
+
+### Pattern Analysis Results
+Tested arrays with lengths from 2 to 20:
+- ALL even-length arrays (2, 4, 6, 8, 10, 12, 14, 16, 18, 20): FAIL
+- ALL odd-length arrays (3, 5, 7, 9, 11, 13, 15, 17, 19): PASS
+- Maximum differences observed range from 2.85e-02 to 7.08e-01
+- These are significant errors, not numerical precision issues
+
+### Hypothesis Testing
+Ran property-based testing with Hypothesis library:
+- Even-length arrays: 11 failures detected in 50 test runs (systematic issue)
+- Odd-length arrays: 0 failures detected in 50 test runs (all passed)
+- The bug is consistent and reproducible across various input values
+
+### Mathematical Verification
+1. The composition property is mathematically fundamental:
+   - shift(x, a) multiplies FFT by exp(i*k*a*2π/period)
+   - shift(shift(x, a), b) should equal shift(x, a+b)
+   - This follows from exp(i*k*a) * exp(i*k*b) = exp(i*k*(a+b))
+
+2. Manual FFT implementation also shows the issue for even arrays:
+   - The mathematical property holds in theory (FFT coefficients match)
+   - But the actual shift implementation produces different results
+   - This suggests an implementation bug rather than a theoretical issue
+
+3. The issue appears related to Nyquist frequency handling:
+   - Even-length arrays have a Nyquist component at index n/2
+   - Odd-length arrays do not have a Nyquist component
+   - The bug manifests only when a Nyquist frequency is present
+
+### Technical Details
+The bug likely stems from the `zero_nyquist` parameter in the convolution kernel initialization within scipy.fftpack._pseudo_diffs.shift (lines 544-547):
+- omega_real uses zero_nyquist=0
+- omega_imag uses zero_nyquist=0
+- This may cause incorrect handling of the Nyquist frequency for even-length arrays
+
+### Conclusion
+The bug report is accurate and reproducible. The composition property failure for even-length arrays represents a genuine implementation bug in scipy.fftpack.shift, not a documentation issue or expected behavior.

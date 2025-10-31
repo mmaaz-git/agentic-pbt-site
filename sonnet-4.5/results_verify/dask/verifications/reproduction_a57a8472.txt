@@ -1,0 +1,51 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported for dask.array.argtopk.
+
+Bug Confirmation:
+-----------------
+The bug occurs exactly as described in the report. When calling da.argtopk with k equal to or greater than the array size on an array with multiple chunks, the function crashes with:
+"ValueError: too many values to unpack (expected 2)"
+
+Reproduction Steps:
+-------------------
+1. Created test array: np.array([1, 2, 3, 4, 5], dtype=np.int32)
+2. Created dask array with multiple chunks: da.from_array(arr, chunks=2)
+3. Called da.argtopk(arr, 5).compute()
+4. Result: ValueError at dask/array/chunk.py:245 in argtopk_aggregate
+
+Test Results:
+-------------
+- FAILS: k=5 (equal to array size) with chunks=2 - ValueError
+- WORKS: k=5 with chunks=5 (single chunk) - Returns [4 3 2 1 0]
+- WORKS: k=3 (less than array size) with chunks=2 - Returns [4 3 2]
+- FAILS: k=-5 with chunks=2 - Same ValueError
+- WORKS: k=-5 with chunks=5 (single chunk) - Returns [1 2 0 4 3]
+
+Property-based testing confirmed multiple failing cases:
+- All cases where k equals array size and array has multiple chunks fail
+- Found 12+ distinct failing examples in 50 test runs
+
+Root Cause Analysis:
+--------------------
+The bug is in the argtopk function in dask/array/chunk.py at line 229:
+
+```python
+if abs(k) >= a.shape[axis]:
+    return a_plus_idx  # BUG HERE
+```
+
+When k >= array size:
+- With single chunk: a_plus_idx is a tuple (a, idx), so return works correctly
+- With multiple chunks: a_plus_idx is a list of tuples after aggregation
+- The caller at line 245 always expects to unpack exactly 2 values: a, idx = argtopk(...)
+- Returning a list causes "too many values to unpack" error
+
+The fix suggested in the bug report is correct:
+- Should return (a, idx) consistently, not the raw a_plus_idx
+- The variables a and idx are already computed at this point in the function
+
+Expected Behavior:
+------------------
+When k equals the array size, argtopk should return all indices sorted by their corresponding values, similar to np.argsort. This is a valid use case and works correctly with single chunks but fails with multiple chunks due to the implementation bug.

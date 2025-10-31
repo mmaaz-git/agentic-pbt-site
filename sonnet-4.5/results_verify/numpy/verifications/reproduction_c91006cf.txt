@@ -1,0 +1,47 @@
+BUG REPRODUCTION RESULTS
+
+1. INITIAL TEST CASES (from bug report):
+All test cases from the bug report were successfully reproduced and confirmed:
+
+rfind('', '\x00'):         Python=-1, NumPy=0  ✗ (Bug confirmed)
+rfind('abc', '\x00'):      Python=-1, NumPy=3  ✗ (Bug confirmed)
+rfind('a\x00b', '\x00'):   Python=1,  NumPy=3  ✗ (Bug confirmed)
+rfind('\x00\x00', '\x00'): Python=1,  NumPy=0  ✗ (Bug confirmed)
+
+2. HYPOTHESIS PROPERTY TEST:
+The hypothesis test immediately failed on the example case:
+- Input: np.array(['abc'], dtype=str), substring '\x00'
+- Expected (Python): -1
+- Actual (NumPy): 3
+The property test confirms that numpy.strings.rfind does not match Python's str.rfind behavior.
+
+3. EXTENDED TESTING REVEALS PATTERN:
+When searching for '\x00' that is NOT in the string, numpy.strings.rfind returns len(string):
+- '' → returns 0 (len=0)
+- 'a' → returns 1 (len=1)
+- 'ab' → returns 2 (len=2)
+- 'abc' → returns 3 (len=3)
+- 'hello world' → returns 11 (len=11)
+
+4. BEHAVIOR WITH NULL CHARACTERS PRESENT:
+When null characters ARE present in the string, the behavior is also incorrect:
+- '\x00' searching for '\x00': Returns 0 (correct by chance)
+- 'a\x00b' searching for '\x00': Returns 3 instead of 1 (wrong)
+- '\x00\x00' searching for '\x00': Returns 0 instead of 1 (wrong)
+- 'abc\x00' searching for '\x00': Returns 3 (correct by chance - happens to be len and position)
+- '\x00abc' searching for '\x00': Returns 4 instead of 0 (wrong)
+- 'a\x00b\x00c' searching for '\x00': Returns 5 instead of 3 (wrong)
+
+5. COMPARISON WITH numpy.strings.find:
+The find() function also has issues with null characters, returning 0 in many incorrect cases.
+Both find() and rfind() appear to have systematic problems handling null character searches.
+
+6. NORMAL SUBSTRING SEARCHES WORK CORRECTLY:
+When searching for regular (non-null) substrings, numpy.strings.rfind works correctly:
+- rfind('hello world', 'o'): Returns 7 ✓
+- rfind('hello world', 'l'): Returns 9 ✓
+- rfind('hello world', 'world'): Returns 6 ✓
+- rfind('hello world', 'xyz'): Returns -1 ✓
+
+CONCLUSION:
+The bug is 100% reproducible. numpy.strings.rfind has a systematic error when searching for null characters ('\x00'), returning the string length instead of -1 when not found, and returning incorrect positions when the null character is present.

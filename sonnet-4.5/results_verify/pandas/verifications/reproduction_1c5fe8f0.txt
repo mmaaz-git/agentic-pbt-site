@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+### Bug Summary
+The bug report claims that null values in categorical columns are lost when round-tripping through the DataFrame interchange protocol. The `from_dataframe` function incorrectly maps null sentinel values to valid category values due to a modulo operation.
+
+### Reproduction Status: CONFIRMED
+
+### Hypothesis Test
+- Ran the provided property-based test with hypothesis
+- Test FAILS as reported with input: cat_values=['a', 'a'], null_mask=[False, True]
+- Error: DataFrame.iloc[:, 0] values differ - expected NaN but got 'a' at position 1
+
+### Minimal Reproduction
+- Created DataFrame with categorical column containing ['a', None]
+- After round-trip through interchange protocol:
+  - Original: ['a', NaN]
+  - Result: ['a', 'a']
+- Null value at position 1 was incorrectly converted to 'a'
+
+### Code Analysis
+Located the bug in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/interchange/from_dataframe.py` at line 254:
+```python
+values = categories[codes % len(categories)]
+```
+
+The issue is confirmed:
+- Categorical data uses codes where -1 represents null values
+- The modulo operation: -1 % 1 = 0, which maps the null to the first category
+- This happens before set_nulls() is called on line 263, causing data corruption
+
+### Cross-Type Comparison
+Tested round-tripping with different data types:
+- Numeric columns: Nulls preserved correctly
+- String columns: Nulls preserved correctly
+- Categorical columns: Nulls NOT preserved (bug confirmed)
+
+### Conclusion
+The bug is real and causes silent data corruption where missing values in categorical columns are replaced with valid category values during round-trip conversion through the interchange protocol.

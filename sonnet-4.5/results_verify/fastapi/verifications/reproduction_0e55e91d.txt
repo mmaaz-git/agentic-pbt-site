@@ -1,0 +1,53 @@
+BUG REPRODUCTION RESULTS
+
+## Test Results Summary
+All tests from the bug report have been successfully reproduced and confirmed.
+
+## Property-Based Test
+The hypothesis test correctly identifies the parsing problem:
+- Input: "[::1]:8000"
+- Using split(":")[0] produces: "["
+- Expected result: "[::1]"
+- Result: FAILS as reported
+
+## Middleware Behavior Test
+1. IPv6 with port ([::1]:8000):
+   - Allowed hosts: ["[::1]"]
+   - Result: Returns 400 (Invalid host header)
+   - Bug CONFIRMED: Should accept this valid IPv6 request
+
+2. IPv6 without port ([::1]):
+   - Allowed hosts: ["[::1]"]
+   - Result: Returns 400 (Invalid host header)
+   - Bug CONFIRMED: Even without port, IPv6 is rejected
+
+3. IPv4 comparison (127.0.0.1:8000):
+   - Allowed hosts: ["127.0.0.1"]
+   - Result: Returns 200 (OK)
+   - Shows IPv4 works correctly with the same logic
+
+## Root Cause Analysis
+The parsing logic `host.split(":")[0]` fails for IPv6 because:
+- IPv6 addresses contain colons (e.g., 2001:db8::1)
+- Bracketed IPv6 with port has format [IPv6]:port
+- Split on ":" breaks the IPv6 address parsing
+
+Test results confirm:
+- [::1]:8000 → parsed as "["
+- [2001:db8::1]:80 → parsed as "[2001"
+- [fe80::1]:443 → parsed as "[fe80"
+
+## Impact Assessment
+This bug makes TrustedHostMiddleware completely unusable with IPv6:
+- All IPv6 requests are rejected regardless of allowed_hosts configuration
+- This affects both localhost (::1) and public IPv6 addresses
+- The middleware cannot be used in IPv6-only or dual-stack environments
+
+## Verification of Fix
+The proposed fix correctly identifies the issue and provides appropriate logic to:
+1. Detect IPv6 addresses by checking for leading "["
+2. Find the closing "]" bracket
+3. Extract the full bracketed IPv6 address
+4. Fall back to original logic for IPv4/hostnames
+
+The bug report is technically accurate and the reproduction code demonstrates the issue clearly.

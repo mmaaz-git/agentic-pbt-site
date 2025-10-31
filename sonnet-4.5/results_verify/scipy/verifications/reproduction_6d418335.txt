@@ -1,0 +1,43 @@
+## Reproduction Report for scipy.signal.deconvolve Bug
+
+### Summary
+I have successfully reproduced the bug described in the report. The function scipy.signal.deconvolve crashes with a ValueError when the divisor array has a leading zero (divisor[0] == 0).
+
+### Reproduction Steps and Results
+
+1. **Hypothesis Test Execution**
+   - Ran the provided property-based test using Hypothesis
+   - Result: The test failed with two distinct failure cases:
+     - Case 1: signal_array=[0.0, 0.0], divisor_array=[0.0, 1.0]
+       Error: ValueError: BUG: filter coefficient a[0] == 0 not supported yet
+     - Case 2: signal_array=[0.0], divisor_array=[0.0, 1.0]
+       Error: ValueError: v cannot be empty (secondary error in convolve)
+
+2. **Minimal Example Execution**
+   - Ran the minimal reproducer from the bug report:
+     ```python
+     signal_arr = np.array([0.0, 0.0])
+     divisor_arr = np.array([0.0, 1.0])
+     quotient, remainder = signal.deconvolve(signal_arr, divisor_arr)
+     ```
+   - Result: ValueError: BUG: filter coefficient a[0] == 0 not supported yet
+   - This confirms the exact error message reported
+
+3. **Source Code Analysis**
+   - Located the deconvolve function in /home/npc/.local/lib/python3.13/site-packages/scipy/signal/_signaltools.py
+   - The function internally calls lfilter(num, den, input) at line 2471
+   - lfilter then calls _sigtools._linear_filter which is a C implementation
+   - The error message originates from the C implementation and explicitly states "BUG"
+
+### Key Findings
+
+1. **The error message itself admits it's a bug**: The error message says "BUG: filter coefficient a[0] == 0 not supported yet", explicitly acknowledging this as a known implementation limitation rather than intentional behavior.
+
+2. **The crash is reproducible**: Both the Hypothesis test and minimal example consistently reproduce the crash with the same error.
+
+3. **Implementation detail**: The deconvolve function uses lfilter internally, which cannot handle filter coefficients where a[0] == 0. This is an implementation limitation, not a mathematical limitation of deconvolution.
+
+4. **No fallback handling**: The code does not check for or handle the case where divisor[0] == 0, allowing the error to propagate from the internal lfilter call.
+
+### Conclusion
+The bug report is accurate. The function crashes when divisor[0] == 0 with an error message that explicitly identifies itself as a "BUG" and states the feature is "not supported yet".

@@ -1,0 +1,42 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python 3.13
+- Cython package from /home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages
+
+### Reproduction Results
+
+The bug report is technically accurate in its claims:
+
+1. **Empty string input**: Causes `ValueError: invalid literal for int() with base 10: ''`
+2. **Just a dot (".")**: Causes `ValueError: invalid literal for int() with base 10: ''`
+3. **Alphabetic character ("a")**: Causes `ValueError: invalid literal for int() with base 10: ''`
+4. **Invalid suffix ("1.0foo")**: Causes `ValueError: invalid literal for int() with base 10: 'foo'`
+5. **Double dot ("1..0")**: Causes `ValueError: invalid literal for int() with base 10: '..'`
+
+All these inputs do indeed crash with the exact unhelpful error message claimed in the bug report.
+
+### Valid Inputs Tested
+The function works correctly for:
+- "1.2.3" → 0x010203F0
+- "4.3a1" → 0x040300A1
+- "1.0b2" → 0x010000B2
+- "2.0rc1" → 0x020000C1
+
+### Analysis of the Error
+The error occurs at line 611 in Utils.py:
+```python
+elif segment != '.':
+    digits.append(int(segment))
+```
+
+When `re.split(r'(\D+)', version_string)` is called:
+- On empty string "", it returns ['']
+- On ".", it returns ['', '.', '']
+- On "a", it returns ['', 'a', '']
+- These empty strings then fail when passed to `int()`
+
+The error message "invalid literal for int() with base 10" is indeed unhelpful because:
+1. It doesn't indicate that the issue is with the version string format
+2. It exposes implementation details rather than providing user-friendly feedback
+3. Users have no way to know what constitutes a valid version string from this error

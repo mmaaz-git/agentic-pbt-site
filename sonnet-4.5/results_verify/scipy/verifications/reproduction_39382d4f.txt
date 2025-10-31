@@ -1,0 +1,47 @@
+BUG REPRODUCTION RESULTS
+
+I have successfully reproduced the bug reported in scipy.spatial.transform.RotationSpline. Here are the technical details:
+
+1. BUG CONFIRMATION:
+   The exact test case from the bug report DOES fail with the reported error:
+   - Input: 4 rotations with times [0.0, 5e-8, 0.5, 1.0]
+   - Error: ValueError: array must not contain infs or NaNs
+   - Warnings: Multiple overflow warnings in numpy multiply operations and in _rotation_spline.py:151
+
+2. ROOT CAUSE ANALYSIS:
+   The bug occurs due to numerical overflow when:
+   - Time interval is very small (5e-8 seconds)
+   - Rotation between those time points is large (180 degrees)
+   - This creates an angular rate of 6.28e+07 rad/s (over 60 million rad/s)
+   - The overflow happens in _angular_acceleration_nonlinear_term at line 151:
+     "return dp * (k1 * cp + k2 * ccp) + k3 * dccp"
+   - The large angular rate gets squared/multiplied in calculations, causing overflow
+
+3. PATTERN OF FAILURE:
+   The bug specifically occurs when:
+   - There are 4 or more rotation points (not just 3)
+   - The first time interval is extremely small (< 1e-7)
+   - The rotation change in that interval is large (π radians)
+
+   Interestingly, with only 3 rotations, the same conditions do NOT trigger the bug.
+
+4. MATHEMATICAL VALIDITY:
+   The inputs are mathematically valid:
+   - All quaternions have unit norm (verified as 1.0)
+   - Times are strictly increasing: [0.0, 5e-8, 0.5, 1.0]
+   - All rotations are valid SO(3) elements
+
+5. REAL-WORLD RELEVANCE:
+   As the bug report states, this could occur in real applications:
+   - High-frequency sensor data (e.g., 20 MHz sampling)
+   - Data with occasional near-duplicate timestamps
+   - Motion capture or robotics with fast rotations
+
+6. TESTING RESULTS SUMMARY:
+   - 3 rotations with dt=5e-8 and 180° rotation: SUCCESS
+   - 4 rotations with dt=5e-8 and 180° rotation: FAILURE (as reported)
+   - 4 rotations with dt=1e-7 and same rotations: FAILURE
+   - Angular rates up to 3.14e+10 rad/s work with 3 rotations
+   - The issue is specific to the spline computation with 4+ points
+
+The bug is technically reproducible exactly as described in the report.

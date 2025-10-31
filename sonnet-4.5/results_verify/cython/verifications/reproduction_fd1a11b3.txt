@@ -1,0 +1,75 @@
+# Bug Reproduction Report
+
+## Summary
+The bug report is accurate and reproducible. SyntaxError exceptions raised from template expressions in Cython.Tempita lack line/column position information, while other exception types (NameError, ValueError, TypeError) correctly include this information.
+
+## Reproduction Results
+
+### Property-Based Test
+Tested multiple invalid Python expressions that cause SyntaxError:
+- `/` - Results: "invalid syntax in expression: /" (NO position info)
+- `**` - Results: "invalid syntax in expression: **" (NO position info)
+- `+++` - Results: "invalid syntax in expression: +++" (NO position info)
+- `+*` - Results: "invalid syntax in expression: +*" (NO position info)
+- `*/` - Results: "invalid syntax in expression: */" (NO position info)
+- `//` - Results: "invalid syntax in expression: //" (NO position info)
+- `--` - Results: "invalid syntax in expression: --" (NO position info)
+- `^^` - Results: "invalid syntax in expression: ^^" (NO position info)
+
+All test cases confirmed that SyntaxError messages lack position information.
+
+### Manual Reproduction Test
+Compared SyntaxError with other exception types:
+
+1. **SyntaxError** (template: `{{/}}`)
+   - Output: `invalid syntax in expression: /`
+   - Missing line/column info
+
+2. **NameError** (template: `{{undefined}}`)
+   - Output: `name 'undefined' is not defined at line 3 column 3`
+   - Has line/column info
+
+3. **ValueError** (template: `{{int('abc')}}`)
+   - Output: `invalid literal for int() with base 10: 'abc' at line 3 column 3`
+   - Has line/column info
+
+4. **TypeError** (template: `{{len(123)}}`)
+   - Output: `object of type 'int' has no len() at line 3 column 3`
+   - Has line/column info
+
+## Source Code Analysis
+
+Examined the `_eval` method in `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Tempita/_tempita.py`:
+
+Lines 303-318 show the problematic implementation:
+```python
+def _eval(self, code, ns, pos):
+    __traceback_hide__ = True
+    try:
+        try:
+            value = eval(code, self.default_namespace, ns)
+        except SyntaxError as e:
+            raise SyntaxError(
+                'invalid syntax in expression: %s' % code)
+        return value
+    except Exception as e:
+        if getattr(e, 'args', None):
+            arg0 = e.args[0]
+        else:
+            arg0 = coerce_text(e)
+        e.args = (self._add_line_info(arg0, pos),)
+        raise
+```
+
+The bug occurs because:
+1. Lines 306-310: SyntaxError is caught in the inner try-except block
+2. Line 309-310: A new SyntaxError is raised with a custom message, replacing the original
+3. This new SyntaxError escapes the method without going through the outer exception handler (lines 312-318)
+4. The outer handler is responsible for adding position info via `_add_line_info(arg0, pos)`
+5. All other exceptions go through the outer handler and get position info added
+
+The `_add_line_info` method (lines 373-378) formats the position as:
+`"{msg} at line {pos[0]} column {pos[1]}"`
+
+## Conclusion
+The bug is confirmed as described. SyntaxError exceptions bypass the position-adding mechanism due to the nested try-except structure, resulting in less helpful error messages compared to other exception types.

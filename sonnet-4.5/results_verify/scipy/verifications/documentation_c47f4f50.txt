@@ -1,0 +1,56 @@
+# Documentation Analysis
+
+## Function Documentation
+
+The `split_data_line` function has no docstring or explicit documentation about its expected input or behavior with empty strings. It's an internal function used to parse CSV-like data lines in ARFF files.
+
+## ARFF Format Specification
+
+From the available documentation:
+
+1. **SciPy Documentation** (scipy.io.arff.loadarff):
+   - Mentions handling missing data (? in file)
+   - Does not explicitly document behavior with empty lines or trailing newlines
+   - Shows examples with continuous data lines
+
+2. **ARFF Format Specification** (Weka documentation):
+   - States "Each instance is represented on a single line, with carriage returns denoting the end of the instance"
+   - Does not explicitly forbid or allow empty lines in data sections
+   - Does not specifically address relational attributes parsing
+
+## Code Intent Analysis
+
+Looking at the codebase reveals important context:
+
+1. **Empty Line Handling Design**:
+   - The code defines `r_empty = re.compile(r'^\s+$')` to match empty lines
+   - In the main data generator (line ~690), empty lines are explicitly skipped:
+     ```python
+     if r_comment.match(raw) or r_empty.match(raw):
+         continue
+     ```
+   - This shows empty lines are intended to be skipped in normal data parsing
+
+2. **Inconsistent Implementation**:
+   - The main data reading path skips empty lines before calling `split_data_line`
+   - BUT `RelationalAttribute.parse_data` does NOT skip empty lines before calling `split_data_line`
+   - This inconsistency is the root cause of the bug
+
+3. **split_data_line Assumptions**:
+   - The function assumes it will receive non-empty lines (hence `line[-1]` without checking)
+   - This assumption is valid for the main data path (which filters empty lines)
+   - This assumption is violated by `RelationalAttribute.parse_data`
+
+## Conclusion
+
+The documentation doesn't explicitly specify how `split_data_line` should handle empty strings, but the code structure strongly suggests:
+
+1. Empty lines are meant to be filtered out before reaching `split_data_line` (as done in main data parsing)
+2. The bug exists because `RelationalAttribute.parse_data` doesn't follow this pattern
+3. The function was written with the assumption that it would never receive empty strings
+
+The bug is real - either:
+- `split_data_line` should be defensive and handle empty strings (the proposed fix), or
+- `RelationalAttribute.parse_data` should filter empty lines before calling `split_data_line`
+
+Since `split_data_line` is called from multiple places, making it defensive (as proposed) is the better fix.

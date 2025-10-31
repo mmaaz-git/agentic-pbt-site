@@ -1,0 +1,37 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+## Reproduction Summary
+I successfully reproduced the bug described in the report. The bug occurs exactly as described when TimeFormatter attempts to format time values with fractional seconds that round to exactly 1000000 microseconds.
+
+## Test Results
+
+### Hypothesis Test
+- The property-based test from the bug report fails when run with hypothesis
+- The test crashes with "ValueError: microsecond must be in 0..999999"
+- This confirms the test can generate inputs that trigger the bug
+
+### Manual Reproduction
+Test input: x = 86400.99999999997
+
+Computation breakdown:
+- int(x) = 86400
+- (x - int(x)) * 10^6 = 999999.9999708962
+- round((x - int(x)) * 10^6) = 1000000 (exceeds valid range!)
+
+Result: ValueError: microsecond must be in 0..999999
+
+## Code Analysis
+Looking at the source code in converter.py (lines 210-225), the bug occurs at:
+1. Line 212: `msus = round((x - s) * 10**6)` - this rounds to 1000000
+2. Lines 219, 221: `pydt.time(h, m, s, msus)` - this fails because datetime.time requires microseconds to be in range [0, 999999]
+
+The issue is that when the fractional part is very close to 1.0, rounding can produce exactly 1000000 microseconds, which is equivalent to 1 second but exceeds the valid microsecond range for datetime.time().
+
+## Verification of Bug Report Claims
+✓ The bug occurs exactly as described
+✓ The root cause analysis in the report is correct
+✓ The failing input (86400.99999999997) triggers the bug
+✓ The error message matches ("microsecond must be in 0..999999")
+
+The bug is real and reproducible.

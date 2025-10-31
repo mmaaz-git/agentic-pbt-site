@@ -1,0 +1,56 @@
+REPRODUCTION OF BUG: pandas.io.parsers.read_csv Large Integer Type Loss
+
+## Bug Reproduction Summary
+
+The bug report is CONFIRMED and REPRODUCIBLE. When a DataFrame containing Python integers larger than int64 range is written to CSV and read back using read_csv, the integers are incorrectly converted to strings instead of being parsed as integers.
+
+## Reproduction Steps
+
+1. **Hypothesis Test Reproduction**
+   - Ran the provided hypothesis test with overflow_amount=1
+   - Result: Test FAILED as expected - AssertionError: Expected int, got str
+   - The test correctly identifies that read_csv returns a string instead of int for large integers
+
+2. **Simple Example Reproduction**
+   - Created a DataFrame with value int64_min - 1 = -9223372036854775809
+   - Original value type: int (Python arbitrary precision integer)
+   - After CSV round-trip type: str (string)
+   - The bug is confirmed: large integers become strings
+
+## Detailed Test Results
+
+Tested various integer values around int64 boundaries:
+- int64_max (9223372036854775807): Works correctly, round-trips as int64
+- int64_max + 1 (9223372036854775808): Works correctly, round-trips as uint64
+- int64_min (-9223372036854775808): Works correctly, round-trips as int64
+- int64_min - 1 (-9223372036854775809): BUG - becomes string instead of int
+- 10^30: BUG - becomes string instead of int
+- -10^30: BUG - becomes string instead of int
+
+## Key Observations
+
+1. **The bug only affects integers outside the int64/uint64 range**
+   - Values within int64 bounds are correctly parsed as int64
+   - Values that fit in uint64 are correctly parsed as uint64
+   - Values outside both ranges become strings
+
+2. **Pandas correctly writes the values to CSV**
+   - The CSV file contains the correct numeric value as text
+   - The issue is purely in the reading/parsing phase
+
+3. **Workaround exists**
+   - Using converters={'column': int} correctly parses the large integers
+   - This proves the functionality exists, but the default behavior is inconsistent
+
+4. **Data type inconsistency**
+   - Original DataFrame stores large int as object dtype with Python int
+   - After round-trip, it's object dtype with Python str
+   - This violates the expectation that numeric data remains numeric
+
+## Impact
+
+This bug causes silent data type corruption. Users expecting numeric operations on large integers after CSV round-trip will encounter unexpected string values, potentially causing:
+- Type errors in arithmetic operations
+- Incorrect sorting behavior
+- Failed numeric comparisons
+- Unexpected behavior in data analysis pipelines

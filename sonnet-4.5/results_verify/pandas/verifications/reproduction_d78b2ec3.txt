@@ -1,0 +1,53 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The bug is real and causes incorrect behavior in Cython's cache loading mechanism.
+
+## Reproduction Steps
+
+### 1. Property-Based Test
+The property-based test from the bug report was slightly incorrect in its assertion. When I ran it, `zipfile.extract()` does NOT raise an error when given a file path instead of a directory path. Instead, it creates an unexpected nested directory structure.
+
+### 2. Minimal Example
+I reproduced the minimal example and confirmed the behavior:
+- When `z.extract('test.c', '/path/to/extract/test.c')` is called
+- Python's zipfile creates the directory structure: `/path/to/extract/test.c/test.c`
+- The expected location `/path/to/extract/test.c` becomes a DIRECTORY, not a file
+- The actual file ends up at `/path/to/extract/test.c/test.c`
+
+### 3. Actual Cython Code Analysis
+I examined the actual Cython source code at `/home/npc/miniconda/lib/python3.13/site-packages/Cython/Build/Cache.py`:
+
+Line 155 contains the bug:
+```python
+z.extract(artifact, join_path(dirname, artifact))
+```
+
+This passes `join_path(dirname, artifact)` which creates a file path like `/path/to/dir/file.c` as the extraction directory, when it should just pass `dirname`.
+
+### 4. Simulated Cython Behavior
+I simulated the exact scenario that would occur in Cython when loading cached compilation results with multiple artifacts:
+
+**Expected behavior**: Files should be extracted to:
+- `/work/module.c` (file)
+- `/work/module.h` (file)
+- `/work/module_api.h` (file)
+
+**Actual buggy behavior**: Files are extracted to:
+- `/work/module.c/module.c` (file in subdirectory)
+- `/work/module.h/module.h` (file in subdirectory)
+- `/work/module_api.h/module_api.h` (file in subdirectory)
+
+With `/work/module.c`, `/work/module.h`, and `/work/module_api.h` being directories instead of files.
+
+## Impact
+
+This bug would cause compilation failures because:
+1. The C compiler expects to find source files at specific paths
+2. Instead of files, it finds directories at those paths
+3. The actual files are nested one level deeper in unexpected subdirectories
+4. Any subsequent compilation step trying to use these artifacts would fail
+
+## Verification
+
+The bug is consistently reproducible and matches the description in the bug report. The suggested fix (passing only `dirname` instead of `join_path(dirname, artifact)`) would correctly extract files to their intended locations.

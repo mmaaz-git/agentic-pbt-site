@@ -1,0 +1,34 @@
+## Reproduction of SparseArray Concatenation Bug
+
+I have successfully reproduced the bug described in the report. The issue occurs when concatenating SparseArrays that have different fill values.
+
+### Test Results
+
+1. **Property-Based Test**: The Hypothesis test failed immediately, finding a simple counterexample:
+   - Input: vals1=[0, 0], vals2=[0, 1], fill1=0, fill2=1
+   - Expected: [0, 0, 0, 1]
+   - Actual: [0, 0, 0, 0]
+   - The value '1' from the second array is lost because it matches that array's fill_value
+
+2. **Specific Test Case from Report**:
+   - Input: arr1 = SparseArray([0, 0, 1], fill_value=0), arr2 = SparseArray([2, 2, 3], fill_value=2)
+   - Expected: [0, 0, 1, 2, 2, 3]
+   - Actual: [0, 0, 1, 0, 0, 3]
+   - The values [2, 2] are completely lost in the concatenation
+
+### The Mechanism of Data Loss
+
+The bug occurs because:
+1. The _concat_same_type method uses only the first array's fill_value for the result
+2. When concatenating sparse indices, it only copies the non-fill values (sp_values) from each array
+3. Values in arr2 that equal arr2.fill_value (2 in this case) are not stored in arr2.sp_values
+4. When the result uses arr1.fill_value (0), those missing positions get filled with 0 instead of 2
+5. This causes silent data loss - the values 2 are replaced with 0
+
+### Verification
+
+The bug is 100% reproducible and affects any concatenation where:
+- The arrays have different fill_values
+- At least one array contains actual data values that match its own fill_value
+
+This is a serious bug because it silently corrupts data without raising any errors or warnings.

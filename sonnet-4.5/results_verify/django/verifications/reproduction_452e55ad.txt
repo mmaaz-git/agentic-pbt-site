@@ -1,0 +1,34 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue occurs when creating a Variable object with a numeric string that has a trailing dot (e.g., "2.", "42.").
+
+### Test Results:
+
+1. **Hypothesis Test**: The property-based test failed as expected, confirming that Variable objects created with strings like "0.", "1.", etc. have both `literal` and `lookups` attributes set, which violates the class invariant.
+
+2. **Manual Reproduction**:
+   - When creating `Variable('2.')`:
+     - `literal` is set to `2.0` (the float value)
+     - `lookups` is set to `('2', '')` (a tuple from splitting on dots)
+   - When calling `resolve()`, it attempts a lookup because `self.lookups` is not None (line 852-854 in base.py)
+   - The lookup fails with VariableDoesNotExist: "Failed lookup for key [2] in [{'True': True, 'False': False, 'None': None}, {}]"
+
+### Root Cause:
+
+The bug stems from the exception handling in `Variable.__init__`:
+
+1. Lines 822-826: When the string contains a dot, it tries to parse as float
+2. Line 823: `self.literal = float(var)` sets literal to 2.0
+3. Lines 825-826: Checks if the last character is "." and raises ValueError
+4. Line 829: This ValueError is caught by the outer except block
+5. Lines 841-848: The code then proceeds to set `self.lookups = tuple(var.split(VARIABLE_ATTRIBUTE_SEPARATOR))`
+
+The problem is that after raising ValueError for the trailing dot, the code doesn't clear `self.literal` before falling through to the lookup parsing logic. This results in both `literal` and `lookups` being set.
+
+### Impact:
+
+The resolve() method checks `if self.lookups is not None` first (line 852), so it attempts variable resolution even though a literal value exists. This causes unexpected VariableDoesNotExist errors for what should either be:
+1. A proper float literal (if "2." is valid)
+2. An invalid input that should fail at construction time (if "2." is invalid)
+
+The current behavior is neither - it partially succeeds at construction but fails at resolution.

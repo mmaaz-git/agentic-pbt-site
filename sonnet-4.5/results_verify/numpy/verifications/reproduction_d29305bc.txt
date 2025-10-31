@@ -1,0 +1,23 @@
+REPRODUCTION REPORT
+==================
+
+I have successfully reproduced the bug described in the report. Here's what happens:
+
+1. When pandas writes a DataFrame containing the value 1.7976931348623155e+308 (which is very close to but less than sys.float_info.max) to an Excel file, the openpyxl library stores it as infinity (inf) in the Excel file.
+
+2. When pandas attempts to read this Excel file back:
+   - The OpenpyxlReader._convert_cell method encounters the infinity value
+   - It tries to convert ALL numeric cells to int first with int(cell.value) at line 600
+   - Since cell.value is infinity, int(infinity) raises an OverflowError: "cannot convert float infinity to integer"
+
+3. The bug is consistently reproducible with both:
+   - The Hypothesis-based property test provided in the report
+   - The simplified manual test case
+
+Key observations:
+- The value 1.7976931348623155e+308 is a valid Python float (less than sys.float_info.max)
+- Excel/openpyxl converts this to infinity during the write operation
+- The xlrd reader (another Excel reader in pandas) DOES have a check for math.isfinite() before attempting int conversion (line 124 in _xlrd.py)
+- The openpyxl reader lacks this check, causing the crash
+
+The error occurs exactly as described in the bug report, with the same error message and at the same location in the code.

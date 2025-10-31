@@ -1,0 +1,38 @@
+## Bug Reproduction Results
+
+### Summary
+The bug report is technically correct. The function _parse_pattern does crash with ValueError when given the input "/\\/".
+
+### Reproduction Test Results
+
+1. **Basic reproduction confirmed**:
+   - Input: _parse_pattern("/\\/")
+   - Result: ValueError: not enough values to unpack (expected 2, got 1)
+   - Location: TestUtils.py, line 196
+   - The error occurs exactly as described in the bug report
+
+2. **Root cause analysis**:
+   - The function uses regex r"(?<!\\)/" to split the pattern
+   - This regex matches "/" that is NOT preceded by a backslash
+   - When the input is "/\\/" and we strip the first character, we get "\\/"
+   - In "\\/", the forward slash IS preceded by a backslash, so the regex doesn't match
+   - re.split() returns a single-element list ["\\/"] instead of the expected two elements
+   - The unpacking `start, pattern = ...` fails because there's only one element
+
+3. **Additional failing patterns found**:
+   - "/\\/" - The reported case
+   - "/\\/pattern" - Similar issue with backslash as start marker
+   - "/" - Single slash also fails (returns empty string after stripping)
+
+4. **Working patterns**:
+   - "/test/pattern" - Normal usage works fine
+   - "/test/:/end/pattern" - Start and end markers work
+   - "/a\\/b/pattern" - Escaped slash inside start marker works
+   - "//pattern" - Empty start marker works
+   - "/\\//pattern" - Backslash followed by unescaped slash works
+
+### Technical Details
+
+The regex pattern r"(?<!\\)/" is a negative lookbehind assertion that matches forward slashes not preceded by backslashes. This is intended to allow escaped slashes within markers. However, when the entire start marker is just a backslash, the remaining string after the initial "/" contains only "\\/" where the slash is escaped, preventing any split point from being found.
+
+The bug is reproducible and the technical explanation in the bug report is accurate.

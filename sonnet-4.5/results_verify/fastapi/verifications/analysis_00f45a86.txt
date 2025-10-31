@@ -1,0 +1,80 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG
+
+**Arguments FOR**:
+- There IS an inconsistency between `' '.join()` and `.split()` operations
+- The round-trip property fails for certain inputs
+- Data is silently lost when scopes contain Unicode whitespace
+- The code behavior is inconsistent within FastAPI itself
+
+**Arguments AGAINST**:
+- OAuth2 RFC 6749 explicitly forbids whitespace in scope names
+- The test uses invalid scope names per the spec
+- This is an edge case with invalid input
+
+**Verdict**: Partially valid - there is an internal inconsistency, but with invalid input.
+
+### Consideration for INVALID
+
+**Arguments FOR**:
+- The OAuth2 RFC 6749 explicitly states scope tokens cannot contain whitespace
+- The test case uses `'\x85'` which is NOT a valid scope name
+- FastAPI is not obligated to handle RFC-violating inputs correctly
+- The bug only occurs with inputs that violate the OAuth2 specification
+
+**Arguments AGAINST**:
+- FastAPI doesn't validate scope names, implicitly accepting any string
+- The inconsistency exists regardless of RFC compliance
+- Silent data loss is problematic even for invalid input
+
+**Verdict**: Strong case - the test uses invalid input per OAuth2 spec.
+
+### Consideration for WONTFIX
+
+**Arguments FOR**:
+- Extremely obscure edge case (Unicode whitespace in scope names)
+- Would never happen with RFC-compliant OAuth2 implementations
+- The "fix" might mask the real issue (invalid scope names)
+
+**Arguments AGAINST**:
+- Easy to fix the inconsistency
+- Silent data loss could be security-relevant
+
+**Verdict**: Moderate case - very edge case but easy to fix.
+
+### Consideration for FEATURE_REQUEST
+
+**Arguments FOR**:
+- Could be reframed as "Add validation for RFC-compliant scope names"
+- The current permissive behavior might be intentional flexibility
+
+**Arguments AGAINST**:
+- The report is about a bug, not requesting new functionality
+- The inconsistency is clearly unintended behavior
+
+**Verdict**: Weak case - this is about fixing existing behavior, not adding features.
+
+### Consideration for DOCUMENTATION_FIX
+
+**Arguments FOR**:
+- FastAPI should document that it accepts non-RFC-compliant scope names
+- The permissive behavior differs from OAuth2 specification
+- Users might expect RFC validation that doesn't exist
+
+**Arguments AGAINST**:
+- The core issue is a code inconsistency, not documentation
+- The bug causes actual data loss, not just confusion
+
+**Verdict**: Weak case - while docs could be clearer, there's a real code bug.
+
+## Final Assessment
+
+This bug report describes behavior with **invalid input** according to OAuth2 RFC 6749. The specification explicitly forbids any whitespace characters in scope names (only allows %x21, %x23-5B, %x5D-7E). The test case using `'\x85'` (NEL) as a scope name violates the RFC.
+
+While there IS an inconsistency in FastAPI's code (using `.split()` without arguments vs `' '.join()`), this inconsistency only manifests with RFC-violating input. FastAPI's real issue is that it doesn't validate scope names at all, but that's a separate concern.
+
+The most appropriate categorization is **INVALID** because:
+1. The test uses scope names that violate OAuth2 RFC 6749
+2. FastAPI is not required to handle RFC-violating inputs correctly
+3. The "bug" only occurs with invalid input that should never exist in a compliant OAuth2 implementation

@@ -1,0 +1,57 @@
+## Bug Reproduction Report
+
+### Summary
+The bug described in the report has been successfully reproduced. The `Middleware.__repr__` method in Starlette produces malformed output with a leading comma when the middleware factory is a callable instance without a `__name__` attribute.
+
+### Reproduction Steps
+
+1. **Test Environment**: Starlette version 0.46.2 on Python 3.13
+
+2. **Simple Reproduction Case**:
+   - Created a callable class (CallableFactory) without a __name__ attribute
+   - Instantiated Middleware with this callable and some arguments
+   - Called repr() on the middleware instance
+
+3. **Actual Output**: `Middleware(, 'arg1', 'arg2', key='value')`
+   - Note the leading comma after the opening parenthesis
+
+4. **Expected Output**: Should be either:
+   - `Middleware('arg1', 'arg2', key='value')` (omitting the callable name entirely)
+   - `Middleware(<CallableFactory instance>, 'arg1', 'arg2', key='value')` (providing some representation)
+
+### Test Results
+
+Test 1 - Callable instance without __name__:
+- Output: `Middleware(, 'arg1', 'arg2', key='value')`
+- Confirmed: Starts with 'Middleware(,' ✓
+
+Test 2 - Normal function with __name__:
+- Output: `Middleware(normal_factory, 'arg1', 'arg2', key='value')`
+- Works correctly as functions have __name__ attributes
+
+Test 3 - Callable instance with __name__ attribute:
+- Output: `Middleware(CustomFactory, 'arg1', 'arg2', key='value')`
+- Works correctly when __name__ is manually added
+
+Test 4 - Callable instance with no args/kwargs:
+- Output: `Middleware()`
+- Works correctly when there are no args (empty string doesn't create comma)
+
+### Hypothesis Test
+The hypothesis test successfully detected the bug, failing with the assertion error:
+`AssertionError: repr has leading comma: Middleware(, 0)`
+
+### Root Cause Verification
+Examined the source code at `/home/npc/miniconda/lib/python3.13/site-packages/starlette/middleware/__init__.py`:
+- Line 40: `name = getattr(self.cls, "__name__", "")`
+- Line 41: `args_repr = ", ".join([name] + args_strings + option_strings)`
+
+When `name` is an empty string (callable instances without __name__), the join operation creates a leading comma because it joins `["", "arg1", "arg2"]` which produces `", arg1, arg2"`.
+
+### Conclusion
+The bug is real and reproducible. It occurs specifically when:
+1. A callable instance (object with __call__ method) is used as middleware factory
+2. The instance doesn't have a __name__ attribute
+3. There are additional arguments or kwargs passed to the Middleware constructor
+
+This is a legitimate edge case as callable instances are valid middleware factories in ASGI/Starlette.

@@ -1,0 +1,49 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+I have successfully reproduced the bug reported in pandas.core.util.hashing.
+
+Test Results:
+-------------
+1. Hypothesis test: CONFIRMED - The test fails for negative values like [-1]
+   - hash_array produces different hashes for the same negative integer depending on dtype
+   - int32: [-1] -> 10030294862651378044
+   - int64: [-1] -> 13029008266876403067
+
+2. Manual reproduction: CONFIRMED - All aspects of the bug report are accurate:
+
+   a) Negative integers hash differently across dtypes:
+      - Value -1: int32=10030294862651378044, int64=13029008266876403067, equal=False
+      - Value -2: int32=11327417105322913293, int64=15719503542151743746, equal=False
+      - Value -10: int32=12491476082024521445, int64=7668437853729003032, equal=False
+      - Value -100: int32=3734721323787512129, int64=2009282728798905700, equal=False
+
+   b) Positive integers hash consistently across dtypes:
+      - Value 1: int32=6238072747940578789, int64=6238072747940578789, equal=True
+      - Value 2: int32=15839785061582574730, int64=15839785061582574730, equal=True
+      - Value 10: int32=530445201382180217, int64=530445201382180217, equal=True
+      - Value 100: int32=2824278126137619252, int64=2824278126137619252, equal=True
+
+   c) hash_pandas_object also affected:
+      - Series with dtype='int32' produces different hashes than dtype='int64' for negative values
+
+Root Cause:
+-----------
+Looking at the implementation in hashing.py (line 305-306), the issue is in how numeric values are handled:
+```python
+elif issubclass(dtype.type, np.number) and dtype.itemsize <= 8:
+    vals = vals.view(f"u{vals.dtype.itemsize}").astype("u8")
+```
+
+This code views the raw bytes of the values and then converts to uint64. For negative integers:
+- int32: Uses 4 bytes, viewed as u4, then cast to u8
+- int64: Uses 8 bytes, viewed as u8 directly
+
+The two's complement representation of -1:
+- int32: 0xFFFFFFFF (4 bytes) -> when cast to u8 becomes a different value
+- int64: 0xFFFFFFFFFFFFFFFF (8 bytes) -> stays as is
+
+This explains why positive values (which have the same bit pattern when zero-extended) hash the same,
+but negative values (which require sign extension) hash differently.
+
+The bug is real and reproducible exactly as described in the report.

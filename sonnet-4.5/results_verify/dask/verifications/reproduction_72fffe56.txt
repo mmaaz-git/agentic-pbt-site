@@ -1,0 +1,31 @@
+## Bug Reproduction Analysis
+
+### Bug Confirmed
+The bug report is accurate. I successfully reproduced the TypeError when calling `ArrowORCEngine._aggregate_files` with the following conditions:
+- `aggregate_files=True`
+- `split_stripes > 1` (tested with value 2)
+- `parts` containing tuples with `None` as the stripe value
+
+### Error Details
+The error occurs at line 86 in `/home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/io/orc/arrow.py`:
+```python
+nstripes = len(new_part[0][1])
+```
+
+When `new_part[0][1]` is `None`, calling `len()` on it raises:
+```
+TypeError: object of type 'NoneType' has no len()
+```
+
+### Root Cause
+The bug report correctly identifies the root cause:
+1. When `read_metadata` is called with `split_stripes=False`, it creates parts with `None` stripe values (line 63 in the code)
+2. The `_aggregate_files` method assumes all stripe values are lists and calls `len()` on them without checking for `None`
+3. This creates an incompatibility between `split_stripes=False` and `aggregate_files=True` with `split_stripes > 1`
+
+### Test Results
+Both test cases from the bug report failed as expected:
+1. The direct reproduction case with `split_stripes=2` raised a TypeError
+2. The hypothesis test also failed on the first example with `split_stripes_val=2`
+
+The bug is real and affects the documented functionality of the ORC file aggregation feature.

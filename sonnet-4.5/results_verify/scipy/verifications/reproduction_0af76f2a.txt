@@ -1,0 +1,52 @@
+## Bug Reproduction Results
+
+### Test Execution Summary
+The bug report's claims have been verified and reproduced successfully.
+
+### Hypothesis Test Results
+- The hypothesis test with negative sll values fails due to NaN comparisons
+- When sll is negative, the function returns arrays full of NaN values
+- The symmetry check `np.allclose(window, window[::-1])` fails because NaN != NaN
+
+### Specific Test Case (M=4, nbar=2, sll=-10.0)
+**Result:** `[nan nan nan nan]`
+**Contains NaN:** True
+**Runtime Warning:** "invalid value encountered in arccosh" at line 1916 in _windows.py
+
+### Comparison with Positive sll (M=4, nbar=2, sll=10.0)
+**Result:** `[1.19950222 1.03422917 1.03422917 1.19950222]`
+**Contains NaN:** False
+**Behavior:** Returns valid symmetric window as expected
+
+### Additional Test Cases
+
+1. **sll = 0.0 (boundary case)**
+   - Result: `[-7.53553391 -0.46446609 -0.46446609 -7.53553391]`
+   - Contains NaN: False
+   - Note: Returns valid but possibly unexpected negative values
+
+2. **sll = 0.001 (very small positive)**
+   - Result: `[-7.54063528 -0.46534135 -0.46534135 -7.54063528]`
+   - Contains NaN: False
+   - Returns valid values
+
+3. **sll = -1000.0 (large negative)**
+   - Result: `[nan nan nan nan]`
+   - Contains NaN: True
+
+### Mathematical Root Cause
+The function computes B = 10^(sll/20) and then A = acosh(B)/π.
+- For sll = -10: B = 0.316 < 1, acosh(0.316) = NaN
+- For sll = 0: B = 1.0, acosh(1.0) = 0 (valid)
+- For sll = 10: B = 3.16 > 1, acosh(3.16) ≈ 1.82 (valid)
+
+The acosh function requires its argument to be >= 1, which requires sll >= 0.
+
+### Verification of Bug Report Claims
+✓ Function returns NaN for negative sll values - CONFIRMED
+✓ RuntimeWarning about "invalid value encountered in arccosh" - CONFIRMED
+✓ No ValueError is raised - CONFIRMED
+✓ Function works correctly with positive sll - CONFIRMED
+
+### Conclusion
+The bug report is technically accurate. The function does produce NaN values for negative sll inputs without raising an error, despite documentation stating sll "should be a positive number."

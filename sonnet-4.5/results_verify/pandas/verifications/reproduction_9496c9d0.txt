@@ -1,0 +1,51 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug reported in fastapi.security.utils.get_authorization_scheme_param.
+
+## Bug Confirmation
+
+The bug is CONFIRMED and reproducible. The function incorrectly handles Authorization headers with multiple spaces between the scheme and credentials.
+
+## Reproduction Results
+
+1. **Hypothesis Test**:
+   - The property-based test fails exactly as described
+   - With input: scheme_input='0', param_input='0', num_spaces=2
+   - Authorization header: '0  0' (with 2 spaces)
+   - Expected param: '0'
+   - Actual param: ' 0' (with leading space)
+   - The test consistently fails for any num_spaces >= 2
+
+2. **Manual Reproduction**:
+   - Authorization: "Bearer  my-token" (2 spaces)
+   - Returns scheme: 'Bearer', param: ' my-token' (note the leading space)
+   - Expected behavior would return param: 'my-token' (no leading space)
+
+3. **Real-World Impact**:
+   - OAuth2PasswordBearer returns different tokens for "Bearer token123" vs "Bearer  token123"
+   - Single space: returns 'token123'
+   - Double space: returns ' token123' (with leading space)
+   - This causes authentication failures because ' token123' != 'token123'
+
+## Root Cause
+
+The function uses `str.partition(" ")` which splits on the FIRST space only:
+```python
+scheme, _, param = authorization_header_value.partition(" ")
+```
+
+When there are multiple spaces:
+- "Bearer  token" gets partitioned into ("Bearer", " ", " token")
+- The scheme is correct: "Bearer"
+- But the param includes the remaining spaces: " token"
+
+## Effect
+
+The bug causes authentication failures in production when:
+1. Clients accidentally send extra spaces in Authorization headers
+2. Proxy servers or middleware normalize/modify whitespace
+3. Manual testing with tools that auto-format headers
+4. Any scenario where multiple spaces appear between scheme and credentials
+
+The impact is significant because the same logical token becomes different strings due to whitespace, breaking authentication silently.

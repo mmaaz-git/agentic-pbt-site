@@ -1,0 +1,30 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Reproduction
+The property-based test with Hypothesis fails exactly as described:
+- Test fails with `n=2` (or any value > 1)
+- Error: `KeyError: (None, None, None, None, None)`
+- The error occurs during the second callback's `unregister()` call
+
+### Direct Bug Reproduction
+The simple reproduction case provided in the bug report was confirmed:
+1. Creating two `Callback()` instances with no parameters results in identical `_callback` tuples: `(None, None, None, None, None)`
+2. Registering both callbacks only adds one entry to `Callback.active` (since it's a set and the tuples are identical)
+3. Unregistering the first callback removes the shared tuple from the set
+4. Attempting to unregister the second callback raises `KeyError` because the tuple is already gone
+
+### Key Observations
+- The bug is caused by the use of `set.remove()` in the `unregister()` method (line 83 in callbacks.py)
+- Multiple `Callback` instances with identical parameters share the same `_callback` tuple value
+- Since `Callback.active` is a set, only one copy of the tuple exists regardless of how many identical callbacks are registered
+- The `add_callbacks` context manager already handles this correctly by using `discard()` instead of `remove()` (line 145)
+
+### Impact
+The bug prevents proper cleanup when multiple callback instances with identical configurations are used, which could happen in:
+- Testing scenarios where multiple identical callbacks are created
+- Libraries or applications that dynamically create callbacks with default parameters
+- Situations where callback objects are created in loops or parallel processing
+
+The bug is real, reproducible, and affects the expected behavior of the API.

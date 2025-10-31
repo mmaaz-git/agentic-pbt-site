@@ -1,0 +1,66 @@
+REPRODUCTION OF THE REPORTED BUG
+
+## Test Environment
+- pandas version: 2.3.2
+- numpy version: (standard with pandas 2.3.2)
+- Python version: 3.13
+
+## Test 1: Simple Reproduction Case
+Code:
+```python
+sparse = SparseArray([1.0, 0.0, 2.0])
+result = sparse.astype(np.int64)
+```
+
+Results:
+- Input type: <class 'pandas.core.arrays.sparse.array.SparseArray'>
+- Result: [1 0 2] (a numpy array)
+- Result type: <class 'numpy.ndarray'>
+- Expected type per documentation: <class 'pandas.core.arrays.sparse.array.SparseArray'>
+- Test passes? NO - Returns ndarray instead of SparseArray
+
+## Test 2: Hypothesis Property Test
+Using the exact failing input from the bug report: `array([0.])`
+
+Results:
+- Created SparseArray successfully
+- After astype(np.int64), result is: [0]
+- Type: <class 'numpy.ndarray'>
+- Expected: SparseArray
+- Test passes? NO - Returns ndarray instead of SparseArray
+
+## Test 3: Using SparseDtype Wrapper
+Code:
+```python
+sparse = SparseArray([1.0, 0.0, 2.0])
+result = sparse.astype(SparseDtype(np.int64))
+```
+
+Results:
+- Result type: <class 'pandas.core.arrays.sparse.array.SparseArray'>
+- Test passes? YES - Returns SparseArray as expected
+
+## Code Analysis
+Examining the implementation at lines 1301-1305:
+```python
+if not isinstance(future_dtype, SparseDtype):
+    # GH#34457
+    values = np.asarray(self)
+    values = ensure_wrapped_if_datetimelike(values)
+    return astype_array(values, dtype=future_dtype, copy=False)
+```
+
+This code explicitly:
+1. Checks if the dtype is NOT a SparseDtype
+2. Converts the SparseArray to a dense numpy array
+3. Returns the result of astype_array, which returns an ndarray
+
+## Verification of Bug Report Claims
+1. ✅ The bug exists - confirmed through testing
+2. ✅ The docstring states "output will always be a SparseArray" - verified
+3. ✅ The actual behavior returns ndarray for non-SparseDtype - confirmed
+4. ✅ Using SparseDtype wrapper works correctly - verified
+5. ✅ The bug is in lines 1301-1305 as reported - confirmed
+
+## Conclusion
+The bug report is technically correct. The implementation violates the documented contract by returning an ndarray when a non-SparseDtype is passed, despite the documentation explicitly stating it should "always" return a SparseArray.

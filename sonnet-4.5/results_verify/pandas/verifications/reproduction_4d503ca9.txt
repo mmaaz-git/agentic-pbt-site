@@ -1,0 +1,32 @@
+## Reproduction Report
+
+I have successfully reproduced the bug in `pandas.io.sas.sas_xport._split_line`.
+
+### Test Results:
+
+1. **Direct reproduction test**: Confirmed that calling `_split_line` with parts that don't contain "_" raises a KeyError:
+   - Input: `parts=[('name', 5), ('value', 3)]`, `s='Alice123'`
+   - Result: `KeyError: '_'`
+
+2. **Hypothesis test**: The property-based test immediately found multiple failing cases where parts list doesn't contain "_" key, all resulting in KeyError.
+
+### Code Analysis:
+
+The function at line 156-175 in `/home/npc/miniconda/lib/python3.13/site-packages/pandas/io/sas/sas_xport.py`:
+- Takes a fixed-length string and a list of (name, length) pairs
+- Splits the string according to the specified lengths
+- Line 174 unconditionally executes `del out["_"]`
+- This causes a KeyError if "_" is not in the parts list
+
+### Current Usage:
+
+I examined all current uses of `_split_line` in the codebase (lines 307, 336, 338):
+- Line 307: `fif = [["prefix", 24], ["version", 8], ["OS", 8], ["_", 24], ["created", 16]]`
+- Line 336: `mem = [["prefix", 8], ["sasdata", 8], ["version", 8], ["OS", 8], ["_", 24], ["created", 16]]`
+- Line 338: `mem = [["modified", 16], ["_", 16], ["label", 40], ["type", 8]]`
+
+All current callers include "_" in their parts list, which explains why this bug hasn't surfaced in production.
+
+### Conclusion:
+
+The bug is real and reproducible. The function crashes with a KeyError when called with a parts list that doesn't contain an entry named "_".

@@ -1,0 +1,48 @@
+BUG TRIAGE ANALYSIS
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `_resample_bin_and_out_divs` is an internal function (prefixed with underscore) and there is no explicit documentation stating that output divisions must be monotonic. The user might be making assumptions about undocumented behavior. Internal functions may have special behaviors that are handled by their callers.
+
+**Why it might not be INVALID:**
+Dask's fundamental architecture requires divisions to be monotonically increasing - this is not just a convention but a core requirement. All division-producing functions in dask must respect this invariant. The bug produces objectively incorrect output that would break dask's partitioning system, regardless of documentation status.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The specific combination of parameters (closed='right', label='right', weekly frequency, short division span) might be considered an edge case that rarely occurs in practice. The function is internal and not meant to be called directly by users. The workaround might be to simply avoid this specific parameter combination.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it affects a valid and reasonable combination of parameters that users might actually use when resampling weekly data. The bug produces fundamentally incorrect output that violates core dask invariants. Non-monotonic divisions would cause data corruption and incorrect results, which is too serious to ignore.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks documentation about its expected behavior and constraints. If the function is not supposed to handle this parameter combination, the documentation should explicitly state these limitations. The issue could be resolved by documenting that certain parameter combinations are unsupported.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not about unclear documentation - the code produces objectively incorrect output that violates dask's fundamental requirements. Monotonic divisions are not a documentation issue but a correctness requirement. The bug causes actual malfunction, not just confusion about expected behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting the specific combination of closed='right' and label='right' with weekly frequencies might be considered a new feature rather than a bug fix. The function might not have been designed to handle this case, and adding support would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts these parameters and attempts to process them - it just produces incorrect output. This is not about adding new functionality but fixing existing functionality that produces wrong results. The parameters are already part of the function's interface.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces non-monotonic divisions, which violates a fundamental dask requirement. This is not a matter of interpretation or edge cases - the output is objectively incorrect and would cause data corruption. The bug occurs with valid parameter combinations that are accepted by the function. The issue has a clear root cause in the code logic where shifted values are not consistently applied.
+
+**Why it might not be BUG:**
+The function is internal (underscore-prefixed) and might have special semantics known only to its callers. There's no explicit documentation stating the monotonicity requirement for this specific function. The parameter combination might be considered unsupported even though it doesn't raise an error.
+
+## Overall Consideration
+
+This appears to be a clear BUG. The evidence is compelling:
+
+1. **Correctness Violation**: The function produces non-monotonic divisions, which fundamentally breaks dask's partitioning system. This is not a subjective interpretation but an objective failure - divisions MUST be monotonic for dask to function correctly. When divisions are non-monotonic, data partitioning fails and operations produce incorrect results.
+
+2. **Valid Input, Invalid Output**: The function accepts the parameter combination without error but produces incorrect output. The parameters (closed='right', label='right', rule='1W') are all valid values that the function is designed to handle. If these were unsupported, the function should raise an error rather than silently producing corrupt output.
+
+3. **Clear Root Cause with Simple Fix**: The bug has been traced to a specific logic error where the label='right' shift is not consistently applied during end adjustment. The fix is straightforward - maintain the shift consistency when appending values. This is clearly a programming error, not a design limitation.
+
+While the function is internal, it's used by public APIs and its correctness is essential for dask's operation. The fact that it's internal doesn't excuse producing incorrect output that violates core invariants. This is a legitimate bug that should be fixed to prevent data corruption and incorrect results in production systems.

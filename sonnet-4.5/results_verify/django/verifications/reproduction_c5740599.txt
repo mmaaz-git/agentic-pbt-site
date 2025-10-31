@@ -1,0 +1,58 @@
+## Bug Reproduction Analysis
+
+### Bug Report Claims
+The bug report claims that `b62_decode` accepts invalid base62 strings `-` and `-0` and returns 0, violating the round-trip property that `b62_encode(b62_decode(s)) == s` for valid strings.
+
+### Reproduction Results
+
+I successfully reproduced the bug exactly as described:
+
+1. **Input "-"**:
+   - `b62_decode('-')` returns `0`
+   - `b62_encode(0)` returns `'0'`
+   - Round-trip FAILS: `'-'` != `'0'`
+
+2. **Input "-0"**:
+   - `b62_decode('-0')` returns `0`
+   - `b62_encode(0)` returns `'0'`
+   - Round-trip FAILS: `'-0'` != `'0'`
+
+3. **Valid inputs work correctly**:
+   - `'0'` round-trips correctly
+   - `'-5'`, `'-A'`, `'-ABC'` all round-trip correctly
+   - Positive base62 strings round-trip correctly
+
+### Technical Analysis
+
+Looking at the code:
+
+**In b62_decode (lines 76-86):**
+```python
+if s[0] == "-":
+    s = s[1:]  # Strips the minus sign
+    sign = -1
+decoded = 0
+for digit in s:
+    decoded = decoded * 62 + BASE62_ALPHABET.index(digit)
+return sign * decoded
+```
+
+When input is `"-"`:
+1. Detects minus sign, strips it, leaving empty string `""`
+2. The empty string loop produces `decoded = 0`
+3. Returns `-1 * 0 = 0`
+
+When input is `"-0"`:
+1. Detects minus sign, strips it, leaving `"0"`
+2. Processes `"0"` to get `decoded = 0`
+3. Returns `-1 * 0 = 0`
+
+**In b62_encode (lines 64-73):**
+```python
+if s == 0:
+    return "0"
+```
+Always returns `"0"` for zero, never `"-"` or `"-0"`.
+
+### Verification
+The bug is technically correct - the functions do violate the round-trip property for these specific inputs. The decode function accepts strings that the encode function will never produce.

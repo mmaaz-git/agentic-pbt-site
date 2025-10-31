@@ -1,0 +1,36 @@
+## Reproduction Results
+
+### Bug Report Claim
+The bug report claims that `categorical_column_to_series` uses modulo arithmetic to silently remap out-of-bounds categorical codes, causing data corruption.
+
+### Reproduction Tests
+
+1. **Basic reproduction test confirmed the behavior**:
+   - Input codes: [0, 1, 100, 200] with 3 categories ['apple', 'banana', 'cherry']
+   - Output: ['apple', 'banana', 'banana', 'cherry']
+   - Code 100 → 100 % 3 = 1 → 'banana'
+   - Code 200 → 200 % 3 = 2 → 'cherry'
+
+2. **Modulo operation verified**:
+   - The function does use `categories[codes % len(categories)]` at line 254
+   - This applies to ALL codes, including out-of-bounds values
+   - Python's modulo: -1 % 3 = 2, 100 % 3 = 1, 200 % 3 = 2
+
+3. **Critical finding about sentinel values**:
+   - The code comment says modulo is to handle "out-of-bounds sentinel values"
+   - BUT the modulo prevents proper null detection!
+   - Example: sentinel -1 gets mapped to categories[2] instead of becoming NaN
+   - The `set_nulls` function can't identify the sentinel after modulo transformation
+
+4. **Pandas' own Categorical behavior**:
+   - `pd.Categorical.from_codes()` accepts ONLY -1 as null indicator
+   - Raises `ValueError` for any other out-of-bounds codes
+   - Message: "codes need to be between -1 and len(categories)-1"
+   - Does NOT use modulo arithmetic
+
+### Technical Accuracy
+The bug report is technically correct:
+- The modulo operation DOES occur
+- It DOES silently remap out-of-bounds codes
+- This IS different from pandas' standard categorical behavior
+- The current implementation fails to properly handle sentinel values as intended

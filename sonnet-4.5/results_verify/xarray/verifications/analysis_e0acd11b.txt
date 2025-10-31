@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function could be considered working as designed if the implicit assumption is that intervals must always be contiguous in xarray's plotting context. The documentation doesn't explicitly state that all boundaries should be returned - it just says "the Intervals' boundaries" which is ambiguous. If the function was only ever intended for contiguous intervals, then the behavior is correct for the intended use case.
+
+**Why it might not be INVALID:**
+The function accepts any sequence of pd.Interval objects without validation, and its documentation says it returns "the Intervals' boundaries" without qualifying this statement. Users can easily create non-contiguous intervals, and the function silently produces incorrect results rather than failing. The ambiguous documentation combined with the silent failure mode makes this more than just undocumented behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal/private function (prefixed with underscore), not part of the public API. It may only be used in specific contexts within xarray where intervals are guaranteed to be contiguous. The use of non-contiguous intervals in pcolormesh might be an edge case that doesn't occur in practice. Fixing this might add unnecessary complexity for a scenario that never happens in real usage.
+
+**Why it might not be WONTFIX:**
+Even though it's an internal function, it's still used in production code and affects user-visible plotting behavior. The function accepts non-contiguous intervals without error and produces incorrect visualizations. This is a data integrity issue that could lead to misleading scientific visualizations, which is serious enough to warrant fixing rather than ignoring.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function might be working exactly as intended for contiguous intervals only, and the real issue is that the documentation doesn't specify this requirement. Adding a clear statement that "intervals must be contiguous" to the docstring would prevent misuse. The current docstring is too vague about what "the Intervals' boundaries" means.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the limitation doesn't fix the underlying problem - the function still silently produces wrong results for valid input. Users can create non-contiguous interval coordinates through pandas, and nothing prevents these from being passed to plotting functions. A documentation fix alone would not prevent the incorrect visualizations from occurring.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting non-contiguous intervals could be seen as a new feature rather than a bug fix. The current implementation might have been designed only for the contiguous case, and adding support for non-contiguous intervals would be an enhancement. The proposed solutions in the bug report (validation or handling all boundaries) are essentially new features.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts non-contiguous intervals as input - it just handles them incorrectly. This isn't about adding new functionality but fixing existing functionality that produces wrong results. The function's interface already suggests it should work with any sequence of intervals, not just contiguous ones.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces objectively incorrect results for valid input (non-contiguous intervals). It returns a subset of boundaries when the documentation claims it returns "the Intervals' boundaries." This leads to incorrect pcolormesh visualizations where gaps between intervals are not represented. The function accepts the input without error but silently produces wrong output, which is a classic bug pattern. Scientific visualization accuracy is critical, and this error could lead to misinterpretation of data.
+
+**Why it might not be BUG:**
+The function might be working exactly as designed for its intended use case (contiguous intervals only). The underscore prefix indicates it's an internal function, possibly with undocumented assumptions about its input. If xarray never creates non-contiguous intervals internally, then this scenario might be outside the function's design scope.
+
+**Overall consideration**
+
+This case presents a nuanced situation involving an internal function with ambiguous documentation and implicit assumptions. The key factors to consider are: (1) the function accepts non-contiguous intervals without validation, (2) it produces demonstrably incorrect results for such input, and (3) this affects user-visible plotting output.
+
+While the function is internal (underscore-prefixed), it's still part of a data visualization pipeline that users rely on for accurate representations. The fact that users can easily create non-contiguous interval coordinates through pandas and pass them to xarray plotting functions makes this more than a theoretical edge case. The silent failure mode is particularly problematic - either the function should handle all valid inputs correctly or explicitly reject invalid inputs.
+
+The most pragmatic classification depends on whether non-contiguous intervals are considered a valid use case in xarray's plotting context. Given that the function is specifically used for pcolormesh plotting, where representing gaps between data regions could be important for accurate visualization, and that nothing prevents users from creating such intervals, this leans toward being a legitimate issue rather than unsupported behavior. However, the internal nature of the function and the possibility that this is an undocumented design constraint suggest this might be better classified as a DOCUMENTATION_FIX, where the constraint should be documented and ideally validated with an informative error message.

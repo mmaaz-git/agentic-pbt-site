@@ -1,0 +1,49 @@
+REPRODUCTION OF BUG REPORT
+
+I successfully reproduced the bug as described in the report. Here are my findings:
+
+1. BASIC REPRODUCTION (from bug report):
+   Code: printing.pprint_thing("hello world", escape_chars=['a'])
+   Result: KeyError: 'a'
+   Status: CONFIRMED - Raises KeyError as reported
+
+2. HYPOTHESIS TEST:
+   The property-based test from the bug report was run with escape_chars containing ['\t', '\n', '\r', 'a', 'b', 'c'].
+   Result: Failed immediately with KeyError: 'a' when escape_chars=['a']
+   Status: CONFIRMED - Test fails as reported
+
+3. ADDITIONAL TESTING PERFORMED:
+
+   Test with standard escapes (list mode):
+   - Input: "hello\tworld\n", escape_chars=['\t', '\n']
+   - Result: 'hello\\tworld\\n' (successful escaping)
+   - This works because '\t' and '\n' are in the hardcoded translate dict
+
+   Test with custom characters (list mode):
+   - Input: "hello world", escape_chars=['a']
+   - Result: KeyError: 'a'
+   - This fails because 'a' is not in the hardcoded translate dict
+
+   Test with mixed valid/invalid (list mode):
+   - Input: "hello\tworld", escape_chars=['\t', 'o']
+   - Result: KeyError: 'o'
+   - Fails on first non-standard character
+
+   Test with dict mode:
+   - Input: "hello world", escape_chars={'o': 'X', 'l': 'Y'}
+   - Result: 'heYYX wXrYd' (successful replacement)
+   - Dict mode works for ANY characters as advertised
+
+4. ROOT CAUSE ANALYSIS:
+   The bug occurs in the as_escaped_string internal function (lines 196-212):
+   - Line 199 creates a hardcoded translate dict with only '\t', '\n', '\r'
+   - Lines 210-211 iterate through escape_chars and do: result.replace(c, translate[c])
+   - This raises KeyError for any character not in the hardcoded dict
+
+5. BEHAVIOR INCONSISTENCY:
+   - When escape_chars is a dict: ANY characters work (custom replacements)
+   - When escape_chars is a list: ONLY '\t', '\n', '\r' work (hardcoded replacements)
+   - This inconsistency is not documented
+
+CONCLUSION:
+The bug report is technically correct. The function crashes with KeyError when escape_chars is a list containing characters other than '\t', '\n', or '\r', despite the documentation suggesting that any list of characters should be acceptable.

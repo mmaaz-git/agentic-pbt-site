@@ -1,0 +1,50 @@
+# Documentation Analysis
+
+## pandas Documentation
+
+### pandas.DataFrame.to_json and ujson_dumps
+- **double_precision parameter**:
+  - Default value: 10
+  - Maximum value: 15
+  - Purpose: "The number of decimal places to use when encoding floating point values"
+  - Constraint: ValueError raised if > 15
+
+### Key observations:
+1. The documentation describes this as "decimal places" but it actually controls significant digits
+2. No explicit round-trip guarantee is documented
+3. No warning about potential precision loss or overflow issues with the default value
+4. The documentation doesn't mention that values near float boundaries might overflow
+
+## JSON Standards (RFC 7159)
+
+### Number Representation Requirements:
+- JSON numbers are represented in base 10 with decimal digits
+- Infinity and NaN are not permitted values
+
+### Interoperability Guidelines:
+1. **IEEE 754 Recommendation**: "Good interoperability" achieved by using IEEE 754-2008 binary64 (double precision)
+2. **Integer Guarantee**: Integers in range [-(2^53)+1, (2^53)-1] are guaranteed to be exactly interoperable
+3. **Implementation Freedom**: Implementations can set limits on number range and precision
+4. **Precision Warning**: Very large or very precise numbers may cause compatibility issues
+
+### Critical Finding:
+RFC 7159 states that numbers outside typical double-precision range "may indicate potential interoperability problems" - but this refers to numbers in the JSON itself, not precision loss during serialization.
+
+## Python's Standard Library json Module
+The standard library's `json.dumps()` uses sufficient precision by default to ensure round-trip fidelity for all valid finite float values, as demonstrated in our tests.
+
+## Documentation Gap Analysis
+
+### What's Missing:
+1. No documentation that ujson_dumps with default precision may cause finite values to overflow to infinity
+2. No warning that the default precision of 10 is insufficient for edge cases near float boundaries
+3. No explicit statement about round-trip guarantees (or lack thereof)
+4. The term "decimal places" is misleading - it's actually significant digits in scientific notation
+
+### User Expectations:
+Given that:
+- pandas is a data analysis library where precision matters
+- The standard library json module preserves values by default
+- No documentation warns about precision loss
+
+Users would reasonably expect that finite float values remain finite through serialization/deserialization, especially when both ujson_dumps and ujson_loads are from the same library.

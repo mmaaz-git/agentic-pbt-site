@@ -1,0 +1,84 @@
+## Bug Report Analysis
+
+### Categorization Considerations
+
+#### INVALID - Arguments Against
+- The dataframe protocol explicitly specifies UTF-8 encoding for strings
+- Surrogate characters (U+D800-U+DFFF) are technically invalid in UTF-8
+- The protocol documentation doesn't promise to handle invalid UTF-8 sequences
+- One could argue that data containing surrogates is malformed
+
+#### INVALID - Arguments For
+- Pandas accepts and stores these strings without issue
+- Python strings can contain surrogates
+- Users have legitimate data that crashes the interchange
+- The error is not documented or expected
+
+#### WONTFIX - Arguments Against
+- This isn't an obscure edge case - any DataFrame with surrogates will crash
+- The fix is simple and doesn't break existing functionality
+- Data interchange should preserve user data when possible
+- The crash is not graceful - it's an unhandled exception
+
+#### WONTFIX - Arguments For
+- Surrogate characters are relatively rare in practice
+- They represent invalid Unicode and shouldn't normally appear
+- Supporting them might encourage bad Unicode practices
+- The protocol specification says UTF-8, which inherently excludes surrogates
+
+#### DOCUMENTATION_FIX - Arguments Against
+- The code behavior is problematic, not just the documentation
+- Simply documenting "surrogates will crash" isn't user-friendly
+- The fix is straightforward and better than documentation workarounds
+- Users shouldn't need to sanitize valid Python strings
+
+#### DOCUMENTATION_FIX - Arguments For
+- The documentation could clarify UTF-8 limitations
+- Could document that certain strings won't interchange
+- The protocol spec could be clearer about Unicode edge cases
+- Users could be warned about surrogate limitations
+
+#### FEATURE_REQUEST - Arguments Against
+- This is a crash/error, not a missing feature
+- The protocol already claims to support strings
+- Round-trip data preservation seems like basic functionality
+- The fix uses existing Python encoding capabilities
+
+#### FEATURE_REQUEST - Arguments For
+- Supporting surrogates could be seen as an enhancement
+- The protocol might not have considered this case originally
+- Could be framed as "add support for all Python strings"
+- The surrogatepass handler is a specific feature addition
+
+#### BUG - Arguments Against
+- The protocol specifies UTF-8, which doesn't support surrogates
+- This might be intended behavior to enforce valid Unicode
+- The documentation doesn't promise all strings will work
+- Surrogates are technically invalid Unicode
+
+#### BUG - Arguments For
+- Pandas accepts these strings, so the interchange should too
+- The crash is unhandled and ungraceful
+- Users expect data that works in pandas to work in interchange
+- The protocol's purpose is data interchange, which fails here
+- Python's standard library provides surrogatepass for exactly this case
+- The fix is simple and maintains backward compatibility
+- Round-trip conversion is a reasonable expectation
+
+### Analysis Summary
+
+This appears to be a legitimate BUG because:
+
+1. **Data Loss**: Valid pandas DataFrames cannot be exchanged via the protocol
+2. **Unhandled Exception**: The code crashes rather than handling the error gracefully
+3. **Reasonable Expectation**: Users expect pandas-to-pandas interchange to preserve data
+4. **Python Standard**: Python provides surrogatepass specifically for such cases
+5. **Simple Fix**: The solution doesn't break existing functionality
+6. **Protocol Purpose**: The interchange protocol's core purpose (data exchange) fails
+
+While surrogates are technically invalid UTF-8, they are valid in Python strings and pandas DataFrames. The interchange protocol should either:
+- Handle them properly (preferred, via surrogatepass)
+- Reject them gracefully with a clear error
+- Document this limitation prominently
+
+The current behavior (unhandled crash) is clearly a bug.

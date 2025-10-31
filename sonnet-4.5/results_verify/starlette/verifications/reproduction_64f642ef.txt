@@ -1,0 +1,63 @@
+## Bug Reproduction Results
+
+### Testing the Claimed Bug
+
+The bug report claims that `strip(" W/")` corrupts ETags ending with 'W' or '/' by removing these characters from the end. The report provides examples:
+- `"abcW"` would become `"abc"` (W stripped from end)
+- `"abc/"` would become `"abc"` (/ stripped from end)
+
+**Actual Test Results:**
+
+When I tested this with the actual Starlette code:
+- ETag `"abcW"` -> `is_not_modified()` returns **True** (works correctly)
+- ETag `"abc/"` -> `is_not_modified()` returns **True** (works correctly)
+- ETag `"dataW/"` -> `is_not_modified()` returns **True** (works correctly)
+
+The claimed bug **DOES NOT REPRODUCE**. The reason is that ETags are quoted strings (e.g., `"abcW"`), and when `strip(" W/")` is applied, it cannot strip the W from the end because the quote character (") blocks it. The strip() method only removes characters from the actual boundaries of the string.
+
+### Understanding strip() Behavior
+
+Python's `strip(" W/")` removes any of the characters ' ', 'W', '/' from both ends of the string, but only if they are at the string boundaries:
+- `"abcW".strip(" W/")` = `"abcW"` (quotes protect the W)
+- `abcW.strip(" W/")` = `abc` (without quotes, W would be stripped)
+
+This is the fundamental misunderstanding in the bug report.
+
+### Testing the Hypothesis Test
+
+The bug report includes a property-based test using Hypothesis. When I ran this test:
+
+```python
+@given(st.text(alphabet=st.characters(min_codepoint=33, max_codepoint=126, blacklist_characters='"'), min_size=1))
+def test_etag_round_trip_strong(etag_value):
+    # Test if ETag round-trips correctly
+```
+
+The test **DID FAIL**, but NOT for ETags ending with W or /. Instead, it failed for ETags containing **commas**, such as:
+- `"k,qx"` - Failed
+- `"^g,.=U4xKq!Zc"` - Failed
+- Any ETag with a comma - Failed
+
+### The Real Bug
+
+There IS a bug in the code, but it's different from what was claimed:
+
+**Real Bug**: ETags containing commas are incorrectly parsed.
+
+When an ETag like `"abc,def"` is processed:
+1. The code splits on comma: `"abc,def".split(",")` → `['"abc', 'def"']`
+2. After stripping: `['"abc', 'def"']`
+3. The original ETag `"abc,def"` is not found in this list
+4. Result: `is_not_modified()` incorrectly returns False
+
+This is a legitimate parsing bug because:
+- RFC 7232 allows commas within ETag opaque-tag values
+- The current implementation naively splits on commas without respecting quoted string boundaries
+
+### Summary
+
+- **Claimed bug about trailing W or /** : **Does NOT exist**
+- **Actual bug with commas in ETags**: **Does exist** (but not mentioned in the report)
+- The bug report's analysis of `strip()` behavior is **incorrect**
+- The provided fix would not solve any real problem
+- The Hypothesis test does catch a bug, but a different one than claimed

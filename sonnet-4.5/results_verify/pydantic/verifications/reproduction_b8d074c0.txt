@@ -1,0 +1,47 @@
+BUG REPRODUCTION RESULTS
+
+1. Test Execution Status:
+   ✓ The provided test code runs successfully
+   ✓ The bug is reproducible exactly as described
+
+2. Observed Behavior:
+
+   For Gt(5) constraint on int_schema:
+   - Returns: {'type': 'int', 'gt': 5}
+   - Schema type remains 'int'
+   - Constraint is embedded directly in the schema
+
+   For Ge(5) constraint on int_schema:
+   - Returns: {'type': 'function-after', 'function': {...}, 'schema': {'type': 'int', 'ge': 5}}
+   - Schema type becomes 'function-after'
+   - Constraint is BOTH embedded in the schema AND wrapped with a function validator
+
+   Similar double-application observed for:
+   - Lt(5): Returns 'function-after' with both 'lt': 5 in schema and function wrapper
+   - Le(5): Returns 'function-after' with both 'le': 5 in schema and function wrapper
+   - Len(5, 10): Returns 'function-after' with both min_length/max_length in schema and function wrapper
+   - MultipleOf(3): Returns 'function-after' with both 'multiple_of': 3 in schema and function wrapper
+
+3. Code Analysis Verification:
+
+   Gt implementation (lines 448-463):
+   - Has if block for embedding constraint (lines 450-457)
+   - Has else block for function wrapper (lines 458-463)
+   - Mutually exclusive: either embeds OR wraps
+
+   Ge implementation (lines 464-478):
+   - Has if block for embedding constraint (lines 466-473)
+   - NO else clause before function definition (line 475)
+   - Always executes both: embeds AND wraps
+
+   Same pattern in Lt (479-493), Le (494-508), Len (509-533), MultipleOf (534-548)
+
+4. Impact Verification:
+   - The redundant validation does add unnecessary overhead
+   - The schema introspection returns different types ('int' vs 'function-after')
+   - The inconsistency is real - Gt behaves differently from Ge/Lt/Le/Len/MultipleOf
+
+5. Technical Correctness:
+   - The bug report accurately describes the code structure
+   - The line numbers referenced are correct
+   - The proposed fix (adding else clauses) would make the behavior consistent

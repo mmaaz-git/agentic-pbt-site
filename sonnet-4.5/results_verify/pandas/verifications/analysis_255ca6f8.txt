@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+One could argue that the current behavior is intentional - when fill_value=False, the function returns False whenever masks exist because masked values are "not equal" by definition, and if any values are not equal, the whole comparison should be False. The documentation could be interpreted to mean that fill_value=False makes ANY masked position cause the entire comparison to fail.
+
+**Why it might not be INVALID:**
+The documentation clearly states that fill_value controls whether "masked values are considered equal", not whether the entire comparison should be skipped. The current implementation completely ignores unmasked values when fill_value=False and masks exist, which contradicts the fundamental purpose of the function - to compare array values. Two arrays with identical unmasked values should be considered equal for their unmasked portions regardless of the fill_value setting.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an edge case that rarely matters in practice. Most users likely use fill_value=True (the default), and those using fill_value=False might expect strict equality including mask positions. Changing this behavior could potentially break existing code that relies on the current implementation.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it fundamentally breaks the function's ability to compare arrays when fill_value=False. The current behavior makes fill_value=False essentially useless for any masked arrays, reducing it to a simple "return False if any masks exist" which provides no value. This is clearly not the intended design based on the documentation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the current behavior is actually intended, then the documentation is misleading. It should explicitly state that fill_value=False causes the function to return False whenever any masks exist, regardless of the actual values. The documentation currently suggests that fill_value controls how masked positions are compared, not that it bypasses comparison entirely.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation's intent seems clear - fill_value should control whether masked positions are considered equal or not equal in the comparison. The current implementation doesn't match this documented behavior. The example in the docstring supports the idea that comparisons should still occur, with fill_value affecting only how masked positions contribute to the result.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that the current implementation is correct but limited, and the requested behavior (properly comparing unmasked values when fill_value=False) is a new feature. The user is asking for enhanced functionality that wasn't originally implemented.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but rather asking for the function to work as documented and expected. The function's purpose is to compare arrays, and it should do so correctly regardless of the fill_value parameter. The current behavior is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation contains an obvious logic error: when fill_value=False and masks exist, it returns False without performing any comparison. This violates the fundamental contract of the function - to compare array values. The code literally has `else: return False` which ignores all data comparison. The documentation describes fill_value as controlling how masked values are treated in comparison, not as a switch to disable comparison entirely. Two arrays with identical unmasked values and identical masks should logically be considered equal for their unmasked portions.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the designers intentionally wanted fill_value=False to mean "fail immediately if any masks exist." However, this interpretation makes no practical sense and contradicts both the documentation and the principle of least surprise.
+
+## Overall consideration
+
+After careful analysis, this is clearly a BUG in the implementation. The evidence is overwhelming:
+
+First, the source code reveals an obvious logic flaw. When fill_value=False and masks exist, the function simply returns False without any comparison: `else: return False`. This is not a subtle edge case or interpretation issue - it's a clear coding error where the comparison logic is completely bypassed. The function fails to fulfill its basic purpose of comparing array values.
+
+Second, the documentation explicitly states that fill_value controls whether "masked values are considered equal" in the comparison. It does not say that fill_value=False should cause the function to ignore all values and return False. The documented behavior implies that comparisons should still occur, with fill_value only affecting how masked positions contribute to the result. The current implementation violates this documented contract.
+
+Third, the current behavior makes fill_value=False essentially useless for masked arrays. It becomes equivalent to checking `if any_masks_exist: return False`, which provides no practical value and is clearly not the intended design. A parameter that completely breaks the function's core functionality for an entire class of inputs (masked arrays) cannot be working as intended. This is a clear bug that should be fixed to make the function work correctly as documented.

@@ -1,0 +1,71 @@
+TRIAGE ANALYSIS
+
+Evaluating this bug report against each possible categorization:
+
+1. INVALID (Incorrect report)
+Arguments FOR:
+- None. The bug is reproducible and the behavior is confirmed.
+Arguments AGAINST:
+- The bug reproduces exactly as described
+- The behavior contradicts JSON specification
+- The behavior is undocumented
+- The behavior is inconsistent
+
+2. WONTFIX (Trivial/uninteresting)
+Arguments FOR:
+- Some might argue numeric column names are uncommon
+- Users could work around by adding a dummy non-numeric column
+Arguments AGAINST:
+- This breaks a fundamental expectation (round-trip serialization)
+- The inconsistency makes it unpredictable
+- It silently corrupts data types
+- Real-world use cases exist (e.g., year-based columns '2020', '2021', '2022')
+- No warning is given to users
+
+3. FEATURE_REQUEST (Not currently supported)
+Arguments FOR:
+- Could be reframed as "need a parameter to control column name type inference"
+Arguments AGAINST:
+- This is not asking for new functionality
+- The current behavior is broken, not missing
+- Round-trip serialization should work by default
+- JSON spec requires string keys, so preserving them is expected behavior
+
+4. DOCUMENTATION_FIX (Documentation is wrong)
+Arguments FOR:
+- The documentation could be updated to warn users about this behavior
+Arguments AGAINST:
+- The documentation isn't wrong; it's silent about this behavior
+- Documenting a bug doesn't make it correct
+- The behavior itself contradicts JSON specifications
+- The inconsistent application suggests it's unintentional
+
+5. BUG (Valid bug report)
+Arguments FOR:
+- Breaks round-trip serialization (df != df.to_json().read_json())
+- Violates JSON specification (keys must be strings)
+- Inconsistent behavior (depends on ALL columns being numeric)
+- Undocumented behavior change
+- Silent data corruption (no warning given)
+- No API parameter to control this behavior
+- Creates unpredictable results based on data content
+Arguments AGAINST:
+- None substantial
+
+DETAILED REASONING:
+
+This is clearly a BUG because:
+
+1. SPECIFICATION VIOLATION: JSON RFC 7159 explicitly states that object keys are strings. When pandas reads JSON with string keys like "0" and converts them to integer 0, it's changing the fundamental data type in violation of the specification.
+
+2. BROKEN CONTRACT: The expectation that serialization is reversible is fundamental. When df.to_json() produces {"0": 1} but read_json converts this to column 0, the round-trip is broken.
+
+3. INCONSISTENT BEHAVIOR: The fact that ['0', '1', 'name'] stays as strings but ['0', '1'] becomes integers is clearly inconsistent and suggests an unintended side effect rather than deliberate design.
+
+4. SILENT CORRUPTION: The conversion happens without warning, making it dangerous for production code that might rely on column names being preserved.
+
+5. NO WORKAROUND: Unlike value type inference (which can be controlled with dtype parameter), there's no way to prevent column name conversion.
+
+This is not WONTFIX because it affects real use cases and violates fundamental expectations. It's not INVALID because the behavior is confirmed. It's not a FEATURE_REQUEST because preserving JSON structure is expected default behavior. It's not just a DOCUMENTATION_FIX because the behavior itself is incorrect, not just undocumented.
+
+RECOMMENDATION: BUG - This should be fixed to preserve string column names from JSON, matching the JSON specification and enabling proper round-trip serialization.

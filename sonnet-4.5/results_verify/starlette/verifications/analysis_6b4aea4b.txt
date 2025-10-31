@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for TrustedHostMiddleware only mentions "domain names" in the allowed_hosts parameter description, not IP addresses. One could argue that the middleware was never intended to support IP addresses at all, and therefore IPv6 address handling is outside its scope. If the feature was never documented or intended to work with IP addresses, then reporting it as broken would be invalid.
+
+**Why it might not be INVALID:**
+The code doesn't explicitly reject IP addresses, and the allow_any="*" pattern suggests it's meant to handle any valid Host header. Moreover, the HTTP specification clearly defines how IPv6 addresses should appear in Host headers (with brackets), and a middleware that validates Host headers should follow HTTP standards. The fact that IPv4 addresses work correctly also suggests IP addresses are intended to be supported.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+IPv6 adoption is still not universal, and the workaround of using domain names instead of IP addresses exists. The maintainers might consider this an edge case that affects very few users in practice. Additionally, most production deployments use domain names rather than IP addresses in Host headers, making this issue low priority for real-world usage.
+
+**Why it might not be WONTFIX:**
+IPv6 is a current internet standard (not experimental or deprecated), and proper IPv6 support is expected in modern web frameworks. The fix is straightforward and doesn't break existing functionality. Dismissing IPv6 support as "won't fix" would be problematic for users deploying IPv6-only or dual-stack environments, which are increasingly common.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that TrustedHostMiddleware only supports domain names and IPv4 addresses, not IPv6 addresses. This would clarify the intended behavior and set proper expectations. The documentation currently doesn't mention IP addresses at all, which is ambiguous.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly attempts to handle any Host header format by splitting on ":", which works for domains and IPv4 but fails for IPv6. This appears to be an implementation oversight rather than intentional limitation. Documenting it as "doesn't support IPv6" would be documenting a bug rather than fixing the root cause.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If IPv6 support was never implemented or considered, adding it would be a new feature rather than a bug fix. The middleware currently works as originally designed for domain names and IPv4 addresses. Adding IPv6 support would extend its capabilities to a new use case.
+
+**Why it might not be FEATURE_REQUEST:**
+HTTP standards have included IPv6 address formatting specifications for over 20 years (RFC 2732 from 1999). Any HTTP Host header parser written after 2000 should handle IPv6 addresses correctly by default. This is fixing broken behavior rather than adding new functionality, as the middleware already attempts to parse Host headers but does so incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The middleware incorrectly parses valid HTTP Host headers that conform to RFC standards. When `[::1]` is added to allowed_hosts, the middleware should accept requests with Host: [::1], but it doesn't due to incorrect parsing. The parsing logic violates HTTP/URL specifications (RFC 3986) for IPv6 address representation. The bug prevents legitimate use cases and has a clear, simple fix.
+
+**Why it might not be BUG:**
+The documentation never explicitly promises IPv6 support, focusing only on "domain names" in its description. If the feature was never intended to work with IPv6 addresses, then it's not broken—it's just not implemented.
+
+## Overall Consideration
+
+After analyzing all aspects, this appears to be a legitimate BUG. The TrustedHostMiddleware is designed to validate HTTP Host headers against an allowed list, and Host headers can legitimately contain IPv6 addresses according to HTTP standards (RFC 3986, RFC 2732). The current implementation uses a naive string split that breaks on the first colon, which fails for IPv6 addresses that inherently contain multiple colons.
+
+The bug has clear real-world impact: anyone trying to use Starlette/FastAPI applications in IPv6 environments with host validation enabled will encounter this issue. The proposed fix is minimal, correct, and doesn't break existing functionality. The fact that the middleware already handles IPv4 addresses correctly suggests that IP address support is intended, making the IPv6 parsing failure a clear bug rather than a missing feature.
+
+While one could argue this should be documented as a limitation, that would be documenting a deficiency rather than fixing a straightforward parsing error. Modern web frameworks should handle both IPv4 and IPv6 addresses correctly, especially when the fix is as simple as checking for the "[" prefix that denotes an IPv6 address. The bug report is technically accurate, well-documented with test cases, and identifies a genuine issue that violates HTTP standards.

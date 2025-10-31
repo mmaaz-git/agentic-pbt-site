@@ -1,0 +1,50 @@
+## Bug Reproduction Analysis
+
+### Bug Claim Verification
+The bug report is technically accurate in its claims:
+
+1. **The crash occurs**: Confirmed. When `decimal_encoder(Decimal('Infinity'))` is called, it raises:
+   ```
+   TypeError: '>=' not supported between instances of 'str' and 'int'
+   ```
+
+2. **Root cause is correct**: The issue is on line 52 of encoders.py:
+   ```python
+   if dec_value.as_tuple().exponent >= 0:  # type: ignore[operator]
+   ```
+
+3. **Explanation is accurate**:
+   - For normal decimals, `as_tuple().exponent` returns an integer
+   - For Infinity, it returns the string 'F'
+   - For NaN, it returns the string 'n'
+   - The comparison `'F' >= 0` causes the TypeError
+
+### Test Results
+- Regular decimals work correctly:
+  - `Decimal("1")` → `1` (int)
+  - `Decimal("1.0")` → `1.0` (float)
+  - `Decimal("-1.5")` → `-1.5` (float)
+
+- Special values crash:
+  - `Decimal('Infinity')` → TypeError
+  - `Decimal('-Infinity')` → TypeError
+  - `Decimal('NaN')` → TypeError
+
+### JSON Specification Context
+According to RFC 7159 (JSON specification):
+- Infinity, -Infinity, and NaN are explicitly NOT permitted in JSON
+- The spec states: "Numeric values that cannot be represented in the grammar below (such as Infinity and NaN) are not permitted."
+
+Python's `json` module:
+- By default allows these values (outputs "Infinity", "-Infinity", "NaN" strings)
+- With `allow_nan=False`, raises ValueError for these values
+- This default behavior is non-standard but pragmatic
+
+### Technical Assessment
+The bug report's technical claims are all correct:
+1. The function does crash with special Decimal values
+2. The crash reason (string vs int comparison) is accurately identified
+3. The proposed fix would work technically
+4. Special Decimal values are valid Python Decimal objects
+
+However, the context is important: these special values cannot be properly represented in standard JSON anyway.

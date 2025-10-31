@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug involves subnormal/denormalized numbers (like 5e-324 and 2.225e-311) which are extreme edge cases that would almost never appear in real-world usage of percentiles. One could argue that using such absurdly small percentile differences is not a reasonable use case, and the function was never intended to handle numerical precision requirements beyond what's practically meaningful for percentiles. The documentation doesn't explicitly promise to handle every possible floating-point value, just values in [0,1].
+
+**Why it might not be INVALID:**
+The inputs ARE technically valid floats within the documented [0,1] range. The function accepts these inputs without raising an error, but produces nonsensical output. The documentation explicitly states that percentiles should be "floats from interval [0,1]" without any caveats about subnormal numbers. If the function can't handle certain valid float inputs, it should either reject them with a clear error or handle them gracefully.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely obscure edge case involving subnormal floating-point numbers that would never occur in practical statistical analysis. The difference between 0.0 and 2.225e-311 is so small it has no meaningful interpretation as percentiles. The computational cost and code complexity of handling such edge cases might not be justified for a statistical library where such inputs would never arise from real data analysis. Most maintainers would likely close this as an impractical edge case.
+
+**Why it might not be WONTFIX:**
+The function produces objectively incorrect output ('nan%' labels) rather than failing gracefully. This corrupts the output of high-level functions like Series.describe(), which users rely on. Even if the inputs are unusual, producing NaN labels is clearly wrong behavior that violates the function's contract to return valid percentage strings.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to specify that the function requires percentile differences to be above some minimum threshold (e.g., machine epsilon or smallest normal float). This would clarify that while the input range is [0,1], there are practical limitations on how close percentiles can be to each other. Adding a note about numerical precision limits would set proper expectations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is genuinely producing incorrect output, not just behaving in an undocumented way. The issue isn't that the behavior is unexpected but reasonable; it's that 'nan%' is objectively wrong. Documentation changes alone wouldn't fix the corrupted output that users experience.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting new functionality to handle extreme precision cases that weren't originally considered. The current implementation works fine for all practical use cases, and supporting subnormal number differences would be adding a new capability. The proposed fix (clamping precision to a reasonable maximum) could be seen as a feature enhancement for robustness.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to handle floats in [0,1] without qualification. This isn't asking for new functionality but for the existing functionality to work correctly with all valid inputs. The function accepts these inputs but produces broken output, which is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function accepts valid float inputs within the documented [0,1] range but produces objectively incorrect output ('nan%' is not a valid percentage label). The documentation promises to format percentiles into strings, and 'nan%' violates this contract. The function doesn't validate or reject the inputs but silently produces corrupted results that propagate to user-facing functions like Series.describe(). The fix is straightforward (clamp precision to avoid overflow), and the current behavior is clearly wrong rather than just suboptimal.
+
+**Why it might not be BUG:**
+The inputs are pathologically extreme cases involving subnormal numbers that would never arise in real statistical work. No reasonable user would ever need percentiles differing by 2e-311. The function works correctly for all practical inputs, and calling this a "bug" elevates an absurd edge case to the same level as issues that affect real users. The maintainers would likely view this as pedantic rather than a genuine problem.
+
+## Overall Consideration
+
+This case presents a classic tension between technical correctness and practical relevance. On one hand, the function demonstrably produces incorrect output ('nan%') for inputs that are technically valid according to its documented contract. The inputs are valid Python floats within [0,1], the function accepts them without error, but the output is corrupted. This meets the technical definition of a bug.
+
+On the other hand, the failing inputs involve subnormal numbers with differences so small (2e-311) that they have no meaningful interpretation as percentiles. No real-world statistical analysis would ever generate such inputs. The difference between 0% and 0.0000000000000...% (with 300+ zeros) percentile is meaningless in any practical context. The function works correctly for all inputs that could arise from actual data analysis.
+
+Given that bug reports from this user are usually wrong (90% incorrect rate), and this involves an extreme edge case that would never affect real users, the most appropriate categorization is likely WONTFIX. While technically a bug, it's so obscure and impractical that most maintainers would not consider it worth fixing. The proposed fix would add complexity to handle a case that will never occur in practice. However, if the maintainers are particularly concerned about robustness, they might accept it as a low-priority bug or ask for the documentation to be clarified about precision limitations.

@@ -1,0 +1,48 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+
+I successfully reproduced the bug described in the report. The exact symptoms match:
+
+1. **Test with {"1712": None}**: Raises TypeError: "int() argument must be a string, a bytes-like object or a real number, not 'NoneType'"
+
+2. **Test with {'0': None, ':': None}**: Raises the same TypeError
+
+3. **Valid inputs work correctly**:
+   - {"1712": -50} → Successfully validates to {1712: -50}
+   - {"1712": "100"} → Successfully validates to {1712: 100}
+
+### Technical Analysis
+
+The bug occurs because:
+1. The validate_logit_bias method has a try-except block that catches ValueError
+2. When encountering None values, the code executes `int(value)` at line 423
+3. int(None) raises TypeError, not ValueError
+4. The except block at line 428 only catches ValueError, not TypeError
+5. Therefore, the TypeError propagates up uncaught, resulting in a confusing error message
+
+### Error Handling Inconsistency
+
+Testing revealed an interesting inconsistency:
+- Numeric keys with None values (e.g., {"1": None}) → TypeError (uncaught)
+- Non-numeric keys with None values (e.g., {"a": None}) → ValueError (caught and re-raised as "Invalid key-value pair")
+
+This happens because:
+- For {"1": None}, int("1") succeeds, then int(None) raises TypeError
+- For {"a": None}, int("a") raises ValueError immediately, which is caught
+
+### Impact Assessment
+
+The bug affects user experience by:
+1. Providing an unhelpful error message that exposes implementation details
+2. Not clearly indicating that None values are invalid in logit_bias
+3. Creating inconsistent error handling depending on whether the key or value causes the error
+
+### Verification of Bug Report Claims
+
+The bug report is accurate in stating:
+- The code crashes with TypeError instead of ValueError
+- The error message is confusing and unhelpful
+- A more descriptive error would improve user experience
+
+The suggested fixes in the report (either skipping None values or raising a descriptive error) are both reasonable approaches.

@@ -1,0 +1,57 @@
+REPRODUCTION RESULTS FOR scipy.signal.normalize BUG REPORT
+
+## Test Results:
+
+1. **Simple Reproduction Test**:
+   - Input: b=[0.0, 1.0], a=[1.0]
+   - Output from normalize(): b=[1.], a=[1.]
+   - Warning issued: "Badly conditioned filter coefficients (numerator): the results may be meaningless"
+   - Impulse response changed from [0, 1, 0, 0, 0] to [1, 0, 0, 0, 0]
+   - Filter behavior preserved: FALSE
+   - The function DID strip leading zeros as documented
+
+2. **Round-Trip Conversion Test (tf2zpk -> zpk2tf)**:
+   - Original: b=[0.0, 1.0], a=[1.0]
+   - After tf2zpk: z=[], p=[], k=1.0
+   - After zpk2tf: b=[1.], a=[1.]
+   - Round-trip NOT preserved (impulse response changed)
+   - This is expected because tf2zpk calls normalize() internally
+
+3. **Multiple Leading Zeros Test**:
+   - Input: b=[0.0, 0.0, 0.0, 2.5], a=[1.0]
+   - Output: b=[2.5], a=[1.]
+   - All three leading zeros were stripped
+   - Delay of 3 samples became no delay
+   - Warning was properly issued
+
+4. **Property-Based Test**:
+   - Test failed as reported
+   - Assert error shows actual [0, 1, 0, 0, 0] vs desired [1, 0, 0, 0, 0]
+   - This confirms the round-trip property is violated
+
+## Technical Analysis:
+
+The bug report's technical claims are CORRECT:
+- Leading zeros ARE being stripped from the numerator
+- This DOES change the transfer function behavior
+- Round-trip conversions DO fail
+- The impulse response IS different
+
+However, this behavior is EXPLICITLY DOCUMENTED. The documentation clearly states:
+- "If values of `b` are too close to 0, they are removed"
+- An example shows [0, 3, 6] becoming [1.5, 3.]
+- A warning is issued when this happens
+
+## Mathematical Interpretation:
+
+For continuous-time systems (which normalize() is designed for per its docs):
+- Leading zeros in descending exponent order represent higher-order terms with zero coefficients
+- Removing them doesn't change the transfer function for continuous-time systems
+- H(s) = 0*s^n + b1*s^(n-1) + ... is mathematically equivalent to H(s) = b1*s^(n-1) + ...
+
+For discrete-time systems (which the bug reporter seems to be using):
+- Leading zeros DO matter as they represent delays
+- H(z) = 0 + b1*z^(-1) represents a unit delay
+- This is different from H(z) = b1
+
+The confusion arises because the user is applying a continuous-time normalization function to discrete-time filters.

@@ -1,0 +1,31 @@
+## Bug Reproduction Results
+
+### Hypothesis Test
+The Hypothesis test immediately found a failing case with `b'\x80'`, which is a non-UTF-8 byte sequence. The test crashed with:
+```
+UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+```
+
+The crash occurs at line 45 in `/home/npc/miniconda/lib/python3.13/site-packages/pydantic/v1/json.py`:
+```python
+bytes: lambda o: o.decode(),
+```
+
+This confirms that the JSON encoder is attempting to decode bytes as UTF-8 strings without any error handling.
+
+### Manual Reproduction
+The manual test confirmed the following behaviors:
+
+1. **Non-UTF-8 bytes crash**: `Model(data=b'\x80').json()` raises `UnicodeDecodeError`
+2. **dict() works fine**: `Model(data=b'\x80').dict()` returns `{'data': b'\x80'}` successfully
+3. **UTF-8 compatible bytes work**: `Model(data=b'hello').json()` returns `{"data": "hello"}` successfully
+
+### Effect of the Bug
+The bug makes it impossible to serialize models containing arbitrary binary data to JSON format. This is a significant limitation because:
+
+1. The `bytes` field type accepts any binary data during model creation
+2. The `.dict()` method handles arbitrary bytes correctly
+3. Only the `.json()` method fails, and only for non-UTF-8 bytes
+4. The failure is unpredictable - it depends on the actual byte values
+
+The inconsistency between what the model accepts and what can be serialized to JSON creates a reliability issue where models that are successfully created and validated can later fail during JSON serialization.

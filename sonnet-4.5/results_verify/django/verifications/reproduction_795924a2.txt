@@ -1,0 +1,48 @@
+Bug Reproduction Results
+========================
+
+Test Environment:
+- Django version: Tested against Django template system
+- Python version: 3.13
+- Test location: /home/npc/pbt/agentic-pbt/worker_/44/
+
+Reproduction Test Results:
+
+1. Property Test Reproduction:
+   - Input: "0." (integer 0 with trailing dot)
+   - Result: FAILED - Variable with trailing dot '0.' parsed as valid float 0.0
+   - The property test correctly identifies the issue
+
+2. Main Bug Reproduction with "2.":
+   - Variable("2.") creates an object with:
+     * v.literal = 2.0 (float value)
+     * v.lookups = ('2', '') (tuple for lookup path)
+   - BOTH literal AND lookups are set simultaneously
+   - When resolved against Context({"2": {"": "unexpected_value"}}):
+     * Returns "unexpected_value" instead of 2.0
+     * This demonstrates that lookups takes precedence over literal
+
+3. Control Tests:
+   a. Variable("2.0") - Normal float:
+      - literal = 2.0, lookups = None
+      - Resolves correctly to 2.0
+
+   b. Variable("2") - Integer:
+      - literal = 2, lookups = None
+      - Resolves correctly to 2
+
+4. Additional Trailing Dot Cases:
+   All cases with trailing dots show the same bug:
+   - "0." → literal=0.0, lookups=('0', '')
+   - "123." → literal=123.0, lookups=('123', '')
+   - "42." → literal=42.0, lookups=('42', '')
+   - "-5." → literal=-5.0, lookups=('-5', '')
+
+Key Finding:
+The bug is 100% reproducible. Any numeric string with a trailing dot (e.g., "2.", "0.", "123.") incorrectly sets BOTH literal and lookups fields, violating the intended invariant where only one should be set.
+
+Technical Cause:
+The code sets self.literal = float(var) on line 823 BEFORE checking if var[-1] == "." on line 825. When the ValueError is raised, self.literal has already been set. The exception handler then treats it as a variable name and sets lookups, resulting in both fields being populated.
+
+Impact:
+This causes incorrect resolution behavior where numbers with trailing dots resolve via lookup instead of as literals, potentially returning unexpected values from the context instead of the numeric value.

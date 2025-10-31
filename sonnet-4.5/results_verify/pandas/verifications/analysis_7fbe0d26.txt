@@ -1,0 +1,47 @@
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The behavior could be considered "working as intended" if Excel files are expected to compress/optimize by skipping empty rows. Some might argue that empty rows in Excel have no meaning and should be ignored, similar to how trailing empty rows in a spreadsheet are not considered part of the data. The documentation doesn't explicitly promise that every row will be preserved in a round-trip, so technically the library isn't violating a documented contract.
+
+**Why it might not be INVALID:**
+The bug report accurately describes a real behavior that causes data loss. The test cases are correct and reproducible. The fundamental expectation that data structures should survive serialization intact is reasonable, even if not explicitly documented. Rows with missing data are semantically different from no rows at all - they represent observations where data was not collected, which is different from no observation existing.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+This could be seen as an edge case that rarely occurs in practice - datasets consisting entirely of missing values might be considered pathological. Changing this behavior could break existing code that relies on empty rows being skipped. The issue only affects rows where ALL values are missing, which might be considered an unusual scenario not worth the complexity of fixing.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it causes silent data loss without warning, which is one of the worst kinds of bugs. The scenario is not that obscure; missing data is common in real datasets, and having entire rows of missing values can occur in time series data, surveys with non-response, or data collection failures. The fact that a workaround exists (na_rep) doesn't make the default behavior acceptable.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The core issue might be that `read_excel()` is behaving as designed (skipping empty rows as an optimization), but this behavior is not documented. If the intent is that Excel files should skip empty rows for efficiency, then the documentation should clearly warn users about this limitation and explain that round-trip preservation is not guaranteed for rows with all missing values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting this behavior doesn't make it correct. Data loss during serialization is a functional issue, not just a documentation gap. Users reasonably expect that saving and loading data should preserve all rows, and having to read documentation to discover data loss is occurring is not acceptable. The behavior itself is problematic regardless of documentation.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+One could argue that preserving empty rows is a new feature that pandas doesn't currently support, rather than a bug. The request could be reframed as "Add support for preserving rows with all None values during Excel round-trips" as an enhancement. This would acknowledge that the current behavior might be intentional but could be improved.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but for the existing functionality to work correctly. Data preservation during serialization is a fundamental expectation, not an optional feature. The fact that it works correctly when na_rep is set to a non-empty value shows the capability exists; the default behavior is just broken.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+This represents a clear case of silent data loss, which is a serious bug. The behavior violates the principle of least surprise - users expect data to survive a save/load cycle. The issue is reproducible, affects data integrity, provides no warning, and has no obvious workaround that preserves the original data representation. The fact that rows ARE written to the file but then skipped on read suggests this is an unintended interaction between components rather than designed behavior.
+
+**Why it might not be BUG:**
+Some might argue this is expected behavior for Excel files, where empty rows are traditionally ignored. Excel itself often skips empty rows when determining data ranges. The behavior might be intentional to match Excel's own behavior or to optimize file reading by skipping irrelevant empty rows.
+
+## Overall Consideration
+
+This issue presents a significant challenge in categorization. On one hand, it represents genuine data loss that users would not expect and which violates fundamental assumptions about data serialization. The rows ARE written to the Excel file (as verified by direct openpyxl inspection), but pandas' read_excel() skips them, suggesting this is more of an oversight than intentional design. The silent nature of the data loss makes it particularly problematic.
+
+On the other hand, the behavior could be seen as an intentional optimization where Excel files skip "meaningless" empty rows, similar to how Excel applications behave. The existence of a workaround (using non-empty na_rep) might suggest the developers were aware of this trade-off. Additionally, the specific case of dataframes containing only None values might be considered unusual enough to not warrant a fix.
+
+The strongest argument is that this causes silent data loss without warning, which is generally considered unacceptable in data processing libraries. The fact that the issue only manifests during the read operation (not write) and that rows with some non-None values are preserved suggests this is an unintended edge case rather than designed behavior. Given that pandas is heavily used for data analysis where missing values are meaningful and row count preservation is important, this should likely be treated as a legitimate bug that needs fixing.

@@ -1,0 +1,39 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+I have successfully reproduced the bug reported for pandas.tseries.frequencies functions is_subperiod() and is_superperiod(). The bug involves a symmetry violation between these two functions.
+
+REPRODUCTION RESULTS:
+--------------------
+
+1. Hypothesis Test:
+   - The property-based test using hypothesis confirmed the bug
+   - Falsifying example: source='D', target='B'
+   - The test failed with: "Symmetry broken: is_subperiod(D, B) = False, but is_superperiod(B, D) = True"
+
+2. Simple Reproduction:
+   - Direct calls to the functions confirmed the asymmetry:
+     * is_subperiod('D', 'B') returns False
+     * is_superperiod('B', 'D') returns True
+   - These values should be equal according to the symmetry property
+
+3. Extended Testing:
+   - Tested multiple frequency pairs to understand the scope:
+     * D -> B: is_sub=False, is_super(reverse)=True ✗ (BROKEN)
+     * B -> D: is_sub=False, is_super(reverse)=True ✗ (BROKEN)
+     * Most other frequency pairs maintain proper symmetry (D->h, h->D, D->W, W->D, etc.)
+
+4. Actual Resampling Test:
+   - CRITICAL FINDING: Pandas DOES support resampling between D and B in both directions
+   - Successfully resampled from D to B (daily to business day) using daily_data.resample('B')
+   - Successfully resampled from B to D (business to daily) using business_data.resample('D')
+   - This proves that both downsampling (D to B) and upsampling (B to D) are valid operations
+
+IMPACT:
+-------
+The bug causes is_subperiod('D', 'B') to incorrectly return False when it should return True, since:
+1. Resampling from D to B is demonstrably possible in pandas
+2. The inverse function is_superperiod('B', 'D') correctly returns True
+3. The symmetry property that should exist between these functions is violated
+
+This is a legitimate logic bug in the implementation of is_subperiod() that fails to properly recognize the valid relationship between daily and business day frequencies.

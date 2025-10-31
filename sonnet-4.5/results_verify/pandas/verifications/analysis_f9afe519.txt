@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that negative window sizes should be handled or rejected, but the documentation never specifies what should happen with negative window sizes. The class is called "FixedForwardWindowIndexer" which semantically implies looking forward (positive direction), and negative sizes don't make semantic sense for a forward-looking window. The current behavior, while producing unintuitive results, is technically just unspecified behavior rather than incorrect behavior. The code doesn't crash and produces deterministic, if meaningless, results.
+
+**Why it might not be INVALID:**
+The invariant that start[i] <= end[i] is fundamental to how array slicing works in Python and NumPy. Violating this invariant produces empty slices in a confusing way that could lead to subtle bugs in user code. Even if not explicitly documented, maintaining basic invariants about window bounds is a reasonable expectation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case with inputs that don't make semantic sense - a "forward-looking" window with negative size is conceptually meaningless. Users shouldn't be passing negative window sizes to a forward window indexer in the first place. The current behavior, while odd, doesn't cause crashes and produces empty windows which could be considered a reasonable fallback for nonsensical input.
+
+**Why it might not be WONTFIX:**
+The issue violates a fundamental invariant about window bounds and could cause confusion or bugs in user code. The fix is trivial (adding validation) and would prevent potential issues. Other methods in the same class already validate inputs (e.g., rejecting center=True), so adding validation for negative window_size would be consistent.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify whether negative window sizes are valid or what should happen with them. The current behavior is deterministic and doesn't crash - it just produces empty windows. The documentation could be updated to clarify that negative window sizes will produce empty windows due to the clipping behavior, making this expected behavior rather than a bug.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior violates basic invariants and produces meaningless results. Rather than documenting this odd behavior, it would be better to either fix it or reject invalid inputs. Documenting that "negative sizes produce invalid bounds with start > end" would be documenting a defect rather than intended behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation doesn't validate negative window sizes, and adding such validation would be a new feature - input validation that didn't exist before. The bug report is essentially asking for the code to handle an edge case that wasn't previously considered, which could be viewed as requesting a new validation feature.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather for the existing functionality to maintain basic invariants. Ensuring that window bounds are valid (start <= end) is fundamental to the correct operation of windowing, not an additional feature. The proposed fix is defensive programming, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code produces window bounds that violate the fundamental invariant that start[i] <= end[i], which is required for valid array slicing. This isn't just unintuitive - it's technically incorrect as it breaks assumptions that downstream code might reasonably make about window bounds. The fact that pandas returns NaN values rather than crashing is just pandas being robust to invalid bounds, not evidence that the bounds are correct.
+
+**Why it might not be BUG:**
+The documentation never specifies that negative window sizes should be supported or how they should behave. The class name "FixedForwardWindowIndexer" strongly implies positive (forward) movement, so negative sizes are outside the intended use case. Without explicit documentation about the expected behavior, this is unspecified behavior rather than a bug.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a case of unspecified behavior rather than a clear bug. The FixedForwardWindowIndexer class name itself implies forward-looking windows, making negative window sizes semantically nonsensical. The documentation provides examples only with positive window sizes and never mentions negative sizes as a valid use case.
+
+While the technical observation about violating the start <= end invariant is correct, this occurs only when providing input (negative window_size) that doesn't make semantic sense for a "forward" window indexer. The current behavior, while producing empty windows in an unintuitive way, is deterministic and doesn't cause crashes - it simply produces meaningless results for meaningless input.
+
+The most appropriate categorization would be INVALID because the bug report is based on an assumption that negative window sizes should be handled in a specific way, but there's no documentation supporting this assumption. The alternative would be FEATURE_REQUEST to add input validation, but given that the input doesn't make semantic sense for this class's purpose, it's more accurate to say the bug report itself is invalid. Users shouldn't expect meaningful behavior when providing semantically nonsensical inputs to a forward-looking window indexer.

@@ -1,0 +1,33 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug described in the report. The function `_normalize_and_strip_protocol` in dask.dataframe.io.parquet indeed returns empty strings when given certain inputs.
+
+Test Results:
+-------------
+1. Ran the specific test cases from the bug report:
+   - Input: "/" -> Result: [""]  ✓ Confirmed
+   - Input: "///" -> Result: [""]  ✓ Confirmed
+   - Input: "file:///" -> Result: [""]  ✓ Confirmed
+   - Input: "s3:///" -> Result: [""]  ✓ Confirmed
+
+2. Ran the property-based test with Hypothesis:
+   - All four example cases failed as expected
+   - Empty strings were found in the results
+
+Code Analysis:
+--------------
+The issue occurs at line 1834 of parquet.py:
+```python
+result.append(p.rstrip("/"))
+```
+
+When the input path is only slashes (e.g., "/") or a protocol followed by only slashes (e.g., "file:///"), the rstrip("/") operation removes all trailing slashes, leaving an empty string.
+
+Impact Verification:
+-------------------
+I tested how pyarrow handles empty strings:
+- pyarrow.fs.FileSelector("") raises: "[Errno 2] Cannot list directory ''. Detail: [errno 2] No such file or directory"
+- This confirms that empty strings cause errors downstream when passed to pyarrow operations
+
+The bug is genuine and causes real issues in the data processing pipeline.

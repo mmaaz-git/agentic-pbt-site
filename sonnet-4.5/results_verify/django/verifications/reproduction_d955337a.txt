@@ -1,0 +1,44 @@
+BUG REPRODUCTION RESULTS
+
+1. CODE ANALYSIS:
+   The check_csrf_trusted_origins function implementation (django_4_0.py, lines 7-20):
+   - Uses simple string containment check: `if "://" not in origin:`
+   - Does NOT validate that "://" appears at the beginning
+   - Does NOT validate the scheme is valid
+   - Does NOT check if there's a proper netloc after the scheme
+
+2. BUG REPORT CLAIMS:
+   The bug report claims the function accepts:
+   - "a://a" - CONFIRMED: No errors raised
+   - "example.com://http" - CONFIRMED: No errors raised
+   - "://example.com" - CONFIRMED: No errors raised
+
+3. REPRODUCTION TEST RESULTS:
+   Tested origins and their validation results:
+   - "a://a": 0 errors (urlsplit: scheme='a', netloc='a')
+   - "example.com://http": 0 errors (urlsplit: scheme='example.com', netloc='http')
+   - "://example.com": 0 errors (urlsplit: scheme='', netloc='', path='://example.com')
+   - "test://test": 0 errors (urlsplit: scheme='test', netloc='test')
+   - "ftp://example.com": 0 errors (urlsplit: scheme='ftp', netloc='example.com')
+   - "http://example.com": 0 errors (urlsplit: scheme='http', netloc='example.com')
+   - "https://example.com": 0 errors (urlsplit: scheme='https', netloc='example.com')
+
+4. HYPOTHESIS TEST:
+   The property-based test FAILED with the exact input mentioned in the report:
+   - Input: prefix='a', suffix='a' produces origin='a://a'
+   - Expected: Should reject invalid scheme
+   - Actual: No errors raised
+   - Result: AssertionError confirming the bug
+
+5. ERROR MESSAGE ACCURACY:
+   The error message states origins "must start with a scheme (usually http:// or https://)"
+   But the code only checks if "://" exists anywhere in the string.
+   This is a clear mismatch between the error message intent and actual validation.
+
+6. MIDDLEWARE IMPACT:
+   When the middleware processes these malformed origins:
+   - "a://a" extracts netloc as 'a' with scheme 'a'
+   - "example.com://http" extracts netloc as 'http' with scheme 'example.com'
+   These would be used for origin matching, which could lead to unexpected behavior.
+
+CONCLUSION: The bug report is technically accurate. The validation function does not properly validate schemes despite its error message claiming it checks that origins "must start with a scheme".

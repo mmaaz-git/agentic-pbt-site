@@ -1,0 +1,54 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+## Summary
+I successfully reproduced the bug reported in Cython.Build.Inline.strip_common_indent. The function contains a clear programming error where an undefined variable 'indent' is used in the second loop.
+
+## Reproduction Steps
+
+1. **Property-Based Test**: Ran the hypothesis test with comments-only and blank-lines-only inputs. The test executes without raising a NameError, indicating that the bug doesn't manifest for these specific inputs (the variable 'indent' is never accessed when all lines are blank or comments).
+
+2. **Specific Test Case**: Tested the exact failing input from the bug report:
+   ```python
+   code = """  x = 1
+       y = 2
+    #comment
+     z = 3"""
+   ```
+
+## Results
+
+The function incorrectly processes the comment line:
+- Input comment line: ' #comment' (with leading space at position 0)
+- Expected output: ' #comment' (preserve the leading space)
+- Actual output: 'comment' (incorrectly strips '#' and leading space)
+
+## Root Cause Analysis
+
+The bug occurs in line 422 of Inline.py:
+```python
+if not match or not line or line[indent:indent+1] == '#':
+```
+
+The variable 'indent' is used here but:
+1. It's only defined in the FIRST loop (line 415) within the loop scope
+2. In the SECOND loop, 'indent' retains the value from the last iteration of the first loop
+3. This stale value (2 in our test case) causes incorrect comment detection
+
+For the comment line ' #comment':
+- The code checks position 2 (line[2:3]) which is 'c'
+- Since 'c' != '#', the line is not recognized as a comment
+- The line gets processed and incorrectly trimmed from position min_indent=2
+- Result: ' #comment'[2:] = 'comment'
+
+## Bug Verification
+
+Through step-by-step debugging, I confirmed:
+1. After first loop: indent=2 (from last processed line 'z = 3')
+2. In second loop for ' #comment': checks line[2:3]='c' instead of line[1:2]='#'
+3. Comment is not detected, gets incorrectly processed
+4. The '#' character and leading space are inadvertently removed
+
+## Conclusion
+
+This is a valid bug. The code uses an undefined/stale variable 'indent' which leads to incorrect behavior when processing comments at different indentation levels than the last non-comment line processed in the first loop.

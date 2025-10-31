@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The FloatConvertor class has no documented requirement to support round-trip conversion. The documentation doesn't promise that convert(to_string(convert(x))) == convert(x) for all valid inputs. The regex and to_string() methods serve different purposes - the regex defines what URL patterns to match, while to_string() formats values for URL generation. There's no inherent requirement that these must be perfectly symmetric. Additionally, floating-point numbers with 21+ decimal places (like 1e-21) are extreme edge cases unlikely to appear in real-world URL routing scenarios.
+
+**Why it might not be INVALID:**
+The bug is technically real - the convertor does accept inputs that it cannot faithfully convert back. The round-trip property, while not explicitly documented, is a reasonable expectation for a convertor class used in URL routing. If a URL pattern matches a value, users would expect to be able to generate a URL with that same value.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case involving numbers with more than 20 decimal places (smaller than 1e-20). In practical web applications, such tiny float values in URLs are vanishingly rare. The current implementation works correctly for 99.99% of real-world use cases. Fixing this would require either changing the regex (breaking backward compatibility) or changing the formatting method (potentially making URLs uglier with scientific notation). The cost-benefit ratio strongly favors leaving it as-is.
+
+**Why it might not be WONTFIX:**
+The issue does cause actual data loss - non-zero values become zero. This isn't just a formatting preference but a functional incorrectness. The proposed fix (limiting the regex to 20 decimal places) is simple and wouldn't affect normal use cases.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is reasonable - supporting up to 20 decimal places is more than sufficient for web applications. The issue is that this limitation isn't documented. Adding a note that FloatConvertor supports values with up to 20 decimal places would clarify the expected behavior and prevent confusion. The code works as designed; it's the expectations that need adjustment.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The regex pattern explicitly allows unlimited decimal places, suggesting the intention was to support all valid decimal representations. If the design intent was to limit to 20 decimal places, the regex itself should enforce that limit, not just the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrary precision floating-point numbers in URLs could be seen as a new feature rather than a bug fix. The current implementation handles standard floating-point values correctly. Adding support for extreme precision values would be an enhancement for specialized scientific or mathematical applications that need to pass such values through URLs.
+
+**Why it might not be FEATURE_REQUEST:**
+The regex already accepts these values, so the convertor claims to support them. This isn't asking for new functionality but for the existing functionality to work correctly. The convertor already tries to handle these inputs; it just does so incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+There is a clear mismatch between what the regex accepts and what to_string() can represent. The convertor silently corrupts data, turning non-zero values into zero without any warning or error. This violates the principle of least surprise and could lead to subtle bugs in applications. The round-trip property is fundamental for bidirectional conversion, which is essential for URL routing where you need to both parse and generate URLs.
+
+**Why it might not be BUG:**
+No documentation promises round-trip conversion. The behavior is consistent and predictable - it's not random or undefined. The limitation comes from a reasonable design choice (using %0.20f formatting for cleaner URLs). Many convertor implementations in various frameworks don't guarantee perfect round-trips for all edge cases. The IntegerConvertor also has limitations (no negative numbers) that break round-trip for some inputs.
+
+**Overall consideration**
+This issue sits at the intersection of technical correctness and practical relevance. While the bug report is technically accurate - the round-trip property is indeed violated for numbers with more than 20 decimal places - the practical impact is minimal. URL parameters with values like 0.000000000000000000001 are extraordinarily rare in web applications. The current implementation makes a reasonable trade-off: it handles normal floating-point values well while keeping URLs clean and readable.
+
+The most important factor is that there's no documented guarantee of round-trip conversion. Without such a requirement, this behavior could be considered a design choice rather than a bug. The convertor's primary job is to parse float values from URLs and convert them back to strings for URL generation - not to provide perfect mathematical precision for extreme values. The fact that extremely small values become "0" could be seen as an acceptable limitation, similar to how IntegerConvertor doesn't support negative numbers.
+
+Given that this is an undocumented edge case with minimal real-world impact, and that "fixing" it could potentially break existing applications that depend on the current behavior, this should be classified as WONTFIX. It's a known limitation that doesn't warrant the risk and effort of a change. At most, it could be documented as a limitation, but even that seems excessive for such an extreme edge case.

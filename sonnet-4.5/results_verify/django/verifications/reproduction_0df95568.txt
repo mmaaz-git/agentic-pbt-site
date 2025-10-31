@@ -1,0 +1,55 @@
+## Bug Reproduction Analysis
+
+### Test Results
+
+I successfully reproduced the bug exactly as described in the report.
+
+#### Basic Reproduction Test
+The minimal reproduction case provided in the bug report works correctly:
+```python
+signal = Signal(use_caching=True)
+sender = object()
+signal.connect(receiver, sender=sender, weak=False)
+signal.has_listeners(sender=sender)  # Raises TypeError
+```
+
+Result: TypeError: cannot create weak reference to 'object' object
+
+The same code with `use_caching=False` works without error and returns True.
+
+#### Hypothesis Test
+The property-based test correctly identifies the issue:
+- With `use_caching=False`: Test passes
+- With `use_caching=True`: Test fails with TypeError
+
+#### Extended Testing
+I tested various Python object types as senders:
+
+Objects that FAIL with use_caching=True (all raise TypeError):
+- object() instances
+- int (42)
+- str ("string")
+- tuple ((1, 2, 3))
+- None
+- list ([1, 2, 3])
+- dict ({"a": 1})
+
+Objects that WORK with use_caching=True:
+- Custom class instances
+- Custom classes themselves
+- Functions
+- Lambda functions
+
+All of the failing types are Python built-in types that don't support weak references.
+
+#### Stack Trace Analysis
+The error occurs in `_live_receivers()` at line 425 when it tries to access the WeakKeyDictionary:
+```
+File "django/dispatch/dispatcher.py", line 425, in _live_receivers
+    receivers = self.sender_receivers_cache.get(sender)
+```
+
+The WeakKeyDictionary.get() method attempts to create a weak reference to the sender key, which fails for objects that don't support weak references.
+
+### Conclusion
+The bug is 100% reproducible and occurs exactly as described in the bug report. The error happens because WeakKeyDictionary cannot create weak references to certain common Python object types, contradicting the documented API that accepts "any Python object" as a sender.

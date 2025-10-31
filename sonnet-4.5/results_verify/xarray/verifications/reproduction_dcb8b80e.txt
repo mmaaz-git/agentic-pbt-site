@@ -1,0 +1,44 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here's my analysis:
+
+### Test Results
+
+1. **Simple Reproduction Test**: The provided example correctly demonstrates the issue:
+   - Input: coord=[2.0], coeffs with degrees=[-1, 0, 1] and values=[100.0, 1.0, 2.0]
+   - Expected result: 100*(2^-1) + 1*(2^0) + 2*(2^1) = 50 + 1 + 4 = 55
+   - Actual result: 5.0
+   - The coefficient for degree -1 (value 100.0) was completely ignored
+
+2. **Property-Based Testing**: The hypothesis test consistently fails when negative degrees are present:
+   - The test generates random polynomials with negative degree terms
+   - All test cases with negative degrees fail
+   - The failures show that negative degree coefficients are silently dropped
+
+### Code Analysis
+
+Examining the source code at `/home/npc/miniconda/lib/python3.13/site-packages/xarray/computation/computation.py`:
+
+Lines 834-837 contain the problematic code:
+```python
+max_deg = coeffs[degree_dim].max().item()
+coeffs = coeffs.reindex(
+    {degree_dim: np.arange(max_deg + 1)}, fill_value=0, copy=False
+)
+```
+
+The issue:
+1. Line 834 gets only the maximum degree
+2. Line 835-837 reindexes to `np.arange(max_deg + 1)` which generates [0, 1, 2, ..., max_deg]
+3. Any coefficients with negative degrees are silently dropped during reindexing
+4. No warning or error is raised to inform the user
+
+### Impact
+
+The bug causes:
+1. **Silent data loss**: Negative degree coefficients are dropped without warning
+2. **Incorrect mathematical results**: The polynomial evaluation is wrong
+3. **Misleading behavior**: The function accepts coefficients with negative degree labels but doesn't process them correctly
+4. **No user feedback**: Users have no way to know their coefficients were ignored
+
+The bug is confirmed and reproducible.

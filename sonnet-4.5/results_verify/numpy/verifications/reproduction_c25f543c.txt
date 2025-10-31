@@ -1,0 +1,48 @@
+## Bug Reproduction Analysis
+
+### Bug Report Summary
+The bug report claims that `numpy.ma.allequal(a, b, fill_value=False)` returns `False` without comparing unmasked values when arrays contain any masked elements, even when all unmasked values are identical.
+
+### Reproduction Results
+
+I successfully reproduced the reported behavior. The hypothesis test fails as described, and all manual test cases confirm the issue:
+
+1. **Test Case 1**: Two arrays with identical data and masks
+   - Arrays have identical unmasked values [1., 3.]
+   - With fill_value=False: returns False (INCORRECT)
+   - With fill_value=True: returns True (correct)
+
+2. **Test Case 2**: Same unmasked values, different masked values
+   - Unmasked values are identical [1., 3.]
+   - Masked values differ (2.0 vs 999.0) but are masked in both arrays
+   - With fill_value=False: returns False (INCORRECT - should be True since unmasked values match)
+   - With fill_value=True: returns True (correct)
+
+3. **Test Case 3**: Different masks, values match where both unmasked
+   - Where both arrays are unmasked, values are equal [1.]
+   - With fill_value=False: returns False (debatable - depends on interpretation)
+   - With fill_value=True: returns True
+
+4. **Documentation Example**: Matches documented behavior
+   - Unmasked values are equal
+   - With fill_value=False: returns False
+
+### Code Analysis
+
+Looking at the implementation in numpy/ma/core.py lines 8448-8461:
+
+```python
+elif fill_value:
+    # ... compares values and fills masked positions with True
+    return dm.filled(True).all(None)
+else:
+    return False  # <-- Simply returns False without any comparison
+```
+
+The current implementation when `fill_value=False` and there are any masked values (`m is not nomask`):
+- **Current behavior**: Immediately returns False without comparing any values
+- **Expected behavior based on documentation**: Should compare unmasked values and treat masked positions as "not equal"
+
+### Technical Correctness
+
+The bug report is technically correct about the implementation. When `fill_value=False` and any masked values exist, the function returns `False` without performing any comparison of the unmasked values. This means two arrays with identical unmasked values will return False if they have any masked elements, regardless of whether the unmasked portions are equal.

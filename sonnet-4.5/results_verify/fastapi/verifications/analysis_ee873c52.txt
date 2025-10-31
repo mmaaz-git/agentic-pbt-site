@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The `decimal_encoder` function's documentation and examples only show usage with normal decimal numbers. The function appears designed specifically for database numeric types (as mentioned in the docstring about `Numeric(x,0)`), not for handling mathematical edge cases. The JSON specification explicitly forbids Infinity and NaN values, so there's a reasonable argument that these inputs are out of scope for a JSON encoder helper function. The function name and context (JSON encoding) suggest it's meant for serializable decimal values only.
+
+**Why it might not be INVALID:**
+The function accepts any Decimal type as input according to its type signature, and Infinity/NaN are valid Decimal values in Python. The crash is unintuitive (comparing string to int) rather than a deliberate rejection of these values. The presence of `# type: ignore[operator]` comment suggests the developers knew about potential type issues but didn't fully address them.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case that would rarely occur in practice. FastAPI is primarily used for web APIs where decimal values typically represent money, quantities, or measurements - none of which would legitimately be infinite or NaN. The JSON specification doesn't support these values anyway, so even if the encoder handled them, the resulting JSON would be non-standard. The workaround is simple: users can check for special values before encoding if they expect them.
+
+**Why it might not be WONTFIX:**
+The function crashes with a confusing error message rather than handling the situation gracefully. Even if these values are edge cases, a clear error message would be better than a TypeError about string comparison. The fix is relatively simple and wouldn't affect normal operation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that special Decimal values are unsupported. Adding a note to the docstring clarifying that the function only handles finite decimal values would prevent confusion. The function's intended scope (database numeric types) could be made clearer. This would set proper expectations without requiring code changes.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation doesn't claim to support all Decimal values, and the examples only show normal numbers. The crash is a code bug, not a documentation issue - the code should either handle these values or reject them explicitly, not crash with a TypeError.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting special Decimal values would be a new capability not currently offered. The function was designed for normal decimals, and adding support for Infinity/NaN would extend its functionality. This would require thoughtful design about how to represent these values (as Python floats, as None, or raising a specific exception).
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts Decimal as input type without restrictions, so this isn't adding a new feature but fixing existing behavior. The crash is clearly unintended - the code should at minimum not crash with a TypeError.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an unintuitive TypeError when given valid Decimal inputs. The type signature promises to handle any Decimal but fails on special values. The `# type: ignore[operator]` comment suggests the developers knew about type issues but didn't fully handle them. The crash occurs due to an implementation oversight (not checking the type of exponent), not a deliberate design choice.
+
+**Why it might not be BUG:**
+The function is clearly designed for normal numeric decimals used in database contexts, not mathematical special values. The JSON specification explicitly forbids these values, so a JSON encoder helper shouldn't be expected to handle them. The documentation examples only show regular numbers, implying that's the intended scope.
+
+## Overall Consideration
+
+Looking at the evidence, this appears to be primarily a DOCUMENTATION_FIX issue. The function is part of FastAPI's JSON encoding pipeline, and JSON explicitly forbids Infinity and NaN values according to RFC 7159. The function's docstring mentions it's designed for database `Numeric(x,0)` types, which would never be infinite or NaN. The crash is unfortunate but occurs on inputs that are fundamentally incompatible with the function's purpose.
+
+However, the poor error message makes this less clear-cut. While the function shouldn't necessarily support these values, crashing with a TypeError about string comparison is confusing and unhelpful. A better approach would be either: (1) document that only finite decimals are supported, or (2) check for special values and raise a clear ValueError explaining they cannot be JSON-encoded.
+
+The proposed "fix" of converting to Python float infinities is problematic because it produces non-standard JSON that many parsers will reject. This would potentially cause downstream issues for API consumers. The better solution is to document the limitation and optionally add a clear error message for unsupported special values.
+
+Given that the issue is about undefined behavior (documentation doesn't specify what happens with special values) and the crash occurs on inputs that are incompatible with JSON standards anyway, this should be classified as DOCUMENTATION_FIX rather than BUG.

@@ -1,0 +1,33 @@
+REPRODUCTION OF BUG REPORT: pandas.plotting.bootstrap_plot
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. CODE VERIFICATION:
+   - Located the implementation in /home/npc/miniconda/lib/python3.13/site-packages/pandas/plotting/_matplotlib/misc.py
+   - Line 303 confirms: samplings = [random.sample(data, size) for _ in range(samples)]
+   - This indeed uses random.sample() which samples WITHOUT replacement
+
+2. REPRODUCTION TEST RESULTS:
+   - Ran the provided reproduction code - it works exactly as described
+   - random.sample() NEVER produces duplicates in any sample (0/1000 samples had duplicates)
+   - random.choices() produces duplicates in ~95% of samples (as expected for bootstrap)
+
+3. STATISTICAL VERIFICATION:
+   - For a 5-element dataset sampled with size=5:
+     * WITHOUT replacement (current): P(duplicates) = 0% (impossible)
+     * WITH replacement (correct): P(duplicates) ≈ 96.2%
+
+4. VARIANCE ESTIMATION IMPACT:
+   - The bug has severe statistical implications
+   - Bootstrap variance of mean with current implementation: 0.0000 (wrong!)
+   - Bootstrap variance of mean with correct implementation: 0.3688 (closer to theoretical)
+   - The current implementation gives 0 variance because every sample is just a permutation
+     with the exact same mean
+
+5. PROPERTY-BASED TEST:
+   - The hypothesis test confirms random.sample() never produces duplicates
+   - This violates the core requirement of bootstrap sampling
+
+CONCLUSION: The bug is REAL and SEVERE. The function is fundamentally broken for its
+intended statistical purpose. Every bootstrap sample is just a permutation of the original
+data, which completely defeats the purpose of bootstrapping.

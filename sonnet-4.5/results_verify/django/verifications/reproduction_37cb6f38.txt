@@ -1,0 +1,45 @@
+## Reproduction of Django Q Object Idempotence Bug
+
+I have successfully reproduced the reported bug. The bug report is accurate in its description and the provided code runs correctly.
+
+### Hypothesis Test Results
+
+The Hypothesis property-based test correctly identified the issue:
+- Running `test_q_and_idempotent()` fails with `Q(x=0)` as a falsifying example
+- The assertion `(q & q) == q` fails because Q objects do not maintain idempotence
+
+### Manual Reproduction Results
+
+The manual reproduction code executed successfully and produced the exact output claimed in the bug report:
+
+1. **Q Object Structure:**
+   - `q` produces: `(AND: ('x', 0))`
+   - `q & q` produces: `(AND: ('x', 0), ('x', 0))` - contains duplicate conditions
+   - `q | q` produces: `(OR: ('x', 0), ('x', 0))` - contains duplicate conditions
+
+2. **Equality Checks:**
+   - `q == (q & q)` returns `False`
+   - `q == (q | q)` returns `False`
+
+   These should return `True` if idempotence was properly maintained.
+
+3. **SQL Generation:**
+   - `q` generates: `WHERE "test_app_testmodel"."x" = 0`
+   - `q & q` generates: `WHERE ("test_app_testmodel"."x" = 0 AND "test_app_testmodel"."x" = 0)`
+   - `q | q` generates: `WHERE ("test_app_testmodel"."x" = 0 OR "test_app_testmodel"."x" = 0)`
+
+   The redundant conditions in the SQL are inefficient and unnecessary.
+
+### Effect of the Bug
+
+The bug has the following concrete effects:
+
+1. **Performance Impact:** Redundant SQL conditions are generated, potentially impacting query performance with unnecessary duplicate checks.
+
+2. **Logic Violations:** The Q objects violate the fundamental boolean algebra property of idempotence (x ∧ x = x and x ∨ x = x).
+
+3. **Equality Issues:** Code that relies on Q object equality comparisons will fail when comparing `q` with `q & q` or `q | q`, even though they should be logically equivalent.
+
+4. **Query Deduplication:** Systems that attempt to cache or deduplicate queries may fail to recognize that `q`, `q & q`, and `q | q` represent the same logical condition.
+
+The reproduction confirms that this is a real issue in Django's Q object implementation.

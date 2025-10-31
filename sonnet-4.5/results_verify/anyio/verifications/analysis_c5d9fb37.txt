@@ -1,0 +1,68 @@
+TRIAGE ANALYSIS
+===============
+
+## Evaluation Against Each Category
+
+### BUG (Valid Bug Report)
+**Strong Evidence FOR:**
+1. **Inconsistent Behavior**: The function behaves differently based on how data is chunked:
+   - Single chunk: Finds delimiter at position 50 with max_bytes=50
+   - Split chunks: Fails to find delimiter at position 49 with max_bytes=50
+   - This violates the principle that stream processing should be chunk-agnostic
+
+2. **Reasonable User Expectation**: Users expect that if a delimiter STARTS within max_bytes, it should be found, especially when the start position is clearly before the limit (e.g., position 49 with limit 50)
+
+3. **Comparison with Similar APIs**: Python's asyncio.StreamReader.readuntil() handles similar cases more gracefully
+
+4. **Real-World Impact**: This affects protocols where delimiters naturally occur near buffer boundaries
+
+**Evidence AGAINST:**
+- The documentation could be interpreted as "stop searching after max_bytes", though this is ambiguous
+
+### INVALID
+**Evidence FOR:**
+- The documentation says "maximum number of bytes that will be read", which could mean stop reading at exactly max_bytes
+
+**Strong Evidence AGAINST:**
+- The behavior is inconsistent based on chunking, which is never acceptable
+- No reasonable interpretation of the documentation justifies different behavior based on how data arrives
+
+### WONTFIX
+**Evidence FOR:**
+- Could argue it's a rare edge case
+
+**Strong Evidence AGAINST:**
+- Not obscure - delimiters at boundaries are common in many protocols
+- The inconsistency makes it a correctness issue, not just an edge case
+- Easy to fix without breaking other functionality
+
+### DOCUMENTATION_FIX
+**Evidence FOR:**
+- The documentation is ambiguous about boundary cases
+- Could clarify that max_bytes is a hard stop for reading
+
+**Strong Evidence AGAINST:**
+- Even if we clarified documentation, the INCONSISTENT behavior based on chunking is still wrong
+- Documentation can't justify behavior that differs based on implementation details (chunking)
+
+### FEATURE_REQUEST
+**Evidence FOR:**
+- Could frame as "add support for finding delimiters that span boundaries"
+
+**Strong Evidence AGAINST:**
+- This is fixing broken behavior, not adding new functionality
+- The inconsistency is a bug, not a missing feature
+
+## Conclusion
+
+This is unequivocally a **BUG** for the following reasons:
+
+1. **Inconsistent Behavior**: The most damning evidence is that the function produces different results based on how the same data is chunked. This is a fundamental violation of stream processing semantics.
+
+2. **Breaks Stream Abstraction**: Users should not need to know or care about the underlying chunking of data. The fact that `receive_until(b'XX', 50)` finds a delimiter at position 49 if data arrives as one chunk but fails if it arrives as two chunks is clearly wrong.
+
+3. **Not Edge Case**: This isn't an obscure scenario - network protocols often have delimiters that might naturally fall near buffer boundaries.
+
+4. **Clear Fix Available**: The bug report provides reasonable fixes that would make the behavior consistent.
+
+The inconsistency alone is sufficient to classify this as a BUG. No amount of documentation clarification could justify behavior that changes based on how the underlying stream chunks the data.

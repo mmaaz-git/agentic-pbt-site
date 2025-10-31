@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The `_read_orc` function is a private internal function (prefixed with underscore), which in Python convention means it's not part of the public API. Users shouldn't be calling it directly, and internal functions may have different conventions or expectations. The documentation doesn't specify behavior for private functions, and there's no explicit contract that private functions shouldn't mutate their inputs. Additionally, the function might be designed to work within a specific internal context where mutation is expected or handled.
+
+**Why it might not be INVALID:**
+Even though it's a private function, it's still called by the public API through `dd.from_map`, and the mutation can cause real problems when processing multiple partitions. The bug demonstrates actual incorrect behavior where the same index gets appended multiple times when processing multiple partitions, which could lead to data processing errors. The mutation violates general Python best practices regardless of whether the function is public or private.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal implementation detail of a private function that users shouldn't be accessing directly. The public `read_orc` function already handles some cases by creating a new list when needed. The current code has been working in production, and changing it might risk breaking existing code that depends on this behavior. The issue only affects edge cases where someone might be calling the private function directly or when specific partition configurations are used.
+
+**Why it might not be WONTFIX:**
+The bug can cause actual data processing errors when reading ORC files with multiple partitions, as demonstrated by the index being appended multiple times. This isn't just a cosmetic issue but can lead to incorrect column selections and potential data corruption. The fix is simple and safe (creating a new list instead of mutating), making it worthwhile to fix even if the impact is limited.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that functions won't mutate their inputs, so perhaps the documentation should be updated to clarify this behavior. Since `_read_orc` is a private function, it might be working as designed for internal use, and the documentation should warn users not to call private functions directly. The issue could be addressed by documenting that private functions may have different behavior expectations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The problem isn't really about documentation - the code has a genuine bug where it mutates input parameters in a way that causes incorrect behavior with multiple partitions. No amount of documentation would make it correct for the function to keep appending the same index multiple times. The mutation is unexpected even for an internal function and violates general programming principles.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that not mutating input parameters is a feature that could be added to improve the robustness of the code. The current implementation works but could be enhanced to follow better practices. Adding immutability guarantees to internal functions could be seen as a new feature rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the function already does what it's supposed to do (read ORC data). The issue is that it has an unintended side effect (mutation) that causes incorrect behavior. Fixing a side effect that causes bugs isn't a feature request but rather a bug fix. The expected behavior (not mutating inputs) is standard practice, not a special feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function mutates its input parameter, which causes demonstrable incorrect behavior when processing multiple partitions - the index gets appended multiple times, growing the columns list incorrectly. This violates the Principle of Least Astonishment and general Python best practices. The bug can cause real data processing errors where the wrong columns might be selected or processed. The fix is straightforward and safe, simply creating a new list instead of mutating the input.
+
+**Why it might not be BUG:**
+The function is private (prefixed with underscore) and not part of the public API, so it might not be bound by the same conventions as public functions. The documentation doesn't explicitly promise that parameters won't be mutated. The public `read_orc` function already works around this in some cases by creating new lists. It could be argued this is working as designed for internal use, even if it's not ideal.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be a genuine bug, though it affects a private internal function. The key evidence is that the mutation causes demonstrably incorrect behavior when `dd.from_map` processes multiple partitions - the index column gets appended multiple times to the same list, which cannot be the intended behavior. While one might argue that private functions have different rules, the mutation still causes actual data processing errors that affect the public API's behavior.
+
+The fact that the public `read_orc` function already tries to work around this issue by creating new lists in some cases (line 98) suggests that the developers are aware that mutation is problematic. However, they missed this particular mutation point in the private function. The proposed fix is minimal, safe, and follows Python best practices by creating a new list instead of mutating the input.
+
+While this affects a private function and might be considered lower priority, the potential for data processing errors when reading multi-partition ORC files makes this a valid bug that should be fixed. The bug report correctly identifies the problem, provides reproducible test cases, and offers a reasonable solution.

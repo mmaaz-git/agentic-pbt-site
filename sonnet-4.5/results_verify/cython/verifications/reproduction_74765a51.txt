@@ -1,0 +1,56 @@
+# Reproduction Report
+
+## Summary
+The bug report is **CONFIRMED**. The `is_re_compilable` function in pandas raises exceptions when given invalid regex patterns, instead of returning `False` as documented.
+
+## Testing Performed
+
+### 1. Simple Reproduction Test
+I ran the exact example from the bug report:
+```python
+from pandas.core.dtypes.inference import is_re_compilable
+result = is_re_compilable('(')
+```
+
+**Result**: The function raised a `PatternError` with message "missing ), unterminated subpattern at position 0" instead of returning `False`.
+
+### 2. Extended Testing
+I tested multiple invalid regex patterns:
+- `'('` - Raised PatternError (unterminated subpattern)
+- `')'` - Raised PatternError (unbalanced parenthesis)
+- `'['` - Raised PatternError (unterminated character set)
+- `'*'` - Raised PatternError (nothing to repeat)
+- `'+'` - Raised PatternError (nothing to repeat)
+- `'?'` - Raised PatternError (nothing to repeat)
+
+All of these raised exceptions instead of returning `False`.
+
+### 3. Valid Pattern Testing
+I confirmed that valid regex patterns work correctly:
+- `'abc'` - Returns `True`
+- `'a.*b'` - Returns `True`
+- `'[abc]'` - Returns `True`
+- `'(abc)'` - Returns `True`
+- `'a+b'` - Returns `True`
+
+### 4. Hypothesis Testing
+The property-based test from the bug report was run and confirmed multiple failures. The test correctly identifies that:
+- When `re.compile(pattern)` raises `re.error`, `is_re_compilable` should return `False`
+- Instead, `is_re_compilable` propagates the exception
+
+## Source Code Analysis
+I examined the actual implementation:
+```python
+def is_re_compilable(obj) -> bool:
+    try:
+        re.compile(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+```
+
+The function only catches `TypeError` (for non-string inputs) but not `re.error` exceptions (for invalid regex patterns). This is the root cause of the bug.
+
+## Conclusion
+The bug is valid and reproducible. The function violates its documented contract by raising exceptions for invalid regex patterns instead of returning `False`.

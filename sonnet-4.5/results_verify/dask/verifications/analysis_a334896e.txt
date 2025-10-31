@@ -1,0 +1,65 @@
+TRIAGE ANALYSIS
+
+Evaluating each possible categorization:
+
+1. BUG (Valid Bug Report):
+   REASONS FOR:
+   - The function silently changes data types without documentation
+   - Breaks the fundamental round-trip property: from_pandas(df).compute() ≠ df
+   - No warning or documentation about this behavior change
+   - The conversion happens by default, not opt-in
+   - Users relying on object dtype for compatibility will experience unexpected failures
+   - The function name "from_pandas" implies it creates a Dask version of the pandas DataFrame, not a modified one
+
+   REASONS AGAINST:
+   - There is a config option to control this behavior (though undocumented)
+   - PyArrow strings might be considered an "improvement" over object strings
+
+2. INVALID:
+   REASONS FOR:
+   - None - the bug is reproducible and real
+
+   REASONS AGAINST:
+   - The behavior is clearly happening and is reproducible
+   - The expectation of round-trip property is reasonable
+   - Documentation doesn't say dtypes will be preserved, but also doesn't say they'll be changed
+
+3. WONTFIX:
+   REASONS FOR:
+   - PyArrow strings are generally more efficient than object strings
+   - There's already a workaround (setting config to False)
+
+   REASONS AGAINST:
+   - This is not an obscure edge case - it affects all string columns
+   - The silent conversion can break production code
+   - The workaround is undocumented
+
+4. DOCUMENTATION_FIX:
+   REASONS FOR:
+   - The behavior might be intentional for performance reasons
+   - Adding documentation about the conversion would inform users
+   - The config option exists but is undocumented
+
+   REASONS AGAINST:
+   - The default behavior is problematic regardless of documentation
+   - Silent type conversion violates principle of least surprise
+   - Users shouldn't have to opt-out of breaking changes
+
+5. FEATURE_REQUEST:
+   REASONS FOR:
+   - Could frame as "add option to preserve dtypes"
+
+   REASONS AGAINST:
+   - The option already exists (config), just poorly documented
+   - This is about fixing unexpected behavior, not adding new functionality
+   - The current behavior is a regression from expected functionality
+
+CONCLUSION:
+This is a BUG. The function violates the reasonable expectation that from_pandas().compute() returns an equivalent DataFrame. While PyArrow strings may be more efficient, silently converting dtypes by default breaks the principle of least surprise and can cause failures in production code that depends on specific dtypes. The fact that there's an undocumented config workaround doesn't negate that the default behavior is wrong.
+
+The proper fix would be either:
+1. Make dtype preservation the default (convert-string=False by default)
+2. Add a parameter to from_pandas() to control this behavior explicitly
+3. At minimum, clearly document this behavior in the function's docstring
+
+Given that this breaks backward compatibility and user expectations without documentation, this qualifies as a BUG that should be fixed.

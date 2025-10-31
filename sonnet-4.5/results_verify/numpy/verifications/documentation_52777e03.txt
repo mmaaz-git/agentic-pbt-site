@@ -1,0 +1,41 @@
+## Documentation Analysis for numpy.linalg.pinv
+
+### Official Documentation Review
+
+I examined the official numpy documentation for `numpy.linalg.pinv` and found the following:
+
+#### Function Purpose
+The function computes the Moore-Penrose pseudo-inverse of a matrix using singular-value decomposition (SVD).
+
+#### Documented Mathematical Properties
+The documentation explicitly states in the **Examples** section (lines 2247-2257 in source):
+- "The following example checks that `a * a+ * a == a` and `a+ * a * a+ == a+`"
+- Example code demonstrates: `np.allclose(a, np.dot(a, np.dot(B, a)))` returns True
+- This establishes that the reconstruction property `a @ pinv(a) @ a == a` is a documented guarantee
+
+#### Mathematical Definition
+The documentation explains that the pseudo-inverse is computed as:
+- Q2 * Σ+ * Q1^T where Σ+ consists of "reciprocals of A's singular values"
+- This reciprocal operation is where the overflow occurs with subnormal values
+
+#### Edge Case Documentation
+**CRITICAL FINDING**: The documentation does NOT mention:
+- How the function handles subnormal/denormalized floating-point values
+- Any limitations regarding extremely small singular values that could cause overflow
+- Expected behavior when computing reciprocals leads to infinity
+- Any warnings about NaN or inf in results
+
+#### Error Handling
+The documentation only mentions:
+- Raises `LinAlgError` if SVD computation does not converge
+- No mention of overflow errors or NaN/inf handling
+
+### Implementation Analysis
+From the source code (line 2285):
+```python
+s = divide(1, s, where=large, out=s)
+```
+This line performs the reciprocal operation without checking for overflow, which causes the bug.
+
+### Conclusion
+The documentation establishes that `a @ pinv(a) @ a == a` is a fundamental property that should hold. The function fails to satisfy this documented property when given valid (though extreme) floating-point inputs. The documentation does not warn about or exclude subnormal values from the expected domain of the function.

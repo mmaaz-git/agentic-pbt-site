@@ -1,0 +1,49 @@
+REPRODUCTION ANALYSIS
+====================
+
+Bug Report: pandas.io.formats.format.format_percentiles Subnormal Float Handling
+
+REPRODUCTION RESULTS
+--------------------
+
+1. Hypothesis Test Reproduction:
+   - The provided Hypothesis test DOES reproduce the bug
+   - Failed on input: percentiles=[5e-324] (subnormal float)
+   - Generated RuntimeWarnings:
+     * "invalid value encountered in divide"
+     * "invalid value encountered in cast"
+     * "invalid value encountered in divide"
+   - The test correctly identified that format_percentiles generates warnings for valid inputs
+
+2. Manual Reproduction:
+   - Tested with subnormal floats: 1e-320, 5e-324, 2.225073858507203e-309
+   - Results:
+     * 1e-320 → Output: ['nan%'] with 3 RuntimeWarnings
+     * 5e-324 → Output: ['nan%'] with 3 RuntimeWarnings
+     * 2.225073858507203e-309 → Output: ['0%'] (no warnings but still incorrect)
+   - The subnormal floats DO pass validate_percentile() - they are valid inputs in [0,1]
+
+3. Real-World Impact with describe():
+   - Series.describe(percentiles=[2.225073858507203e-309]) produces:
+     * Index label "inf%" instead of a valid percentage
+     * Generates warnings: "overflow encountered in multiply", "invalid value encountered in cast"
+   - Series.describe(percentiles=[5e-324]) produces:
+     * Index label "nan%" instead of a valid percentage
+     * Generates warnings about "invalid value encountered in divide"
+   - This breaks the expected output format and could break downstream code expecting valid percentage labels
+
+TECHNICAL ANALYSIS
+------------------
+
+The bug occurs in format_percentiles() at line 1590:
+```python
+percentiles = 100 * percentiles
+```
+
+When multiplying subnormal floats like 5e-324 by 100:
+- 5e-324 * 100 = 5e-322, which is still subnormal
+- Subsequent operations like division in get_precision() cause underflow/overflow
+- This leads to NaN/Inf values propagating through the calculations
+- The final output becomes "nan%" or "inf%" instead of "0%"
+
+The bug is CONFIRMED and REPRODUCIBLE. The function fails to handle valid inputs (subnormal floats in [0,1]) correctly, producing invalid output and warnings.

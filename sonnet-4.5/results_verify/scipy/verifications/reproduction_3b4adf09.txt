@@ -1,0 +1,35 @@
+REPRODUCTION REPORT
+==================
+
+Bug Reproduction Confirmed: YES
+
+Summary:
+The bug report is accurate. scipy.cluster.vq.kmeans2 with minit='random' crashes with LinAlgError when the number of observations equals the number of features (square data matrices).
+
+Reproduction Steps Taken:
+1. Ran the exact test case from the bug report (5x5 matrix, seed=0)
+   - Result: LinAlgError: Matrix is not positive definite ✓
+
+2. Tested with multiple random seeds (0, 1, 2, 3, 4, 5, 10, 42, 100)
+   - Seeds 0, 1, 2, 3, 4, 100: Failed with LinAlgError
+   - Seeds 5, 10, 42: Succeeded
+   - Confirms the issue is seed-dependent but common
+
+3. Analyzed why the error occurs:
+   - When n_obs == n_features (5x5 in this case), the covariance matrix is often rank-deficient
+   - For seed=0: Covariance matrix has rank 4 (not full rank 5)
+   - Eigenvalues include negative value (-9.62e-17), making matrix not positive definite
+   - Cholesky decomposition requires positive definite matrices, hence fails
+
+4. Examined the source code (scipy/cluster/vq.py, lines 550-574):
+   - Line 557: `elif data.shape[1] > data.shape[0]:` handles when features > observations
+   - When features == observations, code falls to else block (line 564)
+   - Line 571: Attempts Cholesky decomposition which fails on rank-deficient matrices
+
+5. Verified the proposed fix:
+   - The fix changes line 557 from `>` to `>=`
+   - This would make square matrices use SVD-based initialization (more robust)
+   - This approach already exists for when features > observations
+
+Conclusion:
+The bug is real and reproducible. When n_observations equals n_features, the random initialization method incorrectly attempts Cholesky decomposition on potentially rank-deficient covariance matrices, causing crashes. The proposed fix is mathematically sound.

@@ -1,0 +1,37 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the reported bug in pandas.core.util.hashing.hash_array. Here are my findings:
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The provided Hypothesis test fails as described:
+- Running the test with different hash_key values (e.g., '0000000000000000') causes an AssertionError
+- The test expects different hash_key values to produce different hash results for numeric arrays
+- The test fails because numeric arrays always produce the same hash regardless of the hash_key value
+
+2. MANUAL REPRODUCTION:
+The manual reproduction code confirms the issue:
+- For numeric arrays (int64): All three different hash_keys produce identical hash values
+  - hash_key='0123456789123456': [ 6238072747940578789 15839785061582574730  2185194620014831856 ...]
+  - hash_key='AAAAAAAAAAAAAAAA': [ 6238072747940578789 15839785061582574730  2185194620014831856 ...]
+  - hash_key='different_key123': [ 6238072747940578789 15839785061582574730  2185194620014831856 ...]
+  - All are identical: True
+
+- For object arrays: Different hash_keys DO produce different hash values
+  - This shows the parameter works correctly for object dtype but not for numeric dtypes
+
+3. EXTENDED TESTING:
+I tested multiple array types to verify the scope of the issue:
+- Integer arrays: hash_key ignored (produces same hash)
+- Float arrays: hash_key ignored (produces same hash)
+- Boolean arrays: hash_key ignored (produces same hash)
+- Datetime arrays: hash_key ignored (produces same hash)
+- Object arrays: hash_key correctly used (produces different hashes)
+
+4. SOURCE CODE ANALYSIS:
+Looking at the implementation in pandas/core/util/hashing.py:
+- Lines 301-306: For numeric types (bool, datetime, timedelta, numbers), the code converts values to uint64 format
+- Line 326: hash_object_array is only called for non-numeric types (in the else branch)
+- The hash_key parameter is passed to hash_object_array but never used in the numeric conversion paths
+
+CONCLUSION:
+The bug is confirmed. The hash_key parameter is silently ignored for all numeric array types (int, float, bool, datetime, timedelta) and is only used when hashing object arrays. This creates an inconsistent API where the same parameter has different effects depending on the input dtype, with no warning or documentation of this behavior.

@@ -1,0 +1,56 @@
+REPRODUCTION REPORT
+==================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed and behaves exactly as described.
+
+## Test Results
+
+### Hypothesis Test
+The property-based test fails on the provided examples:
+- Input: '0\x1f' -> Expected (Python str.strip): '0', Actual (pipeline.str_strip): '0\x1f'
+- Input: '\x1f' -> Expected (Python str.strip): '', Actual (pipeline.str_strip): '\x1f'
+
+### Manual Reproduction
+Running the provided reproduction code confirms the mismatch:
+- Python's str.strip() correctly removes the \x1f character (ASCII Unit Separator)
+- Pipeline's str_strip() does NOT remove the \x1f character
+
+## Technical Analysis
+
+The character \x1f (ASCII 31, Unit Separator) is:
+- Unicode category: Cc (Control character)
+- Considered whitespace by Python (char.isspace() returns True)
+- Stripped by Python's str.strip() method
+- NOT stripped by pydantic's strip_whitespace attribute
+
+Testing shows that pydantic's strip_whitespace only strips common ASCII whitespace:
+- Space (0x20): ✓ Stripped
+- Tab (0x09): ✓ Stripped
+- Newline (0x0A): ✓ Stripped
+- Carriage return (0x0D): ✓ Stripped
+
+But does NOT strip Unicode control characters or other Unicode whitespace:
+- Unit Separator (0x1F): ✗ Not stripped
+- File Separator (0x1C): ✗ Not stripped
+- Group Separator (0x1D): ✗ Not stripped
+- Record Separator (0x1E): ✗ Not stripped
+- Non-breaking space (0xA0): ✗ Not stripped
+- En Quad (0x2000): ✗ Not stripped
+
+## Root Cause
+
+The bug occurs because the pipeline's str_strip() method (line 310-311 of pipeline.py) calls:
+```python
+def str_strip(self: _Pipeline[_InT, str]) -> _Pipeline[_InT, str]:
+    return self.transform(str.strip)
+```
+
+However, the _apply_transform() function (lines 428-431) intercepts this and replaces it with pydantic_core's strip_whitespace:
+```python
+if func is str.strip:
+    s = s.copy()
+    s['strip_whitespace'] = True
+    return s
+```
+
+The pydantic_core strip_whitespace attribute has a more limited definition of whitespace than Python's str.strip() method, leading to inconsistent behavior.

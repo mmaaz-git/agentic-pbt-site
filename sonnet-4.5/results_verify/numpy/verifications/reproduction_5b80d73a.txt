@@ -1,0 +1,30 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug reported for `pandas.core.util.hashing.combine_hash_arrays`.
+
+### Bug Summary
+The function contains an assertion at line 78 that validates the number of items processed matches the `num_items` parameter. However, when the input iterator is empty, the function returns early at line 65 without performing this validation, creating an inconsistency.
+
+### Test Results
+
+1. **Hypothesis Test**: The property-based test fails as expected, confirming that when an empty iterator is passed with `num_items > 0`, the function returns an empty array instead of raising an AssertionError.
+
+2. **Manual Reproduction**:
+   - `combine_hash_arrays(iter([]), 1)` returns `[]` (should raise AssertionError)
+   - `combine_hash_arrays(iter([]), 2)` returns `[]` (should raise AssertionError)
+   - `combine_hash_arrays(iter([]), 5)` returns `[]` (should raise AssertionError)
+   - `combine_hash_arrays(iter([]), 10)` returns `[]` (should raise AssertionError)
+   - `combine_hash_arrays(iter([]), 0)` correctly returns `[]` (expected behavior)
+
+3. **Comparison with Non-Empty Case**:
+   - `combine_hash_arrays(iter([arr]), 2)` correctly raises `AssertionError: Fed in wrong num_items`
+   - This demonstrates the assertion works for non-empty iterators but is bypassed for empty ones
+
+### Code Analysis
+Looking at the function implementation (lines 47-80 in hashing.py):
+- Line 62-65: When the iterator is empty (StopIteration), the function immediately returns an empty array
+- Line 78: The assertion `assert last_i + 1 == num_items` only executes if the loop runs at least once
+- The early return at line 65 bypasses the assertion check entirely
+
+### Impact
+This bug allows callers to pass incorrect `num_items` values when the iterator is empty, which could mask programming errors. The assertion is clearly intended as a consistency check to ensure the caller's expectation (`num_items`) matches reality (actual number of arrays processed), but it fails to enforce this contract for empty iterators.

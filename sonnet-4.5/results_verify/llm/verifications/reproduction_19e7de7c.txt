@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced and verified the bug report's claims.
+
+### Test Results
+
+1. **Normal Operation**: When time moves forward normally, monotonic_ulid correctly maintains strict monotonicity by incrementing the randomness portion when multiple ULIDs are generated in the same millisecond.
+
+2. **Clock Skew Scenario**: Using a mocked time function to simulate clock going backward (1000ms → 1001ms → 999ms), I confirmed that:
+   - ULID3 (generated at T=999ms) has a smaller value than ULID2 (generated at T=1001ms)
+   - This violates the documented guarantee of strict monotonicity
+   - The comparison `ulid3 > ulid2` returns `False`, confirming the violation
+
+### Code Analysis
+
+The implementation has three code paths:
+1. First call (_last is None): Generates fresh ULID
+2. Same millisecond (now_ms == last_ms): Increments randomness to maintain order
+3. Different millisecond: Generates fresh ULID with current timestamp
+
+The bug is in path 3: There is NO check for `now_ms < last_ms`. When the clock goes backward, the code falls through to the "New millisecond, start fresh" branch, generating a ULID with an earlier timestamp. Since ULIDs are compared lexicographically and the timestamp is the most significant part, this results in a smaller ULID, violating monotonicity.
+
+### Technical Accuracy
+
+The bug report's technical details are correct:
+- The missing check for `now_ms < last_ms` is accurately identified
+- The scenario description is valid and realistic
+- The proposed fix would correctly handle the issue by treating backward clock movement similarly to same-millisecond cases
+
+### Real-World Impact
+
+This is a real issue that can occur in production systems due to:
+- NTP clock synchronization adjustments
+- Virtual machine migrations
+- Manual system time changes
+- Leap second adjustments
+
+The bug directly contradicts the function's documented guarantee of generating ULIDs that are "strictly larger" than all previous ULIDs from the same process.

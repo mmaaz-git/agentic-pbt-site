@@ -1,0 +1,73 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+1. Hypothesis Test Results:
+---------------------------
+The property-based test FAILS with the reported example:
+- Input: string='0', start=1, stop=0, repl=''
+- pandas result: '0'
+- Expected (literal interpretation): '00'
+- The test correctly identifies the discrepancy
+
+2. Specific Test Cases from Bug Report:
+----------------------------------------
+Case 1: string='0', start=1, stop=0, repl=''
+- pandas result: '0'
+- Bug report expected: '00'
+- Literal interpretation: '0'[:1] + '' + '0'[0:] = '0' + '' + '0' = '00'
+- CONFIRMED: pandas does not match literal interpretation
+
+Case 2: string='abcde', start=3, stop=1, repl='X'
+- pandas result: 'abcXde'
+- Bug report expected: 'abcXbcde'
+- Literal interpretation: 'abcde'[:3] + 'X' + 'abcde'[1:] = 'abc' + 'X' + 'bcde' = 'abcXbcde'
+- CONFIRMED: pandas does not match literal interpretation
+
+3. Implementation Analysis:
+---------------------------
+Looking at pandas/core/strings/object_array.py lines 351-362:
+```python
+def f(x):
+    if x[start:stop] == "":  # This checks if slice is empty
+        local_stop = start    # If empty, use start as stop
+    else:
+        local_stop = stop
+    y = ""
+    if start is not None:
+        y += x[:start]
+    y += repl
+    if stop is not None:
+        y += x[local_stop:]  # Uses local_stop, not stop
+    return y
+```
+
+When start > stop:
+- x[start:stop] evaluates to "" (empty string)
+- The code sets local_stop = start
+- Result becomes: x[:start] + repl + x[start:]
+- This is insertion at position start, not literal slice replacement
+
+4. Arrow Implementation Behavior:
+---------------------------------
+PyArrow's utf8_replace_slice shows IDENTICAL behavior:
+- When start > stop, it also treats it as insertion at start
+- This suggests PyArrow internally normalizes inverted indices
+- Both implementations are CONSISTENT with each other
+
+5. Technical Correctness of Bug Report:
+---------------------------------------
+The bug report correctly:
+- Identifies the discrepancy between current behavior and literal interpretation
+- Provides working reproduction code
+- Shows the exact line of code causing the special case handling
+- Demonstrates that the behavior differs from string[:start] + repl + string[stop:]
+
+6. Python Slicing Behavior:
+---------------------------
+In Python:
+- 'abcde'[3:1] returns '' (empty string)
+- This is well-defined behavior for inverted slices
+- The literal formula string[:start] + repl + string[stop:] is mathematically consistent for ALL start/stop values
+
+SUMMARY:
+The bug report is TECHNICALLY CORRECT. The current implementation does NOT follow the literal interpretation of slice replacement when start > stop. Instead, both pandas and PyArrow normalize the indices to treat it as an insertion at position start.

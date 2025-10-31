@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The xarray documentation does not explicitly promise that correlation values will be bounded to [-1, 1]. The function documentation only states it computes the Pearson correlation coefficient without specifying bounds. Additionally, the deviations are extremely small (machine epsilon ~2.22e-16), which could be considered acceptable floating-point error that users should handle themselves.
+
+**Why it might not be INVALID:**
+The Pearson correlation coefficient has a well-established mathematical definition that guarantees values within [-1, 1]. This is not just a convention but a fundamental mathematical property. Users have every right to expect that a function computing Pearson correlation will respect this mathematical constraint, even if not explicitly documented.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The deviation from bounds is incredibly tiny (2.22e-16), essentially at the limit of floating-point precision. In practical applications, this difference is negligible and unlikely to cause real problems. The computational cost of adding clipping to every correlation calculation might not be justified for such a minor issue. Most users would never notice this deviation.
+
+**Why it might not be WONTFIX:**
+The issue can cause actual failures in downstream code. For example, computing arccos(correlation) will raise a domain error if correlation > 1.0, even by machine epsilon. Other statistical libraries (like NumPy) manage to stay within bounds, suggesting this is fixable. The fix is trivial (adding a clip operation) with minimal performance impact.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to warn users that due to floating-point precision, results may slightly exceed [-1, 1] and users should clip if needed. This would set proper expectations without changing the code. The documentation currently doesn't mention this numerical behavior, which could be seen as the real issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is not primarily a documentation issue but a violation of mathematical correctness. Documenting a bug doesn't make it not a bug. Other libraries handle this correctly without needing such warnings. Users shouldn't need to manually clip results that are mathematically guaranteed to be bounded.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding automatic clipping could be seen as a new feature for numerical stability rather than fixing a bug. The current behavior might be considered "working as designed" with the enhancement being optional bounds enforcement. Users who want guaranteed bounds could be asking for a new capability.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but asking for correct implementation of existing functionality. The Pearson correlation coefficient is mathematically defined to be within [-1, 1], so ensuring this property is bug fixing, not feature addition. The function already claims to compute Pearson correlation.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns values that violate the mathematical definition of what it claims to compute. The Pearson correlation coefficient is mathematically bounded to [-1, 1], and returning values outside this range is incorrect, regardless of how small the deviation. Other libraries (NumPy) handle this correctly, proving it's fixable. The issue can cause real failures in downstream code (e.g., domain errors in arccos).
+
+**Why it might not be BUG:**
+The deviation is at the level of machine epsilon, which is generally considered acceptable floating-point error. The documentation doesn't explicitly promise bounded results. This could be seen as expected behavior when doing floating-point arithmetic. The fix would add computational overhead to address an extremely rare edge case.
+
+## Overall Consideration
+
+After careful analysis, this issue presents a challenging triage decision. On one hand, the deviation from mathematical bounds is extremely small (machine epsilon) and unlikely to affect most users. The xarray documentation doesn't explicitly promise that results will be bounded, and floating-point imprecision is a known challenge in numerical computing.
+
+On the other hand, the Pearson correlation coefficient has a clear mathematical definition that guarantees bounds of [-1, 1]. This is not a convention but a mathematical fact. The violation of this property, even by a tiny amount, can cause real failures in downstream code - for instance, any code that computes arccos(correlation) will fail with a domain error. The fact that NumPy's corrcoef manages to stay within bounds for the same inputs suggests this is a solvable problem.
+
+The proposed fix is simple and has minimal performance impact - just adding a clip operation to ensure results stay within [-1, 1]. This is a common practice in numerical libraries when computing bounded quantities. Given that the issue can cause actual failures, has a trivial fix, and violates mathematical correctness, this leans toward being a valid bug rather than expected floating-point behavior. However, given the extremely small magnitude of the error and the lack of explicit documentation about bounds, this could reasonably be classified as WONTFIX if the maintainers consider machine-epsilon deviations acceptable.

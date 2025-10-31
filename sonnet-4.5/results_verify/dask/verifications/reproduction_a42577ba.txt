@@ -1,0 +1,58 @@
+BUG REPRODUCTION REPORT
+========================
+
+1. BUG CLAIM:
+   The sorted_columns function crashes with TypeError when row-group statistics contain None values for max (but not min).
+
+2. REPRODUCTION RESULTS:
+
+   Test Case 1 - Reported Bug Case:
+   Input: statistics=[{'columns': [{'name': '0', 'min': 0, 'max': None}]}]
+   Result: TypeError: '<' not supported between instances of 'NoneType' and 'int'
+   Status: BUG CONFIRMED - Crashes exactly as reported
+
+   Test Case 2 - Normal Case:
+   Input: statistics=[{'columns': [{'name': '0', 'min': 0, 'max': 10}]}]
+   Result: [{'name': '0', 'divisions': [0, 10]}]
+   Status: Works correctly
+
+   Test Case 3 - Both None:
+   Input: statistics=[{'columns': [{'name': '0', 'min': None, 'max': None}]}]
+   Result: [] (empty list)
+   Status: Works correctly - column is skipped
+
+   Test Case 4 - min None, max valid:
+   Input: statistics=[{'columns': [{'name': '0', 'min': None, 'max': 10}]}]
+   Result: [] (empty list)
+   Status: Works correctly - column is skipped
+
+   Test Case 5 - Multiple row groups with None max:
+   Input: [{'columns': [{'name': '0', 'min': 0, 'max': 5}]}, {'columns': [{'name': '0', 'min': 6, 'max': None}]}]
+   Result: TypeError: '<' not supported between instances of 'NoneType' and 'int'
+   Status: BUG CONFIRMED - Also crashes
+
+3. ROOT CAUSE ANALYSIS:
+
+   The crash occurs at line 442: assert divisions == sorted(divisions)
+
+   Execution flow for failing case:
+   - Line 421-424: Checks 'min' in c and 'max' in c → PASSES (keys exist)
+   - Line 425: divisions = [0] (from min=0)
+   - Line 426: max = None
+   - Line 427: success = True (because min=0 is not None)
+   - Line 440: success is True, so continues
+   - Line 441: divisions.append(None) → divisions = [0, None]
+   - Line 442: sorted([0, None]) → TypeError!
+
+4. TECHNICAL ACCURACY:
+   The bug report is technically accurate:
+   - The function does crash with TypeError
+   - The crash occurs when max is None but min is not None
+   - The error message matches exactly
+   - The root cause analysis in the bug report is correct
+
+5. COMPARISON WITH EXPECTED BEHAVIOR:
+   Based on code analysis, when statistics contain None values:
+   - The function should treat them as unusable/missing statistics
+   - Columns with None statistics should be skipped (return empty list)
+   - Current behavior: crashes instead of handling gracefully

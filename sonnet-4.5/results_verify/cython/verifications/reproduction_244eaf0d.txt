@@ -1,0 +1,53 @@
+Bug Reproduction Analysis
+==========================
+
+## Reproduction Results
+
+I successfully reproduced all the bugs described in the report:
+
+### Bug 1: _build_path_iterator raises wrong exception types
+
+**Confirmed bugs:**
+- Empty path '' → raises StopIteration (not ValueError)
+- Invalid operator '=' → raises KeyError: '=' (not ValueError)
+- Invalid operator '/' → raises KeyError: '/' (not ValueError)
+- Invalid operator '/a' → raises KeyError: '/' (not ValueError)
+- Invalid operators '(', ')', ']' → all raise KeyError (not ValueError)
+
+The function does raise ValueError for some cases (e.g., '[' raises ValueError "invalid path"), establishing that ValueError is the intended exception type for invalid inputs.
+
+### Bug 2: parse_path_value uses assert for validation
+
+**Confirmed bugs:**
+- Mismatched quotes "'abc\"" → raises AssertionError (not ValueError)
+- Mismatched quotes "\"abc'" → raises AssertionError (not ValueError)
+- Mismatched byte string quotes "b'abc\"" → raises AssertionError (not ValueError)
+- Mismatched byte string quotes "b\"abc'" → raises AssertionError (not ValueError)
+
+**Critical security issue confirmed:**
+When Python is run with the -O flag (optimize mode), assertions are disabled. This causes parse_path_value to accept invalid input with mismatched quotes:
+- "'abc\"" with -O → Returns 'abc' (should raise ValueError)
+- "\"abc'" with -O → Returns 'abc' (should raise ValueError)
+- "b'abc\"" with -O → Returns b'abc' (should raise ValueError)
+- "b\"abc'" with -O → Returns b'abc' (should raise ValueError)
+
+## Technical Analysis
+
+### _build_path_iterator Issues
+1. Line 275: `token = _next()` on empty input causes StopIteration to propagate
+2. Line 279: `operations[token[0]]` causes KeyError for unknown operators
+3. Line 281: Correctly raises ValueError("invalid path") for some cases
+
+The inconsistency shows the function intends to raise ValueError but fails to catch all error cases.
+
+### parse_path_value Issues
+1. Line 171: `assert value[-1] == value[0]` for string validation
+2. Line 174: `assert value[-1] == value[1]` for byte string validation
+
+Using assert for input validation is a serious bug because:
+- Assertions are for debugging/invariants, not input validation
+- They're disabled with python -O, creating a security vulnerability
+- They raise AssertionError instead of the appropriate ValueError
+
+## Verification
+The bug report's test code runs correctly and identifies these exact issues. The hypothesis-based property tests successfully catch both categories of bugs. All claimed failures have been verified.

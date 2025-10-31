@@ -1,0 +1,88 @@
+REPRODUCTION ANALYSIS
+=====================
+
+## Bug Report Claims
+
+The bug report claims that `attrs.validators.or_` catches ALL exceptions (including NameError, AttributeError, KeyError, etc.), masking programming errors in validators and making debugging difficult. It also claims this is inconsistent with `and_` validator behavior.
+
+## Reproduction Results
+
+### 1. Testing or_ validator
+
+I created a test with a buggy validator that references an undefined variable (which should raise NameError):
+
+```python
+def buggy_validator(inst, attr, value):
+    undefined_variable  # Should raise NameError
+
+def working_validator(inst, attr, value):
+    pass
+
+v = validators.or_(buggy_validator, working_validator)
+v(None, None, 42)  # Should raise NameError but doesn't
+```
+
+**Result**: CONFIRMED - The code runs without raising any exception. The or_ validator catches the NameError and continues to the next validator, ultimately succeeding.
+
+### 2. Testing and_ validator
+
+I tested the same scenario with `and_` validator:
+
+```python
+def buggy_validator(inst, attr, value):
+    undefined_variable  # Should raise NameError
+
+def working_validator(inst, attr, value):
+    pass
+
+v = validators.and_(working_validator, buggy_validator)
+v(None, None, 42)  # Raises NameError as expected
+```
+
+**Result**: CONFIRMED - The and_ validator properly propagates the NameError, making the programming error immediately visible.
+
+### 3. Source Code Analysis
+
+Examining the actual implementation confirms the issue:
+
+**_OrValidator (attr/validators.py lines 671-681):**
+```python
+def __call__(self, inst, attr, value):
+    for v in self.validators:
+        try:
+            v(inst, attr, value)
+        except Exception:  # <- Catches ALL exceptions
+            continue
+        else:
+            return
+```
+
+**_AndValidator (attr/_make.py lines 3038-3040):**
+```python
+def __call__(self, inst, attr, value):
+    for v in self._validators:
+        v(inst, attr, value)  # <- No exception handling
+```
+
+### 4. Standard Validator Behavior
+
+I tested standard attrs validators to understand what exceptions they normally raise:
+- `instance_of`: Raises `TypeError` for wrong type
+- `in_`: Raises `ValueError` for value not in collection
+- `gt`: Raises `ValueError` for value not greater than threshold
+- `matches_re`: Raises `ValueError` for regex mismatch
+- `min_len`: Raises `ValueError` for insufficient length
+
+All standard validators raise either `ValueError` or `TypeError` for validation failures, never other exception types like NameError, AttributeError, etc.
+
+## Conclusion
+
+The bug report is ACCURATE:
+
+1. The or_ validator does catch ALL exceptions (line 675: `except Exception`)
+2. This masks programming errors like NameError, AttributeError, KeyError, etc.
+3. The and_ validator does NOT catch exceptions and properly propagates them
+4. This creates an inconsistency between the two validators
+5. Standard validators only raise ValueError or TypeError for validation failures
+
+The bug makes debugging extremely difficult because typos or other programming errors in validators are silently ignored when using or_, potentially causing validators to be skipped unintentionally.

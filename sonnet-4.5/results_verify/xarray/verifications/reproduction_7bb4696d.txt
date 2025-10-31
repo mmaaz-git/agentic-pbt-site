@@ -1,0 +1,24 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug in `xarray.backends.locks.CombinedLock.locked()`.
+
+### Reproduction Results
+
+1. **Basic reproduction test**: When creating a CombinedLock with unlocked threading.Lock objects, the `locked()` method incorrectly returns `True` instead of `False`.
+
+2. **Hypothesis tests**: The first test case fails immediately with n_locks=1, confirming that CombinedLock.locked() returns True even when all constituent locks are unlocked.
+
+3. **Root cause identified**: The implementation on line 236 of locks.py uses `lock.locked` instead of `lock.locked()`, which returns a bound method object rather than calling the method. Since method objects are always truthy in Python, `any(lock.locked for lock in self.locks)` returns True whenever there are any locks present.
+
+### Debug Analysis
+
+I confirmed that:
+- `lock.locked` returns a builtin_function_or_method object
+- `bool(lock.locked)` evaluates to True (method objects are truthy)
+- `lock.locked()` correctly returns False when unlocked
+- The current implementation returns True for any non-empty list of locks
+- The fixed implementation `any(lock.locked() for lock in self.locks)` works correctly
+
+### Impact
+
+This bug causes CombinedLock.locked() to always return True when there are any locks present, regardless of their actual state. This breaks the documented contract that the method should return True only if any of the constituent locks are actually locked.

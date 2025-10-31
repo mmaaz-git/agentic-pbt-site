@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+### Confirmed Behavior
+The bug report is technically accurate. When AbstractMethodError is instantiated with an instance (not a class) and methodtype="classmethod", calling str() on the error object raises an AttributeError.
+
+### Test Results
+
+1. **Simple Reproduction**: CONFIRMED
+   - Creating `AbstractMethodError(MyClass(), methodtype="classmethod")` and calling `str()` on it raises:
+   - `AttributeError: 'MyClass' object has no attribute '__name__'`
+
+2. **Testing All Method Types with Instance**:
+   - methodtype="method": Works correctly, outputs "This method must be defined in the concrete class TestClass"
+   - methodtype="classmethod": FAILS with AttributeError
+   - methodtype="staticmethod": Works correctly
+   - methodtype="property": Works correctly
+
+3. **Testing All Method Types with Class Object**:
+   - ALL method types work correctly when passed a class object instead of an instance
+   - methodtype="classmethod" with class: Outputs "This classmethod must be defined in the concrete class TestClass"
+
+### Root Cause Analysis
+The issue is in the `__str__` method implementation (line 303-308):
+```python
+def __str__(self) -> str:
+    if self.methodtype == "classmethod":
+        name = self.class_instance.__name__  # Assumes class_instance is a class
+    else:
+        name = type(self.class_instance).__name__  # Works with instances
+```
+
+When methodtype="classmethod", the code assumes `class_instance` is a class object (which has `__name__`).
+For other method types, it uses `type(class_instance).__name__` which works with both classes and instances.
+
+### Technical Validity
+- The bug report's code examples are correct and reproduce the issue
+- The error occurs exactly as described
+- The suggested fixes in the bug report would both work:
+  - Option 1: Add validation in __init__ to reject instances when methodtype="classmethod"
+  - Option 2: Handle both cases in __str__ by checking if it's a type
+
+### Usage Pattern Analysis
+The conventional usage shown in documentation is:
+- For classmethods: Pass `cls` (the class) with methodtype="classmethod"
+- For instance methods: Pass `self` (the instance) with methodtype="method"
+
+However, the API accepts any combination without validation, leading to this crash when unconventional but technically allowed combinations are used.

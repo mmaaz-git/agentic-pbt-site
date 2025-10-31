@@ -1,0 +1,42 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report.
+
+### Simple Test Case Reproduction
+When running the provided simple test case:
+```python
+from pandas.io.formats.format import _trim_zeros_complex
+
+values = [complex(1, 2), complex(3, 4)]
+str_values = [str(v) for v in values]
+result = _trim_zeros_complex(str_values)
+```
+
+**Expected:** Input `['(1+2j)', '(3+4j)']` should preserve parentheses
+**Actual:** Output `['(1+2j', '(3+4j']` - the closing parenthesis is lost
+
+### Hypothesis Test Reproduction
+The hypothesis test also failed immediately with the specific failing input `[(1.0, 1.0)]`:
+- Input: `['(1+1j)']`
+- Output: `['(1+1j']`
+- The closing parenthesis is incorrectly removed
+
+### Root Cause Analysis
+I examined the implementation and found the exact issue:
+
+1. The function uses `re.split(r"([j+-])", x)` to split complex number strings
+2. For input `"(1+2j)"`, this produces: `['(1', '+', '2', 'j', ')']`
+3. The function then extracts:
+   - Real part: `"".join(trimmed[:-4])` = `'(1'` (takes everything except last 4 elements)
+   - Imaginary part: `"".join(trimmed[-4:-2])` = `'+2'` (takes elements -4 to -2)
+4. The closing parenthesis `)` at index -1 is never captured in either part
+5. During reconstruction, only the real part, sign, imaginary part, and 'j' are combined, losing the closing parenthesis
+
+### Python Complex Number Representation
+Testing Python's complex number string representation confirms:
+- Complex numbers with non-zero real parts ALWAYS have parentheses: `(1+2j)`, `(3-4j)`, `(-1+0j)`
+- Complex numbers with zero real part do NOT have parentheses: `2j`, `-3j`, `0j`
+- This is consistent for both native Python complex and numpy complex types
+
+### Conclusion
+The bug is confirmed and reproducible. The function incorrectly handles the standard Python complex number format with parentheses, losing the closing parenthesis during processing.

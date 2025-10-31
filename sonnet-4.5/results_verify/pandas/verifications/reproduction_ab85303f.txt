@@ -1,0 +1,44 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the reported bug in pandas.core.indexers.length_of_indexer.
+
+TEST RESULTS:
+-------------
+1. Hypothesis Test: CONFIRMED BUG
+   - The property-based test fails on range(1, 0, 1)
+   - Expected length: 0
+   - Actual returned: -1
+   - The test correctly identifies that length_of_indexer violates the fundamental invariant that
+     length_of_indexer(indexer) should equal len(indexer)
+
+2. Direct Reproduction: CONFIRMED BUG
+   - range(1, 0, 1): Expected 0, Got -1 ✗
+   - range(5, 3, 1): Expected 0, Got -2 ✗
+   - range(0, 5, 2): Expected 3, Got 2 ✗
+
+   The bug affects:
+   a) Empty ranges where start > stop (returns negative values instead of 0)
+   b) Non-empty ranges with step > 1 (incorrect calculation)
+
+3. Root Cause Analysis:
+   The implementation at lines 325-326 of pandas/core/indexers/utils.py:
+   ```python
+   elif isinstance(indexer, range):
+       return (indexer.stop - indexer.start) // indexer.step
+   ```
+
+   This formula is incorrect because:
+   - It doesn't handle empty ranges (returns negative when start > stop)
+   - It doesn't correctly calculate length for non-unit steps
+   - It doesn't match Python's actual range length calculation
+
+4. Python's Correct Behavior:
+   Python's built-in range ALWAYS returns non-negative length:
+   - range(1, 0, 1) correctly returns length 0
+   - range(0, 5, 2) correctly returns length 3
+   - Uses formula: max(0, (stop - start + step - 1) // step) for positive step
+
+CONCLUSION: The bug is real and affects core functionality. The function returns incorrect
+lengths for range objects, violating the basic contract that it should return the same
+value as len(indexer).

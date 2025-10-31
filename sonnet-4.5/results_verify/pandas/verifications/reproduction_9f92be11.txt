@@ -1,0 +1,50 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are the technical details:
+
+### Test Case Results:
+
+1. **Specific Example**:
+   - Input: `left = SparseArray([1, 2, 3], fill_value=0)`, `right = SparseArray([1, 0, 1], fill_value=0)`
+   - Expected: After `left - right`, the result should have `sp_values` containing only non-zero values
+   - Actual: `result.sp_values = [0, 2, 2]` which contains a `0` (the fill_value)
+   - The result's dense representation is correctly `[0, 2, 2]`
+
+2. **Hypothesis Test**:
+   - The hypothesis test fails consistently when arrays with `ngaps == 0` are operated on
+   - Multiple random inputs trigger the same invariant violation
+
+### Root Cause Analysis:
+
+Looking at the source code in `_sparse_array_op` (lines 197-205):
+
+```python
+if left.sp_index.ngaps == 0 or right.sp_index.ngaps == 0:
+    with np.errstate(all="ignore"):
+        result = op(left.to_dense(), right.to_dense())
+        fill = op(_get_fill(left), _get_fill(right))
+
+    if left.sp_index.ngaps == 0:
+        index = left.sp_index
+    else:
+        index = right.sp_index
+```
+
+The bug occurs because:
+1. When one array has no gaps (`ngaps == 0`), the operation converts both to dense arrays
+2. It performs the operation on dense arrays correctly
+3. It then reuses the original sparse index without checking if the result values match the fill value
+4. This creates a SparseArray where `sp_values` can contain fill values, violating the invariant
+
+The `_wrap_result` function (line 282-284) then creates a new SparseArray with the provided data and sparse_index:
+```python
+return SparseArray(
+    data, sparse_index=sparse_index, fill_value=fill_value, dtype=dtype
+)
+```
+
+When `sparse_index` is provided to the SparseArray constructor, it directly uses the data as `sp_values` without filtering out fill values (lines 484-492).
+
+### Verification:
+
+The bug is consistently reproducible and the technical explanation matches the observed behavior. The issue is real and affects the correctness of sparse array operations.

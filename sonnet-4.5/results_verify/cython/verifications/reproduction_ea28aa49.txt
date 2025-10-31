@@ -1,0 +1,69 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+1. BUG REPRODUCTION STATUS
+--------------------------
+✅ SUCCESSFULLY REPRODUCED - The bug described in the report is real and reproducible.
+
+2. TEST RESULTS
+---------------
+
+A. Simple Reproduction Test:
+   - Created two DistutilsInfo objects
+   - Set info2.values['libraries'] = ['lib1', 'lib2']
+   - Merged info2 into info1
+   - Result: info1.values['libraries'] IS the same object as info2.values['libraries']
+   - Modifying info1's list also modified info2's list
+   - This confirms the aliasing bug
+
+B. Hypothesis Property Test:
+   - The property test failed on the first attempt with libs=['0']
+   - The assertion "result.values['libraries'] is not info2.values['libraries']" failed
+   - This confirms the bug occurs for any non-empty list
+
+C. Behavior Comparison:
+   - When key DOESN'T exist in self.values: Lists are aliased (BUG)
+   - When key ALREADY exists in self.values: Lists are independent (CORRECT)
+   - This inconsistency confirms the bug is in the branch where key doesn't exist
+
+3. AFFECTED KEYS
+----------------
+All transitive_list type keys are affected:
+- libraries: ❌ aliased
+- library_dirs: ❌ aliased
+- runtime_library_dirs: ❌ aliased
+- include_dirs: ❌ aliased
+- extra_compile_args: ❌ aliased
+- extra_link_args: ❌ aliased
+- depends: ❌ aliased
+
+4. ROOT CAUSE ANALYSIS
+----------------------
+The code at line 222-229 shows the issue:
+
+```python
+elif type is transitive_list:
+    if key in self.values:
+        # Change a *copy* of the list (Trac #845)
+        all = self.values[key][:]  # Creates a copy
+        for v in value:
+            if v not in all:
+                all.append(v)
+        value = all
+    self.values[key] = value  # Direct assignment when key doesn't exist
+```
+
+When key exists: Line 224 creates a copy with `self.values[key][:]`
+When key doesn't exist: Line 229 directly assigns the reference without copying
+
+5. IMPACT
+---------
+This bug causes shared mutable state between DistutilsInfo objects. Any modification to lists in the merged object will unexpectedly modify the source object's lists. This violates the principle of least surprise and the documented intent (comment on line 223).
+
+6. BUG REPORT ACCURACY
+----------------------
+The bug report is technically accurate:
+- The reproduction code works as described
+- The Hypothesis test correctly identifies the issue
+- The root cause analysis is correct
+- The proposed fix would resolve the issue

@@ -1,0 +1,44 @@
+TRIAGE ANALYSIS FOR BUG REPORT
+===============================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that slice_replace should follow the literal formula string[:start] + repl + string[stop:] for all values of start and stop. The function is documented to "replace a positional slice" and the current behavior (normalizing inverted indices) could be considered a reasonable interpretation of replacing an empty slice at a position. Additionally, both pandas object dtype and PyArrow implementations have the SAME behavior, suggesting this might be intentional design rather than a bug.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that the current implementation differs from what would be expected from a literal interpretation of slice replacement. The documentation says "the slice from start to stop is replaced with repl" and in Python, slice[3:1] is a well-defined empty slice at those exact positions, not at position 3. The current special-case handling is undocumented.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving inverted slice indices (start > stop) which is unlikely to occur in normal usage. The current behavior has been consistent across both implementations (object and Arrow) and changing it would be a breaking change. The practical impact is minimal since most users wouldn't intentionally use inverted indices. Both implementations (pandas and PyArrow) behave identically, suggesting this is the de facto standard behavior.
+
+**Why it might not be WONTFIX:**
+The issue affects the predictability and consistency of the API. Users who programmatically generate start/stop values might encounter unexpected behavior. The fix is simple and the current behavior is based on undocumented special-case logic that could be considered a genuine implementation quirk rather than intended behavior.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation does not specify what happens when start > stop, leaving the behavior undefined. The current implementation behavior (normalizing to insertion at start) is consistent between both backends and could be considered the correct behavior that simply needs documentation. Adding a note about how inverted indices are handled would clarify the API without changing any code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The literal interpretation (string[:start] + repl + string[stop:]) is more intuitive and consistent with Python's slicing semantics. The special case in the code appears to be an implementation detail rather than intended design. Simply documenting the quirk doesn't address the underlying inconsistency with Python's slice behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting literal slice replacement for all start/stop combinations, including inverted indices, could be seen as a new feature rather than fixing a bug. The current behavior might be considered "working as designed" and the request for literal interpretation semantics would be an enhancement. This would require coordinating changes with PyArrow as well.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to replace slices, and Python slices with inverted indices are well-defined. This isn't asking for new functionality but rather for the existing functionality to work consistently with Python's slice semantics. The literal interpretation is the natural expectation from the function signature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function does not behave according to the natural interpretation of its signature and description. The special-case code that sets local_stop = start when the slice is empty is clearly a deviation from literal slice replacement semantics. The behavior is undocumented and inconsistent with how Python slicing works. The bug report provides clear reproduction and a simple fix.
+
+**Why it might not be BUG:**
+Both pandas and PyArrow implementations have the same behavior, suggesting this is intentional design. The behavior has likely been this way for a long time and changing it would be a breaking change. The documentation never explicitly promises literal slice replacement semantics, and the current behavior of treating empty slices as insertions at the start position could be considered a reasonable design choice.
+
+**Overall consideration**
+This is a complex case that sits at the intersection of implementation detail and API design. The bug report is technically correct that the current behavior differs from a literal interpretation of slice replacement. However, both implementations (pandas object dtype and PyArrow) exhibit the same behavior, which strongly suggests this is intentional design rather than an implementation bug. The behavior makes some semantic sense - when you have an inverted slice (which produces an empty string in Python), the implementation chooses to insert at the start position rather than follow the literal formula.
+
+The key issue is that this behavior is UNDOCUMENTED. Users cannot know from reading the documentation that inverted slices will be handled specially. This creates unpredictability in the API, especially for users who might programmatically generate start/stop indices. While the practical impact may be limited (since inverted slices are uncommon in practice), the principle of API consistency and predictability is important.
+
+Given that both implementations behave identically and have likely done so for years, changing this behavior would be a significant breaking change that could affect existing code. The most pragmatic solution would be to document the current behavior clearly, making it an official part of the API specification rather than an undocumented quirk. This preserves backward compatibility while improving API clarity.

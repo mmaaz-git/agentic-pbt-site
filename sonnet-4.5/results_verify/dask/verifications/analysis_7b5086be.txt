@@ -1,0 +1,94 @@
+## Bug Triage Analysis
+
+### Evaluation Against Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function crashes with a common and reasonable input (empty list)
+- Empty filters naturally means "no filtering" - return everything
+- The documentation doesn't forbid empty filters
+- The type hint `List` naturally includes empty lists
+- Higher-level API (`read_parquet`) successfully handles empty filters
+- The crash is due to missing bounds checking, a clear coding error
+- The fix is trivial and obvious (check if list is empty before accessing `filters[0]`)
+- Users may dynamically build filter lists that could be empty in some conditions
+
+**Arguments AGAINST:**
+- Could argue that filters should always contain at least one filter
+- The Arrow engine considers empty filters "malformed"
+
+**Verdict:** Strong case for BUG
+
+#### 2. INVALID (Incorrect Report)
+**Arguments FOR:**
+- The Arrow engine's `_filters_to_expression` explicitly rejects empty filters as "Malformed"
+- Could argue that if you don't want filtering, pass None instead of []
+
+**Arguments AGAINST:**
+- The function actually crashes before any validation - it's an unhandled error
+- The documentation doesn't state empty lists are invalid
+- `read_parquet` handles empty filters successfully
+- Empty list is a valid List type in Python
+- The crash is clearly unintended (accessing index without bounds check)
+
+**Verdict:** Weak case for INVALID
+
+#### 3. WONTFIX (Trivial/Uninteresting)
+**Arguments FOR:**
+- Users could work around by passing None or checking for empty filters before calling
+- Internal function that may not be intended for direct use
+
+**Arguments AGAINST:**
+- The function is importable and has comprehensive documentation
+- The fix is trivial and improves robustness
+- Empty filter lists are a reasonable use case
+- Crashes are generally not acceptable even for edge cases
+
+**Verdict:** Weak case for WONTFIX
+
+#### 4. FEATURE_REQUEST (New Functionality)
+**Arguments FOR:**
+- Could frame as "add support for empty filter lists"
+- The function currently doesn't handle this case
+
+**Arguments AGAINST:**
+- This is fixing a crash, not adding new functionality
+- Empty lists are already valid List types
+- The expected behavior (return everything) is obvious
+- It's more of a bug fix than a feature addition
+
+**Verdict:** Weak case for FEATURE_REQUEST
+
+#### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- Could update docs to explicitly state filters must be non-empty
+- Could clarify the expected behavior with empty filters
+
+**Arguments AGAINST:**
+- The code should handle empty lists gracefully, not crash
+- Documenting a crash as expected behavior would be poor design
+- The natural expectation is that empty filters means no filtering
+
+**Verdict:** Very weak case for DOCUMENTATION_FIX
+
+### Final Analysis
+
+This is clearly a **BUG**. The evidence is overwhelming:
+
+1. **Unhandled crash**: The function crashes with an IndexError on a valid Python List input
+2. **Missing bounds check**: Classic programming error - accessing `filters[0]` without checking length
+3. **Inconsistent behavior**: Higher-level `read_parquet` handles empty filters fine
+4. **Natural semantics**: Empty filters logically means "no filtering"
+5. **Simple fix**: Adding `if not filters: return parts, statistics` would fix it
+6. **Documentation**: Nothing in the docs suggests empty lists are invalid
+
+The fact that some internal Arrow functions consider empty filters "malformed" is an implementation detail that doesn't change the fact that `apply_filters` should handle this gracefully rather than crashing with an IndexError.
+
+### Recommendation
+This bug report should be tagged as **BUG** and the proposed fix is appropriate:
+```python
+if not filters:
+    return parts, statistics
+```
+
+This would make the function robust and consistent with user expectations and the behavior of higher-level APIs.

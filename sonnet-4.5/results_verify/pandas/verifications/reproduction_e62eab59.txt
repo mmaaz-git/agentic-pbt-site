@@ -1,0 +1,44 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in the Cython.Plex.Lexicons module.
+
+## Bug Confirmation
+
+The bug report is accurate. The `parse_token_definition` method in Lexicons.py raises `InvalidToken` exceptions incorrectly, causing a `TypeError` instead of the intended validation error.
+
+## Reproduction Results
+
+1. **Test 1 - Single-element tuple**:
+   - Input: `Lexicon([(Str('a'),)])`
+   - Expected: InvalidToken with message "Wrong number of items in token definition"
+   - Actual: TypeError: InvalidToken.__init__() missing 1 required positional argument: 'message'
+   - Status: BUG CONFIRMED
+
+2. **Test 2 - Non-RE pattern**:
+   - Input: `Lexicon([("not an RE", "TEXT")])`
+   - Expected: InvalidToken with message "Pattern is not an RE instance"
+   - Actual: TypeError: InvalidToken.__init__() missing 1 required positional argument: 'message'
+   - Status: BUG CONFIRMED
+
+3. **Test 3 - Non-tuple token spec**:
+   - Input: `Lexicon(["not a tuple"])`
+   - Expected: InvalidToken with message about non-tuple
+   - Actual: Correctly raises InvalidToken (this code path properly passes token_number)
+   - Status: WORKING AS EXPECTED (different code path)
+
+4. **Test 4 - Valid input**:
+   - Input: `Lexicon([(Str('a'), "TEXT")])`
+   - Result: Successfully creates Lexicon
+   - Status: WORKING AS EXPECTED
+
+## Root Cause
+
+The issue is in the `parse_token_definition` method (lines 168, 170, 174 of Lexicons.py):
+- The `InvalidToken` exception constructor requires two arguments: `token_number` and `message`
+- The method raises `InvalidToken` with only one argument (just the message string)
+- This causes a TypeError when the exception is raised, masking the actual validation error
+
+## Impact
+
+Users who provide malformed token specifications receive a confusing TypeError about missing constructor arguments instead of a clear error message about what's wrong with their token specification. This makes debugging difficult and provides a poor user experience.

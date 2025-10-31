@@ -1,0 +1,88 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## Consideration for Each Category
+
+### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function demonstrably fails to parse quoted cookie values with semicolons correctly
+- It splits 'session="abc;123"' into {'session': '"abc', '': '123"'} instead of {'session': 'abc;123'}
+- The function calls cookies._unquote(), showing clear intent to handle quoted values
+- Python's SimpleCookie (which Django imports and exposes) handles this case correctly
+- The implementation is internally inconsistent - it tries to unquote AFTER splitting on semicolons
+- This breaks legitimate use cases where cookie values contain structured data
+- The function is used in production code (WSGI/ASGI handlers) to parse real HTTP cookies
+- The bug causes data corruption/loss when semicolons appear in quoted values
+
+**Arguments AGAINST:**
+- RFC 6265 (current standard) technically doesn't allow semicolons in cookie values
+- No explicit Django documentation promising this behavior
+
+### INVALID (Incorrect Report)
+**Arguments FOR:**
+- RFC 6265 says semicolons shouldn't be in cookie values, even quoted
+- Django never explicitly documented support for quoted semicolons
+
+**Arguments AGAINST:**
+- Django uses Python's cookies._unquote() function, showing intent to support quoted values
+- Python's http.cookies module (RFC 2109) supports this, and Django imports from it
+- The current implementation is clearly broken - it creates malformed dictionary keys like ''
+- Even if RFC 6265 doesn't require it, the current behavior is objectively wrong
+
+### WONTFIX (Trivial/Uninteresting)
+**Arguments FOR:**
+- Modern applications can use base64 encoding to avoid semicolons
+- This might be considered an edge case
+
+**Arguments AGAINST:**
+- This is not a trivial issue - it causes data corruption
+- It affects cookie parsing in all Django applications
+- The fix is straightforward and would improve compatibility
+- Python's standard library handles this correctly
+
+### FEATURE_REQUEST (Not Currently Supported)
+**Arguments FOR:**
+- Could argue that supporting RFC 2109 quoted semicolons is a new feature
+- Django might only intend to support RFC 6265
+
+**Arguments AGAINST:**
+- The function already attempts to unquote values with cookies._unquote()
+- This isn't adding new functionality, it's fixing broken existing functionality
+- The current behavior produces nonsensical results (empty dictionary keys)
+
+### DOCUMENTATION_FIX (Documentation Wrong)
+**Arguments FOR:**
+- The documentation doesn't specify which RFC is followed
+- Could document that quoted semicolons aren't supported
+
+**Arguments AGAINST:**
+- The code is clearly broken, not just poorly documented
+- The documentation isn't wrong, it's just minimal
+- Fixing only documentation would leave the broken behavior in place
+
+## Analysis Summary
+
+The current implementation has a clear logic error where it:
+1. Splits the entire cookie string on semicolons (line 12)
+2. Then tries to unquote individual values (line 22)
+
+This order is wrong. It should either:
+- Use a proper parser that respects quoted strings when splitting
+- Delegate to SimpleCookie which already handles this correctly
+
+The fact that the function:
+1. Uses cookies._unquote() from Python's RFC 2109 implementation
+2. Is used to parse actual HTTP Cookie headers in Django's request handling
+3. Produces objectively broken output (empty string keys in dictionary)
+4. Differs from Python's standard library behavior without justification
+
+Makes this a clear BUG, not a documentation issue or missing feature.
+
+## Severity Assessment
+
+This is a MEDIUM to HIGH severity bug because:
+- It silently corrupts data containing semicolons
+- It affects a core HTTP handling function
+- It can break applications that legitimately use quoted cookie values
+- It creates security concerns if applications rely on cookie data integrity
+- The current behavior produces nonsensical results that could cause crashes

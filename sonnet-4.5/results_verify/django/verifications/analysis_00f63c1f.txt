@@ -1,0 +1,62 @@
+BUG TRIAGE ANALYSIS
+===================
+
+Evaluating the bug report against each possible categorization:
+
+BUG (Valid Bug Report)
+----------------------
+**Arguments FOR:**
+1. **Clear API Contract Violation**: The `send()` method explicitly documents "Either a specific object or None" as valid senders, but `None` crashes when caching is enabled
+2. **Default Parameter Failure**: `has_listeners(sender=None)` has `None` as the default, yet this default causes a crash
+3. **Production Impact**: Django's own model signals use `use_caching=True`, making this a real issue in production code
+4. **Inconsistent Behavior**: Same code works with `use_caching=False` but crashes with `use_caching=True` - a feature flag shouldn't break documented functionality
+5. **No Documentation of Limitation**: Neither source comments nor public docs warn about sender type restrictions with caching
+
+**Arguments AGAINST:**
+- None (this appears to be a clear bug)
+
+INVALID
+-------
+**Arguments FOR:**
+- None
+
+**Arguments AGAINST:**
+1. The documented API explicitly allows `None` as sender
+2. The crash is not an intentional error message but an unhandled TypeError
+3. The behavior is inconsistent between caching modes
+
+WONTFIX
+-------
+**Arguments FOR:**
+- Could argue that in practice, most Django signals use model classes as senders which are weakref-able
+
+**Arguments AGAINST:**
+1. Not an obscure edge case - `None` is the default parameter value
+2. The API explicitly documents `None` as valid
+3. Simple, everyday objects like `object()` also fail
+4. The fix is straightforward (handle non-weakref-able keys properly)
+
+DOCUMENTATION_FIX
+-----------------
+**Arguments FOR:**
+- Could update docs to say "don't use None or non-weakref-able objects when caching is enabled"
+
+**Arguments AGAINST:**
+1. This would be breaking the existing API contract
+2. The default parameter `sender=None` would become invalid with caching
+3. The code should handle this case, not document around it
+4. Would require changing all method signatures to not default to None
+
+FEATURE_REQUEST
+---------------
+**Arguments FOR:**
+- None
+
+**Arguments AGAINST:**
+1. Not asking for new functionality - expecting existing documented behavior to work
+2. The API already claims to support `None` as sender
+3. This is fixing broken existing functionality, not adding new features
+
+CONCLUSION
+----------
+This is clearly a **BUG**. The implementation fails to handle cases that the API explicitly documents as valid. The `send()` method documentation states "Either a specific object or None" and `has_listeners()` defaults to `sender=None`, yet both crash when caching is enabled. This is not undefined behavior, not a feature request, and not a documentation issue - it's a straightforward implementation bug where the code doesn't match its documented API contract.

@@ -1,0 +1,56 @@
+BUG REPRODUCTION RESULTS
+
+Test Environment:
+=================
+- Tested with dask from /home/npc/miniconda/lib/python3.13/site-packages/dask/
+- Functions tested: dask.utils.format_time and dask.utils.parse_timedelta
+
+Bug Report Claims vs. Reality:
+==============================
+
+1. CLAIM: format_time produces multi-unit strings that parse_timedelta cannot parse
+   RESULT: CONFIRMED
+   - format_time(601) produces "10m 1s"
+   - parse_timedelta("10m 1s") raises ValueError: could not convert string to float: '10m1'
+   - format_time(86400) produces "24hr 0m"
+   - parse_timedelta("24hr 0m") raises ValueError: could not convert string to float: '24hr0'
+
+2. CLAIM: This breaks the "expected round-trip property"
+   RESULT: PARTIALLY CONFIRMED (but no such property was documented)
+   - Values < 600 seconds work fine (e.g., format_time(100) -> "100.00 s" -> parses to 100)
+   - Values >= 601 seconds fail when format_time switches to multi-unit format
+   - The hypothesis test failed on 44 out of 50 random test cases
+
+Technical Details of Failure:
+=============================
+
+The parse_timedelta function:
+1. Removes all spaces from input: "10m 1s" becomes "10m1s"
+2. Finds the last alphabetic sequence as the unit: "s"
+3. Tries to parse the prefix "10m1" as a float, which fails
+
+Additional Issues Found:
+========================
+
+1. Unit mismatch: format_time uses "hr" for hours, but parse_timedelta only recognizes "h" or "hour(s)"
+   - parse_timedelta("1hr") fails with KeyError
+   - parse_timedelta("1h") works fine
+
+2. The parsing algorithm in parse_timedelta is fundamentally incompatible with multi-unit strings:
+   - It expects format: [number][unit]
+   - Cannot handle: [number][unit][number][unit]
+
+Boundary Testing:
+================
+- format_time(600) = "600.00 s" - PARSES OK
+- format_time(601) = "10m 1s" - FAILS TO PARSE
+- format_time(7200) = "120m 0s" - FAILS TO PARSE
+- format_time(7201) = "2hr 0m" - FAILS TO PARSE
+- format_time(172800) = "48hr 0m" - FAILS TO PARSE
+- format_time(172801) = "2d 0hr" - FAILS TO PARSE
+
+Conclusion:
+===========
+The technical details in the bug report are accurate. The functions are indeed incompatible for values >= 601 seconds due to:
+1. Multi-unit format output that parse_timedelta cannot handle
+2. Use of "hr" unit that parse_timedelta doesn't recognize

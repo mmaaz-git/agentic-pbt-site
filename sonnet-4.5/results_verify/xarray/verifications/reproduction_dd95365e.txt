@@ -1,0 +1,60 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I have successfully reproduced the bug reported for xarray.core.formatting_html.collapsible_section.
+
+TEST RESULTS:
+------------
+
+1. Hypothesis Test Execution:
+   - The property-based test with negative n_items values consistently fails
+   - All negative values from -1 to -100 result in:
+     * 'disabled' NOT being present in the output (should be present)
+     * 'checked' being present in the output (should NOT be present)
+
+2. Manual Reproduction with n_items=-5:
+   - The function generates HTML with:
+     * No 'disabled' attribute on the checkbox input
+     * 'checked' attribute present (section is expanded)
+     * Displays "(-5)" in the span, which is semantically meaningless
+
+3. Comparison of Different Values:
+   n_items=None: disabled=True, checked=False (correct - section disabled)
+   n_items=   0: disabled=True, checked=False (correct - section disabled)
+   n_items=  -1: disabled=False, checked=True (BUG - should be disabled)
+   n_items=  -5: disabled=False, checked=True (BUG - should be disabled)
+   n_items=   1: disabled=False, checked=True (correct - section enabled)
+   n_items=   5: disabled=False, checked=True (correct - section enabled)
+
+ROOT CAUSE ANALYSIS:
+-------------------
+
+The bug occurs in line 179 of formatting_html.py:
+    has_items = n_items is not None and n_items
+
+When n_items is a negative integer:
+- "n_items is not None" evaluates to True
+- "True and -5" evaluates to -5 (the negative number itself)
+- Python treats any non-zero integer as truthy
+- Therefore has_items = -5, which is truthy
+
+This leads to:
+- Line 181: enabled = "" (empty string, not "disabled") because "enabled and has_items" is truthy
+- Line 182: collapsed = "checked" because "not has_items" is False
+
+EXPECTED BEHAVIOR:
+-----------------
+
+Negative item counts are semantically meaningless. A section with -5 items makes no logical sense.
+The function should treat negative n_items the same as 0 or None - the section should be disabled
+and not expanded.
+
+ACTUAL BEHAVIOR:
+---------------
+
+Negative n_items values cause the section to be:
+- Enabled (can be clicked/interacted with)
+- Expanded by default (checked attribute present)
+- Displaying a meaningless count like "(-5)"
+
+The bug is confirmed and reproducible.

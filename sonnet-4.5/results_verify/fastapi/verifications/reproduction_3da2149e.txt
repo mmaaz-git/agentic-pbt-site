@@ -1,0 +1,54 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug described in the report. Here are the findings:
+
+1. TEST EXECUTION RESULTS:
+   - Ran the property-based test from the bug report: FAILED
+   - The specific failing case mentioned (["content-type"] with trailing comma) was confirmed
+   - Created comprehensive tests covering multiple scenarios:
+     * Consecutive commas ("Content-Type,,X-Custom"): Returns 400 (FAIL)
+     * Trailing comma ("content-type,"): Returns 400 (FAIL)
+     * Leading comma (",content-type"): Returns 400 (FAIL)
+     * Normal case without extra commas: Returns 200 (PASS)
+     * Multiple consecutive commas: Returns 400 (FAIL)
+
+2. BUG CONFIRMATION:
+   The bug is CONFIRMED. The CORSMiddleware in Starlette v0.46.2 incorrectly rejects preflight
+   requests when the Access-Control-Request-Headers header contains empty values from:
+   - Trailing commas
+   - Leading commas
+   - Consecutive commas
+
+3. ROOT CAUSE ANALYSIS:
+   I examined the source code at lines 127-131 of starlette/middleware/cors.py:
+
+   ```python
+   elif requested_headers is not None:
+       for header in [h.lower() for h in requested_headers.split(",")]:
+           if header.strip() not in self.allow_headers:
+               failures.append("headers")
+               break
+   ```
+
+   The issue is that when splitting "Content-Type," by comma, it produces ["Content-Type", ""].
+   The empty string, even after strip(), remains "" and is checked against self.allow_headers.
+   Since allow_headers doesn't contain empty strings, the check fails.
+
+4. IMPACT:
+   This is a real issue that can occur in production when:
+   - Headers are programmatically generated with trailing commas
+   - Multiple middleware/proxies process headers and introduce formatting issues
+   - Client libraries generate headers with extra commas
+
+5. PROPOSED FIX:
+   The fix suggested in the bug report is correct - skip empty header values after stripping:
+
+   ```python
+   stripped = header.strip()
+   if stripped and stripped not in self.allow_headers:
+       failures.append("headers")
+       break
+   ```
+
+The bug report accurately describes the issue, provides working test cases, and offers a valid fix.

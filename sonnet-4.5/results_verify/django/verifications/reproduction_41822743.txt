@@ -1,0 +1,48 @@
+BUG REPRODUCTION RESULTS
+
+1. REPRODUCING THE REPORTED BUG:
+The bug report claims that calling msg.attach(filename=None, content=b"test content", mimetype=None) raises a TypeError.
+
+TEST RESULT: CONFIRMED
+When I ran the exact reproduction code from the bug report, it failed with:
+"TypeError: expected str, bytes or os.PathLike object, not NoneType"
+
+This error occurs at line 333 in django/core/mail/message.py when mimetypes.guess_type(None) is called.
+
+2. HYPOTHESIS TEST:
+The property-based test using Hypothesis also failed with the same error on the first example (content=b'').
+The test tries to attach content with filename=None and mimetype=None, and it consistently fails with TypeError.
+
+3. ADDITIONAL TESTING:
+
+Test with None filename: FAILS with TypeError
+Test with empty string filename: SUCCEEDS (empty string is a valid path-like object)
+Test with valid filename: SUCCEEDS (normal usage works as expected)
+
+4. ROOT CAUSE ANALYSIS:
+The error occurs at this line in the source code:
+mimetype = mimetype or mimetypes.guess_type(filename)[0] or DEFAULT_ATTACHMENT_MIME_TYPE
+
+The Python standard library's mimetypes.guess_type() function does not accept None as input. It requires:
+- str (a filename or URL)
+- bytes (a filename)
+- os.PathLike object
+
+When filename=None, this call fails immediately with TypeError.
+
+5. PROPOSED FIX VERIFICATION:
+The bug report suggests this fix:
+mimetype = mimetype or (mimetypes.guess_type(filename)[0] if filename else None) or DEFAULT_ATTACHMENT_MIME_TYPE
+
+This would:
+- Only call mimetypes.guess_type() if filename is not None
+- Fall back to DEFAULT_ATTACHMENT_MIME_TYPE if filename is None
+- Maintain backward compatibility for valid filenames
+
+6. DOCSTRING vs IMPLEMENTATION MISMATCH:
+The docstring states: "The filename can be omitted and the mimetype is guessed, if not provided."
+The implementation does not handle the case where filename is None/omitted.
+This is a clear discrepancy between documented behavior and actual implementation.
+
+SUMMARY:
+The bug is reproducible exactly as reported. The code crashes when filename=None despite the docstring explicitly stating that "The filename can be omitted". The proposed fix appears reasonable and would align the implementation with the documented behavior.

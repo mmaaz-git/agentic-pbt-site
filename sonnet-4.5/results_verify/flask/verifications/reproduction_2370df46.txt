@@ -1,0 +1,45 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug reported in the Flask Config.from_prefixed_env method. The bug occurs exactly as described when environment variables define both a flat key and a nested key with the same prefix.
+
+## Reproduction Steps Performed
+
+1. **Property-based test**: Created and attempted to run the hypothesis test from the bug report. The test correctly identifies the issue.
+
+2. **Direct reproduction**: Ran multiple test cases that confirm the bug:
+
+   Test Case 1 - Exact example from bug report:
+   - Set: FLASK_DATABASE="123" and FLASK_DATABASE__HOST="localhost"
+   - Result: TypeError: 'int' object does not support item assignment
+
+   Test Case 2 - Minimal failing case:
+   - Set: FLASK_A="0" and FLASK_A__SUBKEY="0"
+   - Result: TypeError: 'int' object does not support item assignment
+
+   Test Case 3 - Order independence:
+   - Set: FLASK_B__SUBKEY="value" and FLASK_B="123" (reverse order)
+   - Result: TypeError: 'int' object does not support item assignment
+
+   Test Case 4 - String values:
+   - Set: FLASK_C="not_a_number" and FLASK_C__SUBKEY="value"
+   - Result: TypeError: 'str' object does not support item assignment
+
+## Root Cause Analysis
+
+After examining the Flask source code (config.py lines 154-183), the bug occurs because:
+
+1. Environment variables are processed in sorted alphabetical order (line 154)
+2. When FLASK_DATABASE is encountered first, it's parsed as JSON and stored as integer 123 (lines 161-169)
+3. When FLASK_DATABASE__HOST is processed next, the code attempts to traverse nested dicts (lines 173-183)
+4. At line 181, the code tries to execute `current = current[part]` where current[part] is the integer 123
+5. At line 183, it tries `current[tail] = value` which fails with TypeError because current is an integer, not a dict
+
+## Bug Confirmation
+
+The bug is confirmed and reproducible. The error occurs consistently when:
+- An environment variable sets a flat configuration value
+- Another environment variable tries to set a nested value under the same key
+- The flat variable is processed first (alphabetically)
+
+The current implementation does not handle this conflict gracefully and crashes with an uninformative error message that doesn't indicate the actual problem (conflicting environment variable definitions).

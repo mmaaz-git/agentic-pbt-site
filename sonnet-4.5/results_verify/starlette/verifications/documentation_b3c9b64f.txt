@@ -1,0 +1,41 @@
+Documentation Analysis for TrustedHostMiddleware IPv6 Bug Report
+================================================================
+
+## Starlette Documentation
+The Starlette source code for TrustedHostMiddleware does not contain inline documentation about IPv6 support or host header parsing specifics. The middleware's purpose is to validate incoming HTTP Host headers against a list of allowed hosts to prevent host header injection attacks.
+
+The implementation at line 40 of trustedhost.py shows:
+```python
+host = headers.get("host", "").split(":")[0]
+```
+
+This line extracts the hostname from the Host header by splitting on the first colon, which is intended to separate the hostname from the port number.
+
+## RFC 3986 - Uniform Resource Identifier (URI): Generic Syntax
+According to RFC 3986 Section 3.2.2, IPv6 addresses in URIs MUST be enclosed in square brackets. The specification states:
+
+"A host identified by an Internet Protocol literal address, version 6 [RFC3513] or later, is distinguished by enclosing the IP literal within square brackets ("[" and "]"). This is the only place where square bracket characters are allowed in the URI syntax."
+
+## RFC 7230 - HTTP/1.1 Host Header
+RFC 7230 Section 5.4 specifies that the Host header field uses the same format as the authority component of the URI, which means IPv6 addresses must be enclosed in square brackets when appearing in the Host header.
+
+Examples of valid Host headers with IPv6:
+- `[::1]:8080` - IPv6 loopback with port 8080
+- `[2001:db8::1]:443` - IPv6 address with port 443
+- `[::1]` - IPv6 loopback without port
+
+## Expected Behavior Based on Standards
+Based on the RFC specifications:
+1. IPv6 addresses in Host headers MUST be enclosed in square brackets
+2. The host portion should be extracted as the IPv6 address WITHOUT the brackets
+3. Port numbers, if present, appear after the closing bracket and colon (e.g., `]:8080`)
+
+## Current Implementation Issues
+The current implementation fails to handle IPv6 addresses correctly because:
+1. It splits on the first colon, which appears within IPv6 addresses
+2. It doesn't account for the square bracket notation required by RFC 3986
+3. For `[::1]:8000`, it extracts `[` instead of `::1`
+4. For `[2001:db8::1]:443`, it extracts `[2001` instead of `2001:db8::1`
+
+## Conclusion
+The documentation (RFCs) clearly specifies that IPv6 addresses must be enclosed in brackets in URIs and HTTP Host headers. The current Starlette implementation does not handle this standard-compliant format correctly, making it unable to properly validate IPv6 hosts.

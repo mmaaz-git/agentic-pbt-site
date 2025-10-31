@@ -1,0 +1,54 @@
+REPRODUCTION RESULTS FOR scipy.sparse.linalg.spsolve Bug Report
+
+1. BUG CLAIM:
+The bug report claims that spsolve has inconsistent dtype promotion behavior:
+- Dense RHS correctly uses promoted dtype (float64)
+- Sparse RHS incorrectly uses original A.dtype (float32)
+
+2. CODE INSPECTION:
+The bug report correctly identifies that lines 315 and 321 use `A.dtype`:
+- Line 315: `data_segs.append(np.asarray(xj[w], dtype=A.dtype))`
+- Line 321: `x = A.__class__((sparse_data, (sparse_row, sparse_col)), shape=b.shape, dtype=A.dtype)`
+
+3. REPRODUCTION ATTEMPT:
+Running the provided test case:
+```python
+A = sp.csr_array([[1., 2.], [3., 4.]], dtype=np.float32)
+b_dense = np.array([1., 2.], dtype=np.float64)
+b_sparse = sp.csr_array([[1.], [2.]], dtype=np.float64)
+x_dense = spla.spsolve(A, b_dense)
+x_sparse = spla.spsolve(A, b_sparse)
+```
+
+Results:
+- Dense RHS result dtype: float64 ✓
+- Sparse RHS result dtype: float64 ✓
+- Both match the expected promoted dtype
+
+4. CRITICAL FINDING:
+The bug report's analysis is INCORRECT. Here's why:
+
+The bug report missed that before lines 315/321 are reached, the code at lines 235-239 does:
+```python
+result_dtype = np.promote_types(A.dtype, b.dtype)
+if A.dtype != result_dtype:
+    A = A.astype(result_dtype)  # A is converted to result_dtype!
+if b.dtype != result_dtype:
+    b = b.astype(result_dtype)
+```
+
+After this conversion, `A.dtype == result_dtype`, so using `A.dtype` at lines 315/321 is CORRECT and equivalent to using `result_dtype`.
+
+5. ACTUAL BEHAVIOR:
+- Both dense and sparse RHS paths correctly promote dtypes
+- Both return results with dtype float64 when mixing float32 and float64
+- The code is working as intended
+- There is NO inconsistency between dense and sparse RHS handling
+
+6. VERIFICATION WITH MULTIPLE TEST CASES:
+- Float32/Float64 mixing: Works correctly, both paths return float64
+- Complex promotion: Works correctly, both paths return complex128
+- Numerical consistency: Solutions from both paths are numerically identical
+
+7. CONCLUSION:
+The bug report is based on a misunderstanding of the code flow. The reporter failed to notice that A is already converted to the promoted dtype before the sparse RHS construction code is reached. The current implementation is correct and consistent.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+CSSResolver is an internal, undocumented class in pandas that isn't part of the public API. Users shouldn't be directly calling this method, and there's no documented contract about what input formats it should accept. The function could reasonably be limited to common CSS formats without scientific notation support, as scientific notation is extremely rare in actual CSS stylesheets.
+
+**Why it might not be INVALID:**
+The W3C CSS specification explicitly allows scientific notation for numeric values, and pandas uses this for CSS parsing in its table styling features. Even though it's an internal class, it's used to process CSS that could come from user input via the Styler API, and should therefore handle all valid CSS syntax.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Scientific notation in CSS is exceedingly rare in practice. Real-world CSS almost never uses values like "1e-5pt" or "2.5e3px". The edge case is so uncommon that fixing it adds complexity to handle a format that virtually no one will ever use. The current behavior of returning "0pt" with a warning is arguably sufficient for this obscure edge case.
+
+**Why it might not be WONTFIX:**
+The fix is trivial - just updating a regex pattern - and doesn't add significant complexity. The code already attempts to parse numeric values, and scientific notation is a valid numeric format. Silently converting scientific notation to "0pt" could cause unexpected behavior in programmatically generated CSS.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+Since CSSResolver isn't publicly documented, this could be viewed as a documentation issue where the limitations of the CSS parsing should be noted somewhere in the Styler documentation. Users generating CSS programmatically should be warned that certain numeric formats aren't supported.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is genuinely failing to parse valid CSS syntax according to the W3C specification. This isn't a documentation mismatch - it's the implementation not conforming to the standard it's meant to parse. The warning message indicates the input is "unhandled" rather than documenting this as intended behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting scientific notation could be seen as adding a new feature that wasn't originally implemented. The current implementation might have intentionally focused on common CSS patterns, and adding scientific notation support would be an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+Scientific notation isn't a new feature in CSS - it's part of the core CSS syntax specification. The function already attempts to parse CSS numeric values; it just does so incorrectly for this valid format. This is fixing incomplete implementation rather than adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The W3C CSS specification explicitly states that scientific notation is valid for CSS numeric values. The function is meant to parse CSS sizes, but fails on valid CSS syntax, incorrectly returning "0pt" instead of the correct converted value. The regex pattern is demonstrably wrong, splitting scientific notation numbers incorrectly. This is a clear case of the implementation not conforming to the specification it's meant to handle.
+
+**Why it might not be BUG:**
+CSSResolver is an internal, undocumented class that may have intentionally limited scope. There's no public contract stating it must support all valid CSS syntax. The warning system alerts users to unsupported formats, and scientific notation is so rare in CSS that this limitation might be acceptable for pandas' internal use cases.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a valid BUG. The key factors are:
+
+First, the W3C CSS specification unambiguously states that scientific notation is part of valid CSS number syntax. The CSS Syntax Module Level 3 includes explicit parsing rules for scientific notation with 'e' or 'E' followed by an optional sign and digits. When a function claims to parse CSS values, it should handle all valid CSS syntax as defined by the specification, not just common patterns.
+
+Second, the technical analysis clearly shows the regex pattern is incorrect. It splits "1e-5pt" into val='1' and unit='e-5pt', which is objectively wrong parsing. The proposed fix is minimal and correct, properly capturing the full numeric value before extracting the unit. This isn't a matter of interpretation or design choice - the current parsing is mathematically incorrect.
+
+Third, while CSSResolver is internal and undocumented, it's used by pandas' Styler functionality which is public API. Users can provide CSS through the Styler, and that CSS could be programmatically generated with scientific notation. Silently converting valid numeric values to "0pt" could cause data presentation errors. The fact that pandas issues a warning doesn't excuse the incorrect behavior - it shows the code recognizes the input but fails to handle it properly. Since the fix is simple and the current behavior is objectively wrong according to CSS specifications, this should be treated as a BUG rather than dismissed as an edge case.

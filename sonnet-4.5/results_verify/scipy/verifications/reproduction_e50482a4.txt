@@ -1,0 +1,52 @@
+## Bug Reproduction Results
+
+### Test Case Verification
+I successfully reproduced the bug using the provided test case:
+
+```python
+data = [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+score = 1.0
+result = stats.percentileofscore(data, score, kind='rank')
+```
+
+### Results
+- Returned value: 100.00000000000001
+- Value > 100: True
+- Value == 100: False
+- Difference from 100: 1.4210854715202004e-14
+
+### Property-Based Test
+The hypothesis test failed as expected with the provided example, confirming that the function can return values exceeding 100.
+
+### Root Cause Analysis
+The issue occurs due to floating-point arithmetic in the calculation:
+
+For kind='rank':
+- The formula is: `(left + right + plus1) * (50.0 / n)`
+- With the test data: `(10 + 11 + 1) * (50.0 / 11) = 22 * 4.545454545454546`
+- This produces 100.00000000000001 instead of exactly 100
+
+For kind='weak':
+- The formula is: `count(a <= score) * (100.0 / n)`
+- With the test data: `11 * (100.0 / 11)`
+- This also produces 100.00000000000001
+
+### Affected Modes
+Testing all four modes with the same data:
+- kind='rank': 100.00000000000001 (exceeds 100) ✓
+- kind='weak': 100.00000000000001 (exceeds 100) ✓
+- kind='strict': 90.90909090909092 (within bounds)
+- kind='mean': 95.45454545454547 (within bounds)
+
+### Mathematical Verification
+The mathematical calculation should yield exactly 100:
+- For 'rank': (10 + 11 + 1) * (50/11) = 22 * (50/11) = 1100/11 = 100
+- For 'weak': 11 * (100/11) = 1100/11 = 100
+
+However, due to IEEE 754 floating-point representation:
+- 50.0/11 cannot be represented exactly in binary
+- The multiplication accumulates this rounding error
+- Result exceeds 100 by approximately 1.42e-14
+
+### Conclusion
+The bug is confirmed. The function returns values that exceed the documented range [0, 100] due to floating-point arithmetic precision issues. While the excess is extremely small (about 1.42e-14), it technically violates the documented contract that values should be in the range (0-100).

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if the behavior were somehow documented or expected, or if the test methodology were flawed. Perhaps the reporter misunderstood how rolling windows work or made an error in their manual calculations. Maybe there's an undocumented feature where extreme value transitions trigger special handling for numerical stability reasons.
+
+**Why it might not be INVALID:**
+The reproduction clearly shows that rolling().var() returns 0.000244140625 for a window containing [0.0, 0.015625], while the mathematically correct variance with ddof=1 is 0.0001220703125. This is a 2x error that violates the fundamental definition of variance. The documentation provides no justification for this behavior, and variance is a well-defined mathematical concept that should not produce different results based on preceding windows.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The bug only manifests under very specific conditions - a particular sequence of large values transitioning to small values. It doesn't occur with simpler large-to-small transitions or when the same window is calculated in isolation. The edge case is so specific ([0.0, 361328.203125, -862116.111476, 0.0, 0.015625]) that it might be considered too obscure to fix, especially if the fix would require significant refactoring of performance-critical code.
+
+**Why it might not be WONTFIX:**
+While the triggering condition is specific, the bug produces a fundamentally incorrect mathematical result - exactly 2x the correct variance. This is not a minor rounding error but a systematic calculation failure. Financial and scientific applications rely on accurate variance calculations for risk assessment and data analysis. A silent 2x error in variance could lead to serious miscalculations in production systems.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+Perhaps the documentation should warn users about potential numerical instability when rolling windows transition from very large to very small values. Maybe there's an undocumented behavior where the algorithm uses different computation paths based on value magnitudes, and the documentation should clarify this. The documentation could be updated to note that in extreme cases, the rolling calculation may differ from isolated window calculations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The observed behavior is not a reasonable interpretation of variance calculation under any circumstances. Variance has a precise mathematical definition that doesn't allow for 2x errors based on context. No documentation change could justify returning 0.000244140625 when the correct answer is 0.0001220703125. This is a calculation error, not a documentation gap.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that the user is requesting better numerical stability in rolling calculations, particularly for extreme value transitions. Perhaps they want a feature where rolling calculations are guaranteed to match isolated calculations, or an option to use a different algorithm that avoids state contamination between windows. A feature request could be to add validation checks or alternative calculation modes.
+
+**Why it might not be FEATURE_REQUEST:**
+The user is not requesting new functionality but reporting that existing functionality produces mathematically incorrect results. Correct variance calculation is not a feature - it's the core requirement of the var() method. The issue is not about adding capabilities but fixing a fundamental calculation error in existing code.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a bug. The rolling().var() method produces a variance value that is exactly 2x the mathematically correct result. The error is reproducible, specific, and violates the fundamental definition of variance. The context-dependent nature of the error (same window calculates correctly in isolation but incorrectly in sequence) strongly suggests a state management bug in the rolling implementation. The exact 2.0 ratio indicates a systematic error, likely in how the divisor or degrees of freedom are handled during window transitions.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if there were some undocumented numerical stability feature that intentionally modifies calculations for extreme value transitions. However, no such feature is documented, and returning 2x the correct variance cannot be justified as a stability measure. There is no reasonable scenario where this behavior would be intentional.
+
+**Overall consideration**
+
+This is unequivocally a bug in pandas' rolling variance calculation. The evidence is overwhelming: the method returns 0.000244140625 for a window [0.0, 0.015625] when the correct variance is 0.0001220703125. This is not a minor floating-point error or an edge case interpretation - it's exactly 2x the correct value, indicating a systematic calculation error. The fact that the same window calculates correctly in isolation but incorrectly when preceded by specific large values points to a state management issue in the rolling algorithm.
+
+The bug's specificity (only occurring with particular value sequences) suggests the implementation maintains internal state between windows and fails to properly reset or update this state during certain transitions. The exact 2.0 multiplier hints at a possible double-counting error or incorrect degrees of freedom handling. While the triggering condition is specific, the impact is severe - financial and scientific applications depend on accurate variance calculations, and a silent 2x error could cause significant downstream problems.
+
+This cannot be dismissed as WONTFIX despite its specificity, as it produces objectively wrong mathematical results. It's not a DOCUMENTATION_FIX because no documentation could justify this behavior. It's not a FEATURE_REQUEST because correct calculation is the existing method's core purpose. It's not INVALID because the mathematics are unambiguous. This is a legitimate bug that should be fixed to ensure pandas produces mathematically correct results regardless of the input sequence.

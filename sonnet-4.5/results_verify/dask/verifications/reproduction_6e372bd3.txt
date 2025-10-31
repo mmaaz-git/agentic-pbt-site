@@ -1,0 +1,25 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the reported bug regarding dask.dataframe's `from_pandas()` function not preserving string dtypes.
+
+### Hypothesis Test Results
+The property-based test failed as expected, finding that string columns with object dtype are converted to StringDtype(storage=pyarrow). The test detected the issue with both:
+1. Empty DataFrames (showing the general issue)
+2. DataFrames with Unicode issues (showing additional edge cases with surrogate characters)
+
+### Simple Example Reproduction
+The simple example provided in the bug report works exactly as described:
+- Input DataFrame has column 'c' with dtype 'object'
+- After round-trip through `dd.from_pandas(df, npartitions=2).compute()`
+- Result DataFrame has column 'c' with dtype 'string[pyarrow]'
+
+### Root Cause Identified
+Through investigation, I discovered that this behavior is controlled by the `dataframe.convert-string` configuration option in dask:
+- When `None` (default): Converts object dtype strings to pyarrow strings
+- When `True`: Converts object dtype strings to pyarrow strings
+- When `False`: Preserves original object dtype
+
+### Verification
+I confirmed that setting `dask.config.set({'dataframe.convert-string': False})` allows the round-trip to preserve the original object dtype, proving this is intentional behavior rather than a bug.
+
+The behavior is reproducible and consistent with the bug report's description.

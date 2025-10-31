@@ -1,0 +1,35 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug described in the report. The issue occurs in the `source_to_lineno` dictionary creation in `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Debugger/Tests/TestLibCython.py` at line 24.
+
+REPRODUCTION STEPS:
+1. Created and ran test script that demonstrates the issue
+2. Verified the behavior with the actual codefile used by Cython tests
+3. Confirmed the fundamental Python dictionary behavior that causes this issue
+
+FINDINGS:
+
+1. The actual `codefile` contains "pass" on lines 26, 29, and 33
+2. The dictionary comprehension `{line.strip(): i for i, line in enumerate(f, 1)}` creates a mapping from stripped line content to line number
+3. When duplicate lines exist (like "pass"), only the last occurrence is preserved in the dictionary
+4. Testing confirms: `source_to_lineno['pass']` returns 33, losing lines 26 and 29
+
+2. The bug report's example code correctly demonstrates the issue:
+   - Creates sample code with "pass" on lines 2, 5, and 9
+   - Shows that `source_to_lineno['pass']` only maps to line 9
+   - The assertion correctly validates this behavior
+
+3. The property-based test passes because it correctly describes the Python dictionary behavior - duplicate keys map to the last value.
+
+IMPACT:
+This bug affects two methods in test_libcython_in_gdb.py:
+- `lineno_equals()` (line 84): Used to verify the current line number matches a source line
+- `break_and_run()` (line 89): Used to set breakpoints on specific source lines
+
+When these methods are called with a duplicate line like 'pass', they will always use the last occurrence's line number. This makes it impossible to set breakpoints on or verify execution at earlier occurrences of duplicate lines.
+
+EXAMPLE IMPACT:
+- Calling `break_and_run('pass')` will always set a breakpoint on line 33
+- It's impossible to set breakpoints on the 'pass' statements at lines 26 or 29 using this method
+- Tests that rely on specific 'pass' statement locations may behave unexpectedly

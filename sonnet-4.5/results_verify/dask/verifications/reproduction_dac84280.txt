@@ -1,0 +1,59 @@
+BUG REPRODUCTION RESULTS
+
+## Bug Confirmation
+
+The bug report is TECHNICALLY CORRECT. The functions do crash when depth > array_size along the specified axis.
+
+## Test Results
+
+1. **periodic() with depth=6, array_size=5**:
+   - FAILS with ValueError: "Chunks do not add up to shape. Got chunks=((6,), (3, 2)), shape=(5, 5)"
+   - This confirms the exact error mentioned in the bug report
+
+2. **periodic() with depth=5 (equal to array size)**:
+   - WORKS correctly, produces shape (15, 5)
+
+3. **periodic() with depth=3 (less than array size)**:
+   - WORKS correctly, produces shape (11, 5)
+
+4. **reflect() with depth=6, array_size=5**:
+   - FAILS with same ValueError
+   - Confirms the issue affects both functions
+
+5. **NumPy comparison**:
+   - np.pad(array, (6, 6), mode='wrap') WORKS correctly with depth > array_size
+   - Produces expected output array of shape (17,)
+   - This confirms NumPy handles this case without error
+
+## Root Cause Analysis
+
+The error occurs in the `_remove_overlap_boundaries()` function (lines 276-284):
+```python
+def _remove_overlap_boundaries(l, r, axis, depth):
+    lchunks = list(l.chunks)
+    lchunks[axis] = (depth,)  # Forces chunk size to be depth
+    rchunks = list(r.chunks)
+    rchunks[axis] = (depth,)
+
+    l = l.rechunk(tuple(lchunks))  # Fails when l.shape[axis] < depth
+    r = r.rechunk(tuple(rchunks))
+```
+
+When depth=6 but the sliced array has size 5 along that axis, trying to rechunk to size 6 is impossible, causing the error.
+
+## Expected vs Actual Behavior
+
+**Expected** (based on documentation and NumPy behavior):
+- The function should handle depth > array_size gracefully
+- Either by wrapping around multiple times (periodic) or reflecting multiple times
+- Or at minimum, providing a clear user-facing error message
+
+**Actual**:
+- Crashes with an internal implementation error about chunks
+- Error message is confusing and doesn't help users understand the limitation
+
+## Impact Assessment
+
+- The bug affects basic functionality of periodic and reflect boundary conditions
+- Valid use cases exist for depth > array_size (e.g., small arrays with large overlaps)
+- The error message is misleading and exposes internal implementation details

@@ -1,0 +1,46 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report has been successfully reproduced. The issue occurs when resampling a Dask DataFrame/Series with a datetime index from a fine-grained frequency (e.g., hourly) to a coarser frequency (e.g., daily), when the data spans less time than would result in multiple output partitions.
+
+### Reproduction Steps
+
+1. **Hypothesis Test**: The provided property-based test successfully finds failing cases. The test generates Series with datetime indices and various frequencies, then attempts to resample them. It correctly identifies the bug when:
+   - A Series with 10 hourly timestamps
+   - Partitioned into 5 Dask partitions
+   - Resampled to daily frequency
+
+2. **Minimal Reproduction**: The provided minimal example reproduces the bug exactly as described:
+   ```python
+   series = pd.Series([0]*10, index=pd.date_range('2000-01-01', periods=10, freq='h'))
+   ds = dd.from_pandas(series, npartitions=5)
+   result = ds.resample('D').count().compute()
+   ```
+   This raises: `AssertionError` at line 192 of `dask/dataframe/dask_expr/_repartition.py`
+
+### Root Cause Analysis
+
+Through debugging, I identified the exact failure path:
+
+1. The resample operation creates new divisions that reduce the data from 5 partitions to 1 partition
+2. During the lowering phase, a `Repartition` object is created
+3. The `Repartition._lower()` method checks if partitions are being reduced and creates a `RepartitionToFewer` object
+4. Later in the execution, `RepartitionToFewer` is called again, but this time with a ResampleAggregation that already has 1 partition
+5. `RepartitionToFewer` tries to go from 1 partition to 1 partition
+6. The assertion `assert npartitions_input > npartitions` fails because 1 is not greater than 1
+
+### Pattern of Failure
+
+The bug occurs specifically when:
+- Data spans a short time period (e.g., within one day)
+- Original DataFrame has multiple partitions (2 or more)
+- Resampling to a coarser frequency results in fewer time buckets than original partitions
+- The resample operation would result in 1 output partition
+
+Test results show:
+- ✓ Works: 48 hours in 4 partitions → resample to daily (results in 2 output partitions)
+- ✗ Fails: 10 hours in 5 partitions → resample to daily (results in 1 output partition)
+- ✗ Fails: 24 hours in 2 partitions → resample to daily (results in 1 output partition)
+- ✓ Works: 10 hours in 1 partition → resample to daily (already 1 partition, no repartitioning)
+
+The assertion error message and stack trace match exactly what the bug report describes.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This could be considered invalid because floating-point arithmetic inherently has precision limitations, and a difference of 1.42e-14 is within the typical floating-point epsilon range. Many numerical libraries accept such tiny deviations as normal behavior, and users of scientific computing libraries should expect and handle floating-point imprecision. The documentation says "(0-100)" which could be interpreted as approximate bounds rather than strict mathematical bounds.
+
+**Why it might not be INVALID:**
+The documentation explicitly states the return value is "Percentile-position of score (0-100)" without any mention of floating-point tolerances or approximations. The function is part of a statistics library where precise bounds matter for downstream calculations. If a user performs a check like `assert 0 <= result <= 100`, it will fail, which violates the documented contract. The documentation shows an example returning exactly 100, implying exact bounds are achievable.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The deviation is extremely small (1.42e-14) and would never cause practical issues in real-world applications. The cost of fixing this (adding clipping to every calculation) might introduce performance overhead for an essentially theoretical problem. Most users would never notice or care about such a tiny deviation, and those who do can easily add their own clipping. The issue only occurs in edge cases where the score is the maximum value in the array.
+
+**Why it might not be WONTFIX:**
+SciPy is a scientific computing library where correctness and adherence to specifications matter. The fix is trivial (adding np.clip) and would have negligible performance impact. Other statistical functions in SciPy likely handle similar boundary conditions correctly. The bug could cause unexpected failures in automated testing or validation code that checks bounds. It's a clear violation of the documented API contract, regardless of how small the deviation is.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is reasonable given floating-point limitations, and the documentation could be updated to mention that results may exceed 100 by a small epsilon due to floating-point arithmetic. This would set proper expectations without changing existing behavior. The documentation could add a note like "Due to floating-point arithmetic, results may deviate from exact bounds by machine epsilon."
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function's purpose is to return a percentile, which by definition should be bounded to [0, 100]. Changing the documentation to allow values outside this range would be confusing and inconsistent with the mathematical definition of percentiles. Other percentile-related functions in NumPy and SciPy maintain strict bounds, so this would create inconsistency. Users expect percentiles to be within [0, 100], and documenting otherwise would be counterintuitive.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding automatic clipping or an optional `clip` parameter could be seen as a new feature to handle floating-point precision edge cases. This would give users control over whether they want strict bounds enforcement. The current behavior technically works, and adding bounds enforcement could be viewed as an enhancement rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but rather asking for the existing function to comply with its documented behavior. The function already claims to return values in [0, 100], so ensuring this happens isn't a new feature but a correction. Percentiles by definition are bounded to [0, 100], so this is fixing incorrect behavior rather than adding something new.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates its documented API contract by returning values outside the stated range of (0-100). The documentation is clear and unambiguous about the expected range. The fix is straightforward and wouldn't break any reasonable existing code. The mathematical definition of percentiles requires them to be in [0, 100], and violating this is incorrect behavior. SciPy is a scientific library where correctness matters, and even small deviations from specifications should be fixed.
+
+**Why it might not be BUG:**
+The deviation is due to inherent floating-point arithmetic limitations that are well-understood in numerical computing. The difference (1.42e-14) is smaller than machine epsilon and would never cause practical issues. Many numerical libraries have similar floating-point precision artifacts that are considered acceptable. Users of scientific computing libraries should expect and handle such precision issues. The bug only manifests in specific edge cases and doesn't affect the function's practical utility.
+
+## Overall Consideration
+
+This bug report presents a classic tension between mathematical correctness and practical floating-point computing realities. The function returns 100.00000000000001 when it should return exactly 100, exceeding its documented range by approximately 1.42e-14 due to floating-point arithmetic in the formula `(left + right + plus1) * (50.0 / n)`.
+
+From a strict API contract perspective, this is technically a bug - the documentation clearly states the return value should be in the range (0-100), and 100.00000000000001 > 100 evaluates to True in Python. The documentation makes no mention of floating-point tolerances, and even shows an example returning exactly 100.0, suggesting exact bounds are expected. For a scientific computing library like SciPy, where users might use these values in further calculations or validations, maintaining documented bounds is important.
+
+However, from a practical numerical computing perspective, this deviation is negligible and well within expected floating-point precision limits. The error occurs only in edge cases (when the score equals the maximum value in the array), and the proposed fix of adding np.clip() to all calculations seems like overhead for an essentially theoretical problem. Experienced users of numerical libraries understand that floating-point arithmetic has inherent limitations, and a deviation of 1.42e-14 would never cause real-world issues. Most scientific computing code already accounts for floating-point imprecision through techniques like `np.allclose()` rather than exact equality checks.
+
+Given that this is a scientific computing library where both correctness and performance matter, and considering that the fix is simple and wouldn't significantly impact performance, this leans toward being a WONTFIX issue - technically incorrect but practically irrelevant. The deviation is so minuscule that no reasonable use case would be affected, and users who need strict bounds can easily add their own clipping. However, if SciPy maintains high standards for mathematical correctness, it could be considered a valid BUG worth fixing to ensure complete compliance with the documented API.

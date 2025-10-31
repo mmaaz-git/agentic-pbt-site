@@ -1,0 +1,51 @@
+## Bug Report Triage Analysis
+
+### Categorization Considerations
+
+#### 1. BUG - Arguments For:
+- **Functionality is broken**: Using `use_caching=True` with common sender types (strings, integers, None) causes a TypeError
+- **Inconsistent behavior**: The same code works with `use_caching=False` but fails with `use_caching=True`
+- **Runtime surprise**: The error occurs at send() time, not at connect() time, making it harder to detect
+- **Common use case affected**: String senders are widely used in Django applications
+- **Clear violation of expectations**: Users would reasonably expect all sender types that work without caching to also work with caching
+
+#### 2. INVALID - Arguments For:
+- **Undocumented feature**: The `use_caching` parameter is not documented in Django's public API documentation
+- **Internal implementation detail**: Could be argued that this is an internal optimization not meant for public use
+- **WeakKeyDictionary behavior is correct**: The WeakKeyDictionary is behaving as designed by Python
+
+#### 3. WONTFIX - Arguments For:
+- **Obscure feature**: Since it's undocumented, very few users would encounter this
+- **Workaround exists**: Users can simply use `use_caching=False` (the default)
+- **Performance optimization**: The caching feature might be intentionally limited to certain use cases
+
+#### 4. DOCUMENTATION_FIX - Arguments For:
+- **Missing documentation**: The parameter exists in the constructor but is completely undocumented
+- **Behavior should be documented**: If the limitation is intentional, it should be documented
+- **API ambiguity**: The parameter is exposed in the public constructor, making it quasi-public
+
+#### 5. FEATURE_REQUEST - Arguments For:
+- **Enhancement needed**: Supporting all sender types with caching could be seen as a new feature
+- **Not originally designed for this**: The use of WeakKeyDictionary suggests it was designed only for garbage-collectable objects
+
+### Analysis Summary
+
+The core issue is that `use_caching=True` creates a WeakKeyDictionary that cannot handle non-weakly-referenceable types like strings. This is a real limitation that causes crashes with common Django usage patterns.
+
+Key factors:
+1. The parameter is in the public constructor signature (even if undocumented)
+2. The failure mode is unintuitive (works at connect time, fails at send time)
+3. Common Django patterns use string senders
+4. The fix is straightforward (use regular dict instead of WeakKeyDictionary)
+
+### Recommendation
+
+This should be categorized as **BUG** because:
+
+1. **Public API**: Despite being undocumented, the parameter is exposed in the public constructor, making it part of the de facto public API
+2. **Reasonable expectations violated**: Users reasonably expect that all sender types that work in non-caching mode should work in caching mode
+3. **Silent failure pattern**: The code appears to work (connect succeeds) but fails later (send fails), which is a dangerous pattern
+4. **Common use case**: String senders are extremely common in Django applications
+5. **Easy fix available**: The proposed fix (using a regular dict) would resolve the issue without breaking existing functionality
+
+The fact that it's undocumented doesn't make it INVALID because the parameter is publicly exposed and discoverable through IDE autocomplete, help(), and source inspection. It's not a DOCUMENTATION_FIX because the code itself is broken for a reasonable use case. It's not WONTFIX because it affects a common pattern and has an easy fix.

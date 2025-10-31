@@ -1,0 +1,26 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug as described in the report.
+
+### Test Results:
+
+1. **Basic reproduction case**: When creating an ArrowExtensionArray from `pa.array([None])` without an explicit type:
+   - The array is created with PyArrow's `null` type
+   - Calling `fillna(value=999)` on this array raises `ArrowInvalid: Invalid null value`
+   - This matches the error described in the bug report
+
+2. **Working case with explicit type**: When creating with `pa.array([None], type=pa.int64())`:
+   - The array is created with `int64` type
+   - Calling `fillna(value=999)` succeeds and returns an array with [999]
+   - This confirms the contrast case works as described
+
+3. **Property test validation**:
+   - The test fails for `values=[None]` with the same ArrowInvalid error
+   - The test fails for `values=[None, None]` with the same error
+   - The test passes for `values=[1, None, 2]` and `values=[1, 2, 3]`
+   - This confirms the issue only occurs when ALL values are None (resulting in null type)
+
+### Key Finding:
+The bug occurs specifically when PyArrow infers the type as `null` (which happens when an array contains only None values without an explicit type). The fillna method then attempts to create a scalar with the null type and a non-null value, which PyArrow correctly rejects as invalid since the null type can only hold null values.
+
+The error message "Invalid null value" is indeed unhelpful as it doesn't explain the real issue - that the array has a null type that cannot hold non-null values.

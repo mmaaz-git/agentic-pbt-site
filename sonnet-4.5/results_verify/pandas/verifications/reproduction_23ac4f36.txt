@@ -1,0 +1,51 @@
+BUG REPRODUCTION RESULTS
+
+Test Environment:
+- pandas version: (tested with current version)
+- Python: python3
+
+1. Basic Reproduction - CONFIRMED:
+   Input: pd.Series([31536001.0])
+   Original dtype: float64
+   After round-trip dtype: datetime64[ns]
+   Original value: 31536001.0
+   After round-trip value: 1971-01-01 00:00:01
+
+   VERDICT: Bug report is technically correct - the dtype and value change
+
+2. Threshold Testing - CONFIRMED:
+   - Value 31535999.0: float64 -> int64 (no date conversion)
+   - Value 31536000.0: float64 -> int64 (no date conversion, exactly at threshold)
+   - Value 31536001.0: float64 -> datetime64[ns] (converts to date)
+   - Value 31536000.5: float64 -> datetime64[ns] (converts to date)
+
+   VERDICT: There is indeed a threshold at 31536000 (seconds in a year)
+
+3. Additional Test Cases - CONFIRMED:
+   - Value 1000000000.5 becomes 2001-09-09 01:46:40.500000
+   - Value 86400000.0 becomes 1972-09-27 00:00:00
+
+   VERDICT: Large numeric values are being interpreted as timestamps
+
+4. Workaround Testing - CONFIRMED:
+   Using convert_dates=False prevents the conversion:
+   - Original: 31536001.0 (float64)
+   - After round-trip with convert_dates=False: 31536001 (int64)
+
+   Note: dtype still changes from float64 to int64, but at least doesn't become datetime
+
+5. Hypothesis Test - FAILED AS EXPECTED:
+   The property-based test fails with the assertion error about dtype change.
+   This confirms the round-trip property is violated.
+
+TECHNICAL ANALYSIS:
+- The value 31536000 represents exactly 365 days in seconds (365 * 24 * 60 * 60)
+- pandas appears to interpret any numeric value > 31536000 as a Unix timestamp
+- This is happening in the automatic date conversion logic when convert_dates=True (default)
+
+KEY OBSERVATION:
+The bug report is technically accurate. pandas is indeed automatically converting numeric values to dates based on magnitude, which:
+1. Changes the dtype from float64 to datetime64[ns]
+2. Changes the interpretation of the value
+3. Violates round-trip serialization expectations
+4. Is NOT documented in the official documentation

@@ -1,0 +1,67 @@
+## Bug Report Triage Analysis
+
+### Considerations for Each Category
+
+#### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function violates its documented contract: "Shorten an SQL identifier to a repeatable mangled version with the given length"
+- When length=1 is requested, returning a 4-character string clearly exceeds the limit
+- This could cause real issues in production when interfacing with databases that have strict identifier length limits
+- The function is inconsistent: truncate_name('a', 1) returns 'a' (1 char), but truncate_name('ab', 1) returns '187e' (4 chars)
+- The idempotence issue is concerning: truncate_name(truncate_name('00', 1), 1) produces different results
+- The behavior is counterintuitive and violates the principle of least surprise
+
+**Arguments AGAINST:**
+- This might be considered an edge case since typical database identifier limits are 30+ characters
+- The function might have been designed with the assumption that length >= hash_len
+
+#### INVALID
+**Arguments FOR:**
+- One could argue that requesting a 1-character identifier for a database object is unrealistic
+- The function might implicitly require length >= hash_len for proper operation
+
+**Arguments AGAINST:**
+- The documentation clearly states "with the given length" without any caveats
+- The function accepts length=1 without raising an error, implying it should handle it correctly
+- Other similar Django functions handle edge cases properly
+
+#### WONTFIX
+**Arguments FOR:**
+- This is an extreme edge case (length < 4) that would never occur in real database usage
+- Database identifier limits are typically 30+ characters minimum
+- The fix might break existing code that relies on the current behavior
+
+**Arguments AGAINST:**
+- The bug violates the documented contract
+- It's a simple fix that would make the function more robust
+- Edge cases should still be handled correctly in well-designed software
+
+#### DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation could be updated to specify that length must be >= hash_len
+- Could document that the function guarantees uniqueness over length compliance for small values
+
+**Arguments AGAINST:**
+- The documentation is clear about the expected behavior
+- Changing documentation to match buggy behavior is backwards
+- The issue is in the implementation, not the documentation
+
+#### FEATURE_REQUEST
+**Arguments FOR:**
+- Supporting length < hash_len could be seen as a new feature
+- The function was perhaps never intended to handle such small lengths
+
+**Arguments AGAINST:**
+- This is not a new feature - it's fixing existing functionality to match its specification
+- The function already accepts these inputs; it just handles them incorrectly
+
+### Final Analysis
+
+This is clearly a **BUG**. The function has a documented contract that it violates. When a function says it will produce output "with the given length," that creates a clear expectation that the output will not exceed that length. The current behavior:
+
+1. Violates the documented contract
+2. Produces inconsistent results (different behavior for 'a' vs 'ab' with length=1)
+3. Breaks idempotence for small lengths
+4. Could cause real issues when interfacing with systems that have strict length requirements
+
+While this may be an edge case, proper software engineering requires handling edge cases correctly, especially in a widely-used framework like Django. The fix proposed in the bug report is reasonable and would make the function behave according to its documentation.

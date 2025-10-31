@@ -1,0 +1,44 @@
+Documentation Analysis Report
+============================
+
+## Dask Documentation
+
+From the official Dask documentation on custom collections (https://docs.dask.org/en/latest/custom-collections.html):
+
+1. **Purpose of __dask_tokenize__**: The method should generate a deterministic hash that "fully represents" an object.
+
+2. **Key Requirements**:
+   - Must be idempotent: `tokenize(x) == tokenize(x)` must always be true
+   - Must be deterministic: the same object always produces the same token
+   - Should produce unique tokens for different objects to avoid cache collisions
+
+3. **Quote from documentation**: "token is idempotent" and "token is deterministic"
+
+The documentation clearly states that tokenization must be consistent - the same object must always produce the same token. This is essential for Dask's caching and memoization mechanisms to work correctly.
+
+## Python Documentation
+
+From Python's documentation on __hash__:
+
+1. Objects which compare equal must have the same hash value
+2. The hash value of an object must never change during its lifetime
+3. If a class defines mutable objects and implements __eq__, it should not implement __hash__
+
+## CombineKwargDefault Class
+
+The class has no specific documentation about its tokenization behavior, but examining the code:
+
+1. The class is used for handling deprecation cycles for kwarg default values
+2. It has three immutable attributes set at initialization: `_name`, `_old`, `_new`
+3. It has a mutable `_value` property that changes based on global OPTIONS
+4. Both `__hash__` and `__dask_tokenize__` use the mutable `_value`
+
+## Analysis
+
+The current implementation violates documented requirements in two ways:
+
+1. **Dask requirement violation**: The __dask_tokenize__ method returns different tokens for the same object instance when OPTIONS change. This directly violates Dask's requirement that tokens must be idempotent and deterministic.
+
+2. **Python requirement violation**: The __hash__ method returns different values during the object's lifetime, violating Python's fundamental requirement that hash values must not change.
+
+The bug report correctly identifies that using immutable attributes (`_name`, `_old`, `_new`) instead of the mutable `_value` would fix both issues and comply with documented requirements.

@@ -1,0 +1,36 @@
+## Bug Reproduction Summary
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Test Results
+
+1. **Low-level reproduction**: When calling `chars_to_ranges('00')`:
+   - Input: '00' (a string with duplicate '0' characters)
+   - Expected output: ranges covering only character '0' (ASCII code 48)
+   - Actual output: [48, 50] which covers both '0' (48) and '1' (49)
+   - The function incorrectly includes character '1' in the range
+
+2. **High-level impact**: The bug affects the public `Any()` function:
+   - `Any('00')` should match only the character '0'
+   - In practice, it matches both '0' and '1'
+   - Confirmed by creating a Scanner with `Any('00')` which incorrectly matched the string '1'
+
+### Root Cause
+
+The bug is in line 43 of the `chars_to_ranges` function:
+```python
+while i < n and code2 >= ord(char_list[i]):
+```
+
+When processing duplicate characters (e.g., '00'):
+1. After sorting, char_list = ['0', '0']
+2. For the first '0': code1 = 48, code2 = 49
+3. The condition `code2 >= ord(char_list[i])` evaluates to `49 >= 48` (True)
+4. This causes code2 to increment to 50 and i to skip the duplicate
+5. Result: range [48, 50) includes both '0' and '1'
+
+The fix suggested in the report (changing `>=` to `>`) is correct and would properly handle duplicates.
+
+### Impact
+
+This is a real bug that causes incorrect behavior in character matching. Any code using `Any()` or `AnyBut()` with duplicate characters will match unintended characters, potentially causing security issues or unexpected parsing behavior in lexical analyzers built with Cython.Plex.

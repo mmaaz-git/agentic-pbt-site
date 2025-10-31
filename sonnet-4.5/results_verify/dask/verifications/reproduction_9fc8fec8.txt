@@ -1,0 +1,42 @@
+BUG REPRODUCTION REPORT
+======================
+
+I have successfully reproduced the bug described in the report.
+
+## Reproduction Steps:
+
+1. **Verified the test code from the bug report**: The provided code accurately demonstrates the issue. When calling `_adjust_split_out_for_group_keys(100, [])`, the function returns -10 instead of a positive value.
+
+2. **Confirmed the actual function in dask**: Using dask version 2025.9.1, I located and tested the actual function at `dask.dataframe.dask_expr._groupby._adjust_split_out_for_group_keys`. The source code matches exactly what was shown in the bug report:
+   ```python
+   def _adjust_split_out_for_group_keys(npartitions, by):
+       if len(by) == 1:
+           return math.ceil(npartitions / 15)
+       return math.ceil(npartitions / (10 / (len(by) - 1)))
+   ```
+
+3. **Verified the bug with multiple test cases**:
+   - `npartitions=100, by=[]`: Returns -10 (NEGATIVE)
+   - `npartitions=1, by=[]`: Returns 0 (ZERO)
+   - `npartitions=1000, by=[]`: Returns -100 (NEGATIVE)
+   - `npartitions=100, by=['a']`: Returns 7 (correct)
+   - `npartitions=100, by=['a', 'b']`: Returns 10 (correct)
+
+## Mathematical Analysis:
+When `by = []`, the calculation becomes:
+- `len(by) - 1` = `0 - 1` = `-1`
+- `10 / (len(by) - 1)` = `10 / -1` = `-10`
+- `math.ceil(npartitions / -10)` = `math.ceil(-10)` for npartitions=100, which equals `-10`
+
+## Impact:
+The function is used internally in dask's groupby operations to determine the number of output partitions for split operations. The function is called from at least two places:
+1. `GroupByApplyConcatApply._tune_down` method (line 239)
+2. `GroupByReduction._tune_down` method (line 691)
+
+Both calls use `functools.partial(_adjust_split_out_for_group_keys, by=self.by)` to create a function that will be called with npartitions.
+
+## Expected vs Actual Behavior:
+- **Expected**: Function should either validate input and raise an appropriate error for empty `by` list, or return a sensible positive default value
+- **Actual**: Function returns negative values which violate the semantic expectation that partition counts should be positive
+
+The bug is real and accurately reported.

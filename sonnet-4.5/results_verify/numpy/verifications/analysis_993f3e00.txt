@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report incorrectly identifies the problem as being in numpy.char.upper/lower/etc operations, when the actual behavior is a documented feature of numpy.str_ type itself. The numpy.str_ documentation explicitly states "Strips trailing null codepoints" and shows an example where np.str_("abc\x00") becomes 'abc'. The char operations are working correctly on the strings as stored in the numpy array. The bug reporter's assertion that "numpy.char.upper silently strips null characters" is factually incorrect - it's the numpy string type that strips them during array creation, not the char operations.
+
+**Why it might not be INVALID:**
+The numpy.char documentation does claim these functions "Call str.upper element-wise" which could be interpreted to mean they should behave identically to Python's str methods. A user might reasonably expect that if Python's str.upper() preserves null characters, then numpy's "element-wise" version should too. The issue affects data integrity for users working with binary protocols or special string formats.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+While technically the null stripping happens at the numpy.str_ level (not in char operations), this is such a fundamental aspect of how numpy handles strings that changing it would likely break massive amounts of existing code. The behavior of stripping trailing nulls is explicitly documented for numpy.str_ and has been this way for years. The use case of preserving null characters in Unicode string arrays is extremely niche and users needing this can use object arrays or byte arrays instead.
+
+**Why it might not be WONTFIX:**
+The issue does cause real data corruption for valid use cases. Binary protocols, special string encodings, and certain data formats legitimately use null characters. Simply dismissing this as "won't fix" ignores that numpy.char operations claim to provide element-wise string operations but don't actually match Python's behavior due to the underlying type limitations.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The numpy.char function documentation claims to "Call str.upper element-wise" without mentioning the important caveat that numpy.str_ arrays cannot properly represent strings with leading or trailing null characters. This is a significant behavioral difference from Python's str type that users should be warned about. Adding a note to the char operation documentation explaining this limitation would help users understand why their null characters disappear.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior is already documented in the numpy.str_ documentation, which explicitly states it strips trailing null codepoints. The char operations are technically doing exactly what they claim - calling the string methods on the values as stored in the array. The documentation isn't wrong, it's just that users need to understand the numpy.str_ type characteristics.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for numpy.char operations to preserve null characters like Python's str methods do. This would require either changing the fundamental numpy.str_ type behavior or creating new variants of these functions that work with a different string representation. This is asking for new functionality that doesn't currently exist - proper null character preservation in Unicode string arrays.
+
+**Why it might not be FEATURE_REQUEST:**
+The bug report frames this as a bug ("silently strips null characters, causing data corruption") rather than requesting new functionality. They're not asking for a new feature but claiming the existing feature is broken and violates its documented behavior of calling str methods element-wise.
+
+## BUG Considerations
+**Why it might be BUG:**
+If we interpret "Calls str.upper element-wise" strictly, then numpy.char.upper should produce the same results as Python's str.upper for each element. The fact that null characters disappear could be seen as violating this contract. Users have a reasonable expectation that string operations preserve all characters, and silent data loss is generally considered a bug.
+
+**Why it might not be BUG:**
+The behavior is not a bug but a documented characteristic of numpy.str_ type. The numpy.str_ documentation explicitly shows that it strips trailing null codepoints with a clear example. The char operations are working correctly on the strings as they exist in the array. The bug report misidentifies where the null stripping occurs (claims it's in char.upper when it's actually in array creation) and fails to recognize this is documented behavior.
+
+## Overall consideration
+The bug report fundamentally misdiagnoses the issue. It claims that numpy.char.upper and related functions strip null characters, but testing clearly shows the null characters are stripped when creating the numpy array with dtype='U', not during the char operations. This is explicitly documented behavior of numpy.str_ type, which states "Strips trailing null codepoints" with an example showing np.str_("abc\x00") becomes 'abc'.
+
+The reproduction shows that embedded nulls ('abc\x00def') are actually preserved and handled correctly by char.upper, producing 'ABC\x00DEF' as expected. Only leading and trailing nulls are stripped, and this happens at array creation time, not during the char operation. The hypothesis test in the bug report actually fails because of the array creation, not because of char.upper.
+
+While this behavior might be surprising to users and could cause issues for certain use cases, it is working as designed and documented. The most that could be argued is that the numpy.char documentation should cross-reference the numpy.str_ limitation, but even that is questionable since the behavior is already documented where it belongs - in the string type documentation. This should be closed as INVALID because the bug report incorrectly identifies both the location and nature of the issue.

@@ -1,0 +1,42 @@
+## Reproduction Report
+
+I have successfully reproduced the bug reported about pandas.io.json round-trip string index conversion.
+
+### Hypothesis Test Results
+The hypothesis test failed as expected, confirming the bug. The test generates DataFrames with string indices/columns and attempts to round-trip them through JSON. The test fails on the minimal case of a 1x1 DataFrame with orient='index', where the string index '0' is converted to integer 0.
+
+Error from hypothesis test:
+- Original index inferred type: string
+- Roundtrip index inferred type: integer
+- Falsifying example: orient='index', num_rows=1, num_cols=1
+
+### Simple Reproduction Results
+
+1. **String indices that look like numbers (orient='index')**:
+   - Original: index=['0'], dtype=object (string)
+   - After round-trip: index=[0], dtype=int64
+   - Result: DataFrames are NOT equal
+
+2. **String columns that look like numbers (orient='columns')**:
+   - Original: columns=['0', '1', '2'], dtype=object (string)
+   - After round-trip: columns=[0, 1, 2], dtype=int64
+   - Result: DataFrames are NOT equal
+
+3. **Mixed indices (numeric-looking and non-numeric strings)**:
+   - Original: index=['0', 'a', '2'], dtype=object
+   - After round-trip: index=['0', 'a', '2'], dtype=object
+   - Result: DataFrames ARE equal (no conversion happens when mixed)
+
+4. **Workaround with convert_axes=False**:
+   - Original: index=['0'], dtype=object
+   - After round-trip with convert_axes=False: index=['0'], dtype=object
+   - Result: DataFrames ARE equal (workaround successful)
+
+### Effect of the Bug
+The bug causes silent type conversion of string indices/columns that happen to look like numbers during JSON round-tripping. This:
+1. Breaks data integrity when string labels like '0', '1', '2' are intentionally strings
+2. Occurs silently without warning (except for mixed indices which generate FutureWarnings)
+3. Affects both row indices (orient='index') and column names (orient='columns')
+4. Can be worked around by explicitly setting convert_axes=False in read_json()
+
+The behavior is particularly problematic because it only occurs when ALL labels are numeric-looking strings - mixed labels preserve string type, creating inconsistent behavior.

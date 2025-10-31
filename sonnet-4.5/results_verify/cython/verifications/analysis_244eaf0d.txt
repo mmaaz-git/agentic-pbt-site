@@ -1,0 +1,47 @@
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The functions are internal implementation details (_build_path_iterator has a leading underscore, parse_path_value is not documented as public API). There is no documentation specifying that these functions must raise ValueError for invalid inputs. The behavior could be considered unspecified, and the current exception types might be acceptable for internal functions that aren't meant to be called directly by users.
+
+**Why it might not be INVALID:**
+The functions do raise ValueError in some cases (line 281 in _build_path_iterator, line 188 in parse_path_value), establishing a pattern that ValueError is the intended exception for invalid inputs. The inconsistent exception types are clearly a mistake rather than intentional design. The assert issue in parse_path_value is objectively wrong - it allows invalid input through when Python runs with -O.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+These are internal functions not meant for public use. The TreePath module's public API consists of iterfind(), find_first(), and find_all(), which might handle these exceptions properly. The impact is low since end users shouldn't be calling these functions directly. The assert issue only manifests when running with python -O, which is uncommon in practice.
+
+**Why it might not be WONTFIX:**
+The assert bug creates a security vulnerability where invalid input is accepted when assertions are disabled. Even internal functions should have consistent error handling for maintainability. Other Cython developers might use these functions internally and expect consistent behavior. The fix is trivial and improves code quality.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+There's no documentation stating these functions should raise ValueError consistently. Adding documentation to clarify that various exception types are expected for internal functions would resolve the ambiguity. The functions work as implemented, just not as the bug reporter expects.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code already shows intent to raise ValueError (lines 281, 188), so the other exception types are bugs, not intended behavior. The assert issue is clearly a bug, not a documentation problem - using assertions for input validation is universally considered wrong in Python. Documenting broken behavior doesn't fix the underlying issues.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Adding consistent error handling to internal functions could be seen as an enhancement rather than a bug fix. The request to make error handling more uniform across the module is essentially asking for improved functionality. Better error messages would help developers who accidentally misuse these internal functions.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but fixing existing broken behavior. The assert bug is objectively wrong and causes security issues. Consistent exception types are a basic requirement for any function, not an enhancement. The code already tries to raise ValueError in some cases, showing this was the original intent.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The assert statements in parse_path_value are objectively wrong - they create a security vulnerability where invalid input is accepted when Python runs with -O. Using assertions for input validation violates Python best practices and is universally considered a bug. The inconsistent exception types in _build_path_iterator make error handling unpredictable and indicate incomplete error handling implementation. The code shows clear intent to raise ValueError (lines 281, 188) but fails to do so consistently.
+
+**Why it might not be BUG:**
+These are internal functions where the exact exception type might not matter. The module works correctly through its public API. The documentation doesn't promise specific exception types. The impact is minimal since these functions aren't meant for direct use.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug report, particularly due to the assert issue in parse_path_value. Using assert statements for input validation is a well-known anti-pattern in Python because assertions are disabled when running with python -O (optimize mode). This creates a security vulnerability where invalid input with mismatched quotes is silently accepted instead of raising an error. This is objectively wrong regardless of whether the function is internal or public.
+
+The _build_path_iterator issues are less severe but still represent bugs. The function already raises ValueError for some invalid inputs (line 281), establishing that ValueError is the intended exception type. The fact that it raises StopIteration for empty paths and KeyError for unknown operators appears to be oversight rather than design. These expose implementation details (StopIteration from the tokenizer, KeyError from dictionary lookup) rather than providing meaningful error handling.
+
+While these functions appear to be internal (indicated by the underscore prefix and lack of documentation), this doesn't excuse poor error handling. Internal functions are still used by other parts of Cython and should maintain consistent, predictable behavior. The fixes suggested in the bug report are reasonable and would improve code quality without breaking compatibility. The assert issue in particular must be fixed as it represents a clear violation of Python best practices that could lead to security vulnerabilities in production systems running with optimizations enabled.

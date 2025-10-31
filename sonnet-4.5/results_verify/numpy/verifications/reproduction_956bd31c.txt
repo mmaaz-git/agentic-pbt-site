@@ -1,0 +1,38 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug described in the report. The issue is that NumPy arrays with Unicode string dtype silently truncate trailing null characters (\x00).
+
+TEST RESULTS:
+-------------
+
+1. Single null character '\x00':
+   - Input: '\x00'
+   - Stored in array: '' (empty string)
+   - Result: FAILS - null character is completely removed
+
+2. String with trailing null 'hello\x00':
+   - Input: 'hello\x00'
+   - Stored in array: 'hello'
+   - Result: FAILS - trailing null is removed
+
+3. String with null in middle 'hello\x00world':
+   - Input: 'hello\x00world'
+   - Stored in array: 'hello\x00world'
+   - Result: PASSES - null in middle is preserved
+
+4. Multiple trailing nulls 'test\x00\x00':
+   - Input: 'test\x00\x00'
+   - Stored in array: 'test'
+   - Result: FAILS - all trailing nulls are removed
+
+5. Leading null '\x00b':
+   - Input: '\x00b'
+   - Stored in array: '\x00b'
+   - Result: PASSES - leading null is preserved
+
+The bug affects the numpy.strings.replace function as reported because it operates on the already-truncated strings stored in the array. When the input array contains ['\x00'], it's actually stored as [''], so the replace function receives an empty string rather than a null character.
+
+IMPACT:
+-------
+The bug causes silent data corruption for any strings containing trailing null characters. This breaks the round-trip property where storing and retrieving a string should return the same value. The behavior is inconsistent - nulls in the middle or beginning of strings are preserved, but trailing nulls are silently removed.

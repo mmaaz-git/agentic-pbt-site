@@ -1,0 +1,51 @@
+import numpy as np
+import numpy.strings as nps
+
+print("Test 1: Slicing with trailing null")
+arr = np.array(['00\x000'], dtype=str)
+result = nps.slice(arr, 1, 3)
+
+print(f"Input string: {repr(arr[0])}")
+print(f"Slice [1:3]")
+print(f"Expected (Python slice): {repr('00\x000'[1:3])}")
+print(f"Got (numpy.strings.slice): {repr(result[0])}")
+print(f"Match: {result[0] == '00\x000'[1:3]}")
+print()
+
+print("Test 2: Another example with trailing null")
+arr2 = np.array(['abc\x00'], dtype=str)
+result2 = nps.slice(arr2, 0, 4)
+
+print(f"Input string: {repr(arr2[0])}")
+print(f"Slice [0:4]")
+print(f"Expected (Python slice): {repr('abc\x00'[0:4])}")
+print(f"Got (numpy.strings.slice): {repr(result2[0])}")
+print(f"Match: {result2[0] == 'abc\x00'[0:4]}")
+print()
+
+print("Test 3: Check if other numpy.strings functions preserve null characters")
+test_str = np.array(['abc\x00def'], dtype=str)
+print(f"Original: {repr(test_str[0])}")
+print(f"upper(): {repr(nps.upper(test_str)[0])}")
+print(f"lower(): {repr(nps.lower(test_str)[0])}")
+print(f"replace('a', 'x'): {repr(nps.replace(test_str, 'a', 'x')[0])}")
+print()
+
+print("Test 4: Embedded vs trailing nulls")
+arr3 = np.array(['a\x00b'], dtype=str)
+result3 = nps.slice(arr3, 0, 3)
+print(f"Input with embedded null: {repr(arr3[0])}")
+print(f"Slice [0:3]")
+print(f"Expected: {repr('a\x00b'[0:3])}")
+print(f"Got: {repr(result3[0])}")
+print(f"Match: {result3[0] == 'a\x00b'[0:3]}")
+print()
+
+print("Test 5: Step slicing with nulls")
+arr4 = np.array(['a\x00b\x00c'], dtype=str)
+result4 = nps.slice(arr4, None, None, 2)
+print(f"Input: {repr(arr4[0])}")
+print(f"Slice [::2]")
+print(f"Expected: {repr('a\x00b\x00c'[::2])}")
+print(f"Got: {repr(result4[0])}")
+print(f"Match: {result4[0] == 'a\x00b\x00c'[::2]}")

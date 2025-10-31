@@ -1,0 +1,46 @@
+Bug Reproduction Analysis
+=========================
+
+I successfully reproduced the reported bug. Here are the key findings:
+
+**Test Setup:**
+- df1: 2x2 DataFrame with values [2, 2] in column 'x'
+- df2: 3x2 DataFrame with values [4611686018427387904, 4611686018427387904, 4611686018427387904] in column 'x'
+- The multiplication 2 * 4611686018427387904 = 9223372036854775808, which exceeds int64 max (9223372036854775807)
+
+**Observed Behavior:**
+
+1. **Pandas Result:**
+   - x[0]: 9.223372036854776e+18 (positive)
+   - x[1]: 9.223372036854776e+18 (positive)
+   - x[2]: NaN (due to index mismatch)
+   - dtype: float64
+
+2. **Dask Result (2 partitions):**
+   - x[0]: -9.223372036854776e+18 (NEGATIVE - wrong sign!)
+   - x[1]: 9.223372036854776e+18 (positive - correct)
+   - x[2]: NaN (due to index mismatch)
+   - dtype: float64
+
+**Key Observations:**
+
+1. **The bug is real**: Dask produces -9.223372036854776e+18 for x[0] while pandas produces 9.223372036854776e+18
+
+2. **Inconsistent behavior within Dask**: x[0] has the wrong sign (negative) but x[1] has the correct sign (positive), even though both should be the same calculation
+
+3. **Integer overflow handling**:
+   - NumPy int64 multiplication with overflow: -9223372036854775808 (wraps around to negative)
+   - Pandas automatically promotes to float64 and preserves the correct positive value
+   - Dask appears to be inconsistently applying overflow handling between partitions
+
+4. **Partitioning matters**: When DataFrames are pre-aligned (same index), Dask produces the correct result matching pandas exactly
+
+5. **Root cause**: The issue occurs specifically when:
+   - DataFrames have mismatched indices requiring alignment
+   - Integer multiplication causes overflow
+   - Data is split across multiple partitions
+   - The first partition gets the wrong (negative) result while other partitions are correct
+
+**Verification**: The hypothesis test also fails, confirming this is not an isolated issue but a systematic problem with how Dask handles arithmetic operations with overflow and index alignment across partitions.
+
+The bug report accurately describes a real discrepancy between Dask and pandas behavior.

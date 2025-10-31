@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The pydantic v1 documentation never explicitly promises that Decimal values will maintain perfect precision when serialized to JSON. The library is working as designed - the source code clearly shows an intentional decision to convert Decimals to floats for JSON serialization. JSON itself only supports number types (which are typically represented as IEEE 754 doubles), not arbitrary precision decimals. The user's expectation of perfect round-tripping through JSON is an assumption not backed by any documented guarantee.
+
+**Why it might not be INVALID:**
+Decimal types are specifically used in programming for situations requiring exact precision (financial calculations, scientific computing). When a library accepts Decimal fields, there's a reasonable expectation that precision should be preserved. The fact that dict()/parse_obj() preserves precision shows pydantic can handle Decimals properly in Python, making the JSON behavior inconsistent.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior has existed in pydantic v1 for its entire lifecycle and changing it would be a breaking change. Pydantic v1 is in maintenance mode with v2 being the active version. The precision loss only affects very large numbers (>15 significant digits) which may be considered edge cases. The workaround of using dict()/parse_obj() or custom encoders exists for users who need exact precision.
+
+**Why it might not be WONTFIX:**
+Silent data corruption is a serious issue, especially for financial or scientific applications where precision matters. The loss of 0.01 in the example could represent real money or important measurements. The issue affects any Decimal with more precision than a float can handle, which is not that uncommon in real applications.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how Decimals are serialized to JSON or warn about potential precision loss. Users working with Decimals have a reasonable expectation of precision preservation. Adding a warning to the documentation about this limitation would help users make informed decisions about whether to use JSON serialization with Decimal fields.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is working exactly as implemented - the source explicitly converts to float. This isn't a case where the documentation is wrong; it's simply not comprehensive about implementation details. The behavior could be considered obvious given JSON's limitations.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current behavior is intentional and documented in the source code. Adding support for preserving Decimal precision in JSON (by serializing as strings) would be a new feature rather than fixing a bug. This would require new configuration options to maintain backward compatibility while allowing users to opt into string serialization for Decimals.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality but rather expecting existing functionality (Decimal field support) to work correctly. Round-trip serialization is a fundamental operation, not an additional feature. The issue is about data integrity, not enhancement.
+
+## BUG Considerations
+**Why it might be BUG:**
+The library silently corrupts data during what should be a lossless round-trip operation. There's no warning about precision loss, and the corruption happens silently. The inconsistency between dict() (which preserves precision) and json() (which doesn't) suggests unintended behavior. The decimal_encoder docstring even acknowledges round-tripping issues, suggesting awareness of the problem.
+
+**Why it might not be BUG:**
+The code is working exactly as written and intended. The decimal_encoder function explicitly converts to float, and this is by design. JSON's inherent limitations with number precision are well-known in the industry. No documentation promises precision preservation for JSON serialization.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a case where the implementation is working as designed, but the design itself has an unfortunate consequence that users may not expect. The pydantic v1 source code explicitly converts Decimals to floats for JSON serialization, which inherently loses precision for values that cannot be exactly represented in IEEE 754 double precision format.
+
+The key factors are: (1) The documentation never promises precision preservation for Decimal JSON serialization, (2) JSON as a format has inherent limitations with number precision, (3) The source code shows this is intentional behavior, not an accident, (4) Pydantic v1 is in maintenance mode, making breaking changes unlikely.
+
+While the precision loss is unfortunate and could cause real problems in production systems, this is fundamentally a limitation of the JSON format combined with pydantic's design choice to serialize Decimals as JSON numbers rather than strings. The most appropriate classification would be DOCUMENTATION_FIX, as users should be warned about this limitation when using Decimal fields with JSON serialization. However, given that pydantic v1 is in maintenance mode and this behavior is intentional, WONTFIX is also a strong candidate.

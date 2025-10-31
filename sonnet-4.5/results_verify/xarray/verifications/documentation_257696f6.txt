@@ -1,0 +1,38 @@
+## Documentation Analysis
+
+### NumPy Documentation (Reference Standard)
+
+NumPy's documentation for both `cumprod` and `cumsum` clearly states that when `axis=None`:
+1. The input array is **flattened** before computing the cumulative operation
+2. The result is a **1D array** with the same total number of elements as the input
+3. This is the default behavior if axis is not specified
+
+Examples from NumPy docs:
+- `np.cumprod([[1,2,3],[4,5,6]])` returns `[1, 2, 6, 24, 120, 720]` (1D array)
+- `np.cumsum([[1,2,3],[4,5,6]])` returns `[1, 3, 6, 10, 15, 21]` (1D array)
+
+### xarray Documentation
+
+1. **xarray's general philosophy**: The documentation states xarray aims to build upon and extend NumPy's capabilities with labeled arrays, providing "more explicit versions of those found in NumPy/pandas" interfaces.
+
+2. **Specific cumprod/cumsum documentation**: The xarray documentation for `cumprod()` states that if `dim=None` or `dim="..."`, it will "reduce over all dimensions". However, this is vague and doesn't explicitly state the expected behavior (flatten vs. sequential axis application).
+
+3. **Source code documentation**: The docstrings in `duck_array_ops.py` are minimal:
+   - `cumprod`: "N-dimensional version of cumprod."
+   - `cumsum`: "N-dimensional version of cumsum."
+   These provide no specification of the expected behavior for `axis=None`.
+
+### Key Finding
+
+The underlying implementation uses `cumprod_1d` and `cumsum_1d` which are created via `_create_nan_agg_method`. These ultimately delegate to numpy's functions (via `xp.cumprod` and `xp.cumsum`), which would handle `axis=None` correctly by flattening.
+
+The bug is introduced by the `_nd_cum_func` wrapper which intercepts `axis=None` and converts it to `tuple(range(array.ndim))`, causing sequential application along all axes instead of flattening.
+
+### Documentation Verdict
+
+While xarray's documentation doesn't explicitly promise NumPy-compatible behavior for `axis=None` in cumulative operations, several factors suggest this is a legitimate bug:
+
+1. xarray generally aims for NumPy compatibility and builds on NumPy
+2. The underlying functions delegate to NumPy, indicating intent to match NumPy behavior
+3. The current behavior (sequential axis application) is neither documented nor intuitive
+4. The "N-dimensional version" description suggests extending, not changing, NumPy's semantics

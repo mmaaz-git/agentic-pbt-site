@@ -1,0 +1,46 @@
+REPRODUCTION RESULTS FOR fastapi.dependencies.utils.get_path_param_names BUG
+
+## Bug Claim Verification
+The bug report claims that `get_path_param_names` inconsistently handles whitespace:
+- Spaces and tabs ARE extracted
+- Newlines are NOT extracted
+
+### Reproduction Results:
+✓ CONFIRMED: The function behavior matches the bug report exactly:
+- `get_path_param_names("/{ }")` returns `{' '}`
+- `get_path_param_names("/{\t}")` returns `{'\t'}`
+- `get_path_param_names("/{\n}")` returns `set()` (empty)
+
+### Property Test Results:
+✓ CONFIRMED: The hypothesis test fails with input `['\n']`
+- The test creates path `/{\n}`
+- Expected result: `{'\n'}`
+- Actual result: `set()`
+
+### Root Cause Analysis:
+✓ CONFIRMED: The issue is caused by the regex pattern `{(.*?)}` where `.` doesn't match newlines by default in Python
+- The proposed fix using `{([^}]*)}` would indeed extract newlines correctly
+- Alternative fix using `re.DOTALL` flag would also work
+
+## Critical Context Discovery
+However, investigation reveals this is NOT a meaningful bug:
+
+1. **Python Identifier Restrictions**: Path parameters must map to Python function parameters, and Python identifiers:
+   - CANNOT contain spaces
+   - CANNOT contain tabs
+   - CANNOT contain newlines
+   - CANNOT start with numbers
+   - CANNOT contain special characters like dots or dashes
+
+2. **Current Behavior Analysis**:
+   - The function INCORRECTLY extracts spaces and tabs (which can never be valid Python parameters)
+   - The function CORRECTLY fails to extract newlines (which also can never be valid)
+   - Both behaviors are wrong, but the newline behavior is accidentally more correct!
+
+3. **Practical Impact**:
+   - Path parameters with whitespace would NEVER work in FastAPI because they cannot map to Python function parameters
+   - Even if extraction "worked", the framework would fail when trying to match the extracted name to a function parameter
+   - The current inconsistency has no real-world impact since none of these cases should ever occur
+
+## Conclusion
+While the technical behavior IS inconsistent (spaces/tabs extracted but not newlines), this inconsistency occurs in an area that is completely outside the valid use cases for the function. Path parameter names must be valid Python identifiers to function in FastAPI, and none of the whitespace characters are valid in Python identifiers.

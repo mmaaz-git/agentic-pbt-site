@@ -1,0 +1,47 @@
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that configuration headers with whitespace should be automatically stripped. Users providing configuration values are responsible for providing clean input. The middleware works correctly when headers are provided without extraneous whitespace. This could be considered user error - if you configure headers with spaces, you're providing incorrect configuration. Many libraries expect clean configuration input without automatic normalization.
+
+**Why it might not be INVALID:**
+The bug represents a real inconsistency in the code's behavior. The middleware strips whitespace from request headers (line 129: `header.strip()`) but doesn't strip whitespace from configuration headers (line 67). This asymmetric behavior violates the principle of least surprise. HTTP specifications clearly state that whitespace should be stripped from header values, and users would reasonably expect consistent handling throughout the middleware.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+This is an edge case that only affects users who accidentally include whitespace in their configuration. The workaround is trivial - just don't include whitespace in your header configuration. The impact is minimal as most users would naturally provide clean configuration values. Fixing this might break existing code that somehow relies on the current behavior, and the benefit doesn't justify potential backward compatibility issues.
+
+**Why it might not be WONTFIX:**
+The issue affects a core security feature (CORS) and causes legitimate requests to be incorrectly rejected with a 400 error. This isn't just a cosmetic issue - it breaks functionality. The fix is simple (adding `.strip()` to line 67) and unlikely to cause compatibility issues since headers with intentional whitespace are not valid. The current behavior is clearly unintended given that request headers are already stripped.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify how whitespace in configuration headers should be handled. Adding documentation that states "Header names in allow_headers must not contain leading or trailing whitespace" would clarify the expected input format. This would make the current behavior the documented behavior, avoiding any code changes while setting clear expectations for users.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The inconsistent behavior (stripping request headers but not configuration headers) is clearly a bug in the implementation, not a documentation issue. Documenting this quirk would be documenting a bug rather than fixing it. The code already shows intent to normalize headers (by lowercasing them and stripping request headers), so the missing strip operation on configuration headers appears to be an oversight rather than intentional design.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Adding automatic whitespace stripping to configuration headers could be seen as a new feature - "intelligent configuration normalization." The current code works as implemented; this would be adding new functionality to make the configuration more forgiving of user input. This enhancement would improve user experience by automatically cleaning up configuration values.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but rather fixing inconsistent behavior in existing functionality. The middleware already strips whitespace from request headers, so applying the same logic to configuration headers is fixing a consistency bug, not adding a feature. The code shows clear intent to normalize headers (lowercasing and stripping), making this a bug fix rather than a feature addition.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The code exhibits clearly inconsistent behavior: it strips whitespace from request headers (line 129) but not from configuration headers (line 67). This asymmetry causes valid CORS requests to be incorrectly rejected. The fix is straightforward and the current behavior violates both HTTP header parsing specifications and the principle of consistent data handling. The code already demonstrates intent to normalize headers through lowercasing and request header stripping.
+
+**Why it might not be BUG:**
+The code works exactly as written - it stores configuration headers as provided and compares them after stripping request headers. This could be intentional to allow precise control over header matching. Users who provide clean configuration get expected behavior. The issue only arises from user error (providing whitespace in configuration), not from incorrect code logic.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a **BUG**. The primary evidence is the clear inconsistency in how the middleware handles whitespace: stripping it from request headers but not from configuration headers. This asymmetric behavior cannot be intentional design, as it serves no useful purpose and violates the principle of least surprise.
+
+The code already demonstrates clear intent to normalize headers - it lowercases both configuration and request headers for case-insensitive comparison, and it strips whitespace from request headers. The missing strip operation on configuration headers appears to be an oversight rather than deliberate design. The HTTP and CORS specifications consistently require whitespace stripping from header values, and there's no reasonable scenario where preserving whitespace in configuration while stripping it from requests would be beneficial.
+
+While one could argue this is user error (providing configuration with whitespace), the middleware's primary purpose is to handle CORS correctly, and rejecting valid requests due to configuration whitespace is a failure of that purpose. The fix is trivial, non-breaking (headers with spaces are invalid anyway), and brings the code into consistency with both itself and HTTP specifications. This is a clear bug that should be fixed rather than documented or dismissed.

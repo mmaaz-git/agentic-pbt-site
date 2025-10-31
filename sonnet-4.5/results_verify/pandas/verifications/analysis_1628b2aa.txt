@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that surrogate characters should be handled transparently by the interchange protocol. However, surrogates are not valid UTF-8 by definition - they are UTF-16 artifacts that should never appear in properly formed UTF-8 strings. The protocol specification explicitly states strings are UTF-8 encoded, and failing on invalid UTF-8 input could be considered correct behavior. Users should not be creating DataFrames with invalid string data in the first place.
+
+**Why it might not be INVALID:**
+Pandas does allow creating DataFrames with surrogate characters, and the `__dataframe__()` method succeeds, suggesting the operation is supported. The inconsistency between successful export and failed import is a genuine API issue that violates user expectations.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Surrogate characters are an obscure edge case that rarely occurs in real-world data. The bug report's claim about "real-world impact" is questionable - properly written applications shouldn't produce unpaired surrogates. The current behavior (raising an error) appropriately alerts users to malformed data. Additionally, the documentation already warns about "severe implementation issues" and recommends using Arrow instead.
+
+**Why it might not be WONTFIX:**
+The interchange protocol is a public API that should handle edge cases gracefully. Silent failures or crashes on certain inputs, even rare ones, can be problematic for data processing pipelines. The fix would be relatively simple to implement.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that surrogate characters are unsupported. Adding a note about UTF-8 requirements and surrogate incompatibility would clarify the expected behavior. The current implementation correctly follows UTF-8 specification by rejecting surrogates, so the code is working as designed - the documentation just needs to be clearer.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The protocol specification already states "UTF-8 encoded" and UTF-8 inherently excludes surrogates. This is a fundamental property of UTF-8 that doesn't need to be repeatedly documented. The issue is more about the inconsistent API behavior than documentation clarity.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting surrogate characters would be a new capability beyond the current UTF-8 specification. The suggested fixes (using `errors='surrogatepass'` or alternative encodings) would extend the protocol beyond its current design. This could be framed as a request to enhance the interchange protocol to handle a wider range of string data.
+
+**Why it might not be FEATURE_REQUEST:**
+The ability to round-trip DataFrames is a basic expectation, not a new feature. If pandas allows creating DataFrames with certain data, the interchange protocol should handle them. This is fixing broken functionality rather than adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+There is a clear inconsistency where `__dataframe__()` succeeds but `from_dataframe()` fails on the same data. This violates the principle of least surprise and breaks the round-trip property. The API presents an inconsistent interface where export appears to work but import fails. If pandas allows surrogate characters in DataFrames, its interchange implementation should handle them consistently.
+
+**Why it might not be BUG:**
+The behavior is technically correct according to UTF-8 specification. Surrogate characters are invalid UTF-8, and the error appropriately signals this. The real issue might be that pandas shouldn't allow creating DataFrames with invalid string data in the first place. The interchange protocol is correctly enforcing UTF-8 validity.
+
+## Overall consideration
+After careful analysis, this appears to be either WONTFIX or DOCUMENTATION_FIX rather than a BUG. The interchange protocol explicitly specifies UTF-8 encoding, and surrogate characters are fundamentally incompatible with UTF-8 by definition. The Python UTF-8 encoder is correctly rejecting invalid input. While the bug report makes valid points about API inconsistency, the root issue is that the user is attempting to interchange data that violates the protocol's specification.
+
+The fact that pandas allows creating DataFrames with surrogate characters is arguably the real issue, but that's outside the scope of the interchange protocol. The protocol is correctly enforcing its UTF-8 requirement. The suggested "fixes" would actually violate the UTF-8 specification (surrogatepass produces invalid UTF-8, replace loses data).
+
+Given that the documentation already warns about "severe implementation issues" and recommends using Arrow instead, and that surrogate characters are an extremely rare edge case resulting from malformed data, this is most appropriately classified as WONTFIX. At most, it could be DOCUMENTATION_FIX to explicitly note that strings must be valid UTF-8 (no surrogates), though this should be implied by the UTF-8 specification itself.

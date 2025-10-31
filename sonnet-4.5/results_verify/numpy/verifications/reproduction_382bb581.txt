@@ -1,0 +1,57 @@
+## Bug Reproduction Results
+
+### Test Environment
+- NumPy version: 2.3.0
+- Platform: Linux
+
+### Reproduction of Reported Bug
+
+1. **Primary Test Case (p = 1e-300)**:
+   - Input: `np.random.geometric(p=1e-300, size=10)`
+   - Expected: All values >= 1 (positive integers)
+   - Actual: All values = -9223372036854775808 (int64 minimum)
+   - **CONFIRMED**: The function returns negative values, violating the geometric distribution contract
+
+2. **Hypothesis Test Case (p = 2.225073858507e-311)**:
+   - Input: `np.random.geometric(p=2.225073858507e-311, size=100)`
+   - Expected: All values >= 1
+   - Actual: Min value = -9223372036854775808
+   - **CONFIRMED**: Returns int64 minimum value
+
+### Threshold Analysis
+
+Testing various p values to find where the overflow occurs:
+- p = 1e-10: Works correctly (min=598387637, max=30101211818, all positive)
+- p = 1e-50: FAILS (returns -9223372036854775808)
+- p = 1e-100: FAILS (returns -9223372036854775808)
+- p = 1e-200: FAILS (returns -9223372036854775808)
+- p = 1e-300: FAILS (returns -9223372036854775808)
+
+**Finding**: The overflow occurs somewhere between p=1e-10 and p=1e-50.
+
+### Generator API Comparison
+
+Testing the newer `Generator.geometric()` API with same values:
+- p = 1e-10: Works correctly (positive values)
+- p = 1e-50: Returns 9223372036854775807 (int64 MAX)
+- p = 1e-100: Returns 9223372036854775807 (int64 MAX)
+- p = 1e-300: Returns 9223372036854775807 (int64 MAX)
+
+**Finding**: The Generator API has a different overflow behavior - it returns int64 MAX instead of int64 MIN. This is still incorrect but at least maintains the positive integer constraint.
+
+### Mathematical Analysis
+
+Expected values for geometric distribution (E[X] = 1/p):
+- p = 1e-10: E[X] = 1e10 (within int64 range)
+- p = 1e-50: E[X] = 1e50 (exceeds int64 max by factor of 1e31)
+- p = 1e-100: E[X] = 1e100 (exceeds int64 max by factor of 1e81)
+- p = 1e-300: E[X] = 1e300 (exceeds int64 max by factor of 1e281)
+
+### Summary
+
+The bug is **100% reproducible**:
+1. `numpy.random.geometric()` returns int64 MIN (-9223372036854775808) for small p values
+2. This violates the mathematical definition of geometric distribution (must return positive integers >= 1)
+3. The overflow occurs when p is small enough that 1/p exceeds int64 range
+4. The newer Generator API has the same fundamental problem but returns int64 MAX instead
+5. Neither implementation raises an error or warning about the overflow condition

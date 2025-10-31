@@ -1,0 +1,65 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python environment with pydantic installed
+- Testing `pydantic.networks.AnyUrl.build()` method
+
+### Bug Report Claims vs Actual Results
+
+#### Claim 1: `path='/'` produces `path='//'`
+**Status: CONFIRMED**
+- Input: `AnyUrl.build(scheme='http', host='example.com', path='/')`
+- Expected path: `'/'`
+- Actual path: `'//'`
+- The bug report is correct about this behavior.
+
+#### Claim 2: The bug compounds with repeated round-trips
+**Status: CONFIRMED**
+- After 1st build with path='/': path becomes '//'
+- After 2nd build with path='//': path becomes '///'
+- After 3rd build with path='///': path becomes '////'
+- Each round-trip adds an additional slash, exactly as reported.
+
+#### Claim 3: Violates round-trip property
+**Status: CONFIRMED**
+The round-trip property is indeed violated:
+```python
+components = {'scheme': 'http', 'host': 'example.com', 'path': '/'}
+url = AnyUrl.build(**components)
+assert url.path == components['path']  # FAILS: '//' != '/'
+```
+
+### Additional Findings
+
+#### ALL paths starting with '/' are affected
+Not just '/' but any path starting with '/' gets an extra slash prepended:
+- Input: `path='/test'` → Output: `path='//test'`
+- Input: `path='/test/'` → Output: `path='//test/'`
+- Input: `path='/test//path'` → Output: `path='//test//path'`
+
+#### Parsing vs Building produces different results
+```python
+url_parsed = AnyUrl("http://example.com/")   # path='/'
+url_built = AnyUrl.build(scheme='http', host='example.com', path='/')  # path='//'
+```
+The same logical URL produces different path values depending on construction method.
+
+#### Empty path handling
+When path is None, empty string, or omitted, the result is consistent:
+- `path=None` → URL has path='/'
+- `path=''` → URL has path='/'
+- No path parameter → URL has path='/'
+
+Only when an explicit path starting with '/' is provided does the bug occur.
+
+### Hypothesis Test Results
+The property-based test from the bug report correctly identifies the issue:
+```
+✗ Property test failed: path mismatch: expected '/', got '//'
+```
+
+### Conclusion
+The bug report's technical claims are 100% accurate. The `AnyUrl.build()` method incorrectly handles paths that start with '/', prepending an additional '/' to them. This violates:
+1. The round-trip property (build → extract → build changes the value)
+2. RFC 3986 standards (which prohibit '//' after the authority)
+3. Consistency with URL parsing (parsing "http://example.com/" gives different result than building with path='/')

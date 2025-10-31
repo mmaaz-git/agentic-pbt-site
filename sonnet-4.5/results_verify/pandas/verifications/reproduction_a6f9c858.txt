@@ -1,0 +1,57 @@
+BUG REPRODUCTION REPORT
+=======================
+
+## Reproduction Steps Taken
+
+I successfully reproduced the bug as described in the report. Here's what I found:
+
+### 1. Manual Reproduction
+
+Created a test script to verify the reported behavior with pandas StringMethods.count():
+
+**Test Results:**
+- `s.str.count(')')` → PatternError: unbalanced parenthesis at position 0
+- `s.str.count('(')` → PatternError: missing ), unterminated subpattern at position 0
+- `s.str.count('.')` → [9, 11, 8] (counts ALL characters, not literal dots)
+- `s.str.count(')', regex=False)` → TypeError: got an unexpected keyword argument 'regex'
+
+**Expected Results (using Python's str.count()):**
+- 'test)test'.count(')') → 1
+- 'hello(world'.count('(') → 1
+- 'dot.here'.count('.') → 1
+
+### 2. Workaround Verification
+
+Confirmed that using `re.escape()` works as a workaround:
+- `s.str.count(re.escape(')'))` → [1, 0, 0] ✓
+- `s.str.count(re.escape('('))` → [0, 1, 0] ✓
+- `s.str.count(re.escape('.'))` → [0, 0, 1] ✓
+
+### 3. Comparison with StringMethods.replace()
+
+Verified that `replace()` has a `regex` parameter (default=False):
+- `s.str.replace('.', 'X', regex=False)` → replaces literal dots
+- `s.str.replace('.', 'X', regex=True)` → replaces all characters
+- `s.str.replace('(', 'X', regex=False)` → replaces literal parenthesis
+- `s.str.replace('(', 'X', regex=True)` → PatternError (invalid regex)
+
+### 4. Hypothesis Test Issues
+
+The provided hypothesis test has a logic error (when old==new, count won't be 0 after replacement), but this doesn't affect the validity of the bug report. The core issue about regex metacharacters causing errors was confirmed.
+
+## Summary
+
+The bug is CONFIRMED and REPRODUCIBLE:
+
+1. **StringMethods.count() always treats patterns as regex** - This causes errors with unescaped metacharacters like '(', ')', and gives incorrect results for '.'
+
+2. **No regex parameter available** - Unlike replace(), contains(), and other string methods which have `regex` parameters, count() lacks this option
+
+3. **API inconsistency** - Other similar methods (replace, contains) have `regex` parameters with various defaults:
+   - replace(): regex=False (default)
+   - contains(): regex=True (default)
+   - count(): No regex parameter at all
+
+4. **User impact** - Users cannot count literal occurrences of common characters without manually escaping them with re.escape()
+
+The bug report accurately describes the problem and the proposed fix (adding a regex parameter) would bring consistency to the pandas string API.

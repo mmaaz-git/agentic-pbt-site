@@ -1,0 +1,53 @@
+BUG REPRODUCTION ANALYSIS
+
+1. TEST CASE EXECUTION:
+I successfully reproduced the bug using the provided test case.
+
+INPUT: parse_list("a b # comment")
+EXPECTED OUTPUT: ['a', 'b']
+ACTUAL OUTPUT: ['a', 'b', '#__Pyx_L1_']
+
+The bug is confirmed - the function returns a substitution label '#__Pyx_L1_' instead of filtering out the comment.
+
+2. ROOT CAUSE ANALYSIS:
+The issue occurs because of how parse_list interacts with strip_string_literals:
+
+a) strip_string_literals("a b # comment") returns:
+   - Stripped string: "a b #__Pyx_L1_"
+   - Literals dict: {'__Pyx_L1_': ' comment'}
+
+b) parse_list then splits this by spaces: ['a', 'b', '#__Pyx_L1_']
+
+c) The unquote helper function only handles quoted strings from the literals dict,
+   but '#__Pyx_L1_' is not a quoted string, so it's returned as-is
+
+3. ADDITIONAL TEST CASES:
+I also tested with list format:
+INPUT: parse_list("[a, b] # comment")
+OUTPUT: ['[a,', 'b]', '#__Pyx_L1_']
+
+This shows the bug affects both space-separated and comma-separated list formats.
+
+4. BEHAVIOR VERIFICATION:
+The strip_string_literals function is working as designed - it replaces comments with
+substitution labels. The issue is that parse_list doesn't filter out these comment
+substitution labels that start with '#'.
+
+5. TECHNICAL IMPACT:
+When used in real Cython code for parsing distutils directives like:
+```python
+# distutils: libraries = foo bar  # explanation comment
+```
+
+The parse_list function would incorrectly return ['foo', 'bar', '#__Pyx_L1_']
+instead of ['foo', 'bar'], potentially causing build issues if '#__Pyx_L1_'
+is interpreted as a library name.
+
+6. PROPOSED FIX VALIDATION:
+The bug report's proposed fix to filter items starting with '#' would correctly
+address this issue by removing comment substitution labels from the final result.
+
+CONCLUSION:
+The bug is real and reproducible. The function returns internal substitution labels
+for comments instead of filtering them out, which is incorrect behavior for a parser
+that should ignore comments.

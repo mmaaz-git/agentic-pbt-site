@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Dask documentation does not specify what should happen when ddof >= n or with empty bags. Since this behavior is undocumented, one could argue that any behavior (including crashing) is technically acceptable. The user is passing statistically meaningless parameters (ddof >= n), which could be considered invalid input that doesn't need to be handled gracefully.
+
+**Why it might not be INVALID:**
+The bug represents a real crash with ZeroDivisionError that other similar libraries (NumPy, Pandas) handle gracefully. The variance calculation is a standard statistical operation, and users would reasonably expect Dask to handle edge cases similarly to NumPy/Pandas rather than crashing.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The edge cases (ddof >= n or empty bags) represent statistically meaningless operations that should arguably never occur in real-world usage. The effort to fix this might not be worth it for such obscure edge cases that indicate user error. The current crash at least makes it clear that something is wrong with the input.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it's a crash that could affect production code. Other major libraries handle these cases gracefully, and Dask should meet the same standard. The fix is simple and improves robustness.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The Dask documentation is silent on how var() handles edge cases. The documentation could be updated to specify that ddof must be less than n and that empty bags are not supported, making the current behavior the documented behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not just about unclear documentation - it's about inconsistent behavior compared to NumPy/Pandas. Simply documenting that "the function crashes" would not be a good solution when other libraries handle this gracefully.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Currently, Dask doesn't support variance calculation for edge cases that NumPy and Pandas handle. Adding support for these edge cases (returning nan/inf appropriately) could be seen as a new feature to match the capabilities of other libraries.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not about adding new functionality but about fixing existing functionality that crashes unexpectedly. The var() method already exists; it just doesn't handle certain inputs properly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code crashes with an unhandled ZeroDivisionError in cases that other major libraries (NumPy, Pandas) handle gracefully. Users migrating from NumPy/Pandas to Dask would reasonably expect similar behavior. The crash occurs in mathematically well-defined edge cases (division by zero should yield inf or nan, not crash). The proposed fix is straightforward and improves robustness.
+
+**Why it might not be BUG:**
+The documentation doesn't promise any particular behavior for these edge cases. The inputs that cause the crash (ddof >= n) are statistically invalid and represent user error. One could argue that crashing on invalid input is acceptable behavior.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though not a critical one. The key factors are:
+
+1. **Consistency with established libraries**: Both NumPy and Pandas handle these edge cases gracefully by returning special values (inf/nan) rather than crashing. Dask, which aims to provide a familiar interface for users of these libraries, should ideally behave similarly. Users migrating code from Pandas/NumPy to Dask would encounter unexpected crashes.
+
+2. **Mathematical correctness**: While ddof >= n is statistically meaningless, it's a well-defined mathematical edge case (division by zero or negative denominator). Modern numerical libraries typically handle such cases by returning appropriate special values (inf, nan) rather than crashing. The current behavior where ddof > n returns negative variance (-2.0) is particularly problematic as it's mathematically impossible.
+
+3. **Robustness principle**: Good library design suggests handling edge cases gracefully, especially when the fix is simple. The proposed solution (raising a more informative ValueError or returning nan) would improve the user experience and make debugging easier. Even if users shouldn't pass these values, the library should fail gracefully with clear error messages rather than cryptic ZeroDivisionErrors.
+
+Given that this is a real crash in a statistical function where other major libraries handle the same cases gracefully, and the fix is straightforward, this should be classified as a BUG, albeit a low-priority one dealing with edge cases.

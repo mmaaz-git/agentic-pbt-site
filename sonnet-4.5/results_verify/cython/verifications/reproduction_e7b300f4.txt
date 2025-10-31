@@ -1,0 +1,43 @@
+BUG REPRODUCTION REPORT
+=======================
+
+## Summary
+I have successfully reproduced the bug as described in the report. The Template class in Cython.Tempita crashes when attempting to parse bytes content, despite having explicit support for bytes through the `_unicode` flag.
+
+## Test Results
+
+1. **Manual Reproduction**: Confirmed
+   - Creating a Template with bytes content `b"Hello {{name}}"` raises:
+     `TypeError: cannot use a string pattern on a bytes-like object`
+   - The error occurs at line 581 in _tempita.py in the lex() function
+   - Stack trace matches exactly what was reported
+
+2. **Hypothesis Property-Based Test**: Confirmed
+   - The property test fails immediately on any non-empty bytes input
+   - Falsifying example: `value='0'` (when encoded to bytes)
+   - All bytes content causes the same TypeError
+
+3. **Control Tests**:
+   - String content works perfectly: `"Hello {{name}}"` -> `"Hello World"`
+   - Empty bytes still crash: `b""` raises the same TypeError
+   - Plain bytes without template syntax also crash: `b"Hello World"` raises the same error
+
+## Root Cause Analysis
+The bug occurs in the `lex()` function (line 581) when it tries to apply a string regex pattern to bytes content:
+```python
+token_re = re.compile(r'%s|%s' % (re.escape(delimiters[0]), re.escape(delimiters[1])))
+for match in token_re.finditer(s):  # s can be bytes, but token_re is always a string pattern
+```
+
+## Evidence of Intent to Support Bytes
+The code clearly intends to support bytes content:
+1. Line 125: `self._unicode = isinstance(content, str)` - explicitly tracks whether content is unicode
+2. Lines 336-346: The `_repr()` method has specific logic to handle bytes vs unicode
+3. Line 340: Explicit conversion path: `value = bytes(value)`
+4. Lines 351-359: Unicode/bytes conversion handling with encoding support
+5. Line 155: `from_filename()` reads files in binary mode ('rb')
+
+The infrastructure for bytes support exists throughout the codebase, but the lexer was never updated to handle bytes input.
+
+## Conclusion
+This is a legitimate bug. The Template class has explicit support infrastructure for bytes content but fails at the lexical analysis stage due to a type mismatch between the regex pattern (always string) and the content being searched (can be bytes).

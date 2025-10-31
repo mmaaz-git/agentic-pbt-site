@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is CONFIRMED. The kmeans2 function with minit='random' crashes with LinAlgError when given data with duplicate rows or rank-deficient covariance matrices.
+
+### Reproduction Results
+
+1. **Basic Test Case**:
+   - Input: 4x2 array with all rows identical [[1.0, 2.0], [1.0, 2.0], [1.0, 2.0], [1.0, 2.0]]
+   - Result: CRASHES with "LinAlgError: Matrix is not positive definite"
+   - This matches the reported behavior exactly.
+
+2. **Hypothesis Property Test**:
+   - The property-based test failed on the first example with n_obs=2, n_features=2
+   - When creating rank-deficient data by tiling a single column, the 'random' initialization consistently fails
+   - Error trace confirms the crash occurs at line 571 in _krandinit: `x = x @ xp.linalg.cholesky(_cov).T`
+
+3. **Comparison with Other Initialization Methods**:
+   - 'points' method: WORKS on the same duplicate data
+   - '++' method: WORKS on the same duplicate data (though with warnings about empty clusters)
+   - 'random' method: FAILS consistently with LinAlgError
+
+### Root Cause Analysis
+Examining the source code at scipy/cluster/vq.py lines 545-575:
+
+The _krandinit function has three branches:
+1. Lines 552-556: Handle 1D data
+2. Lines 557-563: Handle rank-deficient case when data.shape[1] > data.shape[0] using SVD
+3. Lines 564-571: Default case - computes covariance and uses Cholesky decomposition
+
+The bug occurs in branch 3 (lines 564-571):
+```python
+_cov = xpx.atleast_nd(xpx.cov(data.T, xp=xp), ndim=2, xp=xp)
+x = x @ xp.linalg.cholesky(_cov).T  # CRASHES HERE
+```
+
+When data has duplicate rows, the covariance matrix becomes singular (determinant = 0), which makes it not positive definite. Cholesky decomposition requires a positive definite matrix, hence the crash.
+
+### Impact
+This is a real bug that affects valid use cases:
+- Duplicate data points are common in real datasets
+- Other initialization methods handle this case properly
+- The code already has logic to handle rank-deficient cases (SVD approach), but only applies it when columns > rows
+
+The crash prevents users from using kmeans2 with 'random' initialization on datasets that may contain duplicate observations, which is a significant limitation.

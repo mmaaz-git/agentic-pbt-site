@@ -1,0 +1,33 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the Django migrations operations.
+
+### Test Results
+
+1. **Hypothesis Property-Based Test**: FAILED
+   - The test correctly identifies that `AddIndex.reduce()` mutates the `index.name` attribute
+   - With input `model_name='A', index_name='A', new_index_name='B'`, the assertion fails
+   - Error message: "Index name was mutated from A to B"
+
+2. **Simple Reproduction Script**: CONFIRMED
+   - Running the provided reproduction code shows:
+     - Before reduce: old_index
+     - After reduce: new_index
+   - This confirms that the `add_op.index.name` was mutated from "old_index" to "new_index"
+
+3. **Source Code Verification**: CONFIRMED
+   - Located the problematic code in `/home/npc/miniconda/lib/python3.13/site-packages/django/db/migrations/operations/models.py`
+   - Line 993 shows the mutation: `self.index.name = operation.new_name`
+   - This directly modifies the operation's internal state
+
+### Impact
+
+The mutation violates the immutability contract and causes the following issues:
+
+1. **State Corruption**: If the same `AddIndex` operation instance is used multiple times (e.g., in migration optimization or testing), subsequent uses will see the mutated index name rather than the original.
+
+2. **Unpredictable Behavior**: The operation's behavior becomes dependent on the order of `reduce()` calls, making debugging difficult.
+
+3. **Contract Violation**: The base `Operation` class explicitly documents that operations "should be considered immutable" (line 27-28 of base.py), but `AddIndex.reduce()` violates this contract.
+
+The bug is real and reproducible. The mutation happens when `AddIndex.reduce()` is called with a `RenameIndex` operation that matches the index name.

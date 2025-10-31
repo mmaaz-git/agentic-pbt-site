@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for FileReadStream.receive() does not explicitly specify what should happen with negative values. The function parameter is typed as `int` which includes negative values. Since the documentation doesn't forbid negative values or specify their behavior, one could argue that the current behavior (delegating to Python's file.read()) is acceptable. Python's documented behavior for file.read(-1) is to read the entire file, and anyio is simply passing through this behavior.
+
+**Why it might not be INVALID:**
+The parameter name "max_bytes" has clear semantic meaning - it represents a maximum constraint. A negative value for a maximum doesn't make logical sense. Additionally, the abstract base class documentation says "Receive at most `max_bytes` bytes", which implies an upper bound that -1 violates by reading unlimited bytes.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that requires users to explicitly pass negative values, which is unlikely to happen accidentally in normal usage. The default value is 65536, and typical usage would pass positive values. The impact is limited to users who intentionally or accidentally pass -1, and they could easily avoid this by not passing negative values. The current behavior technically works and matches Python's underlying file.read() behavior.
+
+**Why it might not be WONTFIX:**
+The issue could cause serious memory problems with large files if -1 is passed accidentally (e.g., from a calculation error). The semantic violation of "max_bytes" accepting a value that reads unlimited bytes is confusing and could lead to bugs. The fix is simple and would prevent potential OOM errors.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what happens with negative values, so this could be fixed by documenting that max_bytes=-1 reads the entire file (following Python's convention) and other negative values raise errors. This would make the current behavior explicit and warn users about the memory implications.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The parameter name "max_bytes" inherently implies it should enforce a maximum, not provide a way to read unlimited data. Documenting that max_bytes=-1 reads everything would be documenting a semantic contradiction. The code behavior conflicts with the parameter's intended meaning, suggesting the code should be fixed rather than the documentation updated.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding validation for negative values could be seen as a new feature - input validation that didn't exist before. The current code works as designed (passing through to Python's file.read()), and adding parameter validation would be enhancing it with additional safety checks.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing existing behavior that violates the semantic contract of the parameter. The parameter name "max_bytes" already implies certain behavior that the current implementation doesn't honor. This is correcting a design flaw rather than adding a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The parameter "max_bytes" semantically means "maximum bytes to read" but -1 causes it to read unlimited bytes, directly contradicting its meaning. This semantic violation could cause unexpected memory issues. The method silently accepts values that violate its contract without validation. Additionally, other negative values raise ClosedResourceError which is misleading - the resource isn't closed, the parameter is invalid.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly forbid negative values or specify their behavior. The implementation correctly delegates to Python's file.read(), which has documented behavior for -1. One could argue this is working as implemented, just with incomplete documentation. The behavior matches Python's standard library conventions.
+
+## Overall Consideration
+
+Looking at all considerations, this case presents a semantic contract violation where the parameter name "max_bytes" strongly implies it should enforce a maximum limit, but the implementation allows -1 to read unlimited data. This is more than just a documentation issue because the parameter name itself creates an implicit contract that the code violates.
+
+The fact that Python's file.read() accepts -1 as a special case doesn't mean anyio should expose this behavior through a parameter explicitly named "max_bytes". The abstraction layer should enforce the semantics implied by its API design. Additionally, the current error handling (converting ValueError to ClosedResourceError for other negative values) is misleading and masks the real issue.
+
+However, the strongest argument against this being a bug is that the documentation does not explicitly specify the behavior for negative values. Without clear documentation stating that negative values should be rejected or handled differently, the current behavior of delegating to Python's file.read() could be considered acceptable, even if semantically questionable. Since the user must explicitly pass a negative value (an unusual action) and the default is a safe positive value, this falls more into the category of an undocumented edge case rather than a clear bug.

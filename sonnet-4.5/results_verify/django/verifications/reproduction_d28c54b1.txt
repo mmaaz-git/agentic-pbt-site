@@ -1,0 +1,64 @@
+## Bug Reproduction Analysis
+
+### Summary
+I successfully reproduced the bug reported in django.db.backends.utils.truncate_name. The function violates its contract when the requested length is less than the hash_len parameter (default 4).
+
+### Reproduction Steps Taken
+
+1. **Hypothesis Test Reproduction**
+   - Ran the property-based test from the bug report
+   - The test failed with input: identifier='00', length=1
+   - Result: truncate_name returned 'b4b1' with name length 4, exceeding the requested length of 1
+
+2. **Specific Case Reproduction**
+   - Tested truncate_name('00', length=1)
+   - Expected: identifier with length <= 1
+   - Actual: 'b4b1' (length = 4)
+   - This confirms the bug: the function returns a 4-character identifier when asked for a 1-character identifier
+
+3. **Additional Testing**
+   - Tested edge cases with various lengths (1-5)
+   - Found that the bug only occurs when:
+     * The identifier needs truncation (len(name) > length)
+     * The requested length < hash_len (default 4)
+   - When identifier doesn't need truncation, it works correctly
+
+### Root Cause Analysis
+
+Looking at the code (lines 283-301 in utils.py):
+
+```python
+def truncate_name(identifier, length=None, hash_len=4):
+    namespace, name = split_identifier(identifier)
+
+    if length is None or len(name) <= length:
+        return identifier
+
+    digest = names_digest(name, length=hash_len)
+    return "%s%s%s" % (
+        '%s"."' % namespace if namespace else "",
+        name[: length - hash_len],  # Line 299 - problematic
+        digest,
+    )
+```
+
+The issue is on line 299: `name[: length - hash_len]`
+
+When length=1 and hash_len=4:
+- This becomes name[: 1-4] = name[:-3]
+- For name='00', this results in an empty string
+- The final result is empty_string + 4-char-digest = 4 characters
+- This violates the constraint that the result should be <= length
+
+### Effect and Impact
+
+1. **Contract Violation**: The function's docstring states it should "Shorten an SQL identifier to a repeatable mangled version with the given length", but it doesn't respect the length parameter when length < hash_len.
+
+2. **Potential Database Issues**: Database systems have strict identifier length limits. If a system expects identifiers <= N characters and truncate_name is called with length=N but returns N+3 characters, it could cause database errors.
+
+3. **Consistent Failure Pattern**: This happens consistently when:
+   - The identifier needs truncation (original length > requested length)
+   - The requested length < hash_len (typically 4)
+
+### Conclusion
+The bug is confirmed and reproducible. The function fails to honor its length parameter contract when length < hash_len, returning identifiers that exceed the requested maximum length.

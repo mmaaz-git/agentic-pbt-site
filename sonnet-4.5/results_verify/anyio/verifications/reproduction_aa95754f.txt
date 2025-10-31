@@ -1,0 +1,48 @@
+REPRODUCTION ANALYSIS
+=====================
+
+## Bug Report Validity
+The bug report is technically accurate and has been successfully reproduced.
+
+## Reproduction Process
+
+1. **Source Code Examination**
+   - Located the implementation at /home/npc/miniconda/lib/python3.13/site-packages/anyio/_core/_synchronization.py
+   - Confirmed the docstring at line 306: "Notify exactly n listeners."
+   - Confirmed the implementation at lines 308-314 which includes an IndexError break clause
+
+2. **Test Results**
+
+   Test Case 1: notify(5) with 3 waiters
+   - Expected per docstring: Exactly 5 notifications
+   - Actual behavior: Only 3 notifications (all available waiters)
+   - Result: Confirms the bug - implementation notifies "at most n" not "exactly n"
+
+   Test Case 2: notify(5) with 10 waiters
+   - Expected per docstring: Exactly 5 notifications
+   - Actual behavior: Exactly 5 notifications
+   - Result: Works as documented when sufficient waiters exist
+
+3. **Implementation Analysis**
+   The notify() method implementation:
+   ```python
+   def notify(self, n: int = 1) -> None:
+       """Notify exactly n listeners."""
+       self._check_acquired()
+       for _ in range(n):
+           try:
+               event = self._waiters.popleft()
+           except IndexError:
+               break  # <-- This break causes early termination
+           event.set()
+   ```
+
+   The `break` statement on IndexError means the method will notify fewer than n listeners
+   when there are fewer than n waiters available, contradicting the "exactly n" promise in
+   the docstring.
+
+## Conclusion
+The bug report is accurate. The docstring creates a contract that the method will notify
+"exactly n listeners", but the implementation only notifies "at most n listeners" when
+there are fewer than n waiters available. This is a clear documentation/implementation
+mismatch.

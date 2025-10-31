@@ -1,0 +1,41 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report.
+
+### Hypothesis Test Reproduction
+
+Running the provided Hypothesis test:
+```python
+from hypothesis import given, strategies as st
+from pandas.core.computation.parsing import clean_column_name
+
+@given(st.text(min_size=1, max_size=50))
+def test_clean_column_name_returns_hashable(name):
+    """clean_column_name should return a hashable value."""
+    result = clean_column_name(name)
+    hash(result)
+```
+
+Result: The test fails with the exact error reported:
+- Falsifying example: `name='\x00'`
+- Error: `tokenize.TokenError: ('source code cannot contain null bytes', (1, 0))`
+
+### Minimal Example Reproduction
+
+Running the minimal example:
+```python
+from pandas.core.computation.parsing import clean_column_name
+result = clean_column_name('\x00')
+```
+
+Result: Confirmed TokenError is raised:
+- Error type: `TokenError`
+- Error message: `('source code cannot contain null bytes', (1, 0))`
+
+### Effect of the Bug
+
+The bug causes the `clean_column_name` function to crash with an uncaught `TokenError` when processing column names containing null bytes (`\x00`). According to the function's documented behavior, it should catch exceptions and return the name unmodified when it cannot be converted to a valid Python identifier. However, it only catches `SyntaxError` and not `TokenError`.
+
+The error occurs at line 189 of `pandas/core/computation/parsing.py` when the tokenize module's `generate_tokens` function encounters a null byte in the source string and raises `TokenError`.
+
+This is a legitimate crash that violates the documented contract of the function.

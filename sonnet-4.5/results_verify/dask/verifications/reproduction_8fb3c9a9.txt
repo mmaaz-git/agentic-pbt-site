@@ -1,0 +1,56 @@
+## Bug Reproduction Report
+
+### Test Results
+
+I have successfully reproduced the bug as described in the report. The issue occurs when using `read_bytes` with `not_zero=True` on files where the first block would be 1 byte.
+
+### Simple Reproduction Case
+
+Test Case: File with 1 byte content ('a'), blocksize=1, not_zero=True
+- Expected: Non-empty block containing data after skipping first byte (though in this case, there's no data after the first byte)
+- Actual: Empty block (b'', length=0)
+
+This confirms the bug - an empty block is returned instead of properly handling the edge case.
+
+### Additional Test Cases
+
+1. File size=2 bytes ('ab'), blocksize=1, not_zero=True:
+   - Block 0: b'' (length=0) - EMPTY BLOCK
+   - Block 1: b'b' (length=1)
+
+2. File size=3 bytes ('abc'), blocksize=1, not_zero=True:
+   - Block 0: b'' (length=0) - EMPTY BLOCK
+   - Block 1: b'b' (length=1)
+   - Block 2: b'c' (length=1)
+
+### Property-Based Test
+
+The property-based test also fails immediately with the error:
+"Empty block found! file_size=1, blocksize=1"
+
+This confirms that the invariant "all blocks should have non-zero length" is violated.
+
+### Root Cause Analysis
+
+Looking at the source code (lines 139-141 of dask/bytes/core.py):
+```python
+if not_zero:
+    off[0] = 1      # Start at byte 1 instead of 0
+    length[0] -= 1  # Reduce length by 1
+```
+
+When the first block has a length of 1 byte:
+- off[0] = 1 (start at position 1)
+- length[0] = 1 - 1 = 0 (read 0 bytes)
+
+This creates a block that will read 0 bytes starting from position 1, resulting in an empty block.
+
+### Impact
+
+1. **Data Loss**: When processing files with small first blocks, the empty blocks may cause downstream processing to fail or skip data incorrectly.
+
+2. **Invariant Violation**: The presence of empty blocks violates the reasonable expectation that all blocks contain data.
+
+3. **Edge Case Handling**: The current implementation doesn't handle the edge case where the first block is exactly 1 byte.
+
+The bug is confirmed and reproducible with the provided test cases.

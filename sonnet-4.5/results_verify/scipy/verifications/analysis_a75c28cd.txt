@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior is mathematically correct and expected. When k >= n, bdtr sums the entire binomial distribution which always equals 1.0, making the inverse mathematically undefined since infinitely many p values map to 1.0. Returning nan for an undefined mathematical operation is a reasonable implementation choice. The function is working as mathematically expected, and the user's expectation of a round-trip property in this edge case is unreasonable since the inverse is not uniquely defined.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that bdtri is the "inverse function to bdtr with respect to p" without mentioning any constraints or exceptions. Users have a reasonable expectation based on the documentation that the inverse relationship should hold for all valid inputs. The function accepts k >= n as input without raising an error, implying it should handle these cases properly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case that occurs only when k >= n, which represents summing the entire binomial distribution. Most practical uses of the binomial CDF involve k < n. The mathematical ambiguity of the inverse in this case makes any solution imperfect - whether returning nan, 0.5, or raising an error, none perfectly captures the mathematical reality of infinite solutions. The current nan return at least signals that something unusual has occurred.
+
+**Why it might not be WONTFIX:**
+Silent nan propagation is dangerous in production code and can lead to hard-to-debug issues. The case k >= n is not that obscure - it naturally occurs when checking if all trials succeeded (k = n). Users deserve either proper error handling or clear documentation about this limitation, as nan values can corrupt entire computational pipelines without clear indication of where the problem originated.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is mathematically defensible - returning nan for an undefined inverse is reasonable. The real issue is that the documentation doesn't mention this constraint or behavior. Adding a note that "bdtri returns nan when k >= n because the inverse is not uniquely defined" would set proper expectations. The function is working correctly; users just need to be informed about this edge case behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting that the function returns nan doesn't address the poor user experience of silent failures. Modern APIs typically raise informative exceptions rather than returning special values like nan. If the function cannot compute a meaningful result, it should fail loudly rather than quietly, regardless of what the documentation says.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation works for the standard use case (k < n) but lacks handling for the edge case. Adding proper edge case handling - either by raising an informative exception or returning a canonical value like 0.5 - would be an enhancement to the existing functionality. This would be adding new behavior to handle a case that wasn't originally considered in the design.
+
+**Why it might not be FEATURE_REQUEST:**
+An inverse function should work for all outputs of the forward function by definition. This isn't asking for new functionality but for the basic contract of an inverse function to be fulfilled. When bdtr produces 1.0 for k >= n, bdtri should handle this output appropriately, not return nan. This is fixing broken existing functionality, not requesting new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates its documented contract as an inverse function. The documentation claims bdtri is the inverse of bdtr, but the round-trip bdtr → bdtri → bdtr fails for valid inputs (k >= n). The function silently returns nan without any warning, documentation, or error message, leading to silent failures in user code. This is a clear violation of the principle of least surprise and the documented behavior.
+
+**Why it might not be BUG:**
+The mathematical reality is that the inverse is genuinely undefined when k >= n. No implementation can provide a "correct" inverse when infinitely many inputs map to the same output. The nan return is a standard way to indicate undefined mathematical operations in numerical computing. The issue is more about unclear documentation than incorrect implementation.
+
+## Overall consideration
+
+This case presents a classic tension between mathematical correctness and API usability. Mathematically, when k >= n, bdtr always returns 1.0 regardless of p, making the inverse bdtri(k, n, 1.0) genuinely undefined since any p in [0,1] would be a valid answer. The current implementation returns nan, which is a defensible choice for undefined operations.
+
+However, from an API design perspective, silently returning nan violates several principles of good design. Users reasonably expect that if a function accepts certain inputs without error, it should produce meaningful outputs or explicitly fail. The documentation reinforces this expectation by describing bdtri as the "inverse function to bdtr" without mentioning any constraints or exceptional cases. The silent nan return can cause difficult-to-debug issues in production code.
+
+The most compelling argument is that this is a DOCUMENTATION_FIX. The behavior is mathematically justifiable - returning nan for an undefined operation is standard practice in numerical computing. The scipy.special module contains many mathematical functions that return nan for undefined cases (like log of negative numbers). The real failure here is not documenting this behavior, leaving users to discover it through debugging. Adding clear documentation about the k < n requirement and the nan return for k >= n would align user expectations with the actual behavior. While raising an exception might be more user-friendly, changing the behavior now could break existing code that handles the nan case, making documentation the most pragmatic solution.

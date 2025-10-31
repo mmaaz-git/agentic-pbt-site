@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+### Technical Details Verification
+
+1. **Bug Reproduction - Confirmed**
+   - The exact code from the bug report reproduces the error:
+   ```python
+   values = np.array([(0,)], dtype=object)
+   result = _sort_mixed(values)
+   ```
+   - This raises: `ValueError: all the input arrays must have same number of dimensions`
+
+2. **Root Cause Analysis - Confirmed**
+   The investigation reveals the exact issue claimed in the bug report:
+   - When `np.argsort()` is called on an array of tuples, it returns a 2D array
+   - For example: `np.argsort(np.array([(0,)], dtype=object))` returns `[[0]]` (shape (1,1), ndim=2)
+   - In contrast, `np.argsort()` on strings/numbers returns 1D arrays
+   - For example: `np.argsort(np.array(['a'], dtype=object))` returns `[0]` (shape (1,), ndim=1)
+
+3. **Impact Scope**
+   Testing shows the bug occurs:
+   - With single tuples: `[(0,)]` - FAILS
+   - With multiple tuples: `[(1,), (2,), (0,)]` - FAILS
+   - With empty tuples: `[()]` - FAILS
+   - With multi-element tuples: `[(1, 2), (0, 3)]` - FAILS
+
+   But interestingly:
+   - Mixed arrays with only one tuple work: `[1, 'a', (0,), None]` - PASSES
+   - Arrays without tuples work fine: `[2, 1, 'b', 'a', None]` - PASSES
+
+4. **Why Some Cases Pass**
+   The mixed array case `[1, 'a', (0,), None]` passes because when there's only one tuple, `np.argsort(values[tuple_pos])` where `tuple_pos` selects a single element returns `[0]` (1D), not `[[0]]` (2D). The dimensionality issue only appears when there are multiple tuples or when tuples are the only type present.
+
+5. **Hypothesis Test Confirmation**
+   The hypothesis test from the bug report fails as expected, confirming the bug exists across various randomly generated inputs containing tuples.
+
+### Code Behavior Analysis
+
+The function implementation shows:
+1. It explicitly handles tuples with `tuple_pos = np.array([isinstance(x, tuple) for x in values], dtype=bool)`
+2. It attempts to sort tuples with `tuple_argsort = np.argsort(values[tuple_pos])`
+3. It tries to concatenate results with `np.concatenate([num_locs, str_locs, tuple_locs, null_locs])`
+
+The crash occurs at the concatenation step because `tuple_locs` ends up being 2D while other arrays are 1D.
+
+### Conclusion
+The bug report is technically accurate. The function crashes when processing arrays containing tuples due to numpy's unexpected behavior when calling `argsort()` on object arrays containing tuples.

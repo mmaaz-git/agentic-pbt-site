@@ -1,0 +1,46 @@
+## Bug Reproduction Report
+
+### Bug Verification
+I have successfully reproduced the bug described in the report. The issue occurs when calling `Template.from_filename()` without specifying the `encoding` parameter.
+
+### Reproduction Steps
+
+1. **Simple reproduction test:**
+   - Created a temporary file with content "Hello World"
+   - Called `Template.from_filename(filename)` without encoding parameter
+   - Result: `TypeError: cannot use a string pattern on a bytes-like object`
+
+2. **Property-based test reproduction:**
+   - Ran the hypothesis test with various string inputs
+   - ALL test cases failed with the same TypeError when encoding was not specified
+   - Even empty strings failed
+
+3. **Control test with encoding:**
+   - Called `Template.from_filename(filename, encoding='utf-8')`
+   - Result: Works correctly, returns "Hello World"
+
+### Technical Analysis
+
+The bug occurs exactly as described in the report:
+1. `from_filename` opens the file in binary mode ('rb')
+2. Reads content as bytes
+3. Only decodes if encoding parameter is explicitly provided (line 157-158)
+4. When encoding=None (default), passes raw bytes to Template.__init__
+5. Template.__init__ calls parse() which calls lex()
+6. lex() uses regex operations that fail on bytes in Python 3
+
+The stack trace confirms the failure path:
+```
+File "Cython/Tempita/_tempita.py", line 159, in from_filename (returns cls())
+File "Cython/Tempita/_tempita.py", line 145, in __init__ (calls parse)
+File "Cython/Tempita/_tempita.py", line 739, in parse (calls lex)
+File "Cython/Tempita/_tempita.py", line 581, in lex (regex on bytes fails)
+```
+
+### Impact
+This bug makes `Template.from_filename()` completely unusable without explicitly specifying encoding, despite:
+- The encoding parameter having a default value of None (suggesting it's optional)
+- The class having a `default_encoding = 'utf8'` attribute that appears intended for this purpose
+- No documentation warning that encoding is required
+
+The bug report's analysis is accurate and the proposed fix appears reasonable.

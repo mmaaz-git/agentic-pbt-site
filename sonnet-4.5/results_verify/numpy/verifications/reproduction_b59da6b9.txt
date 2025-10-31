@@ -1,0 +1,56 @@
+REPRODUCTION ANALYSIS
+=====================
+
+1. Bug Report Verification
+--------------------------
+The bug report claims that numpy.char.str_len() incorrectly calculates string lengths when strings contain trailing null characters (\x00).
+
+2. Hypothesis Test Reproduction
+--------------------------------
+I ran the provided Hypothesis test which checks if numpy.char.str_len() matches Python's len() for randomly generated strings.
+
+Result: The test FAILS on the first example with string '\x00'
+- Python len('\x00') returns: 1
+- numpy.char.str_len(['\x00']) returns: 0
+
+This confirms the bug exists.
+
+3. Manual Test Case Reproduction
+---------------------------------
+I ran all the provided test cases and confirmed the exact outputs match the bug report:
+
+String          | Python len  | numpy str_len | Match?
+--------------------------------------------------------
+'\x00'          | 1           | 0             | ✗
+'a\x00'         | 2           | 1             | ✗
+'abc\x00'       | 4           | 3             | ✗
+'\x00\x00'      | 2           | 0             | ✗
+'abc\x00def'    | 7           | 7             | ✓
+
+The pattern is clear: numpy.char.str_len() stops counting at the first trailing null character, but correctly handles nulls in the middle of strings.
+
+4. Python String Behavior Verification
+---------------------------------------
+I verified that Python treats \x00 as a valid character:
+- len('\x00') = 1
+- len('\x00\x00\x00') = 3
+- '\x00' can be indexed, sliced, and counted like any other character
+- ord('\x00') = 0 and chr(0) = '\x00'
+
+Python strings are NOT null-terminated like C strings. The null character is just another valid Unicode character (code point 0).
+
+5. Effect of the Bug
+--------------------
+The bug causes numpy.char.str_len() to return incorrect string lengths whenever a string ends with one or more null characters. This affects:
+
+a) Direct string length calculations - any code relying on str_len for strings with trailing nulls will get wrong results
+b) String manipulation functions that depend on str_len internally
+c) Data validation and processing where string lengths matter
+
+The bug does NOT affect:
+- Strings without null characters
+- Strings with null characters in the middle (e.g., 'abc\x00def')
+
+6. Consistency Check
+--------------------
+The bug behavior is consistent and reproducible. Every string ending with \x00 has its length incorrectly calculated as if the null was a C-style string terminator.

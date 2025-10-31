@@ -1,0 +1,40 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug described in the report. The bug causes infinite recursion when calling cumsum() on a SparseArray with a non-NaN/null fill_value.
+
+## Test Results
+
+1. **Direct reproduction test**:
+   - Created SparseArray([1, 0, 2, 0, 3], fill_value=0)
+   - Called cumsum() on it
+   - Result: RecursionError: maximum recursion depth exceeded
+
+2. **Hypothesis property-based test**:
+   - Ran the provided test with random sparse arrays
+   - Arrays with fill_value=0, 9, -2, etc. all failed with RecursionError
+   - Arrays with default NaN fill_value worked correctly
+   - Test confirmed the bug occurs consistently with non-null fill values
+
+3. **Comparison with NaN fill_value**:
+   - SparseArray with fill_value=np.nan works correctly
+   - cumsum() returns [1.0, nan, 3.0, nan, 6.0] as expected
+   - No recursion error occurs
+
+## Root Cause Analysis
+
+The infinite recursion occurs in the cumsum() method at line 1550 of pandas/core/arrays/sparse/array.py:
+
+```python
+if not self._null_fill_value:
+    return SparseArray(self.to_dense()).cumsum()
+```
+
+When fill_value is not NaN/null:
+1. `_null_fill_value` is False
+2. Method converts to dense array and creates a new SparseArray
+3. The new SparseArray inherits the same non-null fill_value (e.g., 0)
+4. Calling cumsum() on the new SparseArray triggers the same code path
+5. This creates infinite recursion until stack overflow
+
+The bug report accurately describes the issue and provides a valid reproduction case.

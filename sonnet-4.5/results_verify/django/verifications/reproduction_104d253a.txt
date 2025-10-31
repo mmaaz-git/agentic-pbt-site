@@ -1,0 +1,59 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. TEST EXECUTION:
+
+I successfully ran the reproduction code provided in the bug report. The tests confirm that both RenameModel and RenameIndex operations exhibit the reported behavior.
+
+2. RENAMEMODEL BEHAVIOR:
+
+Test Case 1 - RenameModel(old_name='Author', new_name='Writer'):
+- Initial state: old_name='Author', new_name='Writer'
+- After database_backwards() with exception: old_name='Writer', new_name='Author'
+- Result: STATE WAS MUTATED ❌
+
+Test Case 2 - RenameModel(old_name='A', new_name='B'):
+- Initial state: old_name='A', new_name='B'
+- After database_backwards() with exception: old_name='B', new_name='A'
+- Result: STATE WAS MUTATED ❌
+
+3. RENAMEINDEX BEHAVIOR:
+
+Test Case - RenameIndex(model_name='TestModel', old_name='idx_old', new_name='idx_new'):
+- Initial state: old_name='idx_old', new_name='idx_new'
+- After database_backwards() with exception: old_name='idx_new', new_name='idx_old'
+- Result: STATE WAS MUTATED ❌
+
+4. ROOT CAUSE ANALYSIS:
+
+The code inspection confirms the bug report's analysis. Both operations use a problematic swap-mutate-swap-back pattern:
+
+RenameModel.database_backwards() (lines 538-551):
+1. Swaps old_name and new_name (lines 539-543)
+2. Calls database_forwards() (line 545)
+3. Swaps back (lines 547-551)
+
+If step 2 raises an exception, step 3 never executes, leaving the operation in a mutated state.
+
+RenameIndex.database_backwards() (lines 1140-1157):
+- Uses the identical pattern with the same vulnerability
+
+5. EXCEPTION SCENARIOS:
+
+The bug manifests when database_forwards() raises an exception, which can occur in several realistic scenarios:
+- schema_editor is None (as in test cases or dry runs)
+- Database connection issues
+- Permission errors
+- Schema conflicts
+- Migrations being tested or validated without actual database operations
+
+6. IMPACT VERIFICATION:
+
+The mutation affects:
+- The describe() method would return incorrect information after an exception
+- The deconstruct() method would return swapped values
+- Retry logic would operate on swapped names
+- Any code inspecting the operation after the exception would see incorrect state
+
+CONCLUSION:
+The bug is 100% reproducible. The operations violate the documented immutability requirement by permanently mutating their state when database_backwards() encounters an exception.

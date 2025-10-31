@@ -1,0 +1,73 @@
+## Bug Triage Analysis
+
+### Consideration for each category:
+
+#### BUG (Valid Bug Report)
+**Arguments for BUG:**
+- The code produces mathematically invalid window bounds where start > end
+- This violates the fundamental invariant of window indexing
+- Rolling operations silently fail and return all NaN values instead of raising an error
+- The concept of a "window size" semantically cannot be negative - a window cannot have -1 rows
+- The implementation clearly doesn't handle negative values correctly (produces invalid bounds)
+- Other pandas window operations validate their inputs (e.g., center=True raises ValueError)
+- The fix is straightforward: validate that window_size >= 0
+
+**Arguments against BUG:**
+- Documentation doesn't explicitly forbid negative values
+- The parameter type is simply 'int', not constrained to non-negative
+
+#### INVALID (Incorrect Report)
+**Arguments for INVALID:**
+- Documentation doesn't explicitly state negative values are forbidden
+- The type annotation allows any integer
+
+**Arguments against INVALID:**
+- The semantic meaning of "window size" clearly excludes negative values
+- The code produces objectively incorrect results (start > end)
+- Silent failure with NaN values is worse than an error
+
+#### WONTFIX (Trivial/Uninteresting)
+**Arguments for WONTFIX:**
+- Users are unlikely to accidentally pass negative window sizes
+- This is an obscure edge case
+
+**Arguments against WONTFIX:**
+- Silent failure is dangerous - users get wrong results without knowing
+- The fix is trivial to implement
+- Input validation is a standard practice
+
+#### FEATURE_REQUEST (Not Currently Supported)
+**Arguments for FEATURE_REQUEST:**
+- Could argue that adding validation for negative values is a new feature
+- Documentation doesn't promise to handle this case
+
+**Arguments against FEATURE_REQUEST:**
+- This isn't requesting new functionality, but fixing broken behavior
+- The current behavior is objectively wrong (start > end)
+- It's a bug fix, not a feature addition
+
+#### DOCUMENTATION_FIX (Documentation Issue)
+**Arguments for DOCUMENTATION_FIX:**
+- Documentation could be clearer about valid window_size values
+- Could just update docs to say "window_size must be non-negative"
+
+**Arguments against DOCUMENTATION_FIX:**
+- The code behavior is objectively wrong, not just poorly documented
+- Even with documentation, the silent failure mode is dangerous
+- Best practice is to validate inputs and raise clear errors
+
+### Final Assessment
+
+This is clearly a **BUG** for the following reasons:
+
+1. **Semantic Correctness**: A "window size" cannot be negative by definition. The number of rows in a window must be >= 0.
+
+2. **Invalid Output**: The code produces mathematically invalid bounds where start > end, which violates the fundamental contract of window indexing.
+
+3. **Silent Failure**: The worst aspect is that operations using these invalid bounds silently return NaN values rather than raising an error, leading to incorrect results without user awareness.
+
+4. **Consistency**: The same function already validates other inputs (e.g., raises ValueError for center=True), showing that input validation is expected behavior.
+
+5. **Simple Fix**: The fix is trivial - add a check for window_size < 0 and raise ValueError with a clear message.
+
+This is not a FEATURE_REQUEST because we're not asking for new functionality, and not DOCUMENTATION_FIX because the code behavior itself is wrong. It's not WONTFIX because silent failures are serious issues worth fixing. It's not INVALID because the current behavior is objectively incorrect regardless of documentation.

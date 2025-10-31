@@ -1,0 +1,52 @@
+## Bug Reproduction Results
+
+### Bug Confirmed
+The reported bug has been confirmed. The function `is_body_allowed_for_status_code` does indeed raise a `ValueError` when given invalid string inputs that are not in the predefined pattern list and cannot be converted to integers.
+
+### Test Results
+
+#### Valid Inputs - All Pass
+- The function correctly handles `None`, pattern strings ("default", "1XX", "2XX", etc.), and valid numeric strings
+- Correctly returns `False` for status codes that don't allow bodies (204, 205, 304, 1xx codes)
+- Correctly returns `True` for status codes that allow bodies
+
+#### Bug Reproduction - Confirmed
+- Input `"invalid"` raises `ValueError: invalid literal for int() with base 10: 'invalid'`
+- This matches exactly what the bug report claims
+
+#### Additional Invalid String Cases
+The following non-numeric strings all raise ValueError:
+- "abc", "error", "", "foo", "NaN", "Infinity", "6XX", "10X", "ABCD"
+- Empty string "" also causes ValueError
+- Strings with decimal points ("200.0"), scientific notation ("1e2"), hex notation ("0x64") all fail
+- String representations of Python values like "None", "null", "true", "false" all fail
+
+#### Type Signature vs Implementation Mismatch
+The function signature declares:
+```python
+def is_body_allowed_for_status_code(status_code: Union[int, str, None]) -> bool
+```
+
+This indicates the function accepts any string, but the implementation only handles:
+1. The specific pattern strings: "default", "1XX", "2XX", "3XX", "4XX", "5XX"
+2. Strings that can be converted to integers (e.g., "200", "404", "-1")
+
+Any other string causes an unhandled ValueError at line 55 where `int(status_code)` is called without error handling.
+
+### Technical Analysis
+The bug occurs at line 55 of `/home/npc/pbt/agentic-pbt/envs/fastapi_env/lib/python3.13/site-packages/fastapi/utils.py`:
+```python
+current_status_code = int(status_code)
+```
+
+When the input is a string that:
+1. Is not in the predefined pattern set
+2. Cannot be converted to an integer
+
+The `int()` function raises a ValueError which is not caught, causing the function to crash.
+
+### Impact Assessment
+- This is a real bug that violates the function's type contract
+- The function accepts `Union[int, str, None]` but doesn't handle all strings gracefully
+- This could cause crashes in production code if invalid status codes are passed
+- However, this is likely an internal function not meant for direct user consumption

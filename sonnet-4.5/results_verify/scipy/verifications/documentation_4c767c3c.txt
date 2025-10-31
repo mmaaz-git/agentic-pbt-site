@@ -1,0 +1,69 @@
+=== DOCUMENTATION ANALYSIS ===
+
+## Documentation Sources Reviewed
+
+### 1. SciPy Documentation
+- The scipy.io.arff.loadarff documentation explicitly states: "date type attributes" are NOT implemented
+- The documentation lists this under limitations: "cannot read files with date type attributes"
+- However, the DateAttribute class exists in the code, suggesting partial implementation
+
+### 2. ARFF Format Specification
+- ARFF format (from Waikato/WEKA documentation) specifies: `@attribute [name] date [[date-format]]`
+- Date formats follow Java's SimpleDateFormat patterns
+- Default format is ISO-8601: `yyyy-MM-dd'T'HH:mm:ss`
+
+### 3. Java SimpleDateFormat Documentation
+- Pattern letters have specific meanings:
+  * yyyy = 4-digit year
+  * yy = 2-digit year
+  * MM = month (01-12)
+  * dd = day of month
+  * HH = hour (00-23)
+  * mm = minute
+  * ss = second
+- No explicit rules about datetime_unit precedence in the Java spec
+
+### 4. NumPy datetime64 Documentation
+- The datetime_unit parameter determines the precision/granularity:
+  * 'Y' = years
+  * 'M' = months
+  * 'D' = days
+  * 'h' = hours
+  * 'm' = minutes
+  * 's' = seconds
+
+## Expected Behavior Analysis
+
+### What the Code Should Do
+Based on the implementation logic:
+1. Parse date format patterns from ARFF attribute declarations
+2. Convert Java SimpleDateFormat patterns to Python strftime format
+3. Determine the most precise datetime unit from the pattern
+4. Create a numpy datetime64 dtype with appropriate precision
+
+### datetime_unit Determination
+The code appears to implement a "most precise component wins" strategy:
+- If pattern contains seconds -> unit='s'
+- Else if contains minutes -> unit='m'
+- Else if contains hours -> unit='h'
+- Else if contains days -> unit='D'
+- Else if contains months -> unit='M'
+- Else if contains years -> unit='Y'
+
+This makes sense because numpy datetime64 needs to know the precision level.
+
+### Error Handling Expectations
+The code should raise ValueError when:
+1. Pattern contains timezone indicators (z or Z) - explicitly checked
+2. Pattern has no valid date/time components - checked via `datetime_unit is None`
+3. Invalid date format string - caught by regex matching
+
+## Documentation Gaps
+
+1. **Incomplete Implementation**: SciPy docs say date attributes are "not implemented" but the code exists
+2. **No Specification for datetime_unit**: Neither ARFF nor SciPy documentation specifies how datetime_unit should be determined
+3. **Edge Cases Undefined**: No documentation on what should happen with empty or invalid patterns
+
+## Conclusion
+
+The bug violates the intended error handling behavior. Invalid patterns that contain no recognized date components should raise ValueError("Invalid or unsupported date format") but instead are incorrectly accepted with datetime_unit='Y'. This is clearly incorrect behavior even without explicit documentation, as accepting invalid date formats would lead to runtime errors later.

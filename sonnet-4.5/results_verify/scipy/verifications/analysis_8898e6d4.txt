@@ -1,0 +1,45 @@
+TRIAGE ANALYSIS FOR scipy.signal.deconvolve BUG REPORT
+=======================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The divisor used in the failing case is extremely poorly conditioned (condition number ~7.85e+110) with a structure that creates massive numerical amplification. One could argue that such poorly conditioned inputs are outside the reasonable operating range of numerical algorithms, and users should not expect exact results with such pathological inputs. Many numerical algorithms fail with poorly conditioned inputs without this being considered a bug.
+
+**Why it might not be INVALID:**
+The documentation makes an unqualified mathematical claim without any caveats about conditioning or numerical limitations. The function explicitly states it returns values "such that signal = convolve(divisor, quotient) + remainder" - this is presented as a mathematical identity, not an approximation. Furthermore, numpy.polydiv handles the exact same input correctly, proving the operation is mathematically well-defined and computationally feasible.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The failing case involves an extremely poorly conditioned divisor that would rarely occur in practical signal processing applications. The divisor has a tiny leading coefficient (0.3125), a large second coefficient (74.0), thirteen zeros, and then 1.0 - this is an artificial and pathological structure. Fixing this edge case might require switching from lfilter to a different algorithm, which could affect performance or behavior for the 99.9% of normal use cases.
+
+**Why it might not be WONTFIX:**
+The documented mathematical property is fundamental to the function's purpose. When a function violates its core documented contract, even for edge cases, it undermines user trust and can lead to silent failures in production code. The fact that numpy.polydiv handles this correctly shows there's a straightforward fix available (use polydiv internally instead of lfilter).
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that the property holds "within numerical precision" or "for well-conditioned divisors." This would set appropriate expectations about the function's limitations with poorly conditioned inputs. The documentation already mentions numpy.polydiv as an alternative, so users needing exact results could be directed there.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation explicitly states the mathematical relationship without qualification. If the implementation can't guarantee this property, it's not just a documentation issue - it's a fundamental mismatch between specification and implementation. Simply documenting the limitation doesn't fix the fact that the function fails to do what it claims to do.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that handling poorly conditioned divisors robustly is a new feature rather than a bug fix. The request could be reframed as "Add support for poorly conditioned divisors in deconvolve" or "Add numerical stability checking with warnings." This would involve enhancing the function beyond its current capabilities.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to perform deconvolution with the specified mathematical property. This isn't asking for new functionality - it's asking for the existing documented functionality to work correctly. The mathematical relationship "signal = convolve(divisor, quotient) + remainder" is already promised by the current function.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function explicitly violates its documented mathematical contract. The documentation states unequivocally that it returns values "such that signal = convolve(divisor, quotient) + remainder", and this property demonstrably fails for certain inputs. The implementation uses lfilter which introduces numerical instability, while numpy.polydiv (mentioned in the docs as equivalent) works correctly. The bug is reproducible, technically valid, and represents a clear discrepancy between specification and implementation.
+
+**Why it might not be BUG:**
+The failure only occurs with extremely poorly conditioned inputs that are arguably pathological. Many numerical algorithms have undefined behavior with such inputs. The vast majority of real-world signal processing applications would never encounter this issue. One could argue this is expected behavior for numerical algorithms dealing with ill-conditioned problems.
+
+## Overall Consideration
+
+This case presents a clear violation of the function's documented mathematical guarantee. The documentation makes an unqualified claim that "signal = convolve(divisor, quotient) + remainder" without any caveats about numerical precision, conditioning, or limitations. When documentation makes such strong mathematical claims, users rightfully expect them to hold, at least within reasonable numerical tolerance.
+
+The key factors supporting this being a valid bug are: (1) The documented property fails completely (error of 1.5, not a small numerical error), (2) numpy.polydiv handles the same case correctly, proving it's computationally feasible, (3) The implementation choice (lfilter vs polydiv) appears to be the root cause, not fundamental mathematical limitations. The function uses a numerically unstable algorithm when a stable alternative exists and is even referenced in the documentation.
+
+However, the artificial nature of the failing input (tiny leading coefficient, huge second coefficient, many zeros) suggests this is an edge case unlikely to affect real users. The divisor's condition number of 10^110 is absurdly high, far beyond what any practical signal processing application would encounter. Most numerical software has undefined behavior with such poorly conditioned inputs, and requiring perfect behavior for all mathematically valid but numerically pathological inputs could be seen as unreasonable.

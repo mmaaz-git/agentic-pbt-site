@@ -1,0 +1,79 @@
+DOCUMENTATION ANALYSIS
+======================
+
+1. Function Documentation (Docstring):
+
+The decimal_encoder function has the following docstring (lines 38-51 in encoders.py):
+
+"""
+Encodes a Decimal as int of there's no exponent, otherwise float
+
+This is useful when we use ConstrainedDecimal to represent Numeric(x,0)
+where a integer (but not int typed) is used. Encoding this as a float
+results in failed round-tripping between encode and parse.
+Our Id type is a prime example of this.
+
+>>> decimal_encoder(Decimal("1.0"))
+1.0
+
+>>> decimal_encoder(Decimal("1"))
+1
+"""
+
+2. Key Documentation Claims:
+
+a) Purpose Statement: "Encodes a Decimal as int of there's no exponent, otherwise float"
+   - This is what the function does, but doesn't specify precision guarantees
+
+b) Use Case: "useful when we use ConstrainedDecimal to represent Numeric(x,0)"
+   - Numeric(x,0) refers to database numeric types with 0 decimal places (integers)
+   - The documentation suggests this is primarily for integer-like decimals
+
+c) Critical Claim: "Encoding this as a float results in failed round-tripping between encode and parse"
+   - This statement is SELF-CONTRADICTORY with the actual implementation
+   - The docstring warns about round-trip failures with floats
+   - Yet the function returns float for any decimal with fractional parts
+   - This creates exactly the round-trip failure the docstring warns against
+
+3. Code Comment:
+
+Line 36 has a telling comment: "# TODO: pv2 should this return strings instead?"
+- This suggests the developers were aware of potential issues
+- Indicates uncertainty about the current float approach
+
+4. Usage Context:
+
+The function is registered in ENCODERS_BY_TYPE (line 65) for ALL Decimal instances:
+```python
+ENCODERS_BY_TYPE = {
+    ...
+    Decimal: decimal_encoder,
+    ...
+}
+```
+
+This means it's the default encoder for ALL Decimals in FastAPI, not just integer decimals.
+
+5. Documentation Inconsistencies:
+
+a) The docstring focuses on the integer decimal use case (ConstrainedDecimal, Numeric(x,0))
+b) The docstring explicitly warns that "Encoding this as a float results in failed round-tripping"
+c) Despite this warning, the function encodes fractional decimals as float
+d) The function is applied globally to all Decimal types, not just integer decimals
+
+6. External Documentation:
+
+Without access to FastAPI's online documentation due to rate limits, I rely on:
+- The source code and its inline documentation
+- The Python Decimal documentation which guarantees exact decimal arithmetic
+- General JSON encoding principles
+
+7. Conclusion:
+
+The documentation itself acknowledges that encoding as float causes round-trip failures,
+yet the implementation does exactly that for fractional decimals. This is an internal
+contradiction where the code violates its own documented concerns about round-tripping.
+
+The bug report correctly identifies that the function fails to meet its stated purpose
+of avoiding "failed round-tripping between encode and parse" when handling fractional
+decimal values.

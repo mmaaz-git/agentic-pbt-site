@@ -1,0 +1,30 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report.
+
+### Test Execution
+
+1. **Direct reproduction with null byte**:
+   - Ran: `clean_column_name('\x00')`
+   - Result: `tokenize.TokenError: ('source code cannot contain null bytes', (1, 0))`
+   - The function crashes with TokenError as described in the bug report.
+
+2. **Hypothesis test**:
+   - The property-based test also fails with the same TokenError
+   - Hypothesis found the failing input '\x00' as expected
+   - The error occurs at line 189 of parsing.py when iterating over the token generator
+
+### Stack trace analysis:
+The error occurs at:
+- `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/computation/parsing.py`, line 130
+- When calling `next(tokenized)` on the generator returned by `tokenize_string`
+- The actual error originates from Python's tokenize module (line 588) which raises TokenError when it encounters null bytes
+
+### Code flow:
+1. `clean_column_name` receives '\x00' as input
+2. It calls `tokenize_string(f"`\x00`")` at line 129
+3. `tokenize_string` creates a token generator using `tokenize.generate_tokens` at line 185
+4. When iterating over the generator at line 189, Python's tokenizer immediately raises TokenError
+5. This TokenError is NOT caught by the `except SyntaxError` block at line 132
+
+The bug is confirmed: The function only catches `SyntaxError` but not `TokenError`, which violates its documented contract that states it should return the name unmodified when tokenization fails.

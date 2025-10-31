@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The JSON specification (RFC 8259) explicitly allows implementations to set limits on the range and precision of numbers, and ujson is within its rights to not support integers outside certain ranges. The documentation never promises that ujson will handle arbitrary precision integers like Python's standard json module does. Since -2^64 is well outside the recommended IEEE 754 binary64 range and even outside typical int64 ranges, one could argue this is expected behavior for a performance-focused JSON library.
+
+**Why it might not be INVALID:**
+The behavior is clearly broken - silently converting -2^64 to 0 is data corruption, not a documented limitation. Even if ujson is allowed to have limits, it should fail consistently. The fact that it raises exceptions for 2^64 ("Value is too big!") and -2^63-1 ("Value is too small") but silently corrupts -2^64 to 0 shows this is a bug, not an intentional limitation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case involving a value (-2^64) that is outside the range of signed 64-bit integers and well outside JSON's recommended interoperable integer range of [-(2^53)+1, (2^53)-1]. The value -18446744073709551616 would rarely appear in practical applications, and users needing such large negative numbers should use strings or Python's standard json module instead of the performance-optimized ujson.
+
+**Why it might not be WONTFIX:**
+Silent data corruption is never acceptable, regardless of how rare the edge case might be. The fact that the library silently converts -2^64 to 0 without any warning could lead to catastrophic data loss in production systems. At minimum, it should raise an exception like it does for other out-of-range values.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+Neither pandas nor ujson documentation explicitly states what happens with values like -2^64. If the current behavior is intentional (perhaps for performance reasons), then the documentation should be updated to warn users about this limitation and specify exactly which integer ranges are supported and what happens outside those ranges.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The inconsistent behavior (exceptions for some values, silent corruption for others) strongly suggests this is an implementation bug rather than an undocumented feature. Documenting broken behavior doesn't make it correct. The code should be fixed to either handle the value correctly or raise an exception consistently.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrary precision integers like -2^64 could be considered a new feature for ujson, which prioritizes performance over complete correctness. The user is essentially asking for ujson to match the capabilities of Python's standard json module, which could be seen as a feature enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't about adding new functionality - it's about fixing broken behavior. The library already attempts to handle -2^64 (it serializes it correctly with ujson_dumps), but fails on deserialization. The request is to fix the corruption, not to add support for something entirely new.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is textbook silent data corruption - the worst kind of bug. The value -2^64 is serialized correctly but deserialized as 0, completely destroying the data without any error or warning. The inconsistency (raising errors for 2^64 and -2^63-1, but silently corrupting -2^64) clearly indicates an implementation error, likely an unsigned integer underflow in the C code. This violates the fundamental principle that JSON serialization should either round-trip correctly or fail explicitly.
+
+**Why it might not be BUG:**
+The JSON specification allows implementations to set their own limits, and ujson is a performance-focused library that may intentionally trade correctness for speed in edge cases. Since -2^64 is outside the range of signed 64-bit integers and well beyond JSON's recommended interoperable range, this could be considered undefined behavior rather than a bug.
+
+## Overall Consideration
+
+Upon careful analysis, this appears to be a legitimate BUG rather than any other category. The key factor is the SILENT corruption of data - ujson_loads converts -2^64 to 0 without any warning or error. This is fundamentally different from the library's handling of other out-of-range values, which properly raise exceptions. If ujson cannot handle -2^64, it should raise "Value is too small" like it does for -2^63-1, not silently corrupt the value to 0.
+
+The bug report correctly identifies that this is a data integrity issue with potentially severe consequences. In data processing pipelines, silent corruption is far worse than explicit failures because it can propagate undetected through systems, corrupting databases and analytics. The fact that Python's standard json module handles this correctly demonstrates that the limitation is not inherent to JSON but rather a bug in ujson's implementation.
+
+While the JSON specification does allow implementations to set limits, it does not excuse silent data corruption. The inconsistent behavior (exceptions for some out-of-range values, but silent corruption for others) strongly indicates this is an implementation bug rather than a design choice. The most likely cause is an unsigned integer underflow in the C implementation that needs to be fixed to either handle the value correctly or raise an appropriate exception.

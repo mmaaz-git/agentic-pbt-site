@@ -1,0 +1,43 @@
+## Bug Reproduction Results
+
+### Test Case 1: Specific Failing Input from Bug Report
+**Input**: `pd.Series([0, 1, 0, 0])` with `chunksize=1`
+**Result**:
+- Divisions: `[0, 1, 0]`
+- Locations: `[0, 4, 4]`
+- **Bug Confirmed**: `locations[1] == locations[2] == 4`, violating the invariant that locations should be strictly increasing
+
+### Test Case 2: Hypothesis Testing
+The hypothesis test found multiple failures. One example:
+- The test asserted that locations must be strictly increasing
+- Failed with: `locations[2]=5 >= locations[3]=5`
+- This confirms that the function can produce non-monotonic location arrays when given unsorted input
+
+### Test Case 3: Properly Sorted Input
+**Input**: `pd.Series([0, 0, 0, 1])` with `chunksize=1`
+**Result**:
+- Divisions: `[0, 1, 1]`
+- Locations: `[0, 3, 4]`
+- Locations are strictly increasing: TRUE
+- The function works correctly with sorted input
+
+### Technical Analysis of the Bug
+
+The bug occurs because:
+1. The function uses `bisect` operations which require sorted input
+2. When input is unsorted, the bisect operations produce incorrect indices
+3. The function contains this comment at line 288: "# we use bisect later, so we need sorted."
+4. However, the function only sorts the unique values (`seq_unique = sorted(set(seq))`) but NOT the original sequence
+5. The function then uses `bisect.bisect_left(seq, x)` on the potentially unsorted `seq`, which produces incorrect results
+
+### Root Cause
+The function assumes sorted input (as stated in its name and docstring) but:
+1. Does not validate this precondition
+2. Does not document what happens with unsorted input
+3. Silently produces incorrect results instead of failing loudly
+
+### Impact Assessment
+- The function is internal (not in public API)
+- Internal callers ensure sorted input (e.g., passing `data.index` where monotonic increasing is checked)
+- However, the function can be imported directly: `from dask.dataframe.io.io import sorted_division_locations`
+- When used incorrectly with unsorted input, it produces invalid results that violate basic invariants

@@ -1,0 +1,37 @@
+## Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Reproduction
+The Hypothesis property test from the bug report fails as expected. When testing with the specific failing input:
+- segments = ['2', '0', '0', '1', 'd', 'b', '8', '1']
+- port = 8080
+- This produces host_with_port = "[2:0:0:1:d:b:8:1]:8080"
+- When split by ":", the result is "[2" instead of the expected "[2:0:0:1:d:b:8:1]"
+
+The test correctly identifies that using `.split(":")[0]` on an IPv6 address with port breaks the parsing.
+
+### Middleware Behavior Reproduction
+I created comprehensive tests of the actual TrustedHostMiddleware behavior:
+
+1. **Direct parsing test**: Confirmed that `"[2001:db8::1]:8080".split(":")[0]` produces "[2001" instead of "[2001:db8::1]"
+
+2. **Middleware integration test**:
+   - Created a TrustedHostMiddleware with allowed_hosts=["[2001:db8::1]", "2001:db8::1", "localhost"]
+   - Sent a request with Host header "[2001:db8::1]:8080"
+   - The middleware returned a 400 status code with "Invalid host header" message
+   - This confirms the bug: valid IPv6 addresses are being rejected
+
+3. **TestClient verification**:
+   - Request to "localhost" works (200 status)
+   - Request to "[2001:db8::1]:8080" fails (400 status)
+   - Request to "[2001:db8::1]" (without port) also fails (400 status)
+
+### Source Code Examination
+I examined the source code at `/home/npc/pbt/agentic-pbt/envs/fastapi_env/lib/python3.13/site-packages/starlette/middleware/trustedhost.py`:
+- Line 40 contains the problematic code: `host = headers.get("host", "").split(":")[0]`
+- This approach works for IPv4 and domain names but fails for IPv6 addresses
+- FastAPI's version simply re-exports Starlette's implementation
+
+### Impact
+This bug completely breaks IPv6 support in TrustedHostMiddleware. Any application using this middleware cannot accept requests from IPv6 addresses when a port is specified in the Host header, which is the standard format per RFC 2732.

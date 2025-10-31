@@ -1,0 +1,57 @@
+## Bug Triage Analysis
+
+### BUG (Valid Bug Report)
+**Why it could be a BUG:**
+1. The insert() method fails to insert a valid value into an array, which violates the basic contract of insert()
+2. The error is not user-friendly (low-level PyArrow casting error instead of clear message)
+3. This is a realistic use case - users may start with all-None arrays and progressively add values
+4. PyArrow itself supports converting null arrays to typed arrays (can cast null to int64)
+5. The behavior is inconsistent - if you create an array with [None, 42], it works fine as int64, but [None] alone creates null type that can't accept 42 later
+
+**Against being a BUG:**
+- PyArrow null type is documented as not holding values, so this could be expected behavior
+
+### INVALID
+**Why it could be INVALID:**
+1. The null type by definition cannot hold non-null values according to PyArrow
+2. The documentation doesn't promise that type promotion would occur
+
+**Against being INVALID:**
+- The error message is confusing and unhelpful
+- This is a common and reasonable use case
+- The method should either work or give a clear error
+
+### WONTFIX
+**Why it could be WONTFIX:**
+1. This is an edge case involving PyArrow's null type which is rarely used
+2. Users can work around by explicitly creating typed arrays
+
+**Against being WONTFIX:**
+- This is not an obscure edge case - starting with None values is common
+- The fix would improve usability significantly
+
+### DOCUMENTATION_FIX
+**Why it could be DOCUMENTATION_FIX:**
+1. The documentation doesn't explain how null-type arrays behave
+2. The error type doesn't match documented behavior (ArrowNotImplementedError vs ValueError/TypeError)
+
+**Against being DOCUMENTATION_FIX:**
+- The code behavior itself is problematic, not just the documentation
+- Users reasonably expect insert() to work
+
+### FEATURE_REQUEST
+**Why it could be FEATURE_REQUEST:**
+1. Automatic type promotion from null to appropriate type could be seen as a new feature
+2. The current implementation doesn't handle this case
+
+**Against being FEATURE_REQUEST:**
+- insert() is a basic operation that should work for all valid inputs
+- This is fixing broken functionality, not adding new capabilities
+
+## Final Assessment
+
+This is a **BUG**. The insert() method should handle this case properly. Either:
+1. It should automatically promote the null-type array to an appropriate type (preferred), OR
+2. It should raise a clear, user-friendly error explaining the limitation
+
+The current behavior (cryptic ArrowNotImplementedError about casting) is clearly incorrect and violates user expectations. The fact that PyArrow supports casting FROM null to other types suggests that type promotion is technically feasible.

@@ -1,0 +1,64 @@
+BUG TRIAGE ANALYSIS
+==================
+
+## Evaluation Against Each Category
+
+### 1. INVALID
+**Why it might be INVALID:**
+- The documentation doesn't explicitly state that nested exclude should work for plain dicts
+- One could argue the function only promises Pydantic-like behavior for Pydantic models
+
+**Why it's NOT INVALID:**
+- The docstring says it accepts "Pydantic's exclude parameter", implying Pydantic-like behavior
+- The function already supports nested exclude for Pydantic models and dataclasses
+- When a dict like `{"user": {"password"}}` is provided as exclude, the current behavior (excluding the entire "user" key) makes no sense and is clearly incorrect
+- The type hints accept dict-form exclude, which only makes sense for nested exclusion
+
+### 2. WONTFIX
+**Why it might be WONTFIX:**
+- Users could work around this by converting dicts to Pydantic models first
+- The bug only affects plain dicts, not the primary use case (Pydantic models)
+
+**Why it's NOT WONTFIX:**
+- This is not an obscure edge case - nested field exclusion is a common requirement
+- The inconsistent behavior between plain dicts and Pydantic models is confusing
+- The fix is straightforward and doesn't break existing functionality
+- Plain dict support is an advertised feature of jsonable_encoder
+
+### 3. DOCUMENTATION_FIX
+**Why it might be DOCUMENTATION_FIX:**
+- The documentation doesn't explicitly promise nested exclude for plain dicts
+- Could document that nested exclude only works with Pydantic models
+
+**Why it's NOT DOCUMENTATION_FIX:**
+- The current behavior is clearly broken (excludes entire parent instead of nested field)
+- No reasonable user would expect `exclude={"user": {"password"}}` to exclude the entire "user" key
+- The code already attempts to support dict-form exclude but implements it incorrectly
+- Documenting this limitation would be acknowledging a bug rather than clarifying intended behavior
+
+### 4. FEATURE_REQUEST
+**Why it might be FEATURE_REQUEST:**
+- Nested exclude for plain dicts could be seen as a new feature
+- The function might have been designed only for simple exclude on plain dicts
+
+**Why it's NOT FEATURE_REQUEST:**
+- The function already accepts dict-form exclude parameters
+- The current implementation when given dict-form exclude is broken, not just missing
+- This is fixing broken existing functionality, not adding new capability
+- The function explicitly claims to accept "Pydantic's exclude parameter"
+
+### 5. BUG
+**Why this IS a BUG:**
+- The function accepts dict-form exclude but handles it incorrectly
+- Current behavior excludes entire parent keys when nested exclusion is requested
+- Inconsistent behavior between plain dicts and Pydantic models/dataclasses
+- The docstring references "Pydantic's exclude parameter" but doesn't implement Pydantic-like behavior for dicts
+- The fix is straightforward and aligns the behavior with user expectations
+- No reasonable interpretation of `exclude={"user": {"password"}}` would expect the entire "user" key to be excluded
+- The code at line 270 (`allowed_keys -= set(exclude)`) is clearly wrong when exclude is a dict
+
+## Decision Rationale
+
+This is unequivocally a **BUG**. The function accepts dict-form exclude parameters but processes them incorrectly for plain dict objects. When a user provides `exclude={"user": {"password"}}`, they clearly intend to exclude only the "password" field within "user", not the entire "user" object. The current implementation's behavior of excluding the entire parent key is nonsensical and represents a clear logic error in the code.
+
+The bug is not trivial - it affects a core functionality of the encoder and creates inconsistent behavior between different input types. The proposed fix is reasonable and would align the behavior with both Pydantic conventions and user expectations.

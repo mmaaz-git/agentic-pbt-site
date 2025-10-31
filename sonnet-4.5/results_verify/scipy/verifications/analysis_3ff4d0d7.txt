@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify what should happen when the root is at the boundary. One could argue that since the documentation says "f(a) and f(b) must have opposite signs", having f(a)=0 or f(b)=0 technically violates this requirement since zero is neither positive nor negative. Therefore, the behavior for boundary roots might be considered undefined.
+
+**Why it might not be INVALID:**
+The functions do accept boundary roots and return correct root values. The documentation for RootResults explicitly states that iterations should be an integer representing "Number of iterations needed to find the root" with no exceptions. Returning uninitialized memory values clearly violates this documented contract. Additionally, the functions correctly set other fields (root, function_calls, converged) even for boundary cases, indicating this is a supported scenario.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered a very edge case that rarely occurs in practice. Most real-world root-finding problems don't have roots exactly at the boundaries, as users typically choose brackets that strictly contain the root. The bug only affects one field (iterations) while the actual root value and convergence status are correct.
+
+**Why it might not be WONTFIX:**
+Returning uninitialized memory is a serious issue that goes beyond a minor inconvenience. It's non-deterministic behavior that could cause crashes in code that relies on the iterations field. It also represents a potential security issue (information leak from uninitialized memory). The fix is trivial (initialize the variable), making it unreasonable to leave unfixed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that the iterations field is undefined when roots are at boundaries, or to explicitly state that f(a) and f(b) must be non-zero. This would make the current behavior "correct" per the documentation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly has a bug where it returns garbage values from uninitialized memory. This isn't a documentation issue - it's a code defect. Other fields work correctly for boundary roots, suggesting the feature is intended to work. Documenting that "iterations may contain garbage values" would be documenting a bug, not clarifying intended behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that properly handling boundary roots is a new feature that wasn't originally implemented. The request would be to add support for boundary root cases with proper iteration counting.
+
+**Why it might not be FEATURE_REQUEST:**
+The functions already handle boundary roots - they find the correct root value, set function_calls correctly, and mark converged=True. Only the iterations field is broken. This is fixing existing functionality, not adding new functionality. The code path exists but has a bug (uninitialized variable).
+
+## BUG Considerations
+**Why it might be BUG:**
+The iterations field returns garbage values from uninitialized memory instead of the documented "Number of iterations needed to find the root." This is a clear contract violation. The values (millions/billions) are obviously wrong for a process that took 2 function calls. Uninitialized memory access is a classic C/C++ bug. The fix is straightforward - initialize the variable. This behavior is non-deterministic and could cause downstream failures.
+
+**Why it might not be BUG:**
+The actual root-finding works correctly - the root value is correct, convergence is detected, and function_calls is accurate. One could argue this is just a minor issue with one metadata field that most users ignore. The documentation could be interpreted as not guaranteeing behavior for boundary cases.
+
+## Overall Consideration
+
+This is clearly a **BUG** that should be fixed. The evidence is overwhelming:
+
+First, the iterations field is documented as containing "Number of iterations needed to find the root" with no exceptions or caveats. When this field contains values like 6050768 or 1920119424 for a root found in 2 function calls, this is objectively wrong. These are clearly uninitialized memory values, not meaningful iteration counts.
+
+Second, uninitialized memory access is a serious programming error in C/C++. It's non-deterministic (values can change between runs), can cause crashes if code tries to use these values, and represents a potential security issue. No professional software should return uninitialized memory to users.
+
+Third, the fact that all other fields (root, function_calls, converged) work correctly for boundary roots shows this is a supported use case with an implementation bug, not undefined behavior. The fix is trivial - initialize the iterations variable to 0 before the early return paths. This is a classic bug pattern in C where early returns bypass initialization. There's no reasonable argument for leaving garbage values in a public API's return structure.

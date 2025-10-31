@@ -1,0 +1,39 @@
+## Reproduction of Bug Report
+
+I have successfully reproduced the bug in the `normalise_float_repr` function from `Cython.Utils`. The bug report is accurate in its claims.
+
+### Test Results
+
+1. **Bug 1: Invalid float string for very small negative number**
+   - Input: `-1.670758163823954e-133`
+   - Output: `.00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000-1670758163823954`
+   - Error: Cannot convert back to float - ValueError raised
+   - The output contains a minus sign in the middle of the number, making it invalid
+
+2. **Bug 2: Value corruption for small numbers**
+   - Input: `1.114036198514633e-05` (equals 0.00001114036198514633)
+   - Output: `111403619851.00004633`
+   - Error: The value is changed by approximately 10^16 times (999999999995841408%)
+   - The decimal point is placed incorrectly, corrupting the value
+
+### Additional Test Cases
+
+I tested additional cases to understand the pattern:
+- `-1e-10`: Produces `.00000000-1` (invalid float with minus in middle)
+- `-1.0`, `-0.5`, `-10.5`, `-10000000000.0`: Work correctly
+- Positive numbers without scientific notation: Work correctly
+- Zero and positive numbers: Work correctly
+
+### Root Cause
+
+The function fails specifically when:
+1. The input is negative AND in scientific notation with negative exponent
+2. The function incorrectly handles the minus sign by including it in the digit string when calculating decimal point positions
+
+The bug manifests in two ways:
+1. For very small negative numbers, it produces invalid float strings with minus signs embedded in the digits
+2. For some numbers, it produces valid float strings but with incorrect values due to decimal point misplacement
+
+### Confirmation
+
+The bug is 100% reproducible and the test cases provided in the bug report accurately demonstrate the issue. The function clearly fails to preserve the numeric value for certain inputs, which violates its expected behavior based on the existing test suite that verifies `float(float_str) == float(result)`.

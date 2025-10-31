@@ -1,0 +1,32 @@
+## Bug Reproduction Results
+
+### Property-Based Test
+The hypothesis test failed immediately on the first example with header='A', confirming that the bug exists.
+
+### Specific Reproduction
+The bug report's example is accurate:
+- `CORSMiddleware(None, allow_headers=['A'])` produces: `['a', 'accept', 'accept-language', 'content-language', 'content-type']`
+- `CORSMiddleware(None, allow_headers=['a'])` produces: `['accept', 'accept-language', 'content-language', 'content-type', 'a']`
+- These are different lists, confirming the bug.
+
+### Root Cause Analysis
+The analysis clearly shows the problem:
+1. When 'A' is provided, it gets combined with SAFELISTED_HEADERS (which have capital letters)
+2. Sorting happens with mixed case: `['A', 'Accept', 'Accept-Language', 'Content-Language', 'Content-Type']`
+3. Then lowercasing produces: `['a', 'accept', 'accept-language', 'content-language', 'content-type']`
+
+Versus:
+1. When 'a' is provided, it gets combined with SAFELISTED_HEADERS
+2. Sorting happens: `['Accept', 'Accept-Language', 'Content-Language', 'Content-Type', 'a']` (lowercase 'a' sorts after uppercase letters)
+3. Then lowercasing produces: `['accept', 'accept-language', 'content-language', 'content-type', 'a']`
+
+The key insight is that in Python/ASCII: uppercase 'A' (65) < uppercase 'Accept' but lowercase 'a' (97) > uppercase 'Accept' (65).
+
+### Impact
+This bug affects the internal state of the middleware object. The `allow_headers` attribute ends up with a different order depending on the case of the input headers. While this might not affect functionality in most cases (since headers are checked in a case-insensitive manner in line 129), it does violate the principle that headers should be case-insensitive.
+
+### Interesting Edge Case
+When testing 'X-Custom-Header' vs 'x-custom-header', both produce the same result. This is because both 'X' and 'x' sort after all the SAFELISTED_HEADERS (which start with 'A' or 'C'), so the relative ordering isn't affected.
+
+### Technical Correctness
+The bug report is technically accurate. The implementation does produce different internal states for what should be equivalent inputs according to HTTP specifications.

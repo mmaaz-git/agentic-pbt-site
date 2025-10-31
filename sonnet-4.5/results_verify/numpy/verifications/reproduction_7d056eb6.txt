@@ -1,0 +1,38 @@
+BUG REPRODUCTION RESULTS
+
+1. BASIC REPRODUCTION OF THE REPORTED BUG:
+   Input: np.array(['ß']) with inferred dtype <U1
+   - numpy.char.upper result: 'S' (truncated)
+   - Python str.upper result: 'SS' (correct)
+   - The bug report is ACCURATE - numpy truncates the result
+
+2. VERIFICATION WITH EXPLICIT LARGER DTYPE:
+   Input: np.array(['ß'], dtype='<U2')
+   - numpy.char.upper result: 'SS' (correct)
+   - Python str.upper result: 'SS' (correct)
+   - With sufficient dtype size, the function works correctly
+
+3. HYPOTHESIS TEST RESULTS:
+   The provided hypothesis test consistently fails. Examples:
+   - 'ß' with dtype <U1: expected 'SS', got 'S'
+   - 'ßſ' with dtype <U2: expected 'SSS', got 'SS'
+   - 'ßßßß' with dtype <U4: expected 'SSSSSSSS', got 'SSSS'
+
+   Pattern: When dtype size equals input string length, the output is truncated to fit the same dtype size, losing characters when case conversion expands the string.
+
+4. OTHER AFFECTED FUNCTIONS:
+   Testing showed ALL mentioned functions exhibit the same truncation:
+   - char.upper('ß'): Returns 'S' instead of 'SS'
+   - char.swapcase('ß'): Returns 'S' instead of 'SS'
+   - char.title('ß'): Returns 'S' instead of 'Ss'
+   - char.capitalize('ß'): Returns 'S' instead of 'Ss'
+
+5. TECHNICAL DETAILS CONFIRMED:
+   - The bug occurs specifically when numpy infers dtype from input (creates minimal dtype)
+   - German sharp S (ß) uppercases to 'SS' per Unicode standard
+   - Long s (ſ) correctly uppercases to 'S' (no expansion, no issue)
+   - The truncation is silent - no warnings or errors are raised
+   - The output dtype always matches the input dtype as documented
+
+VERIFICATION CONCLUSION:
+The bug report is technically accurate. The functions do truncate results when case transformation expands string length beyond the allocated dtype size. This happens silently without any warning to the user. The behavior contradicts the documentation claim that these functions "Call str.{method} element-wise" since they don't produce the same results as the corresponding Python string methods.

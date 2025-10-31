@@ -1,0 +1,36 @@
+## Reproduction of Bug Report
+
+I successfully reproduced the reported bug in pandas.core.indexers.utils.length_of_indexer.
+
+### Test Results:
+
+1. **Simple reproduction case**: `range(0, 1, 2)`
+   - `length_of_indexer(range(0, 1, 2))` returns: 0
+   - `len(range(0, 1, 2))` returns: 1
+   - The function incorrectly returns 0 when it should return 1
+
+2. **Property-based testing with Hypothesis**:
+   - The property test revealed numerous failing cases
+   - Pattern observed: When step doesn't evenly divide (stop - start), the calculation fails
+   - Examples of failures:
+     - range(0, 1, 2): computed 0, expected 1
+     - range(95, 130, 20): computed 1, expected 2
+     - range(47, 138, 18): computed 5, expected 6
+
+3. **Source code inspection** (line 326 of utils.py):
+   ```python
+   elif isinstance(indexer, range):
+       return (indexer.stop - indexer.start) // indexer.step
+   ```
+
+   This formula uses floor division which truncates, losing the "remainder" elements.
+   For range(0, 1, 2): (1 - 0) // 2 = 0, but there's actually 1 element (0).
+
+### Bug Impact:
+
+The bug is real and affects any code that relies on `length_of_indexer` to accurately determine the length of range objects, particularly when the step doesn't evenly divide the range span. This could impact:
+- Rolling window operations
+- Indexing operations
+- Any pandas functionality that needs accurate indexer lengths
+
+The bug report is accurate in both its diagnosis and the failing examples provided.

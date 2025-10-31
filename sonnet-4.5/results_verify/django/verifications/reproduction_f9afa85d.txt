@@ -1,0 +1,39 @@
+## Reproduction Results
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in the Django cache utils module.
+
+### Test Results
+
+1. **Basic collision case**: Confirmed that `['a', 'b']` and `['a:b']` produce identical cache keys:
+   - Both produce: `template.cache.fragment.d6e7a7288d38d4cf78b2f82cc7f50bba`
+   - This confirms the collision exists as reported.
+
+2. **Additional test cases**: Found multiple collisions:
+   - `['a', 'b', 'c']`, `['a:b', 'c']`, `['a', 'b:c']`, and `['a:b:c']` all produce the same key
+   - All produce: `template.cache.fragment.39e6f0c3b0396246d06add453fe355e5`
+
+3. **Hypothesis test**: The property-based test fails immediately with simple inputs like `['0', '0']` colliding with `['0:0']`.
+
+### Source Code Verification
+
+Examined the actual source code at `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/core/cache/utils.py`:
+
+```python
+def make_template_fragment_key(fragment_name, vary_on=None):
+    hasher = md5(usedforsecurity=False)
+    if vary_on is not None:
+        for arg in vary_on:
+            hasher.update(str(arg).encode())
+            hasher.update(b":")
+    return TEMPLATE_FRAGMENT_KEY_TEMPLATE % (fragment_name, hasher.hexdigest())
+```
+
+The implementation confirms that the function uses `:` as a separator between elements, which causes the collision:
+- `['a', 'b']` → hashes bytes: `'a' + ':' + 'b' + ':'`
+- `['a:b']` → hashes bytes: `'a:b' + ':'`
+
+Both sequences produce identical byte strings for hashing, resulting in the same MD5 hash.
+
+### Impact
+
+This is a real hash collision issue that could cause incorrect cache behavior when template fragments are cached with different vary_on parameters that happen to produce the same concatenated string pattern.

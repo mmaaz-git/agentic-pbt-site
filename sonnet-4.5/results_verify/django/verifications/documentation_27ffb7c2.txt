@@ -1,0 +1,60 @@
+DOCUMENTATION ANALYSIS
+======================
+
+Public API Status:
+-----------------
+The bug report claims WhereNode is part of Django's public API. My investigation shows:
+
+1. WhereNode is NOT in django.db.models.sql.__all__
+   - Only "Query", "AND", "OR", "XOR" are exported in __all__
+   - WhereNode itself is not listed as public API
+
+2. However, WhereNode IS used internally by Django's query system
+   - It's the underlying implementation for WHERE clauses
+   - Q objects and QuerySets ultimately create WhereNode instances
+
+3. XOR connector IS documented and public:
+   - XOR is exported in django.db.models.sql.__all__
+   - XOR is a documented connector type (AND, OR, XOR)
+   - XOR can be used with Q objects via the ^ operator
+   - XOR is supported in QuerySet operations
+
+XOR Behavior Documentation:
+---------------------------
+From Django's documentation and code:
+- XOR matches rows matched by an odd number of operands
+- Native support exists for MariaDB and MySQL
+- Emulation is provided for other databases using:
+  (x OR y OR ...) AND MOD((CASE WHEN x THEN 1 ELSE 0 END) + ..., 2) == 1
+- Oracle doesn't support bitwise XOR operations
+
+Empty Node Behavior:
+-------------------
+The documentation does not explicitly specify what should happen with empty WhereNodes.
+However, the code clearly shows (line 179-180 in where.py):
+```python
+if not sql_string:
+    raise FullResultSet
+```
+
+This indicates that empty WHERE clauses should raise FullResultSet, which is the expected behavior.
+
+Edge Case Coverage:
+------------------
+The code handles multiple edge cases:
+- Empty result sets (raises EmptyResultSet)
+- Full result sets (raises FullResultSet)
+- Databases without native XOR support (provides emulation)
+
+However, it fails to handle the specific case of:
+- Empty WhereNode with XOR connector on databases without native XOR support
+
+API Usage Context:
+-----------------
+While WhereNode is not directly exposed as public API, it can be instantiated:
+1. Through internal Django operations
+2. During query optimization
+3. In dynamic filter construction
+4. By third-party libraries extending Django's ORM
+
+The crash occurs in a code path that is reachable through normal Django ORM operations, even if WhereNode itself isn't intended for direct public use.

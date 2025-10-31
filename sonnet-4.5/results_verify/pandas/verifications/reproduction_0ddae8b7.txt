@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+### Test Results
+I successfully reproduced the bug described in the report. The `length_of_indexer` function indeed returns incorrect (often negative) lengths for slices with negative steps when `start` and/or `stop` are `None`.
+
+### Specific Findings:
+
+1. **Primary Test Case** - `slice(None, None, -1)` on a list of length 5:
+   - Pandas computed: -5 (INCORRECT)
+   - Actual length: 5
+   - The function returns a negative length which is mathematically nonsensical
+
+2. **Pattern of Failures** - All cases with negative step and None values fail:
+   - `slice(None, None, -1)`: computed=-5, actual=5
+   - `slice(None, None, -2)`: computed=-2, actual=3
+   - `slice(4, None, -1)`: computed=-1, actual=5
+   - `slice(None, 0, -1)`: computed=0, actual=4
+
+3. **Cases That Work** - When both start and stop are specified:
+   - `slice(4, 0, -1)`: computed=4, actual=4 (CORRECT)
+   - `slice(3, 1, -1)`: computed=2, actual=2 (CORRECT)
+
+### Root Cause Verification:
+The bug report correctly identifies the problem. When step is negative and start/stop are None, Python's slice semantics use different default values:
+- For positive steps: start=0, stop=len(seq)
+- For negative steps: start=len(seq)-1, stop=-1 (before index 0)
+
+The pandas function incorrectly applies positive step defaults regardless of step sign, then tries to compensate with a swap operation that produces invalid results.
+
+### Python's slice.indices() Method:
+I verified that Python's built-in `slice.indices(length)` method correctly handles all these cases:
+- `slice(None, None, -1).indices(5)` returns `(4, -1, -1)`
+- Using `len(range(4, -1, -1))` correctly gives 5
+
+The bug report's proposed fix of using `slice.indices()` and `len(range(...))` would indeed solve the problem correctly.
+
+### Conclusion:
+The bug is real, reproducible, and the diagnosis in the bug report is accurate. The function returns mathematically invalid negative lengths for common slice operations, which would break any code relying on this function for length calculations.

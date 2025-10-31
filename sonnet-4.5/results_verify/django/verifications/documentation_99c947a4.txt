@@ -1,0 +1,62 @@
+DOCUMENTATION FINDINGS FOR CONTENT_LENGTH HANDLING
+=================================================
+
+1. HTTP SPECIFICATION (RFC 9110 Section 8.6)
+---------------------------------------------
+Based on my research of RFC 9110 Section 8.6:
+
+- Content-Length header MUST be a "decimal non-negative integer"
+- The ABNF grammar is: Content-Length = 1*DIGIT (one or more ASCII digits)
+- No provision for negative values or minus signs in the specification
+- The specification explicitly states "non-negative integer"
+- Messages with invalid Content-Length values MUST NOT be forwarded with the invalid header intact
+
+CONCLUSION: Negative Content-Length values violate the HTTP specification.
+
+2. DJANGO DOCUMENTATION AND SOURCE CODE
+----------------------------------------
+From examining Django's source code:
+
+a) LimitedStream class (django/core/handlers/wsgi.py):
+   - Designed to wrap a stream and limit reads to a specified number of bytes
+   - Uses simple comparison: if _pos >= limit, return empty bytes
+   - No validation that limit must be non-negative
+   - When limit is negative, _pos (starting at 0) >= limit is always True
+   - This causes all read operations to immediately return empty bytes
+
+b) ServerHandler class (django/core/servers/basehttp.py):
+   - Parses CONTENT_LENGTH from environ dict
+   - Handles ValueError/TypeError by defaulting to 0
+   - Does NOT validate that parsed integer is non-negative
+   - Passes negative values directly to LimitedStream
+
+c) WSGIRequest class (django/core/handlers/wsgi.py):
+   - Similar parsing logic to ServerHandler
+   - Handles ValueError/TypeError by defaulting to 0
+   - Does NOT validate that parsed integer is non-negative
+   - Passes negative values directly to LimitedStream
+
+d) Django Issue History:
+   - Multiple tickets exist for LimitedStream edge cases
+   - Ticket #15018: Issues with LimitedStream.readline with negative parameters
+   - Ticket #15785: Issues with reading beyond wsgi.input stream
+   - Ticket #29800: Django hangs when Content-Length has incorrect value
+   - No explicit documentation found stating negative values should be rejected
+
+3. EXPECTED VS ACTUAL BEHAVIOR
+-------------------------------
+Expected (per HTTP spec and error handling pattern):
+- Negative Content-Length values should be treated as invalid
+- Invalid values should default to 0 (as with non-numeric values)
+
+Actual behavior:
+- Negative values are accepted and passed to LimitedStream
+- LimitedStream with negative limit blocks all reads (returns empty bytes)
+- This is inconsistent with how non-numeric values are handled
+
+4. SECURITY AND PRACTICAL IMPLICATIONS
+---------------------------------------
+- Malicious clients could send negative Content-Length to bypass request body processing
+- Applications expecting POST data might receive empty bytes unexpectedly
+- The behavior violates HTTP specifications which could cause interoperability issues
+- Silent failure (returning empty bytes) could mask configuration or client errors

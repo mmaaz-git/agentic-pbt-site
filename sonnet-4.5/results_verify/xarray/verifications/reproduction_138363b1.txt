@@ -1,0 +1,30 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed as follows:
+
+1. **Bug Confirmation**: The function `_rescale_imshow_rgb` does NOT raise a ValueError when both vmin and vmax are provided with vmin > vmax.
+
+2. **Test Results**:
+   - When vmin=1.0 and vmax=0.0 (both provided): NO ERROR raised, function returns incorrect result
+   - When vmin=100.0 and vmax=50.0 (both provided): NO ERROR raised, function returns incorrect result
+   - When vmin=50.0 and vmax=50.0 (equal values): NO ERROR raised, causes division by zero warning
+
+3. **Existing Validation Works Correctly**:
+   - When vmax=None and vmin=500: Correctly raises ValueError (validates against default vmax)
+   - When vmin=None and vmax=-10: Correctly raises ValueError (validates against default vmin=0)
+
+4. **Code Analysis Confirms the Gap**:
+   The code at lines 760-773 has three branches:
+   - If vmax is None: validates that default vmax > provided vmin (lines 760-766)
+   - Elif vmin is None: validates that provided vmax > default vmin (lines 767-773)
+   - Else (both provided): NO VALIDATION - this is the bug!
+
+5. **Impact of the Bug**:
+   When vmin > vmax, the formula `(darray - vmin) / (vmax - vmin)` has a negative denominator, which:
+   - Produces mathematically incorrect scaling (negative values become positive after clipping)
+   - Violates the principle that vmin should map to 0 and vmax should map to 1
+   - Can cause overflow warnings in extreme cases
+   - When vmin == vmax, causes division by zero
+
+The bug report accurately describes a real issue where the function fails to validate input parameters when both are explicitly provided, leading to silent incorrect behavior.

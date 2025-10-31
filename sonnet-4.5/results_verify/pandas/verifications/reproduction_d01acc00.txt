@@ -1,0 +1,39 @@
+REPRODUCTION ANALYSIS
+
+I have successfully reproduced the bug described in the report.
+
+1. **Main Test Case**: format_percentiles([0.99999, 0.0])
+   - Returns: ['100%', '0%']
+   - This violates the documented contract because 0.99999 is NOT exactly 1.0, yet it's rounded to 100%
+
+2. **Root Cause Identified**:
+   The bug occurs at line 1603 of format.py:
+   ```python
+   out[int_idx] = percentiles[int_idx].round().astype(int).astype(str)
+   ```
+
+   For the input [0.99999, 0.0]:
+   - After multiplying by 100: [99.999, 0.0]
+   - np.isclose determines both values are "close to integers" (int_idx = [True, True])
+   - Line 1603 then rounds 99.999 to 100 without checking if this violates the no-rounding-to-100% rule
+   - The value 99.999 rounds to 100, then gets converted to string '100', becoming '100%'
+
+3. **Contrast with Documentation Example**:
+   The documentation shows that format_percentiles([0.9999]) should return ['99.99%'], NOT ['100%'].
+   However, when I test [0.9999] alone, it correctly returns ['99.99%'].
+   The issue arises when combined with other values like [0.99999, 0.0] where the precision calculation
+   and int_idx logic causes incorrect rounding.
+
+4. **Additional Findings**:
+   - The hypothesis test also fails with extremely small values (e.g., 3.288799579893884e-296 rounds to 0%)
+   - The function correctly handles some cases (e.g., [0.99999, 0.99998] returns ['99.999%', '99.998%'])
+   - The bug specifically manifests when np.isclose determines a value is "close to an integer"
+     and that integer would be 0 or 100
+
+5. **Technical Details**:
+   When [0.99999, 0.0] is processed:
+   - Both values are considered "close to integers" after multiplication by 100
+   - The rounding on line 1603 doesn't respect the documented constraint
+   - 99.999 rounds to 100, violating the "no rounding to 100%" rule
+
+The bug report is technically accurate - the function does violate its documented contract.

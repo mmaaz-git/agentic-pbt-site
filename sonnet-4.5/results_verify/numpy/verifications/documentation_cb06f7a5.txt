@@ -1,0 +1,43 @@
+## Documentation Analysis for numpy.strings.slice
+
+### Official Documentation
+According to the official NumPy documentation at https://numpy.org/doc/stable/reference/generated/numpy.strings.slice.html:
+
+1. **Function signature**: `numpy.strings.slice(a, start=None, stop=None, step=None, /)`
+   - All parameters after `a` are positional-only (indicated by the `/`)
+
+2. **Key documented behavior**:
+   - "Like in the regular Python `slice` object, if only `start` is specified then it is interpreted as the `stop`."
+   - This is explicitly stated in both the online documentation and the docstring in the source code
+
+3. **Examples in documentation**:
+   - `np.strings.slice(a, 2)` returns the first two characters (interpreted as [:2])
+   - `np.strings.slice(a, 1, 5, 2)` returns characters with specified start, stop, and step
+
+### Source Code Analysis
+The implementation confirms this behavior:
+```python
+# Just like in the construction of a regular slice object, if only start
+# is specified then start will become stop, see logic in slice_new.
+if stop is None:
+    stop = start
+    start = None
+```
+
+### Critical Finding
+The documentation explicitly states that the function should behave "like in the regular Python `slice` object". However, there is an important distinction:
+
+1. **Python's built-in slice object behavior**:
+   - `slice(2)` creates `slice(None, 2, None)` - treats single arg as stop
+   - `slice(2, None)` creates `slice(2, None, None)` - explicit None as stop means "to the end"
+
+2. **Current numpy.strings.slice implementation**:
+   - Cannot distinguish between `slice(arr, 2)` and `slice(arr, 2, None)`
+   - Both cases result in `start=2, stop=None` after parameter binding
+   - The implementation swaps them unconditionally when `stop is None`
+
+### Documentation Ambiguity
+The documentation says the function should behave "like the regular Python slice object", but doesn't specify what should happen when `stop=None` is explicitly passed. The Python slice object can distinguish these cases, but the current numpy implementation cannot due to how default parameters work in Python functions.
+
+### Conclusion
+The documentation clearly states the function should behave like Python's slice object. Python's slice object treats `slice(2, None)` as "slice from index 2 to the end", not as "slice up to index 2". The current implementation fails to match this documented behavior when `stop=None` is explicitly provided.

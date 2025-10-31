@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation clearly states that numpy.char.upper returns an array with "same dtype as input", which means the output array will have the same fixed-width string dtype as the input. Since numpy string dtypes have fixed widths (e.g., <U1 for single character), this is documented behavior. The user could argue they should have known that a <U1 dtype can only hold one character, and expecting it to magically resize goes against numpy's fundamental design of fixed-size arrays.
+
+**Why it might not be INVALID:**
+The documentation also explicitly states that numpy.char.upper "Calls str.upper element-wise", which creates a strong expectation that it should behave identically to Python's str.upper(). When Python's 'ß'.upper() returns 'SS', a reasonable user would expect numpy.char.upper to do the same. The documentation makes no mention of truncation or data loss when case conversion expands strings, which is a critical limitation that users need to know about.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving specific Unicode characters (German sharp S) that expand during case conversion, which affects a tiny fraction of use cases. The numpy.char module is already marked as "legacy" and scheduled for deprecation, so investing effort to fix this in a dying module might not be worthwhile. Users can work around this by explicitly specifying a larger dtype if they know they're working with such characters.
+
+**Why it might not be WONTFIX:**
+Silent data corruption is never trivial - it's one of the most serious types of bugs. The fact that data is being truncated without any warning means users could be unknowingly losing data in production systems. This affects not just German text but any Unicode character that expands during case conversion, making it a broader internationalization issue that could affect many non-English users.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is technically consistent with numpy's design - arrays have fixed dtypes and operations preserve those dtypes. The real problem is that the documentation doesn't warn users about this limitation. Adding a clear warning about potential truncation when case conversion expands strings would help users understand and work around this behavior. The documentation could explain that "Calls str.upper element-wise" means the operation is performed, but results are constrained by the dtype.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation explicitly claims the function "Calls str.upper element-wise", which is demonstrably false when truncation occurs. Documenting a limitation doesn't make the limitation acceptable when it contradicts the primary documented behavior. Users shouldn't have to read warnings to understand that a function doesn't do what its main description says it does.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Auto-resizing arrays to accommodate expanded strings would be a new feature, not a bug fix. Numpy arrays are designed to have fixed sizes and dtypes for performance reasons, and changing this fundamental behavior would be a significant feature addition. The user is essentially asking for dynamic string handling in a system designed around fixed-size data structures.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality - they're asking for the existing documented functionality ("Calls str.upper element-wise") to actually work correctly. When a function's documentation says it does X, making it actually do X is a bug fix, not a feature request. The function already claims to provide this behavior.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation unambiguously states that numpy.char.upper "Calls str.upper element-wise", but it demonstrably does not do this for strings that expand during case conversion. This is a clear violation of the documented contract. Silent data truncation without warning is a serious issue that could lead to data corruption in production systems. The behavior contradicts user expectations set by both the documentation and the behavior of Python's standard string methods.
+
+**Why it might not be BUG:**
+Numpy's fundamental design principle is that arrays have fixed dtypes, and this has always been the case. The documentation also states the function returns arrays with "same dtype as input", which necessarily implies the output is constrained by the input dtype size. Users working with numpy should understand that string dtypes like <U1 have size limitations.
+
+## Overall consideration
+After careful analysis, this appears to be a legitimate bug, though there are some mitigating factors. The core issue is that the documentation makes two conflicting promises: it will "Call str.upper element-wise" AND return an array with the "same dtype as input". When these promises conflict (as with strings that expand during case conversion), the implementation silently chooses dtype preservation over correctness, resulting in data loss.
+
+The severity of this bug is significant because it causes silent data corruption. Users have no warning that their data is being truncated, which could lead to serious issues in production systems processing international text. While the module is marked as legacy, it's still part of numpy's public API and users reasonably expect it to work as documented.
+
+The most compelling evidence that this is a bug rather than a documentation issue is that the primary documented behavior ("Calls str.upper element-wise") is violated. While numpy has design constraints around fixed dtypes, silently producing incorrect results goes against fundamental principles of reliable software. At minimum, this should raise a warning when truncation occurs, but ideally the functions should either resize the output dtype or raise an error rather than silently corrupting data.

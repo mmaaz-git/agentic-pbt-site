@@ -1,0 +1,64 @@
+## Bug Triage Analysis for format_percentiles
+
+### Evaluation Against Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function explicitly documents that "if any two elements of percentiles differ, they remain different after rounding"
+- This is a clear, unambiguous guarantee in the docstring
+- The reported case violates this guarantee: unique inputs `[0.0, 7.506590166045388e-253]` produce duplicate outputs `['0%', '0%']`
+- The bug is reproducible and the root cause is identified (early return path doesn't preserve uniqueness)
+- The function is used internally by pandas' `describe()` method, which could impact users relying on unique percentile labels
+
+**Arguments AGAINST:**
+- The failing case involves extremely small numbers (e-253) that are arguably not practical in real-world usage
+- The function is internal (not public API), so the contract might be considered less strict
+
+#### 2. WONTFIX
+**Arguments FOR:**
+- The failing values are denormalized floats (7.506590166045388e-253) which are extremely close to zero
+- Such values are unlikely to occur in practical usage scenarios
+- The difference between 0.0 and 7.506590166045388e-253 is so small it could be considered negligible
+- This is an internal utility function, not a public API
+
+**Arguments AGAINST:**
+- The documentation makes an explicit guarantee without any caveats about "practical" values
+- The fix is straightforward (remove early return, always use uniqueness logic)
+- Property-based testing found this issue, suggesting it could occur with other edge cases
+
+#### 3. INVALID
+**Arguments FOR:**
+- None - the documentation clearly states the expected behavior
+
+**Arguments AGAINST:**
+- The bug violates explicitly documented behavior
+- The test case is valid (unique inputs should produce unique outputs per documentation)
+- The issue is reproducible and verifiable
+
+#### 4. DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation could be updated to exclude extremely small values or denormalized floats
+- Could add a caveat about floating-point precision limits
+
+**Arguments AGAINST:**
+- The documentation is clear and makes an absolute guarantee
+- Changing documentation to match buggy behavior is backwards
+- The code should be fixed to match the documentation, not vice versa
+
+#### 5. FEATURE_REQUEST
+**Arguments FOR:**
+- None - this is not requesting new functionality
+
+**Arguments AGAINST:**
+- The functionality already exists in the documentation
+- This is about fixing existing behavior, not adding new features
+
+### Critical Factors
+
+1. **Explicit Documentation**: The docstring explicitly guarantees uniqueness preservation without any caveats
+2. **Internal Function**: While internal, it's used by the public `describe()` method
+3. **Edge Case**: The failing values are extreme edge cases (denormalized floats)
+4. **Simple Fix**: The proposed fix is straightforward and logical
+
+### Recommendation
+This should be categorized as **BUG**. Despite involving edge cases with extremely small numbers, the function makes an explicit, unqualified guarantee in its documentation that unique inputs will remain unique after formatting. The documentation doesn't say "unique inputs will remain unique except for denormalized floats" or "unique inputs will remain unique for practical values". It makes an absolute statement that the current implementation violates.

@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+### Summary
+I successfully reproduced the bug described in the report. The `Middleware.__repr__` method in Starlette (used by FastAPI) does indeed produce invalid Python syntax with a leading comma when the middleware callable lacks a `__name__` attribute.
+
+### Reproduction Results
+
+1. **Simple reproduction with callable class instance:**
+   - Code: `Middleware(CallableWithoutName(), 123, foo="bar")`
+   - Output: `Middleware(, 123, foo='bar')`
+   - **BUG CONFIRMED**: Leading comma present, invalid Python syntax
+
+2. **No args case:**
+   - Code: `Middleware(CallableWithoutName())`
+   - Output: `Middleware()`
+   - No bug in this case (empty string doesn't create a problem)
+
+3. **Regular function with __name__:**
+   - Code: `Middleware(my_middleware, 456, bar="baz")`
+   - Output: `Middleware(my_middleware, 456, bar='baz')`
+   - Works correctly, no leading comma
+
+4. **Lambda function:**
+   - Code: `Middleware(lambda app: app, 789)`
+   - Output: `Middleware(<lambda>, 789)`
+   - Works correctly (lambdas have __name__ = '<lambda>')
+
+### Hypothesis Test Results
+The hypothesis test failed as expected, confirming the bug:
+- The test asserts that the repr should NOT start with 'Middleware(,'
+- Failed on all generated inputs with args: `[0]`, `[114]`, `[-6646]`, etc.
+- Every test case with a CallableWithoutName instance and arguments failed
+
+### Source Code Verification
+Examined `/home/npc/miniconda/lib/python3.13/site-packages/starlette/middleware/__init__.py`:
+- Line 40: `name = getattr(self.cls, "__name__", "")` returns empty string for callables without __name__
+- Line 41: `args_repr = ", ".join([name] + args_strings + option_strings)` joins with empty string first
+- When name is empty string, joining creates: `", arg1, arg2"` instead of `"arg1, arg2"`
+
+### Effect of the Bug
+The bug produces syntactically invalid Python code in the repr output. According to Python conventions, `__repr__` should ideally return a valid Python expression that could recreate the object. While not always possible, it should at least be syntactically valid. The output `Middleware(, 123, foo='bar')` is invalid Python syntax and would cause a SyntaxError if evaluated.
+
+### Severity Assessment
+While this is a real bug that violates Python's `__repr__` conventions, it's relatively low severity because:
+1. It only affects the string representation, not functionality
+2. It only occurs with callables lacking __name__ (less common case)
+3. It's primarily a debugging/display issue

@@ -1,0 +1,41 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the bug reported. The test cases fail exactly as described in the bug report.
+
+CONFIRMED FAILURES:
+1. parse_list('[""]') - Raises KeyError: ''
+2. parse_list("'") - Raises KeyError: '__Pyx_L1'
+3. parse_list('["\\"]') - Raises KeyError: '__Pyx_L1'
+4. parse_list('[a, "", b]') - Raises KeyError: ''
+5. parse_list('"') - Raises KeyError: '__Pyx_L1'
+
+Additional failures found:
+- parse_list("['']") - Raises KeyError: '' (empty single-quoted string)
+- parse_list('""') - Raises KeyError: '' (empty string without brackets)
+- parse_list("''") - Raises KeyError: '' (empty single-quoted string without brackets)
+
+SUCCESSFUL CASES:
+- parse_list('["a"]') works correctly, returning ['a']
+- parse_list('"a"') works correctly, returning ['a']
+- All docstring examples work correctly
+
+ROOT CAUSE ANALYSIS:
+
+The bug has two distinct issues as the report correctly identifies:
+
+1. EMPTY STRING ISSUE:
+   - strip_string_literals() does NOT capture empty string literals ("" or '')
+   - When input is '[""]', strip_string_literals returns ('[""]', {}) with empty dict
+   - The unquote function tries to look up '' (empty key) in literals dict and fails
+
+2. LABEL FORMAT MISMATCH:
+   - strip_string_literals creates labels like "__Pyx_L1_" (with trailing underscore)
+   - When unquote processes quoted strings, it uses literal[1:-1]
+   - For '"__Pyx_L1_"', this produces '__Pyx_L1' (missing underscore), causing KeyError
+   - This affects unclosed quotes like '"' which become '"__Pyx_L1_' in normalized form
+
+The Hypothesis test correctly identifies the minimal failing case with items=[''], which creates the input '[""]'.
+
+EXPECTED BEHAVIOR:
+Empty strings are valid Python string literals and should be supported in list parsing. The function should return [''] for input '[""]', consistent with how it handles other quoted strings.

@@ -1,0 +1,43 @@
+REPRODUCTION OF BUG REPORT
+
+I successfully reproduced the reported behavior with the provided test cases.
+
+TEST RESULTS:
+
+1. TEST WITH initial_step=0:
+   - Input: scipy.differentiate.derivative(f, x=1.0, initial_step=0)
+   - Result: success=False, df=nan, status=-3
+   - Expected by bug report: ValueError should be raised
+   - Actual behavior: No error raised, returns failed result with NaN
+
+2. TEST WITH initial_step=-0.5:
+   - Input: scipy.differentiate.derivative(f, x=1.0, initial_step=-0.5)
+   - Result: success=False, df=nan, status=-3
+   - Expected by bug report: ValueError should be raised
+   - Actual behavior: No error raised, returns failed result with NaN
+
+3. TEST WITH initial_step=0.5 (valid):
+   - Input: scipy.differentiate.derivative(f, x=1.0, initial_step=0.5)
+   - Result: success=True, df≈2.0, status=0
+   - This works correctly as expected
+
+HYPOTHESIS TESTS:
+The hypothesis tests expect ValueError to be raised for zero and negative initial_step values, but this does not happen. Instead, the function returns a result with success=False and NaN values.
+
+ROOT CAUSE ANALYSIS:
+Looking at the source code (_differentiate.py line 408), the implementation handles non-positive initial_step values by converting them to NaN:
+```python
+h0 = xpx.at(h0)[h0 <= 0].set(xp.nan)
+```
+
+This causes the algorithm to encounter a non-finite value and fail with status=-3, but does NOT raise a ValueError during input validation.
+
+COMPARISON WITH step_factor:
+The bug report mentions that step_factor is validated (lines 27-33), but initial_step is not. This is correct - step_factor is included in the validation that checks for non-negative scalars, but initial_step is handled separately and not validated for positivity.
+
+VERIFICATION:
+The bug report's technical details are accurate:
+1. The function does accept zero and negative initial_step values without raising an error
+2. These values cause silent failures with success=False and df=nan
+3. The status code is -3 (non-finite value encountered)
+4. There is indeed no input validation for initial_step positivity

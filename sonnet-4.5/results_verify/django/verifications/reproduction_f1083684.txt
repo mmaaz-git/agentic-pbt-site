@@ -1,0 +1,53 @@
+Bug Reproduction Results
+
+1. CODE EXAMINATION:
+The bug report correctly identifies the issue in InMemoryStorage._save() (lines 238-253):
+- The method opens a file descriptor with `fd = file_node.open(mode)` on line 246
+- The fd variable is used to write chunks of data
+- The method NEVER calls fd.close() before returning
+- This leaves the BytesIO/StringIO object in an open state
+
+2. REPRODUCTION TEST RESULTS:
+Running the provided reproduction code confirms:
+- File closed: False
+- File type: <class '_io.BytesIO'>
+- The file remains open after save() completes
+- The bug report's claim is technically accurate
+
+3. HYPOTHESIS TEST RESULTS:
+Ran 100 test examples with various content and filenames:
+- ALL 100 cases showed file.closed = False
+- The behavior is consistent across all test cases
+- No edge cases where files were properly closed
+
+4. COMPARISON WITH FILESYSTEM STORAGE:
+FileSystemStorage._save() implementation (lines 139-151):
+```python
+try:
+    locks.lock(fd, locks.LOCK_EX)
+    for chunk in content.chunks():
+        if _file is None:
+            mode = "wb" if isinstance(chunk, bytes) else "wt"
+            _file = os.fdopen(fd, mode)
+        _file.write(chunk)
+finally:
+    locks.unlock(fd)
+    if _file is not None:
+        _file.close()  # <-- Explicitly closes the file
+    else:
+        os.close(fd)
+```
+The FileSystemStorage properly uses try/finally to ensure file closure.
+
+5. TECHNICAL IMPACT:
+- BytesIO/StringIO are pure Python objects, not OS file descriptors
+- They don't consume OS-level resources like real file handles
+- Memory is managed by Python's garbage collector
+- The "leak" is not an OS resource leak but a Python object state issue
+
+6. ACTUAL BEHAVIOR VS EXPECTED:
+- Actual: Files remain with closed=False after save()
+- Expected (per bug report): Files should be closed after save()
+- FileSystemStorage precedent: Files are closed after save()
+
+The reproduction confirms the technical accuracy of the bug report. The files do remain open (closed=False) after the save operation completes, which is inconsistent with FileSystemStorage's implementation.

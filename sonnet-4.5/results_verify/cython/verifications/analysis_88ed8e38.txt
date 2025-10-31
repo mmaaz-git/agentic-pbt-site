@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that `spanning_type` must be commutative. ErrorType is designed to be promiscuous in type matching to prevent error propagation, and this behavior might be intentional. The function is internal to the compiler and not part of the public API, so specific mathematical properties like commutativity might not be guaranteed. The error_type is a special sentinel type used for error recovery, and having it behave differently from normal types could be by design.
+
+**Why it might not be INVALID:**
+The function's documented purpose ("Return a type assignable from both type1 and type2") inherently implies a symmetric operation. Mathematical operations on types should generally be commutative unless there's a specific reason not to be. The non-deterministic behavior described could lead to real compilation issues. The fact that the suggested fix is simple and maintains error handling while fixing commutativity suggests this is indeed unintended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Error types only occur during error recovery in the compiler, which is already a failure state. The impact might be considered minimal since compilation will fail anyway when error_type is involved. The current behavior has likely existed for years without causing major issues. Changing this behavior might risk breaking existing error handling patterns in the compiler. The non-commutativity only affects internal compiler operations, not user-visible behavior in successful compilations.
+
+**Why it might not be WONTFIX:**
+The bug can cause non-deterministic error messages and compilation behavior, which makes debugging harder for users. The fix is straightforward and low-risk - just prioritizing error_type in the spanning type calculation. Type inference is a core compiler operation, and correctness here matters for compiler maintainability. The associativity violations mentioned could compound into more serious issues in complex type inference scenarios.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior might be intentional but undocumented. Adding documentation to clarify that spanning_type is not guaranteed to be commutative when error_type is involved would resolve the confusion. The function is internal and not user-facing, so documenting its quirks rather than changing behavior might be appropriate. The ErrorType class documentation could be enhanced to explain its special assignability behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+There's no user-facing documentation to fix since this is an internal compiler function. The behavior contradicts the natural interpretation of "spanning type" as a symmetric operation. Documentation wouldn't fix the actual non-deterministic behavior that could affect compilation. The code comment already describes what the function should do, and the implementation doesn't match that description.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding guaranteed commutativity to spanning_type could be seen as a new feature rather than a bug fix. The request is essentially asking for enhanced mathematical properties in type operations. This could be framed as improving compiler determinism as a feature. Making type inference more predictable during error recovery could be considered an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+Commutativity is a basic expectation for this kind of operation, not a new feature. The function is supposed to find a type that works for both inputs - this is inherently symmetric. This is fixing incorrect behavior, not adding new functionality. The proposed change doesn't add capabilities but fixes existing logic.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates a fundamental mathematical property (commutativity) that would be expected from its description. The non-deterministic behavior could lead to inconsistent error messages and compilation results. The fix is simple and maintains all existing error handling while making behavior consistent. The issue affects type inference correctness, which is crucial for a compiler. The spanning type operation is conceptually symmetric - finding a common type for two inputs - so asymmetric behavior is clearly wrong.
+
+**Why it might not be BUG:**
+Error recovery behavior in compilers often involves special cases and non-standard behavior. The ErrorType's promiscuous assignability might be intentional for error propagation prevention. The issue only manifests when the compilation is already failing due to errors. No evidence has been provided that this causes actual problems in real-world Cython usage.
+
+## Overall Consideration
+
+This appears to be a real bug in the Cython compiler's type inference system. The `find_spanning_type` function is fundamentally a symmetric operation - it finds a type that can represent values from either of two input types. Having it return different results based on argument order violates basic expectations and can lead to non-deterministic compiler behavior.
+
+The root cause is clear: ErrorType's `same_as_resolved_type` method returns True for everything, making it appear assignable from any type. This causes the asymmetric behavior in `_spanning_type` where the order of assignability checks matters. While ErrorType needs special handling for error recovery, this shouldn't break fundamental properties of type operations.
+
+The proposed fix (checking for error_type first and returning it immediately) is elegant and maintains the error propagation behavior while ensuring commutativity. This is a legitimate bug that should be fixed rather than documented or dismissed. The impact may be limited to error recovery scenarios, but correctness in compiler internals matters for maintainability and predictability.

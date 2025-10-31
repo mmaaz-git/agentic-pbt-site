@@ -1,0 +1,43 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug reported for pandas.api.types.is_re_compilable.
+
+## Hypothesis Test Results
+
+The Hypothesis test failed immediately with the input '[' and other invalid regex patterns. The test was designed to verify that is_re_compilable always returns a bool value, but instead it raised re.PatternError exceptions.
+
+Falsifying example found: s='['
+Exception raised: re.PatternError: unterminated character set at position 0
+
+## Simple Test Results
+
+Testing the specific cases mentioned in the bug report all raised exceptions instead of returning False:
+
+- Input ')': Raised PatternError: unbalanced parenthesis at position 0
+- Input '?': Raised PatternError: nothing to repeat at position 0
+- Input '*': Raised PatternError: nothing to repeat at position 0
+- Input '+': Raised PatternError: nothing to repeat at position 0
+- Input '(': Raised PatternError: missing ), unterminated subpattern at position 0
+- Input '[': Raised PatternError: unterminated character set at position 0
+- Input '\': Raised PatternError: bad escape (end of pattern) at position 0
+
+## Source Code Analysis
+
+The current implementation in pandas/core/dtypes/inference.py (lines 166-192) shows:
+
+```python
+def is_re_compilable(obj) -> bool:
+    try:
+        re.compile(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+```
+
+The function only catches TypeError but not re.error (or its subclass re.PatternError), which is raised when an invalid regex pattern is passed to re.compile().
+
+## Effect
+
+This bug causes is_re_compilable to violate its documented contract of always returning a bool. Instead of returning False for invalid regex patterns, it propagates re.PatternError exceptions to the caller. This breaks the expected behavior where the function should be a safe way to check if something can be compiled as a regex without having to handle exceptions.

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The control character restrictions are inherent to the XML 1.0 specification and the Excel file format itself, not a pandas bug. The OOXML standard clearly defines that control characters other than tab, line feed, and carriage return cannot be directly represented in XML. This is a fundamental limitation of the file format that pandas is writing to, similar to how you cannot store binary data in a plain text file. The openpyxl library is correctly enforcing XML standards, and pandas is simply passing data through to the underlying engine.
+
+**Why it might not be INVALID:**
+Pandas accepts the control character as valid DataFrame data and provides no warning or documentation about potential export issues. The error message comes from openpyxl, not pandas, exposing implementation details that users shouldn't need to understand. Other data export methods in pandas (CSV, JSON, Parquet) handle the same data without issues, setting an expectation that valid DataFrame data should be exportable.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Control characters like \x1f are extremely rare in typical data and represent an edge case that affects very few users. The workaround is simple - users can clean their data before export using a regex pattern. The issue only affects one specific engine (openpyxl), and users can switch to xlsxwriter if they need this functionality. Adding automatic character sanitization could silently modify user data, which may be worse than failing explicitly.
+
+**Why it might not be WONTFIX:**
+The issue causes a complete crash with no recovery option when using the default Excel engine. Valid pandas DataFrames created from logs, APIs, or user input may contain these characters. The inconsistent behavior between engines (openpyxl crashes, xlsxwriter escapes) is confusing and undocumented. This is not an obscure math precision issue but a data export failure that could affect production systems.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The pandas documentation completely fails to mention character restrictions when writing to Excel, which is the root cause of user confusion. The documentation should explain that Excel/XML format has inherent character limitations, list which characters are problematic, and show how to clean data before export. It should also document the different behavior between engines. The code is working as designed - it's the documentation that's inadequate.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the limitation doesn't solve the usability problem of valid DataFrames causing crashes. Users expect pandas to handle data export gracefully, not require them to pre-process data based on undocumented format restrictions. Documentation alone won't prevent the poor user experience of encountering an obscure openpyxl exception.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The request for automatic sanitization or a `sanitize_chars` parameter is asking for new functionality that doesn't currently exist. Pandas could add a feature to automatically escape control characters like xlsxwriter does, or provide an option to control this behavior. This would be an enhancement to make pandas more robust when dealing with edge cases in data export. The current behavior is not wrong, just limited.
+
+**Why it might not be FEATURE_REQUEST:**
+The ability to export valid DataFrame data is a basic expectation, not a new feature. Other engines like xlsxwriter already handle this case properly. The issue is about fixing inconsistent and undocumented behavior between engines, not adding new capabilities. Users aren't asking for something novel - they want their data to export without crashing.
+
+## BUG Considerations
+**Why it might be BUG:**
+Pandas silently accepts data it cannot export with the default engine, leading to runtime failures. The inconsistent behavior between engines (openpyxl crashes, xlsxwriter works) indicates a lack of proper abstraction in pandas' Excel export layer. The error bypasses pandas error handling entirely, exposing users to implementation-specific exceptions. A valid DataFrame that can be created, manipulated, and exported to other formats should not cause an unhandled crash in Excel export.
+
+**Why it might not be BUG:**
+The limitation comes from the XML/Excel format specification, not from incorrect code in pandas. The openpyxl library is working correctly by enforcing XML standards. Pandas is essentially a pass-through layer that delegates to the underlying engine. The behavior is deterministic and consistent - control characters always fail with openpyxl. This is a format limitation, not a software defect.
+
+## Overall Consideration
+After thorough analysis, this issue represents a significant gap in pandas' Excel export functionality, but the core question is whether this is a bug or a documentation/usability issue. The technical facts are clear: control characters are illegal in XML 1.0, the Excel format is XML-based, and openpyxl correctly enforces this restriction. However, pandas fails to provide any abstraction or handling for this known limitation.
+
+The most compelling argument against this being a bug is that the code is working exactly as the underlying standards require - illegal XML characters cannot be written to XML files. This is not a coding error but a fundamental format constraint. The xlsxwriter engine's ability to handle these characters through escaping shows this is not an impossible problem, but rather a difference in implementation philosophy between the underlying libraries.
+
+The strongest indication this should be treated as a documentation issue is that pandas provides no guidance about character restrictions in Excel export, despite this being a known limitation of the format. Users have no way to know these restrictions exist until they encounter the crash. At minimum, the documentation must be updated to explain these limitations, show how to detect and clean problematic characters, and document the different behavior between engines. While adding automatic handling would be nice, the immediate need is to document the existing behavior so users can work around it.

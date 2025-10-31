@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is CONFIRMED and VALID. The pandas.core.algorithms.factorize function indeed incorrectly treats empty string ('') and null character ('\x00') as the same value, violating its documented round-trip property.
+
+### Reproduction Steps Performed
+
+1. **Property-based test reproduction**:
+   - Ran the provided Hypothesis test with the specific failing input ['', '\x00']
+   - Result: AssertionError at index 1, confirming mismatch between original '\x00' and reconstructed ''
+
+2. **Manual reproduction example**:
+   - Executed the exact code from the bug report
+   - Output matches bug report exactly:
+     * Input: ['', '\x00']
+     * Codes: [0 0] (both values assigned same code)
+     * Uniques: [''] (only one unique value stored)
+     * Index 0: orig='', recon='', match=True
+     * Index 1: orig='\x00', recon='', match=False
+
+3. **Round-trip property verification**:
+   - Used uniques.take(codes) as per documentation
+   - Result: ['' ''] - null character is lost, replaced with empty string
+   - This directly violates the documented guarantee
+
+### Key Findings
+
+1. Empty string ('') and null character ('\x00') are distinct values in Python:
+   - '' == '\x00' evaluates to False
+   - len('') = 0, len('\x00') = 1
+   - ord('\x00') = 0 (null character has ASCII value 0)
+
+2. factorize assigns both values the same code (0) and only stores one unique value ('')
+
+3. The round-trip property documented as "uniques.take(codes) will have the same values as values" is violated
+
+4. This occurs with both raw lists and pandas Series inputs
+
+### Impact
+This is a data corruption bug where distinct string values containing null characters are silently converted to empty strings during factorization. This could lead to incorrect data analysis and loss of information in production systems that process strings with null characters.

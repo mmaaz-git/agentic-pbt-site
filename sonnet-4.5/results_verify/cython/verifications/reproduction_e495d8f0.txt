@@ -1,0 +1,60 @@
+# Bug Reproduction Report
+
+## Bug Verified
+I have successfully reproduced the bug as described in the report.
+
+## Actual Code Location
+The code is located at:
+`/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Debugger/libcython.py:957`
+
+The current implementation matches exactly what the bug report states.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test
+Ran the provided hypothesis test which PASSES (meaning it expects the bug to exist):
+```python
+@given(st.text(min_size=1, alphabet=st.characters(whitelist_categories=('Lu', 'Ll'))))
+def test_complete_with_empty_word(funcname):
+    word = ""
+    text = f"cy break {funcname} "
+    all_names = [funcname, "other_func", "another_func"]
+
+    result = complete_unqualified_logic(text, word, all_names)
+
+    assert funcname in result  # This assertion passes, confirming the bug
+```
+
+With `funcname="spam"` and `word=""`, the test confirms that "spam" is in the result.
+
+### 2. Direct Bug Reproduction
+Executed the exact code from the bug report:
+```python
+text = "cy break spam "
+word = ""
+
+seen = set(text[:-len(word)].split())
+```
+
+Output confirmed:
+- `text[:-0]` evaluates to `''` (empty string), not `'cy break spam '`
+- `seen` becomes `set()` (empty set)
+- Result is `['spam', 'eggs', 'ham']` - includes "spam" which should be filtered out
+
+## Python Slicing Behavior
+The core issue is Python's slicing behavior:
+- `text[:-0]` returns an empty string `''`, not the full string
+- This is a well-known Python quirk where negative zero in slicing has special meaning
+- When `word` is empty (len=0), `text[:-len(word)]` becomes `text[:-0]` which is empty
+
+## Effect of the Bug
+In a GDB debugging session using Cython:
+1. User types: `cy break spam ` (with trailing space)
+2. User presses TAB for completion
+3. Expected: New function names excluding "spam"
+4. Actual: "spam" appears again in the completion list
+
+This creates a poor user experience where already-typed function names are suggested again, causing redundant and confusing completions.
+
+## Confirmation
+The bug is real and reproducible. The code logic fails for the specific case when `word` is empty due to Python's slice notation behavior with `[:-0]`.

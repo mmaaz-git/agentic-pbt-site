@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report describes behavior that is technically occurring - the function does return NaN for very small alpha values. However, one could argue that using alpha values below the minimum normalized float64 value (approximately 2.2e-308) is outside the reasonable domain of the function. The user is essentially pushing the function beyond the limits of floating-point arithmetic, which is not a use case that would occur in any practical signal processing application. The alpha parameter represents a physical characteristic (the fraction of window tapering), and values like 1e-311 have no meaningful interpretation in this context.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that alpha is a "float" parameter and specifies behavior at alpha=0 and alpha=1, strongly implying that all values in [0,1] are valid. There is no documented minimum threshold, and the function already handles the special case of alpha=0. A user following the documentation would reasonably expect any float in the valid range to work without producing NaN values. The fact that the function accepts the value without raising an error but then produces invalid output suggests a genuine implementation issue.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case that would never occur in real-world usage. The alpha parameter represents the fraction of the window that is tapered, and values below 1e-300 are physically meaningless - they would represent a taper so small it's effectively zero. The computational cost of adding checks for such extreme values might not be justified given that no practical application would ever use such values. The issue only affects values below the float64 minimum normalized value, which are already in the denormalized range where numerical precision is compromised.
+
+**Why it might not be WONTFIX:**
+The issue causes the function to return NaN values silently (except for warnings), which could propagate through subsequent calculations and cause hard-to-debug issues. The fix is trivial - either adding a simple bounds check or treating very small alpha values as zero. Given that the function already has special handling for alpha=0 and alpha=1, adding handling for near-zero values would be consistent with the existing design. The bug could affect property-based testing or numerical optimization routines that explore extreme parameter values.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The root issue is that the documentation doesn't specify the numerical limitations of the alpha parameter. Adding a note that alpha values below approximately 1e-308 may cause numerical overflow would inform users of the limitation while keeping the current implementation. This would be the minimal change needed to align the documentation with the actual behavior. The documentation could specify that alpha should be either 0 or greater than sys.float_info.min for numerical stability.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the limitation doesn't fix the underlying problem that the function produces invalid output for inputs that are technically within the documented range [0,1]. Users shouldn't need to know about floating-point implementation details to use a high-level signal processing function. The function already handles alpha=0 specially, so it's inconsistent to not handle values approaching zero. Documentation alone doesn't prevent the NaN values from propagating through user calculations.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting extremely small alpha values could be seen as a new feature - extending the function to handle denormalized floating-point values gracefully. The current implementation works correctly for all normalized float64 values, and adding support for denormalized values would be enhancing the function beyond its current capabilities. This would require new code to detect and handle these edge cases, which is more like adding a feature than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to support alpha in [0,1], and very small positive values are mathematically part of this range. The issue is not about adding new functionality but about making the existing functionality work correctly for all advertised input values. The function should either accept these values and compute correct results or reject them with a clear error message. Silent NaN generation is clearly incorrect behavior, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function accepts valid float inputs within the documented range [0,1] but produces mathematically invalid output (NaN) due to an implementation oversight. The documentation makes no mention of numerical limitations, implying all floats in the range should work. The issue is caused by a specific line of code that doesn't handle division overflow, which is a classic numerical bug. The function already has special cases for alpha=0 and alpha=1, suggesting that edge cases should be handled properly. Silent NaN generation is definitively incorrect behavior that violates the principle of least surprise.
+
+**Why it might not be BUG:**
+The values causing the issue (alpha < 1e-308) are in the denormalized float range, which is known to have numerical issues. One could argue that using such extreme values is user error rather than a bug in the function. The physical interpretation of alpha makes such small values meaningless in practice. Many numerical libraries don't guarantee correct behavior for denormalized values, and this could be considered an accepted limitation of floating-point arithmetic rather than a bug in the implementation.
+
+## Overall Consideration
+
+This bug report presents a classic edge case in numerical computing where mathematical theory meets floating-point reality. The Tukey window function is mathematically well-defined for all alpha in [0,1], but the implementation fails for extremely small positive values due to floating-point overflow. The key question is whether scipy should be expected to handle such extreme values gracefully.
+
+Looking at the evidence: The documentation claims to support "float" values for alpha with special cases at 0 and 1, with no mentioned restrictions. The implementation already handles alpha=0 specially by returning a rectangular window, showing that edge cases are considered. The failure mode (silent NaN generation with only warnings) is problematic as it could cause downstream issues that are hard to debug. The fix would be trivial - either validate input or treat very small values as zero.
+
+However, the practical impact is negligible. No real-world signal processing application would use alpha values below 1e-308. The values causing issues are in the denormalized float range where numerical precision is already compromised. The bug was found through property-based testing with randomly generated values, not through actual use. Many numerical libraries accept such limitations as inherent to floating-point arithmetic. Given scipy's focus on practical scientific computing rather than theoretical correctness at extreme edges, this could reasonably be considered too minor to fix.

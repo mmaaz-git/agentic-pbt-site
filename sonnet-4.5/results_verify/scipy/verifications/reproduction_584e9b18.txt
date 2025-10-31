@@ -1,0 +1,32 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is confirmed to be accurate. The function `scipy.sparse.csgraph.csgraph_from_dense` does indeed drop small non-zero values from the sparse representation, treating them as if they were equal to the `null_value` parameter.
+
+### Reproduction Results
+
+1. **Hypothesis Test Reproduction**:
+   - The failing input from the report (graph with edge weight 1.69552992e-69) was tested
+   - Result: The shortest path function returns `inf` for the path from node 0 to 1, despite a direct edge existing
+   - This confirms that the small edge value was incorrectly treated as a non-edge
+
+2. **Manual Test Case Reproduction**:
+   - Tested various small values from 1e-300 to 1e-3
+   - Results match the bug report exactly:
+     - Values ≤ 1e-10: Dropped (nnz = 0)
+     - Values ≥ 1e-5: Kept (nnz = 1)
+   - The threshold appears to be approximately between 1e-08 and 2e-08
+
+3. **Comparison with scipy.sparse.csr_array**:
+   - The standard `csr_array` constructor correctly preserves all non-zero values
+   - Even extremely small values like 1e-300 are kept (nnz = 1)
+   - This shows inconsistent behavior between the two scipy functions
+
+### Impact
+The bug causes silent data loss where small but mathematically significant edge weights are discarded without warning. This leads to incorrect graph analysis results, particularly in shortest path computations where edges appear to not exist when they actually do.
+
+### Threshold Discovery
+Additional testing revealed the exact threshold is approximately 1e-08:
+- Values ≤ 1e-08 are dropped
+- Values ≥ 2e-08 are kept
+This suggests an epsilon-based comparison is being used internally, likely around 1e-08.

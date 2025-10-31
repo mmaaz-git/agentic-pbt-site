@@ -1,0 +1,62 @@
+BUG REPRODUCTION RESULTS
+
+SUMMARY:
+The bug report is ACCURATE. The function does violate its documented contract by returning strings longer than max_length when max_length is small (< 3).
+
+SPECIFIC TEST CASE FROM BUG REPORT:
+Input: truncate_string('00', max_length=1)
+Expected: Result length <= 1
+Actual: Result is '...' with length 3
+Status: BUG CONFIRMED
+
+ADDITIONAL TEST CASES PERFORMED:
+
+1. text='00', max_length=1
+   Result: '...' (length=3)
+   VIOLATES CONTRACT (3 > 1)
+
+2. text='abc', max_length=2
+   Result: 'ab...' (length=5)
+   VIOLATES CONTRACT (5 > 2)
+   Note: This is even worse - it tries to do text[:2-3] + "..." which gives text[:-1] + "..." = 'ab...'
+
+3. text='hello', max_length=3
+   Result: '...' (length=3)
+   DOES NOT VIOLATE (3 == 3)
+
+4. text='test', max_length=0
+   Result: 't...' (length=4)
+   VIOLATES CONTRACT (4 > 0)
+   Note: text[:0-3] gives text[:-3] which is 't', then adds '...'
+
+5. text='', max_length=1
+   Result: '' (length=0)
+   DOES NOT VIOLATE (empty string is returned as-is on line 458)
+
+6. text='x', max_length=1
+   Result: 'x' (length=1)
+   DOES NOT VIOLATE (string not truncated since len(text) <= max_length on line 463)
+
+7. text='xy', max_length=1
+   Result: '...' (length=3)
+   VIOLATES CONTRACT (3 > 1)
+
+HYPOTHESIS PROPERTY TEST:
+The property-based test with Hypothesis confirmed the bug fails immediately with the same example: text='00', max_length=1.
+
+ROOT CAUSE ANALYSIS:
+The bug occurs in line 476 of the code:
+    return text[: max_length - 3] + "..."
+
+When max_length < 3:
+- max_length=1: text[:-2] + "..." gives an unexpected slice result plus "..."
+- max_length=2: text[:-1] + "..." gives partial text plus "..."
+- max_length=0: text[:-3] + "..." gives partial text plus "..."
+
+The function always appends "..." (3 chars) without checking if this would exceed max_length.
+
+VERIFICATION OF BUG REPORT CLAIMS:
+1. The bug exists: CONFIRMED
+2. It happens for max_length < 3: CONFIRMED
+3. The root cause is on line 476: CONFIRMED
+4. The suggested fix would resolve it: LIKELY (not tested but logically sound)

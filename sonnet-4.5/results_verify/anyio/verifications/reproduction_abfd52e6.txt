@@ -1,0 +1,58 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python Version: 3.13.2
+- anyio Version: 4.7.0
+- Backend: asyncio
+
+### Key Finding: The Bug Report is INCORRECT
+
+The bug report claims that `anyio.sleep_until(float('nan'))` hangs indefinitely. However, my testing shows this is FALSE.
+
+### Actual Behavior
+
+When running `anyio.sleep_until(float('nan'))`:
+
+1. The function calculates `delay = deadline - now`, which results in NaN
+2. It then calls `max(delay, 0)`, which returns NaN (confirmed by testing)
+3. It passes NaN to the underlying `sleep()` function
+4. In Python 3.13, `asyncio.sleep(nan)` raises `ValueError: Invalid delay: NaN (not a number)`
+5. Therefore, `anyio.sleep_until(nan)` DOES NOT hang - it raises a ValueError immediately
+
+### Test Results
+
+1. **Python max() behavior with NaN**: Confirmed that `max(nan, 0)` returns NaN
+
+2. **Direct asyncio.sleep(nan) test**: Raises ValueError immediately
+   ```
+   ValueError: Invalid delay: NaN (not a number)
+   ```
+
+3. **time.sleep(nan) test**: Also raises ValueError
+   ```
+   ValueError: Invalid value NaN (not a number)
+   ```
+
+4. **anyio.sleep_until(nan) test**: Raises ValueError immediately
+   ```
+   ValueError: Invalid delay: NaN (not a number)
+   ```
+
+### Reproduction Code Execution
+The provided reproduction code in the bug report is misleading. When actually run:
+- It does NOT hang indefinitely
+- It raises a ValueError immediately
+- The try/except TimeoutError block never catches anything because ValueError is raised first
+
+### Hypothesis Test Analysis
+The property-based test provided would fail, but not for the reason stated:
+- It fails with ValueError, not TimeoutError
+- The function doesn't hang; it raises an error immediately
+
+### Conclusion
+The bug report's fundamental claim is incorrect. In Python 3.13 with current asyncio implementation:
+- `anyio.sleep_until(nan)` does NOT hang indefinitely
+- It raises a clear and appropriate ValueError
+- The error message explicitly states the problem: "Invalid delay: NaN (not a number)"
+
+This appears to be based on outdated behavior or a misunderstanding of how Python/asyncio handles NaN values in sleep functions.

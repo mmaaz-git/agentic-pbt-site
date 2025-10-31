@@ -1,0 +1,41 @@
+## Bug Reproduction Analysis
+
+### Test Execution
+
+I successfully reproduced the reported bug by running both the Hypothesis property-based test and the simple reproduction code provided in the bug report.
+
+#### Hypothesis Test Results:
+- The test passed, confirming that the bug exists
+- With `kwargs={'a': 0}`, a `bunch` object was created
+- `hasattr(b, 'a')` returned `True`, showing the attribute is accessible
+- `'a' in dir(b)` returned `False`, confirming the attribute is not listed in `dir()`
+
+#### Simple Reproduction Results:
+- Created `tempita.bunch(x=1, y=2, z=3)`
+- All attributes (x, y, z) were accessible via dot notation (b.x, b.y, b.z)
+- `hasattr()` returned `True` for all three attributes
+- None of the attributes appeared in `dir(b)` output
+- The `dir(b)` output showed only standard dict methods and dunder methods, but not the dynamically set attributes
+
+### Source Code Analysis
+
+Examining the `bunch` class implementation in `/home/npc/miniconda/lib/python3.13/site-packages/Cython/Tempita/_tempita.py` (lines 393-421):
+
+1. `bunch` inherits from `dict`
+2. It implements `__setattr__` to store attributes as dictionary items
+3. It implements `__getattr__` to retrieve dictionary items as attributes
+4. It does NOT implement `__dir__()` method
+
+This means:
+- Attributes are stored in the dictionary (accessible via `self[name]`)
+- They are accessible via dot notation through `__getattr__`
+- They are NOT reported by `dir()` because there's no custom `__dir__()` implementation
+- The default `dir()` mechanism for dict subclasses doesn't include dictionary keys
+
+### Confirmed Behavior
+
+The bug report is accurate:
+1. Dynamically set attributes on `bunch` instances are accessible via attribute access
+2. These attributes return `True` for `hasattr()` checks
+3. These attributes do NOT appear in `dir()` output
+4. This violates the expected behavior where accessible attributes should be discoverable through `dir()`

@@ -1,0 +1,40 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in dask.utils.format_bytes.
+
+### Bug Confirmation
+
+The bug is confirmed and reproducible. The function violates its documented contract.
+
+### Reproduction Steps
+
+1. **Hypothesis Test**: The provided Hypothesis test correctly identifies the issue. When testing integers from 0 to 2^60-1, the test fails for value 1125894277343089729.
+
+2. **Direct Reproduction**: Running the specific test case shows:
+   - Input: n = 1125894277343089729
+   - n < 2^60 = True (within documented range)
+   - Output: '1000.00 PiB'
+   - Output length: 11 characters
+   - Expected: <= 10 characters
+
+3. **Edge Case Analysis**: Further testing reveals:
+   - Values from 999 PiB produce '999.00 PiB' (10 chars) ✓
+   - Values from 1000 PiB produce '1000.00 PiB' (11 chars) ✗
+   - Values up to 1023 PiB all produce 11-character outputs ✗
+   - The issue only affects PiB unit (largest unit in the function)
+   - Other units (TiB, GiB, MiB, kiB) convert to larger units before reaching 1000
+
+### Root Cause
+
+The function formats all values with 2 decimal places using f"{n / k:.2f} {prefix}B". When the value reaches 1000 or more of any unit:
+- Format "999.00 PiB" = 10 characters
+- Format "1000.00 PiB" = 11 characters
+
+The issue specifically affects PiB because:
+1. It's the largest unit defined in the function
+2. There's no larger unit (like EiB) to convert to
+3. Values >= 1000 PiB still display as PiB with 4 digits before the decimal
+
+### Impact
+
+Any value >= 1000 * 2^50 (approximately 1.126 * 10^18) and < 2^60 will produce output exceeding the documented 10-character limit. This affects approximately 127 PiB worth of values in the valid input range.

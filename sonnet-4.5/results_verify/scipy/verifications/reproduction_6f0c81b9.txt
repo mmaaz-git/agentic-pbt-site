@@ -1,0 +1,44 @@
+BUG REPRODUCTION REPORT
+======================
+
+## Summary
+I have successfully reproduced the bug as described in the report. The issue is confirmed: the ODR.set_iprint method does not validate input parameters and produces a confusing internal error message when invalid values are provided.
+
+## Test Results
+
+### Direct Bug Reproduction
+When calling `odr_obj.set_iprint(init=3)` (where 3 is outside the valid range of [0, 1, 2]):
+- **Expected behavior**: A clear ValueError stating "init must be 0, 1, or 2, got 3"
+- **Actual behavior**: ValueError: "[3, 0] is not in list"
+
+### Additional Testing
+I tested various invalid values for the `init` parameter:
+- init=-1: ValueError: "[-1, 0] is not in list"
+- init=4: ValueError: "[4, 0] is not in list"
+- init=10: ValueError: "[10, 0] is not in list"
+
+All invalid values produce the same type of confusing internal error message.
+
+### Valid Values Testing
+Confirmed that valid values (0, 1, 2) work correctly:
+- init=0: Success
+- init=1: Success
+- init=2: Success
+
+### Property-Based Testing
+The property-based test from the bug report successfully identifies the issue:
+- The test systematically generates various input values
+- When any parameter (init, iter, final) receives a value outside [0, 1, 2], it triggers the internal "is not in list" error
+- The test correctly identifies this as a missing input validation issue
+
+## Root Cause Analysis
+Looking at the source code in `/home/npc/.local/lib/python3.13/site-packages/scipy/odr/_odrpack.py`:
+
+1. Line 1062-1073: The method directly assigns user input to `iprint_l` without validation
+2. Line 1079-1081: The method tries to find the modified list in `ip2arg` using `.index()`
+3. When an invalid value is provided, the constructed list doesn't exist in `ip2arg`, causing the `.index()` method to raise "is not in list"
+
+The bug is exactly as described: the method lacks input validation that should occur before attempting to use the values internally.
+
+## Conclusion
+The bug report is accurate and reproducible. The ODR.set_iprint method indeed fails to validate its input parameters, resulting in confusing internal error messages instead of clear, user-friendly validation errors.

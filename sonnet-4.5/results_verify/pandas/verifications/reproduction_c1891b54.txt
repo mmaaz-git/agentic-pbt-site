@@ -1,0 +1,65 @@
+## Bug Reproduction Results
+
+### Test Case 1: Primary Bug Scenario
+**Input:**
+- cat_a: values=['a'], categories=['a']
+- cat_b: values=['a', 'b\x00'], categories=['a', 'b\x00']
+- cat_c: values=['b'], categories=['b']
+
+**Expected Result:**
+- Categories: ['a', 'b\x00', 'b'] (all unique categories preserved)
+- Values: ['a', 'a', 'b\x00', 'b'] (all values preserved)
+
+**Actual Result:**
+- Categories: ['a', 'b\x00'] (missing 'b')
+- Values: ['a', 'a', 'b\x00', nan] (last value converted to NaN)
+
+**Verification:** The bug is CONFIRMED. Category 'b' is dropped and its value is converted to NaN.
+
+### Test Case 2: Hypothesis Failing Input
+**Input:**
+- cat1: values=['0'], categories=['0']
+- cat2: values=['0', '1\x00'], categories=['0', '1\x00']
+- cat3: values=['1'], categories=['1']
+
+**Expected Result:**
+- Categories: ['0', '1\x00', '1']
+- Values: ['0', '0', '1\x00', '1']
+
+**Actual Result:**
+- Categories: ['0', '1\x00'] (missing '1')
+- Values: ['0', '0', '1\x00', nan]
+
+**Verification:** The bug is CONFIRMED with the exact input from hypothesis testing.
+
+### Test Case 3: Two Categoricals Only
+When combining just cat_b and cat_c (without cat_a):
+- Result categories: ['a', 'b\x00', 'b']
+- Result values: ['a', 'b\x00', 'b']
+
+**Important:** This works CORRECTLY! All categories are preserved when combining just two categoricals.
+
+### Test Case 4: Different Order
+When combining in reverse order [cat_c, cat_b, cat_a]:
+- Result categories: ['b', 'a'] (missing 'b\x00')
+- Result values: ['b', 'a', nan, 'a']
+
+**Observation:** The bug manifests differently with different orderings, but still loses categories.
+
+### Hypothesis Test Results
+The hypothesis test successfully found the failure with the minimal example. The test confirms that `union_categoricals` does not preserve all unique categories as it should according to set union semantics.
+
+### Critical Findings:
+1. The bug is REPRODUCIBLE and CONSISTENT
+2. The bug only occurs with 3+ categoricals in specific patterns
+3. The bug causes DATA LOSS (categories dropped, values become NaN)
+4. The behavior is ORDER-DEPENDENT (different orders produce different missing categories)
+5. Two-categorical unions work correctly, suggesting the bug is in the iterative merging logic
+
+### Pattern Analysis:
+The bug appears when:
+- First categorical has category 'X'
+- Second categorical has both 'X' and 'Y\x00' (with null byte or similar special character)
+- Third categorical has category 'Y' (similar to but different from 'Y\x00')
+
+This suggests a potential issue with how pandas handles string comparison or category merging when special characters are involved in a multi-step union operation.

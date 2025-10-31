@@ -1,0 +1,32 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the reported bug in pydantic.plugin._schema_validator.build_wrapper.
+
+### Hypothesis Test Results
+The hypothesis test ran and failed as expected, confirming that when an on_exception handler raises an exception, it suppresses the original exception. The test failed with:
+- AssertionError: "Original exception was suppressed by handler exception"
+- This occurred for ALL tested inputs (empty strings and other values)
+
+### Direct Reproduction Results
+The direct reproduction code also confirmed the bug:
+- When func() raises ValueError("Original error")
+- And the on_exception handler raises RuntimeError("Handler raised an exception")
+- The code catches RuntimeError instead of the original ValueError
+- Output: "BUG: Caught RuntimeError from handler: Handler raised an exception"
+- This confirms the original ValueError was completely suppressed
+
+### Code Analysis
+Looking at the build_wrapper function (lines 95-124), the issue is clear:
+- Line 116-117: When an exception (non-ValidationError) occurs, on_exception handlers are called
+- If any on_exception_handler raises an exception, it immediately propagates up
+- The original exception from line 110 is lost completely
+- This breaks the chain of exception handling
+
+### Impact Assessment
+The bug is real and has significant consequences:
+1. Original exceptions from application code are completely lost
+2. Debugging becomes extremely difficult as users see handler exceptions instead of actual errors
+3. A single buggy plugin can break the entire exception handling chain
+4. The stack trace points to the wrong location (the handler instead of the original error)
+
+This is indeed a valid bug that breaks the principle that plugin handlers should be observational and not interfere with the application's exception flow.

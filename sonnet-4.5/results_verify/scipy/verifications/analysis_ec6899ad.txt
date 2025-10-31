@@ -1,0 +1,75 @@
+# Bug Triage Analysis: scipy.signal.windows.tukey NaN Values with Tiny Alpha
+
+## Consideration for Each Category
+
+### BUG (Valid Bug Report)
+**Arguments FOR classifying as BUG:**
+1. **Function Contract Violation**: The function returns NaN values when it should return a valid window array. The docstring promises "The window" without mentioning NaN as a possibility.
+2. **Valid Input Range**: Alpha values like 1e-309 are technically within the implied valid range [0, 1] for a "fraction" parameter.
+3. **Existing Edge Case Handling**: The function already handles alpha=0 specially, showing intent to handle edge cases gracefully.
+4. **Silent Corruption**: NaN values can silently propagate through user calculations, causing hard-to-debug issues.
+5. **Reasonable User Expectation**: Users expect mathematical functions in scipy to handle numerical edge cases gracefully.
+6. **Easy to Fix**: The fix is straightforward and doesn't break existing functionality.
+7. **Consistency**: Other scipy window functions handle edge cases without returning NaN.
+
+**Arguments AGAINST:**
+- The values causing issues (1e-309) are extremely small and rarely encountered in practice
+- The documentation doesn't explicitly promise to handle all float values
+
+### WONTFIX
+**Arguments FOR classifying as WONTFIX:**
+1. **Extreme Edge Case**: Alpha values like 1e-309 are so small they're practically indistinguishable from 0.
+2. **Unlikely in Practice**: Real-world applications rarely use alpha values smaller than 1e-100.
+3. **Numerical Limits**: This is hitting fundamental numerical limits of floating-point arithmetic.
+
+**Arguments AGAINST:**
+- The fix is trivial and doesn't impact normal usage
+- Silent NaN propagation is worse than an explicit error
+- scipy is a scientific computing library that should handle numerical edge cases
+
+### INVALID
+**Arguments FOR classifying as INVALID:**
+1. **Unspecified Behavior**: The documentation doesn't explicitly state the valid range for alpha or promise to handle extreme values.
+2. **Numerical Overflow**: This is a natural consequence of floating-point arithmetic limits.
+
+**Arguments AGAINST:**
+- The parameter is described as a "fraction" which implies [0, 1] range
+- The function already handles alpha=0, showing intent to handle edge cases
+- Returning NaN violates the implicit contract of returning a valid window
+
+### DOCUMENTATION_FIX
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+1. **Missing Range Specification**: Documentation should explicitly state alpha must be in a practical range like [1e-100, 1].
+2. **Missing Warning**: Documentation should warn about numerical instability with extremely small values.
+
+**Arguments AGAINST:**
+- The code behavior is incorrect; fixing only documentation leaves the NaN issue
+- Users shouldn't need to worry about numerical overflow for valid inputs
+
+### FEATURE_REQUEST
+**Arguments FOR classifying as FEATURE_REQUEST:**
+1. **New Robustness Feature**: Could be seen as requesting enhanced numerical robustness.
+
+**Arguments AGAINST:**
+- This is fixing broken behavior, not adding new functionality
+- The function should already handle values in [0, 1] without returning NaN
+
+## Analysis Summary
+
+The key factors in this decision are:
+
+1. **Scientific Computing Standards**: scipy is a scientific computing library where numerical stability and robustness are paramount. Users trust it to handle edge cases gracefully.
+
+2. **Principle of Least Surprise**: Returning NaN for a valid input value (even if extreme) violates user expectations. Window functions should return valid numerical arrays.
+
+3. **Existing Precedent**: The function already handles alpha=0 specially, demonstrating intent to handle edge cases rather than letting them cause numerical issues.
+
+4. **Silent Failure**: NaN propagation is particularly dangerous because it can corrupt downstream calculations silently.
+
+5. **Easy Fix**: The proposed fix is trivial, well-motivated, and doesn't break any existing functionality.
+
+6. **Mathematical Consistency**: For alpha approaching 0, the window should approach a rectangular window (all ones), which the proposed fix achieves.
+
+## Recommendation
+
+This should be classified as **BUG**. While the alpha values causing issues are extremely small, they are still within the mathematical domain of the function (positive numbers less than 1). The function's failure to handle these values gracefully, returning NaN instead of a valid window, represents a genuine bug that should be fixed. The fact that the fix is straightforward and maintains mathematical consistency further supports this classification.

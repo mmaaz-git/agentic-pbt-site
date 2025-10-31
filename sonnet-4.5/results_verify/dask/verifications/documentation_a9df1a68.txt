@@ -1,0 +1,42 @@
+## Documentation Analysis
+
+### Function Documentation
+The `_aggregate_stats` function has minimal documentation:
+- Docstring: "Utility to aggregate the statistics for N row-groups into a single dictionary. Used by `Engine._construct_parts`"
+- No explicit documentation about the expected format of returned column statistics
+
+### Internal Function Status
+`_aggregate_stats` is an internal utility function (prefixed with underscore) that is not part of the public API. It is used internally by the parquet reading infrastructure in Dask.
+
+### Expected Column Statistics Format
+Based on code analysis and usage patterns in dask/dataframe/io/parquet/:
+
+1. **Normal column statistics structure** (observed in lines 505-511, 520-526):
+   ```python
+   {
+       "name": <column_name>,
+       "min": <min_value>,
+       "max": <max_value>,
+       "null_count": <null_count>
+   }
+   ```
+
+2. **Problematic structure** (lines 503, 518):
+   ```python
+   {"null_count": <null_count>}  # Missing 'name', 'min', 'max' fields
+   ```
+
+### Consumer Expectations
+The `sorted_columns` function (and potentially other consumers) expects:
+1. All column statistics to have a 'name' field (line 419, 443 in core.py)
+2. Statistics to optionally have 'min' and 'max' fields (checked on line 421-423)
+
+### Documentation Gaps
+1. No formal specification of the column statistics dictionary structure
+2. No documentation about the "dangerous stats" case (min == max with nulls)
+3. No contract specified between `_aggregate_stats` and its consumers
+
+### Conclusion
+While there is no explicit documentation stating that all column statistics MUST have a 'name' field, the code pattern and usage throughout the codebase clearly establishes this as an implicit requirement. The `sorted_columns` function unconditionally accesses `c["name"]` when the `columns` parameter is provided, indicating this is an expected invariant.
+
+The comment in the code "Remove dangerous stats (min == max, but null values exist)" suggests the intent is to exclude certain statistics, but the implementation is incomplete - it removes the min/max fields but fails to maintain the required 'name' field that downstream code depends on.

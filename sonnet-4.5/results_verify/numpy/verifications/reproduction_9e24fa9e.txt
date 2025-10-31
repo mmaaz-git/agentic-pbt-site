@@ -1,0 +1,46 @@
+## Bug Reproduction Results
+
+### Test Case 1: Basic null character replacement
+**Input:** `'abc'` with `replace('\x00', 'X')`
+**Python result:** `'abc'` (no change, as there are no null characters)
+**NumPy result:** `'XaXbXcX'` (inserts X between every character)
+**Match:** FALSE - NumPy behaves incorrectly
+
+### Test Case 2: String with actual null character
+**Input:** `'a\x00b'` with `replace('\x00', 'X')`
+**Python result:** `'aXb'` (replaces the null character with X)
+**NumPy result:** `'XaX\x00XbX'` (inserts X between characters AND keeps the null)
+**Match:** FALSE - NumPy behaves incorrectly
+
+### Additional Test Results
+- `'hello'` → NumPy: `'XhXeXlXlXoX'` vs Python: `'hello'` (MISMATCH)
+- `'h\x00ello'` → NumPy: `'XhX\x00XeXlXlXoX'` vs Python: `'hXello'` (MISMATCH)
+- `'\x00hello'` → NumPy: `'X\x00XhXeXlXlXoX'` vs Python: `'Xhello'` (MISMATCH)
+- `'hello\x00'` → NumPy: `'XhXeXlXlXoX'` vs Python: `'helloX'` (MISMATCH)
+- `'\x00\x00'` → NumPy: `'X'` vs Python: `'XX'` (MISMATCH)
+
+### Critical Discovery
+When testing `nps.replace(arr, '', 'X')` (empty string replacement):
+- NumPy result: `'XaXbXcX'`
+- Python result: `'XaXbXcX'`
+- These MATCH!
+
+**This reveals that NumPy is incorrectly treating the null character `\x00` as if it were the empty string `''`.**
+
+### Hypothesis Test Result
+The hypothesis test from the bug report confirms the issue:
+- Test failed on the example `strings=['abc'], old='\x00', new='X'`
+- The assertion fails because NumPy returns `'XaXbXcX'` instead of `'abc'`
+
+### Technical Analysis
+1. NumPy's implementation appears to confuse null character (`\x00`) with empty string (`''`)
+2. When replacing `\x00`, NumPy behaves exactly as if replacing `''` (empty string)
+3. Empty string replacement in both Python and NumPy inserts the replacement at every character boundary
+4. This is a clear deviation from Python's `str.replace` behavior with null characters
+
+### Severity Assessment
+This is a severe bug because:
+1. It causes data corruption when processing strings with null character replacements
+2. It violates the documented behavior of matching Python's `str.replace`
+3. It makes it impossible to correctly replace actual null characters in strings
+4. The behavior is completely different from what users would expect based on Python's standard library

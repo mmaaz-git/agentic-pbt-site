@@ -1,0 +1,30 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `_aggregate_stats` function in dask/dataframe/io/parquet/utils.py indeed creates column statistics dictionaries without a 'name' field in certain conditions.
+
+### Reproduction Steps
+
+1. **Property-based test**: Ran the hypothesis test provided in the bug report. The test fails immediately when testing any case where `min == max` and `null_count > 0`. Example failing input: `col_name="0", value=0, null_count=1`.
+
+2. **Specific test case**: Tested the exact failing input mentioned (col_name="x", value=5, null_count=10). The function returns: `{'null_count': 10}` without a 'name' field.
+
+3. **Downstream impact**: Confirmed that when the `sorted_columns` function is called with a `columns` parameter (e.g., `columns=["x"]`), it raises a KeyError when trying to access `c["name"]` on line 419 of core.py.
+
+### Key Findings
+
+1. The bug occurs in two places in `_aggregate_stats` (lines 503 and 518) where the code creates column stats with only `{'null_count': null_count}` when `minval == maxval and null_count` is true.
+
+2. In contrast, the normal case (when min != max or null_count is 0) correctly includes all fields: `{'name': name, 'min': minval, 'max': maxval, 'null_count': null_count}`.
+
+3. The bug manifests when:
+   - Column has uniform non-null values (min == max)
+   - Column also has null values (null_count > 0)
+   - Downstream code attempts to access the 'name' field
+
+4. The `sorted_columns` function expects all column statistics to have a 'name' field:
+   - Line 419: `if columns and c["name"] not in columns:`
+   - Line 443: `out.append({"name": c["name"], "divisions": divisions})`
+
+### Impact
+The bug causes a KeyError when `sorted_columns` is called with a non-None `columns` parameter on statistics containing columns where min==max and there are nulls. This breaks the parquet reading pipeline in specific data scenarios.

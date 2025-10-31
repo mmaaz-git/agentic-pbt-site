@@ -1,0 +1,46 @@
+DOCUMENTATION ANALYSIS
+======================
+
+I have reviewed the official documentation for both NumPy's string functions and Python's string methods.
+
+1. NUMPY DOCUMENTATION (numpy.strings.strip)
+   - States that when `chars=None` (the default), it "removes whitespace"
+   - Documentation says it is "similar to Python's str.strip() method"
+   - Does not explicitly define what constitutes "whitespace"
+   - No mention of special handling for null bytes
+
+2. PYTHON DOCUMENTATION (str.strip)
+   - Clearly defines whitespace as characters that in Unicode database have:
+     * General category 'Zs' (Separator, space), OR
+     * Bidirectional class of WS, B, or S
+   - The null byte '\x00' has Unicode category 'Cc' (Control character)
+   - Therefore, null byte is NOT whitespace according to Python
+   - Python's str.strip() correctly preserves null bytes
+
+3. EXPECTED BEHAVIOR
+   Since NumPy documentation claims the functions are "similar to Python's str.strip()",
+   users would reasonably expect:
+   - Same definition of whitespace
+   - Same stripping behavior
+   - Compatibility when migrating code between NumPy and pure Python
+
+4. ACTUAL BEHAVIOR DISCOVERED
+   NumPy incorrectly strips null bytes in certain cases:
+   - Strips '\x00' when it's the only character
+   - Strips trailing '\x00' from strings like 'abc\x00'
+   - Strips '\x00' after removing actual whitespace (e.g., ' \x00 ' becomes '')
+   - BUT: Does NOT strip '\x00' from middle of strings or leading positions
+     when followed by non-whitespace
+
+5. DOCUMENTATION GAP
+   The NumPy documentation does not:
+   - Define what it considers "whitespace"
+   - Mention any differences from Python's whitespace definition
+   - Document the special handling of null bytes
+   - Warn about incompatibility with Python's str.strip()
+
+CONCLUSION: The documentation creates a reasonable expectation that numpy.strings.strip()
+should behave identically to Python's str.strip() for whitespace removal. The actual
+behavior violates this expectation by treating null bytes as strippable characters
+in certain contexts, which Python does not do. This is either a bug in the implementation
+or a documentation deficiency that fails to note this behavioral difference.

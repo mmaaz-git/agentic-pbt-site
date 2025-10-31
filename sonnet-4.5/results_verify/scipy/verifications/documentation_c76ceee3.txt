@@ -1,0 +1,39 @@
+DOCUMENTATION ANALYSIS
+=====================
+
+1. SciPy Documentation:
+   - The scipy.io.arff.loadarff documentation does NOT specify how quotes should be handled
+   - Examples show unquoted attribute names like 'width', 'height', 'color'
+   - No mention of quote stripping or retention behavior
+   - Documentation is silent on this implementation detail
+
+2. ARFF Format Specification:
+   - According to Waikato ARFF specification, quotes are used as delimiters for attribute names containing spaces
+   - The spec states: "if the name includes spaces it must be quoted"
+   - Quotes can only appear at start and end of names, and must match
+   - This strongly suggests quotes are DELIMITERS, not part of the actual name
+   - An attribute like 'my attribute' should be parsed as "my attribute" (without quotes)
+
+3. Source Code Analysis:
+   - Found the bug source in /home/npc/.local/lib/python3.13/site-packages/scipy/io/arff/_arffread.py
+   - Line 45: r_comattrval = re.compile(r"'(..+)'\s+(..+$)")
+     * This regex requires 2+ characters between single quotes (..+ means at least 2 chars)
+     * Single-char names like 'a' don't match, so quotes aren't stripped
+   - Line 47: r_wcomattrval = re.compile(r"(\S+)\s+(..+$)")
+     * This catches everything else, including double-quoted names
+     * Double quotes are captured as part of \S+ and never stripped
+
+4. Expected Behavior:
+   Based on ARFF format specification, quotes should be:
+   - Recognized as delimiters for attribute names
+   - Stripped during parsing
+   - NOT included in the actual attribute name
+
+5. Current Behavior:
+   - Single quotes: Inconsistently stripped (only for 2+ char names)
+   - Double quotes: Never stripped
+   - This violates the principle that quotes are delimiters
+
+Conclusion:
+-----------
+The documentation doesn't explicitly specify quote handling, but the ARFF format specification clearly indicates quotes are delimiters that should be stripped. The current implementation's inconsistent behavior appears to be an unintentional bug rather than a design choice.

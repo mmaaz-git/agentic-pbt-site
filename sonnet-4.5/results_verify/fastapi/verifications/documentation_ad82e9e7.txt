@@ -1,0 +1,33 @@
+## Documentation Findings
+
+### FastAPI Documentation
+The FastAPI official documentation for HTTPBasic authentication does not explicitly mention character encoding requirements or limitations. The documentation examples show how to use HTTPBasic for authentication but do not address UTF-8 support or non-ASCII character handling in credentials.
+
+From web searches, I found that:
+1. There are known community-reported issues with non-ASCII characters in FastAPI's HTTPBasic implementation
+2. GitHub issue #3235 and discussion #8856 specifically mention problems with characters like "Ä" in passwords
+3. The FastAPI documentation recommends encoding credentials to UTF-8 bytes before comparison in user code, but this is after the HTTPBasic class has already decoded them
+
+### RFC 7617 Specification
+RFC 7617 (published in 2015, superseding RFC 2617) governs HTTP Basic Authentication:
+
+1. **Character Encoding**: The RFC introduces an optional 'charset' parameter with the only allowed value being 'UTF-8'. This indicates that the server expects character data to be encoded using UTF-8.
+
+2. **Default Encoding**: The RFC deliberately leaves the default encoding undefined "for backwards compatibility reasons", as long as it remains compatible with US-ASCII. This means implementations may choose their encoding when the charset parameter is not specified.
+
+3. **Historical Context**: The RFC notes that "most implementations chose either a locale-specific encoding such as ISO-8859-1, or UTF-8" before the specification was clarified.
+
+4. **Username Requirements**: Recipients "MUST support all characters defined in the 'UsernameCasePreserved' profile" except the colon character.
+
+5. **Password Requirements**: Recipients "MUST support all characters defined in the 'OpaqueString' profile."
+
+### FastAPI Source Code Analysis
+Examining `/fastapi/security/http.py`, line 211 shows:
+```python
+data = b64decode(param).decode("ascii")
+```
+
+This explicitly uses ASCII decoding, which will fail for any character with a code point > 127. The code catches `UnicodeDecodeError` but re-raises it as an HTTPException with "Invalid authentication credentials" message, masking the underlying encoding issue.
+
+### Key Finding
+While RFC 7617 does NOT mandate UTF-8 as the default encoding (leaving it undefined for backwards compatibility), it does specify that implementations should support UTF-8 when indicated. The current FastAPI implementation strictly uses ASCII, which is more restrictive than necessary and prevents legitimate use cases with international characters.

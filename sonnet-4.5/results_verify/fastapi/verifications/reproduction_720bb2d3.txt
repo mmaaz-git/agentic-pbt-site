@@ -1,0 +1,55 @@
+BUG REPRODUCTION RESULTS
+
+1. CODE EXAMINATION:
+   - Located the issue at line 40 of starlette/middleware/trustedhost.py
+   - Current code: `host = headers.get("host", "").split(":")[0]`
+   - This naive string splitting approach fails for IPv6 addresses
+
+2. TEST RESULTS - STRING PARSING:
+   All IPv6 test cases FAILED to extract the correct host:
+
+   Input: '[::1]' → Got: '[' → Expected: '[::1]'
+   Input: '[::1]:8080' → Got: '[' → Expected: '[::1]'
+   Input: '[2001:db8::1]' → Got: '[2001' → Expected: '[2001:db8::1]'
+   Input: '[2001:db8::1]:8080' → Got: '[2001' → Expected: '[2001:db8::1]'
+
+   IPv4/hostname cases worked correctly:
+   Input: 'localhost' → Got: 'localhost' ✓
+   Input: 'localhost:8080' → Got: 'localhost' ✓
+   Input: 'example.com:443' → Got: 'example.com' ✓
+
+3. MIDDLEWARE BEHAVIOR TEST:
+   Created TrustedHostMiddleware with allowed_hosts=["[::1]", "[2001:db8::1]", "localhost"]
+
+   Results:
+   - '[::1]' → REJECTED (400 Bad Request) - Should be ALLOWED
+   - '[::1]:8080' → REJECTED (400 Bad Request) - Should be ALLOWED
+   - '[2001:db8::1]' → REJECTED (400 Bad Request) - Should be ALLOWED
+   - '[2001:db8::1]:8080' → REJECTED (400 Bad Request) - Should be ALLOWED
+   - 'localhost' → ALLOWED (200 OK) ✓
+   - 'localhost:8080' → ALLOWED (200 OK) ✓
+
+   This confirms that even when IPv6 addresses are explicitly in the allowed_hosts list,
+   they are rejected because the parsing extracts the wrong host value.
+
+4. PROPERTY-BASED TEST:
+   Tested with multiple port values (8080, 443, 3000, 80, 65535)
+   ALL tests FAILED - the parsing consistently returns '[' instead of '[::1]'
+
+5. ROOT CAUSE:
+   The bug occurs because IPv6 addresses contain colons as part of the address itself.
+   When `"[::1]:8080".split(":")` is called, it splits on the FIRST colon, which is
+   inside the IPv6 address, returning '[' as the first element.
+
+6. IMPACT:
+   - Any application using TrustedHostMiddleware cannot accept requests from IPv6 clients
+   - This affects both local IPv6 addresses (::1) and public IPv6 addresses
+   - The middleware becomes unusable in IPv6-only or dual-stack environments
+   - The www redirect feature (line 47) would also fail for IPv6 addresses
+
+7. BUG REPORT ACCURACY:
+   The bug report is technically accurate in all its claims:
+   - The parsing logic is indeed flawed for IPv6
+   - The test cases demonstrate the issue correctly
+   - The proposed fix would resolve the problem
+   - The reference to RFC 3986 is appropriate

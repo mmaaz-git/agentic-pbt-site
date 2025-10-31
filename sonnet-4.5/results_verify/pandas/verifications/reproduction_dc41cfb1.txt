@@ -1,0 +1,47 @@
+=== BUG REPRODUCTION REPORT ===
+
+1. BUG REPRODUCTION STATUS: CONFIRMED
+
+2. HYPOTHESIS TEST RESULTS:
+- The provided Hypothesis test successfully failed when run, confirming negative variances
+- The specific failing input (data=[3222872787.0, 0.0, 2.0, 0.0], window=3) was verified
+- Additional failing cases were found by Hypothesis, confirming this is not an isolated incident
+
+3. SPECIFIC EXAMPLE REPRODUCTION:
+Input: data = [3222872787.0, 0.0, 2.0, 0.0], window = 3
+Output from pandas.rolling(3).var():
+  - Index 0: NaN (expected, insufficient data)
+  - Index 1: NaN (expected, insufficient data)
+  - Index 2: 3.462303e+18 (window=[3222872787.0, 0.0, 2.0])
+  - Index 3: -511.666667 (window=[0.0, 2.0, 0.0]) ← NEGATIVE VARIANCE
+
+4. MATHEMATICAL VERIFICATION:
+For window [0.0, 2.0, 0.0]:
+- Mean = (0 + 2 + 0) / 3 = 0.666667
+- Deviations: [-0.667, 1.333, -0.667]
+- Squared deviations: [0.444, 1.778, 0.444]
+- Sum of squared deviations: 2.667
+- Variance (ddof=1) = 2.667 / 2 = 1.333
+
+EXPECTED: 1.333 (positive)
+ACTUAL: -511.667 (negative)
+
+5. CROSS-VERIFICATION:
+- NumPy: np.var([0.0, 2.0, 0.0], ddof=1) = 1.333 ✓
+- Manual calculation: 1.333 ✓
+- Pandas rolling: -511.667 ✗
+
+6. ROOT CAUSE INDICATORS:
+The bug occurs when:
+- Large values (3.2 billion) are in the rolling window initially
+- Window transitions to contain only small values
+- This pattern suggests numerical instability in the variance algorithm
+- Likely using the computationally unstable formula: Var(X) = E[X²] - E[X]²
+
+7. IMPACT:
+- Variance is mathematically ALWAYS non-negative (sum of squares divided by count)
+- Negative variance is mathematically impossible and violates fundamental statistical properties
+- This can corrupt downstream analyses that assume valid variance values
+- Silent data corruption: no error or warning is raised
+
+CONCLUSION: The bug is successfully reproduced. Pandas rolling.var() returns mathematically impossible negative values, confirming the reported issue.

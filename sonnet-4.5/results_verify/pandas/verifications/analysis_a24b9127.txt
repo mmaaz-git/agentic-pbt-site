@@ -1,0 +1,55 @@
+# Bug Report Analysis
+
+## Categorization Considerations
+
+### BUG (Arguments For)
+1. **Round-trip Failure**: The interchange protocol's core promise is data exchange between DataFrame libraries. A pandas DataFrame that cannot round-trip through its own interchange protocol violates this fundamental expectation.
+
+2. **Silent Data Acceptance**: pandas accepts surrogate characters in DataFrames without warning, but then crashes when using the interchange protocol - this inconsistency is problematic.
+
+3. **Poor Error Handling**: The code crashes with a low-level UnicodeEncodeError rather than providing meaningful error handling or fallback behavior.
+
+4. **Practical Impact**: While surrogate characters are technically invalid UTF-8, they can appear in real-world data (e.g., corrupted text, Windows filenames, data from legacy systems).
+
+### INVALID (Arguments Against)
+1. **UTF-8 Specification Violation**: Surrogate characters are explicitly forbidden in UTF-8 by RFC 3629. The interchange protocol correctly specifies UTF-8, so rejecting surrogates is technically correct behavior.
+
+2. **Invalid Input**: The user is providing invalid UTF-8 data to a system that requires valid UTF-8. This could be seen as user error.
+
+3. **Standard Compliance**: The current implementation follows the UTF-8 standard correctly by refusing to encode surrogates.
+
+### WONTFIX (Arguments For)
+1. **Edge Case**: Surrogate characters are rare in practice and represent corrupted or malformed data.
+
+2. **Standards Compliance**: Changing the behavior would violate UTF-8 standards for an obscure edge case.
+
+3. **Alternative Solutions**: Users can clean their data before using the interchange protocol.
+
+### DOCUMENTATION_FIX (Arguments For)
+1. **Undocumented Limitation**: Neither the pandas nor interchange protocol documentation mentions that strings with surrogates will fail.
+
+2. **Misleading Examples**: Documentation shows simple round-trip examples without mentioning data restrictions.
+
+3. **Missing Error Cases**: The documentation should specify what types of data cannot be exchanged through the protocol.
+
+### FEATURE_REQUEST (Arguments Against)
+1. **Not a New Feature**: This is about handling existing data types that pandas already supports, not adding new functionality.
+
+2. **Expected Behavior**: Round-trip conversion is a core expectation, not an enhancement.
+
+## Analysis
+
+The key question is whether pandas DataFrames containing surrogate characters should be considered "valid" data for the interchange protocol.
+
+**Critical Factors:**
+1. pandas explicitly allows surrogate characters in string columns
+2. The interchange protocol is designed for pandas-to-pandas conversion (among others)
+3. The crash occurs deep in internal code without user-friendly error handling
+4. The proposed fix (using `errors='surrogatepass'`) is a standard Python approach for handling this exact situation
+
+The fact that pandas accepts this data but then cannot process it through its own interchange protocol represents a fundamental inconsistency. While surrogates are technically invalid UTF-8, pandas has already made the design decision to support them in DataFrames. The interchange protocol should either:
+- Handle them gracefully (as proposed in the fix)
+- Reject them at DataFrame creation time
+- Provide clear documentation about this limitation
+
+The current state - accepting the data but crashing during interchange - is the worst of both worlds.

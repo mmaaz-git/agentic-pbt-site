@@ -1,0 +1,49 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `starlette.middleware.Middleware.__repr__` method indeed produces syntactically invalid Python code when the middleware callable does not have a `__name__` attribute.
+
+### Test Results
+
+1. **Hypothesis Test Reproduction:**
+   - Ran the provided Hypothesis test with the failing input `args=[0], kwargs={}`
+   - Result: `Middleware(, 0)` - confirms the leading comma bug
+   - The assertion correctly identifies the issue
+
+2. **Manual Example Reproduction:**
+   - Created a `CallableWithoutName` class instance (no `__name__` attribute)
+   - Test case: `Middleware(callable_obj, 123, kwarg="test")`
+   - Output: `Middleware(, 123, kwarg='test')` - confirms the leading comma
+   - Expected: Either `Middleware(CallableWithoutName, 123, kwarg='test')` or `Middleware(123, kwarg='test')`
+
+3. **Additional Test Cases:**
+   - Lambda function: `Middleware(<lambda>, 456, another='value')` - works correctly (lambdas have `__name__`)
+   - No arguments: `Middleware()` - works correctly (empty string, no comma issue)
+   - Only kwargs: `Middleware(, key='value', another='test')` - also has leading comma bug
+
+### Source Code Analysis
+Examined `/home/npc/pbt/agentic-pbt/envs/starlette_env/lib/python3.13/site-packages/starlette/middleware/__init__.py`:
+
+The bug is in the `__repr__` method (lines 36-42):
+```python
+def __repr__(self) -> str:
+    class_name = self.__class__.__name__
+    args_strings = [f"{value!r}" for value in self.args]
+    option_strings = [f"{key}={value!r}" for key, value in self.kwargs.items()]
+    name = getattr(self.cls, "__name__", "")
+    args_repr = ", ".join([name] + args_strings + option_strings)
+    return f"{class_name}({args_repr})"
+```
+
+The issue occurs because:
+1. When `self.cls` doesn't have `__name__`, `getattr(self.cls, "__name__", "")` returns an empty string
+2. The empty string is always included as the first element in `[name] + args_strings + option_strings`
+3. When joined with `", "`, this creates a leading comma like `", 123, kwarg='test'"`
+
+### Impact
+The bug affects real-world scenarios where:
+- Callable class instances (without `__name__` attribute) are used as middleware
+- Custom callable objects are used
+- Any callable that doesn't define `__name__`
+
+The result is syntactically invalid Python code in the repr output, violating Python conventions for `__repr__` methods.

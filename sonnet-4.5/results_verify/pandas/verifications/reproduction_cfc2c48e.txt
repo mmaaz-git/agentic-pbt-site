@@ -1,0 +1,36 @@
+BUG REPRODUCTION REPORT
+======================
+
+I successfully reproduced the bug described in the report. The issue occurs when import_optional_dependency is called with a submodule name where:
+1. The submodule is present in sys.modules
+2. The parent module is NOT in sys.modules
+3. A min_version parameter is specified
+
+Reproduction Results:
+--------------------
+
+1. Hypothesis Test:
+   - Ran the provided property-based test with Hypothesis
+   - Result: Test failed with AssertionError confirming that KeyError is raised instead of ImportError
+   - Failing example: parent_name='aaaaa' (and any other generated value)
+   - Error message: "KeyError raised instead of ImportError: 'fake_parent_aaaaa'"
+
+2. Simple Reproduction Case:
+   - Ran the simple example code provided in the bug report
+   - Result: Confirmed that KeyError is raised with message: 'fake_parent_xyz'
+   - Exception type confirmed as KeyError, not ImportError as expected
+
+3. Source Code Analysis:
+   - Located the bug in /lib/python3.13/site-packages/pandas/compat/_optional.py
+   - Line 145: module_to_get = sys.modules[install_name]
+   - This line directly accesses sys.modules without checking if the parent module exists
+   - When the parent module is not in sys.modules, Python raises KeyError
+
+Bug Mechanism:
+-------------
+The function correctly imports the submodule at line 135, but when it needs to get version information and the submodule has a parent (line 143), it tries to access the parent module from sys.modules at line 145. If the parent module was never imported separately (only the submodule was imported), this causes a KeyError.
+
+This is a real bug because:
+1. The function is documented to raise ImportError for import-related issues
+2. The KeyError is unexpected and breaks the API contract
+3. Callers expecting to catch ImportError will miss the KeyError exception

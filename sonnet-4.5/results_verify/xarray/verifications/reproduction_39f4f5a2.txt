@@ -1,0 +1,42 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported for xarray.util.deprecation_helpers.CombineKwargDefault.
+
+Test Results:
+-------------
+1. The hash of CombineKwargDefault objects DOES change when the global OPTIONS["use_new_combine_kwarg_defaults"] changes.
+
+2. Specific failing case from report (name='0', old='', new='0'):
+   - Hash with use_new_combine_kwarg_defaults=False: 0 (hash of empty string '')
+   - Hash with use_new_combine_kwarg_defaults=True: 2257954227275858763 (hash of string '0')
+   - The hash changes because _value changes from '' to '0'
+
+3. Example case (name="test", old="old_value", new="new_value"):
+   - Hash with False: 2883386397871174292 (hash of "old_value")
+   - Hash with True: 1448110018038735717 (hash of "new_value")
+
+Impact Confirmed:
+-----------------
+1. Set membership breaks: Objects added to a set with one option value cannot be found when the option changes:
+   - Object added to set: True (with use_new_combine_kwarg_defaults=False)
+   - Object in set after option change: False (with use_new_combine_kwarg_defaults=True)
+
+2. Dictionary lookups fail: Objects used as dictionary keys cannot be retrieved after option changes:
+   - Added to dict successfully with use_new_combine_kwarg_defaults=False
+   - KeyError when trying to retrieve with use_new_combine_kwarg_defaults=True
+
+Root Cause:
+-----------
+The __hash__ method (lines 180-181) returns hash(self._value), where _value is a property that returns either self._old or self._new based on the global OPTIONS state:
+
+```python
+@property
+def _value(self) -> str | None:
+    return self._new if OPTIONS["use_new_combine_kwarg_defaults"] else self._old
+
+def __hash__(self) -> int:
+    return hash(self._value)
+```
+
+This violates Python's fundamental requirement that an object's hash must not change during its lifetime, causing silent data corruption when these objects are used in sets or as dictionary keys.

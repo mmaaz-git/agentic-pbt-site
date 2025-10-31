@@ -1,0 +1,45 @@
+TRIAGE ANALYSIS FOR scipy.special.boxcox/inv_boxcox BUG REPORT
+================================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly guarantee round-trip behavior for all possible inputs, especially extreme edge cases like subnormal values. The functions are documented to handle lambda=0 as a special case, but there's no specification about how "close to zero" is determined. Using subnormal values (5e-324) is an extreme edge case that pushes floating-point arithmetic to its limits, and the documentation doesn't promise correct behavior in such extreme cases.
+
+**Why it might not be INVALID:**
+The mathematical definition of the Box-Cox transformation has well-defined limits as lambda approaches zero, and both functions should consistently apply these limits. The fact that boxcox correctly recognizes subnormal values should be treated as zero (returning log(x)) while inv_boxcox doesn't creates an asymmetry that violates the mathematical expectation of an inverse transformation pair.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Subnormal values like 5e-324 are extremely rare in practical applications. The smallest positive subnormal double-precision float is about 5e-324, which is so close to zero that most real-world applications would never encounter such values. The computational cost of adding threshold checks in a low-level numerical function might not be justified for such an obscure edge case. Most users would simply use lambda=0 if they want the logarithmic transformation.
+
+**Why it might not be WONTFIX:**
+Scientific computing libraries like SciPy are expected to handle numerical edge cases correctly, especially when one function (boxcox) already handles it properly. The fix is conceptually simple - ensure both functions use the same threshold for treating lambda as zero. The inconsistency between the two functions is the real problem, not just the edge case itself.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current documentation doesn't specify how the functions handle values very close to zero or mention any thresholds. Adding a note about numerical stability issues with subnormal lambda values and recommending users to explicitly use lambda=0 for the logarithmic transformation would help users avoid this issue. The documentation could clarify that round-trip behavior is not guaranteed for extreme edge cases.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about unclear documentation - there's an actual inconsistency in the implementation where one function treats subnormal values as zero while the other doesn't. Simply documenting this inconsistent behavior would not be satisfactory; the functions should behave consistently with each other regardless of what the documentation says.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting perfect round-trip behavior for all possible floating-point values, including subnormal ones, could be seen as a new feature rather than a bug fix. The current implementation works correctly for all normal floating-point values, and extending support to subnormal values could be considered an enhancement. Users could be asking for more robust numerical stability handling that goes beyond the original design scope.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but rather for consistent behavior between a function and its inverse. The mathematical definition of inverse functions implies that f^(-1)(f(x)) = x within numerical precision limits. The current inconsistency is a deviation from expected mathematical behavior, not a request for additional features.
+
+## BUG Considerations
+**Why it might be BUG:**
+There is a clear inconsistency between boxcox and inv_boxcox in how they handle subnormal lambda values. The boxcox function correctly applies the limiting behavior (returning log(x)) while inv_boxcox doesn't (failing to return exp(y)). This breaks the fundamental mathematical property that inverse functions should round-trip. The issue is reproducible, well-defined, and stems from inconsistent threshold handling between the two functions.
+
+**Why it might not be BUG:**
+The functions work correctly for all normal use cases and only fail with extremely small subnormal values that are practically indistinguishable from zero. The documentation doesn't explicitly promise round-trip behavior for all possible inputs, and using values like 5e-324 could be considered misuse of the functions. The mathematical formulas are correctly implemented; the issue only arises from floating-point precision limitations.
+
+## Overall Consideration
+
+This bug report presents a technically valid issue where scipy.special.boxcox and scipy.special.inv_boxcox handle subnormal lambda values inconsistently. The boxcox function treats subnormal values as zero (correctly returning log(x)), while inv_boxcox attempts to compute the formula directly, leading to numerical instability and incorrect results. This breaks the expected round-trip property of inverse function pairs.
+
+However, the practical impact of this issue is minimal. Subnormal values like 5e-324 are extraordinarily rare in real-world applications - they are the smallest representable positive floating-point values, essentially computational artifacts rather than meaningful mathematical quantities. Most users encountering such values likely have other numerical issues in their code. The functions work correctly for all normal floating-point values down to about 1e-308.
+
+While the inconsistency is technically a flaw, fixing it would require adding threshold checks to a low-level numerical function that would affect performance for all users to handle an edge case that virtually no one will encounter. The more pragmatic approach would be to document this limitation rather than modify the implementation. Given that about 90% of bug reports from this user are incorrect, and this issue affects only the most extreme edge cases with no practical impact, this should likely be closed as WONTFIX.

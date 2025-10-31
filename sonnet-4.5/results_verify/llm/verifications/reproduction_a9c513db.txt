@@ -1,0 +1,49 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is CORRECT. The `truncate_string` function does violate its documented contract by returning strings longer than `max_length` when `max_length < 3`.
+
+### Property-Based Test Results
+The Hypothesis test provided in the bug report fails immediately, confirming the issue exists.
+
+### Specific Failing Case Analysis
+The bug report claimed:
+- Input: `text = "hello", max_length = 1`
+- Expected: Result should be at most 1 character long
+- Actual: Result is 'hel...' (6 characters)
+
+My reproduction confirms this, though with a slight difference from the bug report's claimed output:
+- Bug report claimed output: '...' (3 chars)
+- Actual output: 'hel...' (6 chars)
+
+The bug is actually WORSE than reported - it produces even longer strings than the report claimed.
+
+### Root Cause Analysis
+When `max_length < 3`, the code does: `text[:max_length - 3] + "..."`
+
+For `max_length = 1`:
+- Calculates slice as `text[:-2]` (negative index)
+- In Python, `"hello"[:-2]` returns `"hel"` (all but last 2 chars)
+- Appends "..." making final result "hel..." (6 chars)
+- This is 6x longer than the requested max_length of 1
+
+For `max_length = 2`:
+- Calculates slice as `text[:-1]` (negative index)
+- `"hello"[:-1]` returns `"hell"`
+- Appends "..." making final result "hell..." (7 chars)
+- This is 3.5x longer than the requested max_length of 2
+
+### Additional Edge Cases Tested
+- `truncate_string("a", 0)` returns "..." (3 chars) - violates constraint
+- `truncate_string("ab", 0)` returns "..." (3 chars) - violates constraint
+- `truncate_string("ab", 1)` returns "..." (3 chars) - violates constraint
+- `truncate_string("abc", 1)` returns "a..." (4 chars) - violates constraint
+- `truncate_string("abcd", 2)` returns "abc..." (6 chars) - violates constraint
+
+### Technical Verification
+The function's docstring states: "Truncate a string to a maximum length"
+The parameter is documented as: "max_length: Maximum length of the result string"
+
+The word "maximum" unambiguously means the result should not exceed this length. The current implementation clearly violates this contract for small values of max_length.
+
+The bug is reproducible, technically accurate, and represents a clear violation of the documented behavior.

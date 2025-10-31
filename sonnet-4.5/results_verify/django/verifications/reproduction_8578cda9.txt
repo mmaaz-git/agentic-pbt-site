@@ -1,0 +1,36 @@
+Bug Reproduction Results
+========================
+
+1. Simple Reproduction Test:
+   - Code: CountsDict(word="hello", foo="bar")
+   - Result: ValueError: dictionary update sequence element #0 has length 1; 2 is required
+   - This confirms the bug - CountsDict cannot accept additional kwargs
+
+2. Django's Actual Usage:
+   - Code: CountsDict(word="hello")  # No additional kwargs
+   - Result: Works correctly
+   - Django only uses CountsDict this way, never passing additional kwargs
+
+3. Property-Based Testing:
+   - When kwargs_data is empty: Tests pass
+   - When kwargs_data has entries: Tests fail with either:
+     a) TypeError: dict expected at most 1 argument, got 2 (multiple kwargs)
+     b) ValueError: dictionary update sequence element #0 has length 1; 2 is required (single kwarg)
+   - This confirms that any non-empty kwargs cause failures
+
+4. Source Code Inspection:
+   - Current code: super().__init__(*args, *kwargs)
+   - The bug is confirmed: using *kwargs (single asterisk) instead of **kwargs (double asterisk)
+   - When *kwargs is used, Python tries to unpack the dictionary as positional arguments
+   - This causes dict() to receive individual keys as arguments instead of key-value pairs
+
+5. Comparison with Correct dict Subclass:
+   - A properly implemented dict subclass uses super().__init__(*args, **kwargs)
+   - This correctly passes keyword arguments to the parent dict class
+   - The test demonstrated that changing *kwargs to **kwargs fixes the issue
+
+Technical Impact:
+- The bug prevents CountsDict from accepting any keyword arguments beyond 'word'
+- The class signature suggests it should accept **kwargs like any dict subclass
+- The typo (*kwargs vs **kwargs) violates the Liskov Substitution Principle for dict subclasses
+- However, Django's internal usage is not affected because it never passes additional kwargs

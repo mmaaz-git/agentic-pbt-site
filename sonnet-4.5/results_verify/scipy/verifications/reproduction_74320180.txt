@@ -1,0 +1,36 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+### Hypothesis Test Execution
+The Hypothesis test failed as expected with the error:
+```
+AssertionError: Documentation says expm returns ndarray, but got <class 'scipy.sparse._csr.csr_matrix'>
+Falsifying example: test_expm_return_type_matches_docs(n=2,)
+```
+
+### Manual Test Execution
+The manual reproduction confirmed the behavior:
+
+**For sparse input:**
+- Input type: `scipy.sparse._csr.csr_matrix`
+- Output type: `scipy.sparse._csr.csr_matrix`
+- Is output ndarray? **False**
+- Is output sparse? **True**
+
+**For dense input:**
+- Input type: `numpy.ndarray`
+- Output type: `numpy.ndarray`
+- Is output ndarray? **True**
+
+### Implementation Analysis
+Examining the source code at `/home/npc/.local/lib/python3.13/site-packages/scipy/sparse/linalg/_matfuncs.py`:
+
+1. The docstring clearly states: "Returns expA : (M,M) ndarray"
+2. However, the implementation in `_expm` function (lines 606-621, 706-707) explicitly preserves the sparse structure when input is sparse:
+   - When input is sparse and shape is (0,0): returns `A.__class__(out)` (line 609)
+   - When input is sparse and shape is (1,1): returns `A.__class__(out)` (line 619)
+   - In `_solve_P_Q` function: when sparse, uses `spsolve(Q, P)` which returns a sparse matrix (line 707)
+
+### Conclusion
+The bug report is accurate. The function's actual behavior (returning a sparse matrix when given sparse input) does not match its documented behavior (always returning an ndarray). The function preserves the sparsity of the input, which is actually a sensible and useful behavior, but the documentation doesn't reflect this.

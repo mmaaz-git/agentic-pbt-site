@@ -1,0 +1,53 @@
+REPRODUCTION ANALYSIS
+===================
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+1. HYPOTHESIS TEST RESULTS
+The property-based test using Hypothesis confirms the bug:
+- The test fails with the assertion error: "lag_plot should reject lag=-1 but it succeeded"
+- This demonstrates that lag_plot does not validate negative lag values
+- The function accepts negative lag values when it should raise a ValueError
+
+2. MANUAL TEST RESULTS
+Running the provided manual test code produced exactly the outputs described in the bug report:
+
+Test with lag=-1:
+- Created 1 point (should have raised ValueError)
+- Y-axis label: 'y(t + -1)'
+- The function accepts lag=-1 and produces a nonsensical single-point plot
+
+Test with lag=0:
+- Raised ValueError: x and y must be the same size
+- This is an error from matplotlib, not a proper validation error from pandas
+
+3. CODE ANALYSIS
+Looking at the implementation in /home/npc/miniconda/lib/python3.13/site-packages/pandas/plotting/_matplotlib/misc.py:
+
+```python
+def lag_plot(series: Series, lag: int = 1, ax: Axes | None = None, **kwds) -> Axes:
+    # workaround because `c='b'` is hardcoded in matplotlib's scatter method
+    import matplotlib.pyplot as plt
+
+    kwds.setdefault("c", plt.rcParams["patch.facecolor"])
+
+    data = series.values
+    y1 = data[:-lag]  # Line 434
+    y2 = data[lag:]   # Line 435
+    if ax is None:
+        ax = plt.gca()
+    ax.set_xlabel("y(t)")
+    ax.set_ylabel(f"y(t + {lag})")
+    ax.scatter(y1, y2, **kwds)
+    return ax
+```
+
+The bug occurs because:
+- When lag=-1, `data[:-(-1)]` becomes `data[:1]` (first element only)
+- When lag=-1, `data[-1:]` gives the last element only
+- This produces a single point plot which is meaningless
+- When lag=0, `data[:-0]` becomes `data[:0]` (empty array) and `data[0:]` gives full array
+- This causes a size mismatch error from matplotlib
+
+CONCLUSION
+The bug is fully reproducible. The function does not validate the lag parameter and accepts invalid values (lag <= 0) that produce nonsensical or error-prone results.

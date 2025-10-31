@@ -1,0 +1,58 @@
+## Bug Reproduction Analysis
+
+### Test Setup
+Successfully reproduced the bug using both the provided test code and custom test scripts in a Django environment.
+
+### Test Results
+
+#### Test 1: Prefix "/"
+When calling `static("/")`:
+- Generated pattern: `^(?P<path>.*)$`
+- This pattern matches EVERY possible URL:
+  - Matches empty string ''
+  - Matches 'admin/'
+  - Matches 'api/users/123'
+  - Matches 'any/arbitrary/url'
+
+#### Test 2: Normal Prefix "/media/"
+When calling `static("/media/")`:
+- Generated pattern: `^media/(?P<path>.*)$`
+- This pattern only matches URLs starting with "media/":
+  - Does NOT match empty string ''
+  - Does NOT match 'admin/'
+  - DOES match 'media/file.jpg'
+  - Does NOT match 'api/users/123'
+
+#### Test 3: Empty Prefix ""
+When calling `static("")`:
+- Correctly raises: `ImproperlyConfigured: Empty static prefix not permitted`
+
+#### Test 4: Multiple Slashes "//"
+When calling `static("//")`:
+- Generated pattern: `^(?P<path>.*)$`
+- Also matches all URLs (same problem as "/")
+
+### Hypothesis Test Results
+The hypothesis test from the bug report runs successfully and confirms:
+- All slash-only prefixes ("/", "//", "///", "////") generate the same overly-broad pattern
+- All of them result in `^(?P<path>.*)$` which matches every URL
+
+### Technical Analysis
+The root cause is in line 28 of static.py:
+```python
+r"^%s(?P<path>.*)$" % re.escape(prefix.lstrip("/"))
+```
+
+When prefix="/":
+1. `prefix.lstrip("/")` returns empty string ""
+2. `re.escape("")` returns empty string ""
+3. Pattern becomes `^(?P<path>.*)$`
+4. This matches ALL URLs in the application
+
+### Impact Verification
+The bug is real and has serious implications:
+1. Using `static("/")` would cause the static file handler to intercept ALL requests
+2. This would break normal URL routing for admin, API endpoints, and all other views
+3. The behavior is inconsistent with the explicit validation that rejects empty prefixes
+
+The bug report's claims are accurate and the reproduction is successful.

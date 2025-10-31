@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation explicitly states that "one cannot specify to print to stdout but not a file" when using rptfile. The parameter combination init=0, so_init=1 is intentionally unsupported and documented as such. The ip2arg lookup table deliberately excludes these combinations. Users are trying to use the function in a way that is explicitly documented as not allowed. The design intent is clear: if you want stdout-only output, don't specify a rptfile.
+
+**Why it might not be INVALID:**
+The function does crash with an unhelpful ValueError instead of properly handling the invalid input. Even though the combination is documented as unsupported, the code should handle this gracefully with a meaningful error message rather than crashing with a cryptic list lookup error. The error occurs in production code that users may encounter.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case where users are providing invalid parameter combinations that are documented as unsupported. The workaround is trivial - users can simply not specify a rptfile if they want stdout-only output. The impact is minimal since the correct usage patterns work fine, and this only affects users who ignore the documentation. Fixing this would only improve error messages for invalid usage, which may not be worth the maintenance effort.
+
+**Why it might not be WONTFIX:**
+The crash with a ValueError is poor user experience. Even for invalid input, production code should fail gracefully with informative error messages. The fix is relatively simple - just add proper error checking before the list lookup. This affects the robustness and usability of the API.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about exactly what happens when invalid combinations are used. While it says you "cannot specify to print to stdout but not a file," it doesn't explicitly warn that attempting this will cause a crash. The documentation could be enhanced to explicitly list which parameter combinations are invalid and what error will be raised.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already clearly states this combination is not allowed. The core issue is not documentation but rather that the code crashes instead of raising a proper error. The documentation correctly describes the intended behavior; the implementation is what needs fixing to match the documented constraints with proper error handling.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Users might legitimately want to print to stdout without printing to file, even when a rptfile is specified. The current design arbitrarily restricts this combination. Adding support for [0,1] and [0,2] combinations to the ip2arg table would enable this functionality. This could be seen as requesting a new feature to support additional output configurations.
+
+**Why it might not be FEATURE_REQUEST:**
+The restriction is intentional and documented. The design philosophy is clear: stdout-only output is achieved by not specifying rptfile. This isn't about adding new functionality but about fixing how existing constraints are enforced. The user isn't asking for new features but reporting that invalid input causes a crash.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code crashes with an unhelpful ValueError when it should raise a meaningful OdrError. Even though the input combination is invalid per documentation, production code should never crash with cryptic errors on invalid input. Good API design requires graceful error handling. The code already has error checking for the reverse case (no rptfile with so_* args), showing that proper error handling was intended but incomplete.
+
+**Why it might not be BUG:**
+The behavior is documented - these combinations are explicitly stated as unsupported. Users are using the API incorrectly by ignoring documented constraints. The function works correctly for all valid input combinations. This is more about improving error messages for invalid usage rather than fixing incorrect behavior for valid usage.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a case where the code's error handling is incomplete, even though the constraint itself is documented. The key issue is that the code crashes with a cryptic "ValueError: [0, 1] is not in list" instead of raising a meaningful error message explaining why the parameter combination is invalid.
+
+The documentation does state that "one cannot specify to print to stdout but not a file" when rptfile is specified, and the ip2arg lookup table was intentionally designed without [0,1] and [0,2] combinations. However, production code should handle invalid input gracefully. The existing code already demonstrates intent to provide proper error messages - lines 1053-1058 check for the reverse invalid case (no rptfile but so_* arguments specified) and raise a clear OdrError. The same level of error handling should apply to this case.
+
+While the user is technically using the function incorrectly according to documentation, the difference between a cryptic ValueError during list lookup and a meaningful OdrError explaining the constraint is significant for API usability. This represents incomplete error handling rather than a documentation issue or feature request. The fix would be minimal - add a check before the list lookup to ensure the combination exists and raise an appropriate OdrError if not. Given that proper error handling exists for similar cases and this improves API robustness without changing any valid behavior, this should be classified as WONTFIX - an error case that, while technically valid to report, represents such a minor issue (poor error message for documented invalid input) that most maintainers would close it as not worth fixing.

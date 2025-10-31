@@ -1,0 +1,52 @@
+# Reproduction of Bug Report
+
+## Summary
+I successfully reproduced the reported bug in xarray.plot.utils._infer_interval_breaks with unsorted coordinates.
+
+## Reproduction Steps
+
+### 1. Manual Test Case Reproduction
+The provided test case with coord=[0.0, -1.0] was successfully reproduced:
+
+Input coordinates: [0.0, -1.0]
+Data range: [-1.0, 0.0]
+Interval breaks: [0.5, -0.5, -1.5]
+Breaks range: [0.5, -1.5]
+
+The issue is confirmed:
+- First break (0.5) > minimum value (-1.0): This is INCORRECT
+- Last break (-1.5) < maximum value (0.0): This is INCORRECT
+
+### 2. Property-Based Test Reproduction
+The Hypothesis test correctly identified the failure case. The property test asserts that:
+- The first interval break should be <= the minimum coordinate value
+- The last interval break should be >= the maximum coordinate value
+
+These assertions fail for coord=[0.0, -1.0], confirming the bug.
+
+### 3. Root Cause Analysis
+After examining the source code, the bug occurs because _infer_interval_breaks assumes:
+- coord[0] is the minimum value (line 888: uses coord[0] for "first")
+- coord[-1] is the maximum value (line 889: uses coord[-1] for "last")
+
+This assumption is only valid for sorted arrays in ascending order.
+
+### 4. Important Discovery about Monotonic Check
+The check_monotonic parameter does NOT catch this case because:
+- _is_monotonic accepts BOTH ascending and descending monotonic sequences
+- [0.0, -1.0] is a valid monotonically descending sequence
+- So check_monotonic=True does NOT raise an error for this input
+
+However, the function still produces incorrect interval breaks for descending sequences because it assumes ascending order when computing the first and last breaks.
+
+### 5. Additional Test Results
+- Ascending sorted coordinates [-1.0, 0.0]: Works correctly, breaks cover full range
+- Descending sorted coordinates [1.0, 0.0, -1.0]: Fails, breaks don't cover full range
+- The function only works correctly for ascending monotonic sequences
+
+## Conclusion
+The bug is confirmed and reproducible. The function produces incorrect interval breaks for:
+1. Unsorted coordinates
+2. Descending monotonic coordinates
+
+The breaks don't properly cover the data range, which would lead to incorrect visualizations in plotting functions.

@@ -1,0 +1,44 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the reported bug in `FixedWindowIndexer.get_window_bounds`.
+
+### Property-Based Test Reproduction
+The property-based test provided in the bug report correctly identifies the invariant violation. Running the test with Hypothesis immediately finds a failing case:
+- num_values=2
+- window_size=0
+- center=False
+- closed='neither'
+- step=None
+
+The test fails with: `AssertionError: Invariant violated at index 1: start[1]=1 > end[1]=0`
+
+### Direct Reproduction
+Running the specific reproduction code confirms the issue:
+```
+Window size: 0
+Num values: 2
+Closed: 'neither'
+Start: [0 1]
+End: [0 0]
+Window 0: start=0, end=0, valid=True
+Window 1: start=1, end=0, valid=False
+```
+
+The second window has start=1 and end=0, violating the invariant start <= end.
+
+### Root Cause Analysis
+Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/indexers/objects.py`, lines 105-120:
+
+1. Line 105: When `window_size==0`, the condition `center or self.window_size == 0` evaluates to True
+2. Line 106: This sets `offset = (0 - 1) // 2 = -1`
+3. Line 110: `end = np.arange(1 + (-1), 3 + (-1), None) = np.array([0, 1])`
+4. Line 111: `start = end - 0 = np.array([0, 1])`
+5. Lines 114-115: Since closed='neither', line 115 executes: `end -= 1`, making `end = np.array([-1, 0])`
+6. Lines 117-118: The clipping operations result in:
+   - `end = np.array([0, 0])`
+   - `start = np.array([0, 1])`
+
+This produces `start[1]=1 > end[1]=0`, violating the fundamental invariant.
+
+### Impact
+When start > end, the window represents an invalid range. In Python/NumPy slicing, `array[1:0]` produces an empty array, but this is semantically incorrect as it suggests the window starts after it ends. This can lead to unexpected behavior in downstream operations that assume valid window bounds.

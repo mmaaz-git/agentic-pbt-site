@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state which schemes are valid beyond mentioning "usually http:// or https://". The word "usually" suggests other schemes might be acceptable. If Django intentionally allows any scheme format for flexibility (e.g., to support ws://, wss://, or custom schemes), then the current behavior of accepting "a://a" might be intentional. The function might only be checking for the presence of a scheme separator, not validating the scheme itself.
+
+**Why it might not be INVALID:**
+The error message explicitly states origins "must start with a scheme" but the code only checks if "://" exists anywhere in the string. This allows "example.com://http" which clearly doesn't start with a scheme. The mismatch between the error message's stated intent and the actual validation logic suggests this is a real issue, not just undefined behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only affects edge cases with malformed origins that developers are unlikely to use in practice. Real-world usage would typically involve proper URLs like "https://example.com". The impact is minimal since developers would quickly notice if their CSRF configuration isn't working as expected. The current check might be intentionally permissive to avoid breaking existing configurations that use non-standard but functional schemes.
+
+**Why it might not be WONTFIX:**
+This is a security-related component (CSRF protection) where proper validation is important. The middleware actually uses these values with urlsplit() to extract hosts for origin matching, so malformed values could lead to unexpected security behavior. The error message promises validation that isn't actually performed, which could mislead developers about what values are acceptable.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The error message could be updated to accurately reflect what the code does: "must contain '://'" rather than "must start with a scheme". The documentation could be clarified to explicitly list all acceptable schemes or state that any scheme is allowed as long as the URL format is valid. This would align the documentation with the actual permissive behavior of the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The error message already correctly states the intended behavior - origins should "start with a scheme" and use "usually http:// or https://". The code not matching this intent suggests the implementation is wrong, not the documentation. The Django 4.0 release notes clearly indicate schemes are required for security purposes, suggesting proper validation was the goal.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding validation for specific schemes (http, https, ws, wss) would be a new feature that enhances the current basic check. The current code only ensures some form of scheme separator exists, and adding scheme validation would be an enhancement. This could be framed as a request to add stricter validation options for better security.
+
+**Why it might not be FEATURE_REQUEST:**
+The error message already promises this validation ("must start with a scheme"), so implementing it would be fixing broken functionality, not adding new functionality. The Django 4.0 release notes indicate this validation was supposed to be part of the compatibility check. This is about making the code match its stated behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+There's a clear mismatch between what the error message claims to check ("must start with a scheme") and what the code actually checks (contains "://" anywhere). The code accepts clearly malformed origins like "example.com://http" where the scheme is in the wrong position. The middleware will then use these malformed values with urlsplit(), potentially causing unexpected behavior in CSRF protection. The validation is supposed to help developers catch configuration errors early, but it's failing to do so.
+
+**Why it might not be BUG:**
+The documentation uses the word "usually" when mentioning http:// and https://, suggesting flexibility in what schemes are accepted. The code might be intentionally permissive to support various URL schemes beyond just HTTP/HTTPS. Without explicit documentation stating exactly which schemes are valid or that the scheme must be at the start, this could be considered undefined behavior rather than a bug.
+
+## Overall consideration
+Looking at all the evidence, this appears to be a legitimate bug, though not a critical one. The error message explicitly states that values "must start with a scheme" but the implementation only checks if "://" exists anywhere in the string. This allows clearly malformed values like "example.com://http" where the text before "://" is not a valid scheme and the scheme appears in the wrong position. The test case demonstrates that "a://a" passes validation despite 'a' not being a recognized URL scheme.
+
+However, the practical impact is limited. Developers are unlikely to accidentally use malformed origins like "a://a" or "example.com://http" in production configurations. They would use proper URLs like "https://example.com". The validation check is more of a helpful guardrail than a critical security feature, since the actual CSRF protection happens elsewhere in the middleware. While the code doesn't match its stated intent, this mismatch is unlikely to cause real-world problems.
+
+Given Django's focus on security and the fact that this is in a compatibility check designed to help developers migrate to Django 4.0's new requirements, this should likely be classified as a DOCUMENTATION_FIX. The error message should be updated to accurately describe what the code actually validates (presence of "://") or the code should be fixed to match the message's intent. Since the permissive behavior hasn't caused known issues and changing it might break existing configurations, updating the documentation to match reality seems more appropriate than changing the validation logic.

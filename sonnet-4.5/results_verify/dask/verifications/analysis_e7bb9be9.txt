@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly guarantee that all possible combinations of N, M, and chunks parameters must work. One could argue that using chunks >= M for non-square matrices is an edge case that falls outside the intended use. The chunks parameter is meant for performance optimization, and users could work around this by choosing smaller chunk sizes.
+
+**Why it might not be INVALID:**
+The documentation clearly states that M can be different from N to create non-square matrices, and there's no documented restriction on chunk sizes relative to matrix dimensions. The function signature explicitly supports M != N, and NumPy's eye function (which Dask aims to be compatible with) handles non-square matrices without issue. The crash is clearly a bug in the implementation, not undefined behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered a minor edge case that only affects specific combinations of parameters (non-square matrices with chunks >= M). Users can easily work around it by using smaller chunk sizes. The fix might introduce complexity or performance implications that aren't worth addressing for such a narrow use case.
+
+**Why it might not be WONTFIX:**
+This is a clear implementation bug with a straightforward fix (one line change). The bug causes a crash rather than producing incorrect results, making it impossible to ignore. The fix doesn't add complexity - it actually makes the code more correct by using the already-computed vchunks and hchunks values properly. This is not a trivial issue as it breaks valid use cases.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the documentation should specify restrictions on chunk sizes for non-square matrices if such restrictions were intended. The documentation could be updated to warn users about this limitation rather than fixing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is clearly buggy - it computes vchunks and hchunks correctly but then incorrectly uses only vchunks[0] for both dimensions. This is an implementation error, not a documentation issue. The documentation correctly describes the intended behavior (supporting non-square matrices), and the code fails to implement it properly.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting all possible combinations of chunk sizes for non-square matrices could be seen as a new feature rather than a bug fix. The current implementation might have been designed primarily for square matrices, with non-square support being a requested enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to support non-square matrices through the M parameter - this is documented existing functionality, not a new feature. The bug is in the implementation of already-documented behavior. The code already attempts to handle non-square matrices but does so incorrectly due to a simple error in the chunks parameter.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear implementation error where the code computes vchunks and hchunks correctly via normalize_chunks but then incorrectly passes (chunks, chunks) instead of (vchunks, hchunks) to the Array constructor. The bug causes a crash with a cryptic "Missing dependency" error for valid parameter combinations. The fix is simple, correct, and makes the code consistent with its computed values. The function explicitly supports non-square matrices per its documentation, and this bug prevents that documented functionality from working correctly.
+
+**Why it might not be BUG:**
+Very few reasons exist to not classify this as a bug. The only argument might be that the specific parameter combination is unusual, but that doesn't make the crash acceptable for documented functionality.
+
+## Overall Consideration
+
+This is unequivocally a BUG. The evidence is overwhelming:
+
+First, the implementation contains an obvious error on line 624 where it uses `chunks=(chunks, chunks)` instead of `chunks=(vchunks, hchunks)`. The code goes through the effort of correctly computing both vchunks and hchunks using normalize_chunks, but then throws away the hchunks information and incorrectly uses vchunks[0] for both dimensions. This is clearly a mistake, not intentional behavior.
+
+Second, the bug causes a complete failure (crash) rather than incorrect output, making it impossible for users to work with valid parameter combinations. The function's documentation explicitly supports non-square matrices via the M parameter, and NumPy's equivalent function handles these cases correctly. Dask arrays claim NumPy compatibility, so this deviation from NumPy's behavior is a bug.
+
+Third, the fix is trivial (one line change), correct (uses already-computed values), and has been verified to work. The proposed fix doesn't add complexity or change the algorithm - it simply uses the values that were already correctly computed. This is a textbook case of a simple implementation bug with a straightforward fix. There's no ambiguity about the intended behavior or the correctness of the fix.

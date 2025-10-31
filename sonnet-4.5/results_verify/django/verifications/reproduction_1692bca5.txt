@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The bug occurs when using Django's Signal class with `use_caching=True` and non-weakly-referenceable senders.
+
+### Test Results:
+
+1. **Hypothesis Test**: FAILED with TypeError: "cannot create weak reference to 'str' object"
+   - The property-based test correctly identifies the bug when any string is used as a sender
+
+2. **Direct Reproduction**: CONFIRMED
+   - With `use_caching=True` and string sender: FAILS with TypeError
+   - With `use_caching=False` and string sender: WORKS correctly
+   - With `use_caching=True` and class instance sender: WORKS correctly
+
+3. **Additional Testing with Non-Weakly-Referenceable Types**: ALL FAILED
+   - Integer (42): TypeError - cannot create weak reference to 'int' object
+   - Float (3.14): TypeError - cannot create weak reference to 'float' object
+   - None: TypeError - cannot create weak reference to 'NoneType' object
+   - Tuple ((1, 2, 3)): TypeError - cannot create weak reference to 'tuple' object
+   - Boolean (True): TypeError - cannot create weak reference to 'bool' object
+
+### Bug Mechanism:
+
+The bug occurs in django/dispatch/dispatcher.py at line 183 in the `send()` method:
+```python
+or self.sender_receivers_cache.get(sender) is NO_RECEIVERS
+```
+
+When `use_caching=True`, the Signal's __init__ creates a WeakKeyDictionary:
+```python
+self.sender_receivers_cache = weakref.WeakKeyDictionary() if use_caching else {}
+```
+
+WeakKeyDictionary requires all keys to be weakly referenceable, but Python's built-in immutable types (str, int, float, bool, None, tuple, frozenset) cannot have weak references created to them.
+
+### Impact:
+
+1. The error only manifests during `send()`, not during `connect()`, making it a runtime surprise
+2. String senders are commonly used in Django (e.g., for model names, signal names)
+3. The same code works fine with `use_caching=False`, creating inconsistent behavior
+4. There is no documentation warning about this limitation
+
+The bug report accurately describes the issue and the proposed fix (using a regular dict instead of WeakKeyDictionary) would resolve the problem.

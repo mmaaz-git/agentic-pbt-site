@@ -1,0 +1,61 @@
+## Bug Reproduction Results
+
+### Direct Test Results
+
+I successfully reproduced the bug exactly as described in the bug report. Here are the key findings:
+
+1. **Test with `errors='ignore'`**:
+   - Expected behavior: Should return the module even if version checking fails
+   - Actual behavior: Raises `ImportError: Can't determine version for sys`
+   - **BUG CONFIRMED**
+
+2. **Test with `errors='warn'`**:
+   - Expected behavior: Should warn and return None, not raise an exception
+   - Actual behavior: Raises `ImportError: Can't determine version for sys`
+   - **BUG CONFIRMED**
+
+3. **Test with `errors='raise'`**:
+   - Expected behavior: Should raise ImportError
+   - Actual behavior: Raises `ImportError: Can't determine version for sys`
+   - This is correct behavior
+
+### Hypothesis Property-Based Testing
+
+The Hypothesis tests revealed multiple failures:
+- Multiple built-in modules (sys, os, io, math, time) lack a `__version__` attribute
+- When `min_version` is specified for these modules, the function raises ImportError regardless of the `errors` parameter setting
+- Only `json` and `re` modules have `__version__` attributes and work correctly
+
+### Root Cause Analysis
+
+1. The bug occurs at line 150 in the implementation:
+   ```python
+   version = get_version(module_to_get)
+   ```
+   This line is executed without any exception handling when `minimum_version` is specified.
+
+2. The `get_version()` function (line 78) raises ImportError if the module lacks `__version__`:
+   ```python
+   if version is None:
+       raise ImportError(f"Can't determine version for {module.__name__}")
+   ```
+
+3. Most Python standard library modules (sys, os, io, math, time) do not have a `__version__` attribute, which is normal and expected.
+
+4. The error handling for the `errors` parameter (lines 156-166) only occurs AFTER `get_version()` is called, so the exception is raised before the `errors` parameter can be evaluated.
+
+### Verification of Bug Report Claims
+
+The bug report is technically accurate:
+- The function does raise ImportError when it should not according to the documentation
+- The proposed fix correctly wraps the `get_version()` call in a try-except block
+- The fix handles the `errors` parameter appropriately before re-raising
+
+### Impact
+
+This bug affects any code that tries to use `import_optional_dependency` with:
+- Built-in Python modules that lack `__version__` attributes
+- A specified `min_version` parameter
+- `errors='ignore'` or `errors='warn'`
+
+This is a clear violation of the documented contract that these error modes should handle version checking failures gracefully.

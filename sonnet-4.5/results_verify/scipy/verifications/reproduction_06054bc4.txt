@@ -1,0 +1,30 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue occurs exactly as described:
+
+### Direct Instantiation Test
+When calling `NominalAttribute("test_attr", ())` with an empty tuple or list:
+- **Expected**: Either successfully create an attribute with empty values, or raise a descriptive error
+- **Actual**: Crashes with `ValueError: max() iterable argument is empty`
+
+### Root Cause Confirmed
+The crash occurs at line 103 in `/home/npc/.local/lib/python3.13/site-packages/scipy/io/arff/_arffread.py`:
+```python
+self.dtype = (np.bytes_, max(len(i) for i in values))
+```
+
+When `values` is empty, the generator expression `(len(i) for i in values)` produces no elements, causing `max()` to fail with the error "max() iterable argument is empty".
+
+### Test Results
+1. **Direct instantiation with empty tuple**: Crashes with ValueError as reported
+2. **Direct instantiation with empty list**: Same crash
+3. **Loading ARFF with empty nominal `{}`**: Actually fails earlier in parsing with ParseArffError "This does not look like a nominal string"
+
+The bug is real and occurs exactly as the report describes. The error message is indeed confusing and unhelpful - it doesn't explain that the issue is that nominal attributes require at least one value.
+
+### Impact
+This is a legitimate crash that occurs when:
+- Users programmatically create NominalAttribute objects with empty value lists
+- Processing ARFF data that might have empty nominal attributes (though the parser catches this earlier)
+
+The current error message "max() iterable argument is empty" provides no guidance to users about what went wrong or how to fix it.

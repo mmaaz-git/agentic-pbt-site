@@ -1,0 +1,50 @@
+## Reproduction Results for SparseArray.fill_value Setter Bug
+
+### Bug Report Accuracy
+
+The bug report is technically accurate in its description of the behavior:
+
+1. **The hypothesis test fails as claimed**: When data=[0] with fill_value=0, changing fill_value to 999 causes to_dense() to return [999] instead of [0].
+
+2. **The simple reproduction case works exactly as described**:
+   - Input: [0, 0, 0] with fill_value=0
+   - After setting fill_value=999: to_dense() returns [999, 999, 999]
+   - This confirms the data appears to mutate
+
+3. **Understanding the mechanism**:
+   - SparseArray stores only non-fill values in sp_values
+   - Values equal to fill_value are stored implicitly (not in sp_values)
+   - When fill_value=0 and data=[0, 0, 0], sp_values is empty
+   - to_dense() reconstructs by filling with current fill_value, then placing sp_values
+   - Therefore, changing fill_value changes what the implicit values become
+
+4. **Mixed data behavior**:
+   - When data contains both fill and non-fill values (e.g., [0, 1, 0, 2, 0])
+   - Only the values that were equal to the original fill_value change
+   - Non-fill values (1 and 2) remain unchanged
+   - This creates [999, 1, 999, 2, 999] after changing fill_value from 0 to 999
+
+5. **Edge case verification**:
+   - When no values equal the original fill_value (e.g., [1, 2, 3, 4, 5] with fill_value=0)
+   - Changing fill_value has no effect on to_dense() output
+   - This is because all values are explicitly stored in sp_values
+
+### Technical Analysis
+
+The implementation at lines 659-661 is indeed just:
+```python
+@fill_value.setter
+def fill_value(self, value) -> None:
+    self._dtype = SparseDtype(self.dtype.subtype, value)
+```
+
+This only updates the dtype's fill_value without handling data preservation. The to_dense() method then uses this new fill_value when reconstructing the array, causing the apparent data mutation.
+
+### Is This Actually a Bug?
+
+The key question is whether this behavior is:
+1. A bug (data should be preserved when changing fill_value)
+2. Expected behavior (fill_value change is a reinterpretation of sparse data)
+3. Undefined behavior (not specified in documentation)
+
+The bug report argues for #1 based on the "principle of least surprise" - that a property setter shouldn't appear to mutate data. This is a reasonable expectation from a user perspective.

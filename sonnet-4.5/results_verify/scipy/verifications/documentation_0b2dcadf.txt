@@ -1,0 +1,67 @@
+## Documentation Analysis for scipy.fftpack.diff
+
+### Official Documentation Findings
+
+1. **Function Docstring (from source code and help):**
+   - Located in scipy/fftpack/_pseudo_diffs.py
+   - Clearly states: "If `sum(x, axis=0) = 0` then `diff(diff(x, k), -k) == x` (within numerical accuracy)."
+   - Also states: "For odd order and even `len(x)`, the Nyquist mode is taken zero."
+
+2. **Online Documentation:**
+   - The SciPy documentation website confirms the same claim about the round-trip property
+   - The claim is presented as a general statement without qualifications
+
+3. **Mathematical Implementation:**
+   The function applies the transformation:
+   - y_j = pow(sqrt(-1)*j*2*pi/period, order) * x_j
+   - y_0 = 0 if order is not 0
+
+4. **Critical Detail - Nyquist Mode Handling:**
+   - The documentation mentions that for odd order and even length sequences, the Nyquist mode is zeroed
+   - This is a key implementation detail that affects the round-trip property
+   - The Nyquist frequency for a sequence of length n is at index n/2 when n is even
+
+### Key Observation
+
+The documentation makes an unconditional claim: "If sum(x) = 0, then round-trip works"
+
+However, the implementation has a specific behavior that breaks this claim:
+- When order is odd (like 1 for differentiation) and length is even, Nyquist mode is zeroed
+- This zeroing of the Nyquist mode means information is lost during differentiation
+- When integrating back (order=-1), the lost information cannot be recovered
+- Therefore, the round-trip fails for signals that have non-zero Nyquist components
+
+### Examples of the Conflict
+
+1. Signal [-0.5, 0.5] (length 2, sum=0):
+   - FFT: [0, -1] (has non-zero Nyquist component at index 1)
+   - After diff with order=1: Nyquist is zeroed → information lost
+   - Round-trip fails
+
+2. Signal [-1, 0, 1] (length 3, sum=0):
+   - Length is odd, so no Nyquist zeroing occurs
+   - Round-trip succeeds
+
+3. Signal [1, -1, 1, -1] (length 4, sum=0):
+   - FFT has non-zero component at Nyquist (index 2)
+   - After diff with order=1: Nyquist is zeroed → information lost
+   - Round-trip fails
+
+### Similar Functions
+
+- `hilbert`/`ihilbert`: Documentation correctly states "If sum(x, axis=0) == 0 then hilbert(ihilbert(x)) == x"
+- `tilbert`/`itilbert`: Documentation correctly qualifies the condition: "If sum(x, axis=0) == 0 and n = len(x) is odd, then tilbert(itilbert(x)) == x"
+
+Note that tilbert specifically mentions "n = len(x) is odd" as a requirement, acknowledging the Nyquist issue.
+
+### Conclusion
+
+The documentation for `diff` makes an incorrect general claim. The round-trip property does NOT hold for all zero-mean signals. It fails specifically when:
+1. The sequence length is even
+2. The order is odd
+3. The signal has non-zero Fourier components at the Nyquist frequency
+
+The documentation should either:
+1. Be corrected to specify the exact conditions (similar to tilbert)
+2. Be removed if the conditions are too complex to state simply
+3. Be clarified to explain the Nyquist mode limitation

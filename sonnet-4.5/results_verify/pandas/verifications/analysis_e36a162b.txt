@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The functions have a documented precondition that "Only one of these may be None". When a user violates a documented precondition by passing both masks as None, it could be argued that this is user error and not a bug in the code. The documentation clearly states the constraint, and violating it leads to undefined behavior. Many libraries don't validate every precondition for performance reasons.
+
+**Why it might not be INVALID:**
+The bug report is technically accurate - the code does crash with a RecursionError when both masks are None. Even though this violates a precondition, the current behavior (infinite recursion) is objectively worse than raising a clear error message. The bug report isn't claiming the functions should work with both masks as None, just that they should fail gracefully with a proper error message.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+These are internal functions in `pandas.core.ops.mask_ops`, not part of the public API. They're meant to be called by pandas internals that should already ensure the preconditions are met. Adding validation checks would add overhead to every call for a case that should never happen in proper usage. The RecursionError, while not ideal, does indicate something went wrong.
+
+**Why it might not be WONTFIX:**
+A RecursionError is a confusing way to communicate a precondition violation. The fix is trivial (3 lines of code) and would make debugging much easier for anyone who encounters this issue. The performance impact of a single if-statement checking two None values is negligible. These functions are used internally but could be called incorrectly during pandas development or by extensions.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation already states the precondition clearly: "Only one of these may be None". The real issue might be that the documentation should explicitly state what happens when the precondition is violated (undefined behavior/crash). The code behavior matches what's documented - it doesn't promise to handle the case where both are None.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation correctly describes the precondition. The issue isn't with the documentation but with the code's failure to validate that precondition. Updating documentation to say "causes infinite recursion if both are None" would be documenting a bug rather than fixing it. The proposed fix is to change the code behavior, not clarify documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding precondition validation could be seen as a new feature - making the functions more robust by validating inputs. The current implementation assumes correct usage, and adding defensive programming with input validation is an enhancement. This would be requesting the functions to handle an additional case (both None) that they currently don't support.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for proper error handling of an invalid input case. The functions already have defined behavior for valid inputs; this is about making them fail gracefully for invalid inputs. Most would consider proper error messages for precondition violations a bug fix, not a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The functions enter infinite recursion instead of validating their documented preconditions. This causes a confusing RecursionError instead of a clear ValueError explaining what went wrong. The fix is straightforward and would prevent stack overflow crashes. Good defensive programming practice suggests validating preconditions, especially when violation leads to infinite recursion. The bug report correctly identifies the problem, provides a minimal reproduction case, and offers a reasonable fix.
+
+**Why it might not be BUG:**
+These are internal functions with documented preconditions. When preconditions are violated, undefined behavior (including crashes) is generally acceptable. The functions work correctly for all valid inputs as documented. Many high-performance libraries skip validation checks on internal functions to avoid overhead. The user shouldn't be calling these internal functions incorrectly in the first place.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a borderline case between WONTFIX and BUG. The key factors to consider are:
+
+First, these are internal functions in the `pandas.core.ops` module, not part of the public API. They have clearly documented preconditions stating "Only one of these may be None." When users violate documented preconditions, especially in internal functions, undefined behavior is often considered acceptable. The functions work correctly for all valid inputs as specified in their documentation.
+
+Second, however, the current failure mode (infinite recursion leading to RecursionError) is particularly poor. A simple 3-line check could prevent stack overflow and provide a clear error message. The performance cost is negligible - checking two values for None is extremely fast. While these are internal functions, they could still be called incorrectly during pandas development, testing, or by extensions, and a clear error would aid debugging significantly.
+
+Third, the precedent in the pandas codebase matters. Looking at the code, there's already error checking present - for example, line 188-189 has a `raise_for_nan` function that validates inputs and raises ValueError for floating NaN values. This suggests the codebase does validate some preconditions. Additionally, after the `if left_mask is None` check, there's a TypeError raised if left is not an ndarray (line 159-160), showing that input validation is performed. Given that other validations exist, adding one more for this precondition seems consistent with the existing code patterns.

@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is confirmed to be accurate. When a pandas DataFrame with all-numeric string column names is serialized to JSON using `to_json()` and deserialized back using `read_json()`, the column names are incorrectly converted from strings to integers, causing data loss.
+
+### Property-Based Test Reproduction
+The provided property-based test correctly identifies the issue. When run with Hypothesis, it immediately fails with the example `columns=['0']`, demonstrating that the round-trip property is violated.
+
+### Manual Reproduction Results
+The manual reproduction code confirms the following behaviors:
+
+1. **Data Loss Case**: Column names '00' and '0' both become integer 0
+   - Original: ['00', '0'] (string types)
+   - Result: [0, 0] (integer types)
+   - This represents actual data loss as '00' loses its leading zero
+
+2. **Consistent Conversion Pattern**:
+   - ['0'] → [0] (string to int)
+   - ['0', '1'] → [0, 1] (strings to ints)
+   - ['00'] → [0] (DATA LOSS: '00' becomes 0)
+
+3. **Inconsistent Behavior with Mixed Types**:
+   - ['0', 'a'] → ['0', 'a'] (preserved as strings when mixed)
+   - ['abc'] → ['abc'] (non-numeric strings preserved)
+
+4. **JSON Format Verification**:
+   The JSON output correctly stores columns as strings: `{"columns":["00","0"],...}`
+   This confirms the issue is in `read_json()`'s deserialization, not in `to_json()`'s serialization.
+
+5. **Workaround Available**:
+   Using `convert_axes=False` in `read_json()` prevents the conversion:
+   - With default (convert_axes=True): ['00', '0'] → [0, 0]
+   - With convert_axes=False: ['00', '0'] → ['00', '0'] (preserved)
+
+### Conclusion
+The bug is real and causes actual data loss. The behavior is reproducible and consistent. The fact that a workaround exists (convert_axes=False) confirms this is an intentional conversion that has unintended consequences for certain use cases.

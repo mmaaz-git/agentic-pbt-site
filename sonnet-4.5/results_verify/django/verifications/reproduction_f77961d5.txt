@@ -1,0 +1,37 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. The Bug Is Real
+The to_locale() function in Django does indeed have the case normalization issue described. When given uppercase input without a dash, it only lowercases the first 3 characters, leaving characters after position 3 in their original case.
+
+2. Test Results
+Running the provided test cases:
+- to_locale('ENUS') returns 'enuS' (expected: 'enus')
+- to_locale('FRCA') returns 'frcA' (expected: 'frca')
+- to_locale('DEDE') returns 'dedE' (expected: 'dede')
+- to_locale('AAAA') returns 'aaaA' (expected: 'aaaa')
+
+The hypothesis test correctly fails with the error message showing that uppercase characters beyond position 3 are preserved.
+
+3. Code Analysis
+Looking at the implementation in django/utils/translation/__init__.py:
+- Line 233: `lang, _, country = language.lower().partition("-")` properly lowercases the entire input
+- Line 234-235: When no country code is found (no dash), it returns `language[:3].lower() + language[3:]`
+- This only lowercases the first 3 characters, concatenating the rest unchanged
+
+The bug is clearly in line 235 where it should just return `lang` (which is already fully lowercased from line 233) instead of manually lowercasing only the first 3 characters.
+
+4. Behavior with Dashed Input
+When the input contains a dash, the function works correctly:
+- to_locale('en-us') returns 'en_US'
+- to_locale('EN-US') returns 'en_US'
+- to_locale('sr-latn') returns 'sr_Latn'
+
+This shows the function properly handles the standard use case of converting hyphenated language codes to underscore-separated locale names with proper capitalization.
+
+5. Impact
+The bug affects any language code input without a dash that has uppercase characters beyond position 3. While this may not be a common use case (most language codes are 2-3 characters), the inconsistent behavior is problematic for:
+- Code that might pass uppercase strings expecting normalization
+- Edge cases where longer language identifiers are used
+- General principle of consistent string normalization

@@ -1,0 +1,47 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug described in the report. The issue is confirmed and affects the pandas.io.sas.sasreader.read_sas function.
+
+## Code Analysis
+
+The source code at lines 141-143 of /home/npc/miniconda/lib/python3.13/site-packages/pandas/io/sas/sasreader.py shows:
+
+```python
+if ".xpt" in fname:
+    format = "xport"
+elif ".sas7bdat" in fname:
+    format = "sas7bdat"
+```
+
+This uses substring matching instead of proper extension checking.
+
+## Test Results
+
+I ran comprehensive tests that confirm the bug:
+
+1. Files with ".xpt" embedded in the filename but not as the actual extension:
+   - "data.xpt.backup" → Incorrectly detected as xport format
+   - "test.xpt.bak" → Incorrectly detected as xport format
+   - "myfile.xpt123" → Incorrectly detected as xport format
+   - "file.xpt.old" → Incorrectly detected as xport format
+
+2. Files with ".sas7bdat" embedded in the filename but not as the actual extension:
+   - "file.sas7bdat.old" → Incorrectly detected as sas7bdat format
+   - "data_v2.sas7bdat.archive" → Incorrectly detected as sas7bdat format
+   - "abc.sas7bdat.123" → Incorrectly detected as sas7bdat format
+
+## Expected vs Actual Behavior
+
+Expected: When format=None, files without proper .xpt or .sas7bdat extensions should raise a ValueError with message "unable to infer format of SAS file from filename"
+
+Actual: Files are incorrectly detected as valid SAS formats if they contain the extension strings anywhere in the filename, leading to FileNotFoundError when pandas attempts to open them as SAS files.
+
+## Impact
+
+This bug affects users who:
+- Have backup files with naming patterns like "file.xpt.backup"
+- Use version control suffixes like "data.sas7bdat.old"
+- Have files with embedded extension strings that aren't actual SAS files
+
+The bug causes incorrect format detection and confusing error messages (FileNotFoundError instead of the appropriate ValueError about unrecognized format).

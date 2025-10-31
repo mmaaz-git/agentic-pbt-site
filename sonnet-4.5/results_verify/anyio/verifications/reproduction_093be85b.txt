@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The BufferedByteReceiveStream.receive() method does accept negative values for the max_bytes parameter and exhibits the exact behavior described.
+
+## Test Results
+
+### Hypothesis Test
+The hypothesis test runs without errors, confirming that the function accepts negative max_bytes values and returns data (rather than raising an exception).
+
+### Manual Reproduction
+When testing with various negative values for max_bytes, I observed:
+
+1. max_bytes=-1: Returns all but the last 1 byte (b'HelloWorl' from b'HelloWorld')
+   - Result: 9 bytes returned, 1 byte buffered
+
+2. max_bytes=-2: Returns all but the last 2 bytes (b'HelloWor' from b'HelloWorld')
+   - Result: 8 bytes returned, 2 bytes buffered
+
+3. max_bytes=-5: Returns all but the last 5 bytes (b'Hello' from b'HelloWorld')
+   - Result: 5 bytes returned, 5 bytes buffered
+
+4. max_bytes=0: Returns empty bytes and buffers all data (expected behavior)
+   - Result: 0 bytes returned, 10 bytes buffered
+
+## Root Cause
+
+The implementation uses Python's slice notation directly on byte arrays:
+- `chunk[:max_bytes]` with negative values produces Python's negative indexing behavior
+- `chunk[:-1]` returns all but the last byte
+- `chunk[:-2]` returns all but the last 2 bytes, etc.
+
+The code never validates that max_bytes is non-negative, allowing this unintuitive behavior to occur. The comparison `len(chunk) > max_bytes` on line 75 is always True when max_bytes is negative, triggering the slicing logic that exhibits this behavior.
+
+## Conclusion
+
+The bug is confirmed and reproducible. The function accepts negative max_bytes values and uses Python's negative slice semantics instead of either:
+1. Raising a ValueError for invalid input
+2. Treating negative values as 0
+3. Documenting this behavior explicitly

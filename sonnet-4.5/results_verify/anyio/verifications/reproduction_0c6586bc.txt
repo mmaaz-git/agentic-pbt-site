@@ -1,0 +1,47 @@
+## Reproduction of the Bug
+
+I successfully reproduced the bug described in the report. The issue is confirmed to exist in anyio's `_SocketProvider.extra_attributes` implementation.
+
+### Test Results
+
+1. **Basic Reproduction Test:**
+   - Created a mock socket with counters for `getsockname()` and `getpeername()` calls
+   - Called `local_port()` twice: `getsockname()` was called 2 times (once per access)
+   - Called `remote_port()` twice: `getpeername()` was called only 1 time (during initialization, then cached)
+   - This confirms the inconsistent caching behavior
+
+2. **Hypothesis Property-Based Test:**
+   - Ran the provided Hypothesis test with various values of `num_accesses` (1-10)
+   - Confirmed that for any value of `num_accesses`:
+     - `local_port` calls `getsockname()` exactly `num_accesses` times
+     - `remote_port` calls `getpeername()` only once (during initialization)
+   - All test iterations passed, confirming the bug is reproducible and consistent
+
+### Code Examination
+
+Examined the actual source code at `/home/npc/pbt/agentic-pbt/envs/anyio_env/lib/python3.13/site-packages/anyio/abc/_sockets.py`, lines 168-174:
+
+```python
+if self._raw_socket.family in (AddressFamily.AF_INET, AddressFamily.AF_INET6):
+    attributes[SocketAttribute.local_port] = (
+        lambda: self._raw_socket.getsockname()[1]  # Dynamic - calls getsockname() every time
+    )
+    if peername is not None:
+        remote_port = peername[1]
+        attributes[SocketAttribute.remote_port] = lambda: remote_port  # Cached - uses captured value
+```
+
+The code clearly shows:
+- `local_port`: Returns a lambda that calls `self._raw_socket.getsockname()[1]` on every access
+- `remote_port`: Returns a lambda that returns a captured value `remote_port` (the value from `peername[1]`)
+
+### Impact
+
+The bug has real effects:
+1. **Performance Impact**: Each access to `local_port` makes a system call, which is inefficient for frequently accessed sockets
+2. **Behavioral Inconsistency**: Two similar attributes behave differently without justification
+3. **Error Handling Differences**: If a socket becomes invalid after initialization:
+   - `local_port` will raise an `OSError` when accessed
+   - `remote_port` will continue returning the cached value from initialization
+
+The bug report accurately describes the issue and provides valid reproduction cases.

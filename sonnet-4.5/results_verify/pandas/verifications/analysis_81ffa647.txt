@@ -1,0 +1,60 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG
+**Arguments for BUG classification:**
+1. **Invariant violation**: The function violates a fundamental invariant that `start[i] <= end[i]` which is required for valid array slicing operations
+2. **Inconsistent behavior**: Other indexers (FixedForwardWindowIndexer, ExpandingIndexer) maintain this invariant correctly
+3. **Logical incorrectness**: When `start > end`, the resulting slice is empty, but this happens due to a calculation error rather than intentional design
+4. **Clear root cause**: The bug stems from an incorrect offset calculation that produces `-1` when `window_size=0`
+5. **Fixable**: The proposed fix is simple and maintains backward compatibility for all valid use cases
+
+**Strength**: STRONG - This is a clear logic error that violates fundamental slicing invariants
+
+### Consideration for INVALID
+**Arguments for INVALID classification:**
+1. **Undocumented invariant**: The documentation doesn't explicitly state that `start[i] <= end[i]` must hold
+2. **Produces correct results**: Despite the invariant violation, the rolling operations still produce the expected empty windows (all zeros)
+3. **Edge case**: `window_size=0` with `closed='neither'` is an extremely rare use case
+
+**Strength**: WEAK - While the invariant isn't explicitly documented, it's a fundamental requirement of array slicing
+
+### Consideration for WONTFIX
+**Arguments for WONTFIX classification:**
+1. **No practical impact**: The violated bounds still produce the expected empty slices in practice
+2. **Obscure edge case**: `window_size=0` with `closed='neither'` is unlikely to occur in real-world usage
+3. **Works as intended**: The rolling operations produce the correct results (empty windows) despite the technical violation
+4. **Not a security issue**: The invariant violation doesn't cause crashes or security vulnerabilities
+
+**Strength**: MODERATE - While obscure, the invariant violation is still technically incorrect
+
+### Consideration for FEATURE_REQUEST
+**Arguments for FEATURE_REQUEST classification:**
+1. **Missing validation**: The code could add validation to prevent `window_size=0` entirely
+2. **Better error handling**: Could raise an informative error for this edge case
+3. **Enhancement**: The fix could be seen as an enhancement to handle edge cases more gracefully
+
+**Strength**: WEAK - This is fixing existing incorrect behavior, not adding new functionality
+
+### Consideration for DOCUMENTATION_FIX
+**Arguments for DOCUMENTATION_FIX classification:**
+1. **Missing invariant documentation**: The documentation should explicitly state that `start[i] <= end[i]` must hold
+2. **Undefined behavior**: The documentation doesn't specify what `window_size=0` should do
+3. **Add clarification**: Could document that `window_size=0` produces empty windows
+
+**Strength**: WEAK - The code behavior is incorrect, not just the documentation
+
+### Final Assessment
+
+This is a **BUG**. The reasoning:
+
+1. **Violates fundamental invariant**: The requirement that `start[i] <= end[i]` is implicit in Python's slicing semantics. Code that produces `start > end` is logically incorrect, even if it happens to work due to Python's forgiving slice behavior.
+
+2. **Clear calculation error**: The offset calculation of `(0-1)//2 = -1` when `window_size=0` is mathematically incorrect for the intended purpose. The offset should never be negative in this context.
+
+3. **Inconsistent with similar classes**: Other window indexers handle `window_size=0` correctly without violating the invariant, showing this is not intended behavior.
+
+4. **Simple, safe fix**: The proposed fix (setting offset=0 when window_size=0) is straightforward and maintains all existing correct behavior while fixing the edge case.
+
+5. **Principle of least surprise**: Developers expect window bounds to follow array slicing conventions where `start <= end`. Violating this expectation, even in edge cases, is a bug.
+
+While the practical impact is minimal (the wrong bounds still produce empty windows as expected), the violation of a fundamental invariant in the calculation logic qualifies this as a legitimate bug that should be fixed.

@@ -1,0 +1,87 @@
+## Triage Analysis for numpy.lib.scimath.power Bug Report
+
+### Consideration for Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function returns inf+nanj when mathematically the result should be inf or inf+0j
+- The documentation example shows that even powers of negative numbers should have valid imaginary parts (0j), not NaN
+- Regular numpy.power() handles the same calculation correctly, returning inf without NaN
+- The function's stated purpose is to provide mathematically valid results in the complex domain
+- NaN in the imaginary part is not a mathematically correct result for (-1e-200)^(-2)
+- The issue is reproducible and consistent across different small negative values
+
+**Arguments AGAINST:**
+- This is an extreme edge case involving underflow to zero followed by division
+- The behavior might be considered a known limitation of complex arithmetic
+
+#### 2. WONTFIX
+**Arguments FOR:**
+- This only occurs in extreme underflow/overflow scenarios (x < ~1e-155)
+- Most practical applications wouldn't encounter numbers this small
+- The workaround is simple: use regular numpy.power for even integer powers
+- Fixing this might require special case handling that complicates the code
+
+**Arguments AGAINST:**
+- The function's purpose is specifically to handle negative bases correctly
+- The documentation examples imply valid complex results should be returned
+- It's not just a cosmetic issue - NaN propagates and can break downstream calculations
+- Other values work correctly, showing this is fixable
+
+#### 3. INVALID
+**Arguments FOR:**
+- The documentation doesn't explicitly guarantee behavior for overflow/underflow cases
+- Complex arithmetic with extreme values might be undefined behavior
+
+**Arguments AGAINST:**
+- The documentation example clearly shows even powers should have valid imaginary parts
+- Mathematically, the result is well-defined (positive infinity)
+- Regular numpy.power handles this correctly, showing it's not inherently impossible
+- The function exists specifically to handle negative bases properly
+
+#### 4. FEATURE_REQUEST
+**Arguments FOR:**
+- Could be seen as requesting enhanced overflow handling
+- The current implementation works for most cases
+
+**Arguments AGAINST:**
+- This is not asking for new functionality
+- The function already claims to handle negative bases in complex domain
+- It's a correction of existing behavior, not a new feature
+
+#### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation could specify overflow/underflow limitations
+- Could document that extreme values might produce NaN
+
+**Arguments AGAINST:**
+- The documentation example implies valid results should be returned
+- This is a code bug, not a documentation issue
+- The mathematical result is well-defined
+
+### Analysis Summary
+
+The core issue is that scimath.power returns inf+nanj for calculations that should yield inf or inf+0j. This happens when:
+1. A small negative number (< ~1e-155) is raised to a negative even power
+2. The intermediate calculation underflows to complex zero
+3. Division by complex zero produces inf+nanj instead of inf
+
+The bug violates the implicit contract shown in the documentation where:
+- Example: np.emath.power([-2, 4], 2) returns array([4.-0.j, 16.+0.j])
+- This establishes that imaginary parts should be valid numbers, not NaN
+
+### Recommendation
+
+This should be classified as **BUG** because:
+
+1. **Mathematical Incorrectness**: The result inf+nanj is mathematically wrong. (-1e-200)^(-2) = 1e+400 = inf, which is real and positive.
+
+2. **Documentation Consistency**: The documentation examples show that even powers of negative numbers should have 0j imaginary parts, not NaN.
+
+3. **Comparison with numpy.power**: Regular numpy.power handles this correctly (returns inf), proving it's fixable.
+
+4. **Function Purpose**: scimath.power exists specifically to handle negative bases correctly by converting to complex domain. Returning NaN defeats this purpose.
+
+5. **Impact**: NaN propagates through calculations, potentially breaking user code in non-obvious ways.
+
+The proposed fix in the bug report (detecting even integer powers and avoiding complex conversion) is reasonable and would resolve the issue without affecting normal use cases.

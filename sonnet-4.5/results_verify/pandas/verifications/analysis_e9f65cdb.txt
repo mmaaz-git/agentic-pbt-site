@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The SAS documentation distinguishes between date values (days since 1960) and datetime values (seconds since 1960). One could argue that date values are conceptually meant to represent dates without time components, and therefore truncation to whole days is the expected behavior. The function parameter explicitly states unit='d' for days, not fractional days.
+
+**Why it might not be INVALID:**
+The function receives float64 values that can have fractional components, and silently truncating them causes data loss. The companion function _parse_datetime preserves fractional days, creating an inconsistency. The documentation doesn't explicitly state that fractional days should be truncated.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an edge case where users shouldn't be storing time-of-day information in date fields. SAS users who need time precision should use datetime formats (unit='s') instead of date formats (unit='d'). The truncation behavior has likely been in place for a long time without major complaints.
+
+**Why it might not be WONTFIX:**
+This causes silent data loss, which is a serious issue. The fix is straightforward and wouldn't break existing code that uses whole number days. The inconsistency between _parse_datetime and _convert_datetimes suggests this is unintentional rather than a design choice.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how fractional days are handled. If truncation is the intended behavior, the documentation should clearly warn users that fractional day values will be truncated to whole days. The docstring could be updated to clarify this behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The inconsistency between the two functions suggests this is a bug rather than intended behavior that needs documentation. Simply documenting the truncation wouldn't fix the data loss issue or the inconsistency problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting fractional days in date values could be seen as a new feature rather than a bug fix. The current implementation might have been designed to only handle whole days, and adding fractional day support would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The scalar function already supports fractional days, so this isn't a new capability. The vectorized function should have the same behavior as the scalar version. This is fixing existing inconsistent behavior rather than adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+There's a clear inconsistency between _parse_datetime (preserves fractional days) and _convert_datetimes (truncates them). This causes silent data loss without warning. SAS stores dates as float64, allowing fractional values, and the truncation happens at the pandas conversion level, not the SAS level. The fix is straightforward and the current behavior appears to be an implementation oversight rather than intentional.
+
+**Why it might not be BUG:**
+SAS date formats (as opposed to datetime formats) are traditionally used for dates without time components. Users who need time precision should use datetime formats. The current behavior might be intentional to enforce this distinction.
+
+**Overall consideration**
+After examining the evidence, this appears to be a legitimate bug. The key factors are: (1) The inconsistency between _parse_datetime and _convert_datetimes is strong evidence that the truncation is unintentional. Both functions serve the same purpose but behave differently. (2) The silent data loss without any warning is problematic - even if truncation were intended, it should at least warn users. (3) The implementation uses "M8[D]" which forces day precision, but this appears to be an implementation detail rather than a requirement.
+
+However, there's a reasonable argument that this is actually working as intended. SAS explicitly distinguishes between date formats (for dates) and datetime formats (for timestamps). When a column is marked with a date format (not datetime), it's reasonable to expect it contains date values without time components. The truncation could be seen as enforcing this semantic distinction.
+
+The strongest argument against calling this a bug is that SAS date formats are semantically different from datetime formats, and the function is correctly interpreting date format columns as containing date-only values. If users have fractional days in a date column, they may be using the wrong format and should use a datetime format instead. This would make it either INVALID (working as intended) or DOCUMENTATION_FIX (needs clearer documentation about the truncation behavior).

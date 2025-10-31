@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This could be considered invalid because the documentation doesn't explicitly specify how empty strings in flag lists should be handled. The user might be expected to provide valid, non-empty flag names, and providing empty strings could be considered misuse of the API. The error technically does indicate what's wrong - it can't find an empty string in the flag dictionary.
+
+**Why it might not be INVALID:**
+The bug report is technically accurate - the code does raise KeyError('') for empty strings while there's clear intent in the code to catch such errors and raise TypeError("invalid flags specification"). The existing try-except block at lines 307-310 shows the developer's intent to handle malformed flag inputs gracefully, but the implementation fails to achieve this goal for empty strings.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a low-severity issue involving poor error messages for invalid input. Empty strings in flag lists are nonsensical input that should never occur in properly written code. The error still prevents the invalid ndpointer from being created, just with a less helpful error message. Developers can easily debug this by looking at their flag input. The impact is minimal - just a less helpful error message for an edge case.
+
+**Why it might not be WONTFIX:**
+The code already has infrastructure to provide better error messages (the try-except block), and the fix is trivial - either filter empty strings or extend the try-except block by one line. The current KeyError('') is genuinely unhelpful compared to other error messages. Since there's already error handling code that was intended to catch this case but doesn't, this seems like an oversight worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what happens with malformed flag inputs during ndpointer creation. It only mentions TypeError for arrays that don't meet requirements at runtime. The documentation could be updated to clarify that invalid flag specifications (including empty strings) will raise exceptions, and users should ensure all flag names are valid.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly intends to handle this case with a specific error message ("invalid flags specification") but fails to do so due to a bug. This isn't a documentation issue - it's a code implementation issue where the error handling doesn't cover all the code paths it should. Documenting the current buggy behavior would be wrong.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that gracefully handling empty strings in flag lists (by ignoring them) would be a new feature. Currently the code doesn't support this, and adding support for ignoring empty flag entries could be seen as an enhancement rather than a bug fix. Many APIs silently ignore empty strings in comma-separated lists as a convenience feature.
+
+**Why it might not be FEATURE_REQUEST:**
+The code already has error handling that's supposed to catch this exact situation. The try-except block with TypeError("invalid flags specification") was clearly intended to handle malformed flags, including empty strings. This isn't requesting new functionality but asking for the existing error handling to work as apparently intended.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear implementation bug. The code has explicit error handling at lines 307-310 that catches exceptions and raises TypeError("invalid flags specification"), showing clear intent to handle malformed flag inputs. However, the _num_fromflags call at line 311 is outside this try-except block, causing empty strings to raise an unhelpful KeyError(''). The error handling code exists but doesn't cover all the code it should. This is a textbook bug where the implementation doesn't match the developer's clear intent.
+
+**Why it might not be BUG:**
+The function still fails correctly on invalid input - it just gives a less helpful error message. One could argue that KeyError is appropriate since the empty string key doesn't exist in the flag dictionary. The code technically works as implemented, just not as ideally as it could. Empty strings are nonsensical input that shouldn't occur in practice.
+
+## Overall consideration
+After careful analysis, this appears to be a genuine implementation bug, though of low severity. The code at lines 307-310 shows clear developer intent to catch exceptions during flag processing and provide a helpful error message: TypeError("invalid flags specification"). The problem is that this try-except block doesn't cover the _num_fromflags call on line 311, which is where the KeyError('') actually occurs for empty strings.
+
+The evidence for this being a bug is compelling: (1) There's existing error handling code specifically for flag processing errors, (2) The error handling provides a clear, helpful message for malformed flags, (3) The _num_fromflags call is accidentally outside the try-except by just one line, (4) Both proposed fixes are trivial one-line changes, and (5) The current KeyError('') is objectively less helpful than the intended TypeError message.
+
+However, I must consider that this is an edge case involving invalid input that should never occur in production code. The function still correctly rejects the invalid input, just with a poor error message. Given that 90% of reports from this user are invalid, and this is a low-impact issue about error message quality for nonsensical input, this might be better classified as WONTFIX - too trivial to merit attention from busy maintainers. The code fails safely, and any developer hitting this error can easily debug it by examining their flag input.

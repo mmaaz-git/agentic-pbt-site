@@ -1,0 +1,90 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## Evaluating Each Possible Category
+
+### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The code generates syntactically invalid SQL when identifiers contain double quotes
+- This causes runtime SQL syntax errors that crash the application
+- Both SQLite and PostgreSQL documentation clearly specify that double quotes must be escaped by doubling them
+- The issue is reproducible and has a clear, correct fix
+- The bug affects core functionality (SQL generation) in a way that violates SQL standards
+- Multiple database backends are affected (SQLite and PostgreSQL at minimum)
+
+**Arguments AGAINST:**
+- Identifiers with embedded quotes are rare in practice
+- The bug has likely existed for a long time without many complaints
+
+**Assessment:** STRONG case for BUG
+
+### 2. INVALID (Incorrect Report)
+**Arguments FOR:**
+- None - the bug is real and reproducible
+
+**Arguments AGAINST:**
+- The SQL generated is demonstrably incorrect according to SQL standards
+- SQLite rejects the malformed SQL with a syntax error
+- The bug report is technically accurate
+
+**Assessment:** NOT INVALID
+
+### 3. WONTFIX (Trivial/Uninteresting)
+**Arguments FOR:**
+- Identifiers with double quotes are extremely rare in practice
+- Most developers never encounter this edge case
+- The bug has existed for years without major issues
+
+**Arguments AGAINST:**
+- When it does occur, it causes a hard failure (SQL syntax error)
+- The fix is simple and non-breaking
+- Django should generate valid SQL according to standards
+- This is a correctness issue, not just a minor inconvenience
+
+**Assessment:** Possible but unlikely - correctness matters
+
+### 4. FEATURE_REQUEST (New Feature)
+**Arguments FOR:**
+- Could argue that supporting quotes in identifiers is a "new feature"
+
+**Arguments AGAINST:**
+- Django already attempts to quote identifiers
+- This is fixing existing broken functionality, not adding new capability
+- The quote_name method exists specifically to handle identifier quoting
+- SQL standard compliance is not a "feature" but a requirement
+
+**Assessment:** NOT a feature request
+
+### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- Django's documentation doesn't explicitly state how embedded quotes should be handled
+
+**Arguments AGAINST:**
+- The issue is in the code implementation, not the documentation
+- The code generates invalid SQL regardless of what documentation says
+- Fixing documentation wouldn't solve the actual problem of SQL syntax errors
+
+**Assessment:** NOT a documentation issue
+
+## Final Assessment
+
+This is clearly a **BUG**. The reasoning:
+
+1. **Violates SQL Standards**: Django generates SQL that violates both the SQL standard and specific database requirements for identifier quoting
+
+2. **Causes Runtime Failures**: The malformed SQL causes actual syntax errors that crash operations
+
+3. **Has a Clear Fix**: The solution is straightforward - escape embedded quotes by doubling them
+
+4. **Affects Core Functionality**: SQL generation is a core ORM responsibility, and it must be correct
+
+5. **Not Implementation-Defined**: This isn't a case where behavior is undefined or implementation-specific. The SQL standard and database documentation are clear about the requirement
+
+While the bug affects an edge case (identifiers with embedded quotes), when it does occur, it causes complete failure rather than degraded functionality. Django's ORM should handle all valid identifiers correctly, not just common ones.
+
+The proposed fix is minimal, correct, and non-breaking:
+```python
+return '"%s"' % name.replace('"', '""')
+```
+
+This change ensures Django generates valid SQL for all identifier names, maintaining compatibility with SQL standards.

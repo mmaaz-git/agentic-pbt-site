@@ -1,0 +1,36 @@
+## Bug Reproduction Report for pandas.io.formats.format.format_percentiles
+
+### Summary
+I have successfully reproduced the reported bug. The `format_percentiles` function indeed produces duplicate outputs for unique inputs that are extremely close to each other.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Reproduction**
+   - Ran the property-based test provided in the bug report
+   - The test failed with the error: `AssertionError: Unique inputs produced duplicate outputs: [0.0, 1.3551338041573578e-306] -> ['0%', '0%']`
+   - This confirms the property violation
+
+2. **Minimal Example Reproduction**
+   - Executed the specific failing example: `[0.0, 7.506590166045388e-253]`
+   - Output: `['0%', '0%']`
+   - Confirmed that two unique input values produce identical output strings
+
+3. **Root Cause Analysis**
+   - Examined the source code at `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/io/formats/format.py`
+   - The issue occurs at lines 1596-1598 where there's an early return when all percentiles are considered "close to integers"
+   - When `np.all(int_idx)` is True, the function returns early without checking for uniqueness
+   - In the problematic case:
+     - Input: `[0.0, 7.506590166045388e-253]`
+     - After multiplying by 100: `[0.0, 7.506590166045388e-251]`
+     - Both values round to 0 and are considered "close to integers"
+     - The early return path produces `['0%', '0%']` without preserving uniqueness
+
+### Technical Details
+The bug occurs because:
+1. Very small values like `7.506590166045388e-253` become `7.506590166045388e-251` when multiplied by 100
+2. These values round to 0 with the initial precision calculation
+3. Both values pass the `np.isclose(percentiles_round_type, percentiles)` test
+4. The early return at line 1597 doesn't use the uniqueness-preserving logic that comes later (lines 1600-1601)
+
+### Impact
+This bug violates the documented contract of the function which explicitly guarantees that "if any two elements of percentiles differ, they remain different after rounding". This is a clear violation of the function's documented behavior.

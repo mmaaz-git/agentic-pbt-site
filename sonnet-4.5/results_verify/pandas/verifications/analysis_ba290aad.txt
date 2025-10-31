@@ -1,0 +1,61 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG
+**Strong evidence this is a BUG:**
+1. **Violates documented contract**: The documentation explicitly promises that `uniques.take(codes)` equals the original values. This is clearly violated.
+2. **Data corruption**: Different input values produce the same code, causing information loss.
+3. **Incorrect behavior**: Python treats '' and '\x00' as distinct values, but factorize doesn't.
+4. **Already confirmed**: Similar issue #34551 was confirmed as "clearly a bug" by pandas maintainer.
+5. **Affects realistic use cases**: Binary data, C-string imports, control characters are legitimate use cases.
+6. **Silent failure**: No warnings or errors - data is silently corrupted.
+
+### Consideration for INVALID
+**Why this might be INVALID:**
+- None. The documentation is explicit, the behavior is wrong, and the bug is reproducible.
+
+### Consideration for WONTFIX
+**Why this might be WONTFIX:**
+1. **Edge case**: Null characters in strings might be considered rare enough to not prioritize.
+2. **Deep architectural issue**: The bug appears to be in low-level C code using null-terminated strings.
+3. **Performance implications**: Fixing might require significant changes to string handling with performance costs.
+
+**Counter-arguments:**
+- The edge case argument is weak - null characters are valid in Python strings.
+- The architectural difficulty doesn't make it less of a bug.
+- Performance concerns don't justify data corruption.
+
+### Consideration for DOCUMENTATION_FIX
+**Why this might be DOCUMENTATION_FIX:**
+1. **Could document the limitation**: Add warning that null characters aren't handled correctly.
+2. **Historical behavior**: If this has always been the behavior, documenting it might be easier than fixing.
+
+**Counter-arguments:**
+- The current documentation makes an explicit promise that is violated.
+- Documenting data corruption as expected behavior is not acceptable.
+- This would be admitting a fundamental flaw without fixing it.
+
+### Consideration for FEATURE_REQUEST
+**Why this might be FEATURE_REQUEST:**
+1. **Could argue null character support is a new feature**: If pandas never intended to support null characters.
+
+**Counter-arguments:**
+- Python strings inherently support null characters - it's not a new feature.
+- The documentation doesn't exclude null characters.
+- The function claims to work with "values" - null characters are valid string values.
+- Other characters like '\x01' work fine - this is a bug, not a missing feature.
+
+### Final Assessment
+This is unequivocally a **BUG**:
+
+1. **Clear contract violation**: The documentation makes an explicit promise that is broken.
+2. **Data integrity issue**: Distinct values are incorrectly treated as identical.
+3. **Already acknowledged**: Similar issues have been confirmed as bugs by maintainers.
+4. **No documentation escape clause**: Nothing in the docs suggests null characters are unsupported.
+5. **Python semantics violation**: Python strings can contain null bytes - pandas should handle them.
+6. **Inconsistent behavior**: Works for '\x01' but not '\x00' - clearly a bug, not a design choice.
+
+The severity is high because:
+- Silent data corruption occurs
+- The bug violates a fundamental property of the function
+- It affects data integrity in production systems
+- There's no warning or error to alert users

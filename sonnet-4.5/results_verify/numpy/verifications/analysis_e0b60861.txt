@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The use of `ma.nomask` (a scalar False) when no elements are masked is an intentional optimization in numpy's design. The documentation does not explicitly promise that the mask will always be indexable or always be an array. Users working with masked arrays should be aware that `nomask` is a special value used for efficiency. The behavior is consistent with numpy's documented use of `nomask` as a special value to indicate no masking is needed.
+
+**Why it might not be INVALID:**
+The behavior breaks reasonable user expectations. When working with an array of N elements, it's natural to expect the corresponding mask to also have N elements that can be indexed. The documentation doesn't warn users about this inconsistency, and the examples shown always demonstrate cases where some elements are masked (thus always showing an array mask).
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a longstanding behavior in numpy that likely has been this way for many years. Changing it would break backward compatibility for code that relies on checking `mask is ma.nomask`. The optimization of using a scalar instead of an array of all False values saves memory and is likely considered a feature, not a bug. The workaround is simple - users can check if the mask is nomask before indexing.
+
+**Why it might not be WONTFIX:**
+The issue causes real problems for users trying to write generic code that processes masked arrays. The bug report demonstrates a common and reasonable usage pattern that fails unexpectedly. The memory savings from using a scalar vs an array of booleans is minimal for most use cases, while the confusion and bugs it causes are significant.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The behavior itself is intentional and makes sense from an implementation perspective, but the documentation fails to warn users about this special case. The documentation could be updated to explicitly state that the mask can be either `nomask` (scalar) or an array, and provide guidance on how to handle both cases safely. Adding a note about checking for `nomask` before indexing would prevent this confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting this quirk doesn't fix the underlying usability issue. Users shouldn't need to write defensive code to handle two different types for what is conceptually the same thing. The API would be cleaner and more intuitive if the mask was always consistently typed.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that having a consistently indexable mask is a new feature request rather than a bug fix. The current behavior works as designed, and the request is for an enhancement to make the API more user-friendly. A new parameter or method could be added to always return an array mask for users who need that consistency.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather for existing functionality to work consistently. The ability to index into a mask isn't a new feature - it already works when some elements are masked. The request is for this existing capability to work in all cases, not just some.
+
+## BUG Considerations
+**Why it might be BUG:**
+The inconsistent type of the mask attribute violates the principle of least surprise and breaks legitimate use cases. The mask conceptually represents a boolean value for each element in the array, so it should always be indexable by element position. The current behavior makes it impossible to write clean, generic code for processing masked arrays without special-casing nomask. The bug report provides a clear, minimal reproduction that shows real code breaking.
+
+**Why it might not be BUG:**
+This behavior is intentional, not accidental. The use of `nomask` as a memory optimization is a deliberate design choice in numpy. The fact that the mask can be either a scalar or an array is consistent with numpy's documented behavior of using `nomask` for efficiency. This is working as designed, even if the design is not ideal.
+
+## Overall Consideration
+
+After careful analysis, this appears to be primarily a DOCUMENTATION_FIX issue. The behavior is intentional - numpy deliberately uses `ma.nomask` (a scalar False) as an optimization when no elements need masking. This is a documented aspect of numpy's masked array implementation, though not well-explained in the specific function documentation.
+
+The key issue is that the documentation for masked_equal and related functions doesn't warn users about this behavior or explain how to handle it safely. Users reasonably expect that a mask corresponding to an N-element array would always have N indexable elements, but this expectation is broken by the nomask optimization. The documentation should explicitly state that the mask can be either nomask (scalar) or an array, and provide guidance like "always check if mask is ma.nomask before attempting to index it."
+
+While one could argue this is a design flaw that should be fixed (BUG), the behavior is intentional and has been part of numpy for many years. Changing it would break backward compatibility for any code that relies on the nomask optimization. The pragmatic solution is to document the behavior clearly so users know how to handle both cases correctly. The documentation should include examples showing both scenarios and the recommended pattern for safe iteration over mask values.

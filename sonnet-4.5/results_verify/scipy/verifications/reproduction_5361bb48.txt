@@ -1,0 +1,52 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+
+I successfully reproduced the bug exactly as described in the report. Here are my findings:
+
+#### 1. Core Issue Confirmed
+The function `newton_cotes` crashes with a TypeError when given a list with non-uniform spacing and `equal=0`:
+- Input: `[0, 0.5, 2]` (list)
+- Error: `TypeError: unsupported operand type(s) for /: 'list' and 'float'`
+- Error location: Line 1056 in `_quadrature.py`: `yi = rn / float(N)`
+
+#### 2. Working vs Non-Working Cases
+
+**Cases that WORK with lists:**
+- Uniform spacing: `[0, 1, 2]` with `equal=0` - Success
+- Any list with `equal=1` - Success (because line 1040 forces `rn = np.arange(N+1)`)
+- Integer input: `newton_cotes(2)` - Success
+
+**Cases that FAIL with lists:**
+- Non-uniform spacing: `[0, 0.5, 2]` with `equal=0` - TypeError
+- The same input as numpy array works: `np.array([0, 0.5, 2])` - Success
+
+#### 3. Root Cause Analysis
+The issue occurs because:
+1. When `rn` is a list, lines 1038-1042 handle it partially:
+   - `len(rn)` works with lists
+   - `np.diff(rn)` automatically converts the list to array for the diff operation
+   - If spacing is uniform, `equal` is set to 1, and the code path changes
+
+2. When non-uniform spacing is detected (equal=0), the code continues to line 1056
+3. Line 1056 attempts `yi = rn / float(N)` where `rn` is still a list
+4. Lists don't support division by float, causing the TypeError
+
+#### 4. Comparison with Similar Functions
+I tested other scipy.integrate functions:
+- `trapezoid([1, 2, 3], [0, 1, 2])` - Works with lists
+- `simpson([1, 2, 3], x=[0, 1, 2])` - Works with lists
+
+These functions handle list inputs gracefully, likely by converting them to arrays internally.
+
+#### 5. Hypothesis Test Results
+The hypothesis test provided in the bug report fails as expected:
+- The test generates lists with various spacings
+- Any non-uniform spacing causes the TypeError
+- The test correctly identifies the failure case
+
+### Technical Correctness
+The bug report is technically accurate:
+- The error occurs exactly where reported
+- The proposed fix (adding `rn = np.asarray(rn)`) would resolve the issue
+- The inconsistency with other scipy.integrate functions is real

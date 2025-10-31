@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS OF NBITBASE DEPRECATION BUG
+==================================================
+
+Bug Summary:
+The numpy.typing module is intended to emit a deprecation warning when NBitBase is accessed,
+but the warning never triggers due to a Python module attribute lookup issue.
+
+Reproduction Results:
+--------------------
+
+1. BUG CONFIRMED: The deprecation warning does NOT trigger when accessing npt.NBitBase
+
+   Test Output:
+   - Warnings caught: 0
+   - Expected: 1 DeprecationWarning
+   - The Hypothesis test fails with AssertionError: Expected 1 warning, got 0
+
+2. Root Cause Verified:
+   - NBitBase is imported directly at module level (line 160 of numpy/typing/__init__.py)
+   - The __getattr__ function (lines 172-184) is designed to emit the deprecation warning
+   - Python's attribute lookup mechanism finds NBitBase in the module's __dict__ first
+   - Since the attribute is found, __getattr__ is never called
+   - Therefore, the deprecation warning code is never executed
+
+3. The Fix Works:
+   - Created a test module implementing the proposed fix
+   - The fix imports NBitBase as _NBitBase (private name)
+   - When NBitBase is accessed, __getattr__ is called and returns _NBitBase
+   - Result: The deprecation warning IS successfully emitted with the fix
+   - NBitBase remains fully functional and accessible after the fix
+
+4. Impact:
+   - Users upgrading to NumPy 2.3+ are not warned about NBitBase deprecation
+   - Code using NBitBase will break without warning when it's removed
+   - The deprecation timeline (removal planned for future version) is violated
+   - This defeats the purpose of having a deprecation period
+
+Conclusion:
+The bug report is accurate and reproducible. The current implementation fails to emit
+the intended deprecation warning, and the proposed fix correctly resolves the issue.

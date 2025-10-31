@@ -1,0 +1,28 @@
+## Reproduction Report
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Reproduction
+- Ran the property-based test with Hypothesis as described in the bug report
+- The test failed immediately on input '\x00' (null byte character)
+- Multiple failures were observed with strings containing null bytes
+- The exact error matched the report: `tokenize.TokenError: ('source code cannot contain null bytes', (1, 0))`
+
+### Direct Example Reproduction
+- Tested the minimal reproduction case: `parsing.clean_column_name('\x00')`
+- Confirmed it raises `tokenize.TokenError` instead of returning the name unmodified
+- The full stack trace shows the error originates from Python's tokenizer when it encounters null bytes
+
+### Key Finding
+The bug is real and occurs exactly as described. When `clean_column_name` receives a string containing null bytes (e.g., '\x00'), it crashes with a `TokenError` instead of gracefully returning the name unmodified as the documentation promises.
+
+### Exception Hierarchy Verification
+- Confirmed that `tokenize.TokenError` is NOT a subclass of `SyntaxError`
+- `TokenError` inherits directly from `Exception`, not from `SyntaxError`
+- This explains why the current `except SyntaxError` clause doesn't catch it
+
+### Proposed Fix Verification
+I tested the proposed fix of catching both `SyntaxError` and `tokenize.TokenError`, and it correctly:
+- Returns null-byte containing strings unmodified instead of crashing
+- Maintains existing behavior for other invalid identifiers
+- Preserves idempotence property (applying the function twice gives the same result)

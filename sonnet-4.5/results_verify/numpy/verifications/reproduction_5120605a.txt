@@ -1,0 +1,44 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the reported bug in numpy.mean that violates the mathematical property min(X) <= mean(X) <= max(X).
+
+## Hypothesis Test Results
+
+The property-based test using Hypothesis found multiple violations. The test failed with arrays of identical float64 values, particularly:
+- Array of 6 identical values: 5.000538517706642e-184
+- Array of 13 identical values: 5.000538517706642e-184 (also negative values)
+
+## Specific Example Reproduction
+
+The specific example from the bug report was confirmed:
+- Input: Array of 29 identical values 1.46875144e-290
+- Result: mean > max, violating the bounds property
+- Min:  1.46875143999999995371e-290
+- Mean: 1.46875144000000023852e-290
+- Max:  1.46875143999999995371e-290
+- The mean exceeds the maximum by approximately 2.848e-306
+
+## Edge Case Analysis
+
+Testing revealed the following patterns:
+
+1. The bug occurs with very small float64 values (near denormalized range)
+2. The bug depends on array size - for the value 1.46875144e-290:
+   - n=5, n=10: No violation
+   - n=20, n=29, n=30: Violation occurs
+   - n=50, n=100: No violation
+3. Float32 arrays do not exhibit this issue (likely due to different precision handling)
+4. Regular-sized numbers (e.g., 1.0, 2.0) work correctly
+5. The bug also occurs with overflow situations (very large numbers produce inf)
+
+## Root Cause
+
+The issue stems from floating-point accumulation errors in the computation np.sum(arr) / len(arr). When summing many identical small values, rounding errors accumulate, causing the sum to be slightly larger than expected. Since all array elements are identical, the mathematical mean should exactly equal any element value, but the computed mean violates this due to precision loss.
+
+## Verification
+
+I verified that:
+1. All elements in the test arrays are indeed identical (np.all(arr == arr[0]) returns True)
+2. The manual calculation np.sum(arr) / len(arr) produces the same incorrect result as np.mean()
+3. The violation is consistent and reproducible

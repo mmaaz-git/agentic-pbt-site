@@ -1,0 +1,65 @@
+## Bug Report Triage Analysis
+
+### Considering BUG (Valid Bug Report)
+
+**Arguments FOR classifying as BUG:**
+1. **Invalid return value**: The function returns `-1` for empty strings, which is not a valid 0-based column index as promised in the documentation
+2. **Inconsistent error handling**: The function raises `ValueError` for invalid characters (e.g., '1', '@') but silently returns `-1` for empty strings
+3. **Real-world impact**: Used in `_range2cols`, this bug causes `[-1]` to be returned as a column index list, which could cause incorrect column selection
+4. **Violates Excel standards**: Empty strings are not valid Excel column names, yet the function doesn't reject them
+5. **Documentation implies error**: The docstring says it raises `ValueError` when "Part of the Excel column name was invalid" - an empty string is invalid
+6. **Negative indexing issues**: In Python, `-1` has special meaning (last element), causing silent incorrect behavior rather than errors
+
+### Considering INVALID
+
+**Arguments AGAINST (why it might be INVALID):**
+1. **Private function**: This is an internal function (underscore prefix), not part of the public API
+2. **Documentation ambiguity**: The docstring doesn't explicitly state empty strings are invalid
+3. **"Part of" wording**: The error description says "Part of the Excel column name was invalid" - an empty string has no parts
+
+**Counter-arguments:**
+- Even internal functions should behave correctly for consistency
+- The function's purpose clearly implies empty strings are invalid
+- The wording issue is minor compared to returning an invalid index
+
+### Considering WONTFIX
+
+**Arguments for WONTFIX:**
+1. **Internal function**: As a private function, users shouldn't be calling it directly
+2. **Edge case**: Empty column specifications might be rare in practice
+3. **Caller responsibility**: The calling code could validate input before calling `_excel2num`
+
+**Counter-arguments:**
+- The bug affects `_range2cols` which is closer to user-facing functionality
+- Even if rare, returning `-1` could cause subtle bugs
+- The function already validates other invalid inputs, so it should be consistent
+
+### Considering DOCUMENTATION_FIX
+
+**Arguments for DOCUMENTATION_FIX:**
+1. **Unclear specification**: Documentation doesn't explicitly state empty strings should raise errors
+2. **Could document current behavior**: Could update docs to say "returns -1 for empty strings"
+
+**Counter-arguments:**
+- The behavior is clearly wrong (returning invalid index)
+- Documenting bad behavior doesn't make it correct
+- The function's purpose implies empty strings are invalid
+
+### Considering FEATURE_REQUEST
+
+**Arguments for FEATURE_REQUEST:**
+1. **New validation**: Adding validation for empty strings could be seen as a new feature
+2. **Enhancement**: Improving error messages and validation
+
+**Counter-arguments:**
+- This is fixing incorrect behavior, not adding new functionality
+- The function already validates input, just incompletely
+- Returning `-1` is a bug, not missing feature
+
+### Final Assessment
+
+**STRONGEST CASE: BUG**
+
+The function returns an invalid column index (`-1`) for empty/whitespace strings instead of raising a `ValueError` like it does for other invalid inputs. This is inconsistent, violates the documented return type ("The column index corresponding to the name"), and can cause real issues in downstream code. The fact that it's an internal function doesn't excuse incorrect behavior, especially when it's used by other pandas functions like `_range2cols`.
+
+The bug is clear, reproducible, has real impact, and the fix is straightforward. While the documentation could be clearer, the current behavior is objectively wrong - returning an invalid index is worse than any documentation ambiguity.

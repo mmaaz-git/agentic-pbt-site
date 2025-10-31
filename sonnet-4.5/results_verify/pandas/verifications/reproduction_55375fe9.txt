@@ -1,0 +1,39 @@
+REPRODUCTION RESULTS
+
+The bug report's claims have been verified through testing:
+
+1. **Basic reproduction confirmed**
+   - Created DataFrame with 1 row and 0 columns: pd.DataFrame([{}])
+   - Original shape: (1, 0) - confirms 1 row exists with no columns
+   - After JSON roundtrip with orient='records': shape becomes (0, 0)
+   - The row is indeed lost, exactly as reported
+
+2. **Testing across different orient values**
+   - orient='records': Fails - produces '[]', loses all rows
+   - orient='index': Fails - produces '{}', loses all rows
+   - orient='columns': Fails - produces '{}', loses all rows
+   - orient='values': Fails - produces '[]', loses all rows
+   - orient='split': SUCCEEDS - produces '{"columns":[],"index":[0],"data":[]}', preserves row count
+   - orient='table': SUCCEEDS - produces schema with index, preserves row count
+
+3. **Multiple rows test**
+   - DataFrame with 3 rows and 0 columns also loses all rows with orient='records'
+   - Produces '[]' which is interpreted as 0 rows on read_json
+
+4. **Technical details**
+   - The issue is that empty dictionaries in a list [{}, {}, {}] serialize to '[]'
+   - An empty JSON array '[]' is correctly interpreted as "no records" by read_json
+   - This is semantically correct from a JSON perspective: empty records disappear
+   - The formats that preserve rows ('split' and 'table') explicitly encode index information
+
+5. **Property test validation**
+   - The hypothesis test correctly identifies the issue with data={}
+   - The test also found an unrelated overflow issue with very large negative integers
+
+6. **Impact assessment**
+   - This affects any DataFrame with rows but no columns
+   - Common in data processing pipelines where columns are progressively added/removed
+   - Silent data loss - no error or warning is raised
+   - Workaround exists: use orient='split' or orient='table'
+
+The reproduction fully confirms the bug report's technical claims about the behavior.

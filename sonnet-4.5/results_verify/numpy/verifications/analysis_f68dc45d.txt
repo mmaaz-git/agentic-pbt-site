@@ -1,0 +1,47 @@
+Bug Report Analysis for numpy.ma compress functions
+===================================================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that these functions must preserve dimensionality. It only says they return "compressed_array : ndarray" without specifying the shape or dimensionality requirements. The functions are working as implemented, and the implementation has been this way for a long time. The documentation doesn't promise 2D output, only that it returns "the compressed array."
+
+**Why it might not be INVALID:**
+The functions explicitly require 2D input and raise NotImplementedError for non-2D arrays. All documented examples show 2D output. The functions are described as compressing rows/columns from 2D arrays, which implies the result should still be a 2D structure. The inconsistent behavior (2D when data remains, 1D when all masked) suggests this is unintended rather than by design.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This edge case only occurs when ALL data is masked, which is rare in practice. The current behavior has existed for years without major complaints. Changing it now could break existing code that depends on the current behavior. The workaround is simple - users can check the result's dimensionality if needed.
+
+**Why it might not be WONTFIX:**
+The issue causes real downstream errors (IndexError when accessing shape[1]). It violates the principle of least surprise - functions that take 2D input and compress rows/columns should return 2D output. The fix is straightforward and makes the behavior consistent. This is not a trivial cosmetic issue but a functional inconsistency.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that when all rows/columns are removed, a 1D empty array is returned. This would set proper expectations and prevent surprises. The code is working as designed, but the documentation doesn't explain this edge case behavior clearly.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior appears to be an implementation oversight rather than intentional design. Regular numpy array slicing preserves dimensions even for empty results. Documenting a bug doesn't make it correct behavior. The inconsistency (sometimes 2D, sometimes 1D) is hard to justify as intended behavior worth documenting.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The request is asking for new behavior - maintaining 2D structure in edge cases. This could be seen as an enhancement to make the functions more robust and consistent. It's adding a new capability (dimension preservation) that wasn't explicitly promised before.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but fixing inconsistent behavior. The functions already return 2D arrays in most cases - this is about making that behavior uniform. It's more of a bug fix than a feature addition. The expectation of dimension preservation is reasonable given the function's purpose.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is demonstrably inconsistent - returning 2D arrays when data remains but 1D when all is masked. This breaks the principle of type stability. Regular numpy operations preserve dimensions even for empty results. The functions require 2D input and logically should return 2D output. The inconsistency causes real errors in downstream code that reasonably expects consistent output shape. The implementation explicitly returns np.array([]) which loses dimension information unnecessarily.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly guarantee 2D output. The implementation has worked this way for a long time. The edge case is rare enough that it hasn't been a major issue. Without explicit documentation promising dimension preservation, this could be considered unspecified behavior rather than incorrect behavior.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate BUG rather than any other category. Here's why:
+
+First, the inconsistency is the key issue. These functions return 2D arrays in all cases EXCEPT when all data is masked, where they suddenly return 1D arrays. This type instability is problematic and unexpected. If the functions always returned 1D arrays, or if the documentation explained this edge case, it might be different. But the inconsistent behavior suggests an implementation oversight rather than intentional design.
+
+Second, the functions' purpose and naming strongly suggest they should preserve structure. They're called compress_rows and compress_cols, operating on 2D arrays to remove certain rows or columns. The natural expectation is that removing rows from a 2D array yields a 2D array with fewer rows, not a 1D array. This is how standard numpy array slicing works - arr[empty_index] preserves dimensions. The current behavior violates the principle of least surprise.
+
+Third, this causes real practical problems. Code that works fine with partially masked arrays suddenly breaks with fully masked arrays, requiring defensive programming to handle an edge case that shouldn't exist. The IndexError when accessing shape[1] is a concrete problem that users face. While the documentation doesn't explicitly promise dimension preservation, reasonable code written against these APIs will break due to this inconsistency. The fix is simple and makes the behavior more predictable and consistent with numpy conventions.

@@ -1,0 +1,40 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug reported about pandas.api.extensions.ExtensionDtype violating Python's hash-equality contract.
+
+### Reproduction Steps
+
+1. **Basic Test Execution**:
+   - Created and ran the provided test case with a custom ParametrizedDtype that extends ExtensionDtype
+   - The test confirms that when `dtype == string_repr` returns True, `hash(dtype) != hash(string_repr)`
+
+2. **Test Results**:
+   - `dtype == string_repr`: True (dtype equals its string representation)
+   - `hash(dtype) == hash(string_repr)`: False (hashes are different)
+   - `hash(dtype)`: 4209543490
+   - `hash(string_repr)`: -2357043020238890238
+
+3. **Dictionary Behavior**:
+   - When using dtype as dictionary key: Works correctly
+   - When using string_repr to access same value: Returns KeyError
+   - This confirms that despite being equal, they cannot be used interchangeably as dictionary keys
+
+4. **Hypothesis Property Test**:
+   - Ran property-based test with 100+ random integer parameters
+   - Failed on every single test case (param values from -1000 to 1000)
+   - This demonstrates the bug is consistent and not an edge case
+
+5. **Source Code Analysis**:
+   - Located the issue in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/dtypes/base.py`
+   - `__eq__` method (lines 133-137): Allows comparison with strings by converting string to dtype via `construct_from_string`
+   - `__hash__` method (line 147): Only hashes the _metadata tuple attributes, not considering string equality
+
+### Impact
+This bug violates Python's fundamental requirement that if `a == b`, then `hash(a) == hash(b)`. This contract violation can cause:
+- Silent failures when using dtype instances and their string representations interchangeably in dictionaries
+- Unexpected behavior in sets containing both dtype objects and strings
+- Inconsistent behavior in any code relying on the hash-equality contract
+
+### Verification
+The bug is consistently reproducible across all test cases and affects all ExtensionDtype subclasses that inherit the default __eq__ and __hash__ implementations.

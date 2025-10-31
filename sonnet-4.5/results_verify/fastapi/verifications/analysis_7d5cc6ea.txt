@@ -1,0 +1,69 @@
+## Bug Triage Analysis
+
+### Considerations for Each Category:
+
+#### BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function's type signature explicitly promises to accept `Union[int, str, None]`
+- The function crashes with ValueError on valid string inputs (empty string, non-numeric strings)
+- FastAPI's own code allows string status codes in the `responses` parameter (Dict[Union[int, str], ...])
+- Users can legitimately provide custom string status codes in their API responses
+- The crash happens in production code when users provide valid inputs per the API contract
+- The function violates its own type contract - a clear bug
+
+**Arguments AGAINST:**
+- One could argue that only "reasonable" status codes should be accepted
+- The OpenAPI spec defines specific patterns for status codes
+
+#### INVALID (Incorrect Report)
+**Arguments FOR:**
+- None - the bug is real and reproducible
+
+**Arguments AGAINST:**
+- The function demonstrably crashes on inputs its type signature claims to accept
+- The type system explicitly allows any string, not just numeric ones
+- FastAPI's routing explicitly allows string status codes in responses
+
+#### WONTFIX (Trivial/Uninteresting)
+**Arguments FOR:**
+- Users typically use standard HTTP status codes (integers)
+- Non-numeric string status codes are uncommon in practice
+
+**Arguments AGAINST:**
+- This is not an obscure edge case - empty strings and non-numeric strings are common
+- The bug causes production crashes, not just incorrect behavior
+- FastAPI explicitly supports string status codes in its API
+- The fix is straightforward and improves robustness
+
+#### FEATURE_REQUEST (Not Currently Supported)
+**Arguments FOR:**
+- Supporting arbitrary non-numeric strings could be seen as a new feature
+
+**Arguments AGAINST:**
+- The type signature already claims to support all strings
+- This is not asking for new functionality, but for the existing contract to be honored
+- The function already handles some string patterns ("default", "1XX", etc.)
+
+#### DOCUMENTATION_FIX (Documentation Issue)
+**Arguments FOR:**
+- The type hint could be updated to reflect current behavior: `Union[int, Literal["default", "1XX", ...], str]` where str must be numeric
+
+**Arguments AGAINST:**
+- Changing the type signature would be a breaking change
+- FastAPI's routing layer explicitly allows arbitrary string status codes
+- The bug is in the implementation, not the documentation
+- Users rely on the current type contract
+
+### Final Assessment:
+
+This is clearly a **BUG**. The function:
+1. Has a type signature that promises to accept any string
+2. Is used in contexts where arbitrary strings are allowed (FastAPI's responses dict)
+3. Crashes on valid inputs according to its type contract
+4. Violates the principle that functions should handle all inputs matching their type signatures
+
+The function should either:
+- Handle non-numeric strings gracefully (return a sensible default or raise a more specific exception)
+- Have its type signature changed to reflect actual accepted inputs (breaking change)
+
+Given that FastAPI allows string status codes in responses, and this function is used to validate those, it should handle all string inputs without crashing.

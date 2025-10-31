@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly state that SparseArray.mean() must match dense array behavior. There is no specification about how NaN fill values should be handled, and the current behavior (ignoring NaN values when fill_value is NaN) could be considered a valid design choice. The implementation might intentionally treat NaN fill_value as "missing data to ignore" rather than "values to propagate." Since the documentation doesn't promise consistency with dense arrays, this could be working as designed.
+
+**Why it might not be INVALID:**
+The behavior is genuinely inconsistent between sparse and dense representations of the same data. The to_dense() method exists specifically to convert sparse to dense format, implying some level of behavioral equivalence. Users would reasonably expect mathematical operations to produce the same results regardless of the storage format. The fact that SparseArray.mean() produces different results than arr.to_dense().mean() for the same logical data is surprising and could lead to bugs in user code.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving NaN as both fill_value and data value, which may be rare in practice. The current behavior might be intentional to provide better performance or memory efficiency by avoiding NaN propagation. Users who need strict NumPy compatibility can use to_dense().mean() explicitly. The fix might introduce breaking changes for existing code that relies on the current behavior. Since pandas Series already has different NaN handling (skipna=True by default), there's precedent for pandas objects not following strict NumPy semantics.
+
+**Why it might not be WONTFIX:**
+The inconsistency could cause real problems in data analysis pipelines where sparse arrays are used for memory efficiency but mathematical correctness is still required. The issue affects a fundamental statistical operation (mean) which is widely used. The proposed fix is relatively simple and wouldn't affect performance significantly. Other users might be encountering this issue silently, getting incorrect results without realizing it.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation completely lacks specification for how SparseArray.mean() handles NaN values, especially when NaN is the fill_value. The current behavior could be considered correct if it were properly documented. Adding documentation explaining that SparseArray.mean() ignores NaN values when fill_value is NaN would clarify the intended behavior. This would help users understand the difference between sparse and dense array operations and make informed choices.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior appears to be a bug rather than an intentional design choice, given that it silently produces different results than the equivalent dense array. Simply documenting the current behavior would perpetuate a confusing inconsistency. Users would still face unexpected results when switching between sparse and dense arrays. The lack of a skipna parameter suggests this wasn't a deliberate design decision about NaN handling.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+SparseArray.mean() could benefit from a skipna parameter like pandas Series has, giving users explicit control over NaN handling. The current implementation lacks this flexibility, and adding it would be a new feature. This would allow users to choose between NumPy-compatible behavior (skipna=False) and the current behavior (skipna=True). The request could be reframed as "Add skipna parameter to SparseArray aggregation methods."
+
+**Why it might not be FEATURE_REQUEST:**
+The issue is about incorrect behavior of existing functionality, not missing functionality. The mean() method already exists and should work correctly with the data types it accepts. Adding a skipna parameter doesn't address the core issue that the default behavior is inconsistent with dense arrays. This is about fixing a bug in current behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is objectively inconsistent - the same logical data produces different results depending on storage format. This violates the principle of least surprise and could cause silent data corruption in analysis pipelines. NumPy's mean() consistently returns NaN when any value is NaN, following IEEE 754 standards. The to_dense() method implies that sparse arrays should behave equivalently to their dense counterparts for mathematical operations. The current implementation appears to be an oversight rather than intentional design.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly promise consistency with dense arrays. Pandas already has different NaN handling conventions (Series.mean() skips NaN by default), so there's no universal standard within pandas. The current behavior might be intentional for performance or to match other sparse array implementations. Without clear documentation stating the expected behavior, this could be considered undefined behavior rather than incorrect behavior.
+
+## Overall Consideration
+
+After examining all aspects of this bug report, several key factors emerge. First, the reported behavior is real and reproducible - SparseArray.mean() does produce different results than the equivalent dense array when NaN is used as fill_value and the data contains NaN values. The technical details in the bug report are accurate, and the proposed fix would address the inconsistency.
+
+However, the critical issue is the complete absence of documentation specifying how SparseArray.mean() should handle NaN values, particularly when NaN is the fill_value. This creates ambiguity about whether the current behavior is intentional or accidental. The pandas ecosystem already has inconsistent NaN handling - Series.mean() defaults to skipna=True while NumPy arrays propagate NaN. This precedent suggests that different pandas objects can have different NaN semantics.
+
+The strongest argument for this being a bug is the principle of least surprise and the existence of the to_dense() method, which implies some level of behavioral equivalence. Users reasonably expect mathematical operations to produce consistent results regardless of storage format. However, without explicit documentation promising this consistency, the current behavior could be defended as a valid design choice optimized for the sparse array use case. Given the lack of clear specification and the fact that pandas already has inconsistent NaN handling across different data structures, this appears to be more of a documentation issue than a clear bug. The behavior should be explicitly documented, and potentially a skipna parameter should be added to give users control over the behavior.

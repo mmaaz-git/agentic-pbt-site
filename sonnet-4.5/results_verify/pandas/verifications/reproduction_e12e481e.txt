@@ -1,0 +1,27 @@
+## Bug Reproduction Report
+
+### Summary
+I successfully reproduced the bug described in the report. The `normalize` function in `numpy.f2py.symbolic` fails to handle nested `CONCAT` expressions properly, leading to different normalized forms for mathematically equivalent string concatenation expressions.
+
+### Test Results
+
+1. **Manual Reproduction**: The exact example provided in the bug report reproduces successfully:
+   - Input: `a = as_string('""', 1)`, `b = as_string('""', 1)`, `c = as_string("''", 1)`
+   - `(a // b) // c` normalizes to: `Expr(Op.CONCAT, (Expr(Op.STRING, ('""', 1)), Expr(Op.STRING, ("''", 1))))`
+   - `a // (b // c)` normalizes to: `Expr(Op.CONCAT, (Expr(Op.STRING, ('""', 1)), Expr(Op.CONCAT, (Expr(Op.STRING, ('""', 1)), Expr(Op.STRING, ("''", 1))))))`
+   - These normalized forms are NOT equal, confirming the bug.
+
+2. **Hypothesis Testing**: The property-based test also fails, finding additional failing examples where the associativity property is violated.
+
+### Code Analysis
+Looking at the `normalize` function implementation (lines 899-916 in symbolic.py):
+- The function handles `Op.CONCAT` by iterating through the data elements
+- It merges adjacent strings with the same quote type
+- However, it does NOT flatten nested CONCAT expressions before processing
+- This means `CONCAT(a, CONCAT(b, c))` remains nested while `CONCAT(CONCAT(a, b), c)` might get partially flattened
+
+### Bug Impact
+The bug violates the mathematical property that string concatenation should be associative. In a normalization function, equivalent expressions should normalize to the same canonical form, but they don't due to the lack of flattening nested CONCAT operations.
+
+### Verification
+The bug is real and impacts the correctness of the symbolic manipulation in numpy's f2py module. The normalization function fails to produce a canonical form for equivalent string concatenation expressions.

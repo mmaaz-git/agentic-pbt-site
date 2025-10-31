@@ -1,0 +1,38 @@
+## Bug Reproduction Results
+
+### Test Execution Summary
+
+I successfully reproduced the bug exactly as described in the report. The test execution confirms:
+
+1. **Basic Bug Reproduction**: ✓ CONFIRMED
+   - Creating a DataFrame with surrogate character '\ud800' works fine
+   - Calling `df.__dataframe__()` succeeds without error
+   - Calling `interchange.from_dataframe()` fails with: `UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 24: surrogates not allowed`
+
+2. **Surrogate Character Test Cases**: ALL FAIL
+   - '\ud800' (high surrogate alone): UnicodeEncodeError
+   - '\udc00' (low surrogate alone): UnicodeEncodeError
+   - '\ud800\udc00' (surrogate pair): UnicodeEncodeError
+   - 'normal\ud800text' (surrogate in middle): UnicodeEncodeError
+
+### Technical Details
+
+The error occurs exactly at the line specified in the bug report:
+- File: `/pandas/core/interchange/column.py`
+- Line: 351
+- Code: `b.extend(obj.encode(encoding="utf-8"))`
+
+The error happens because:
+1. Pandas allows creating DataFrames with strings containing surrogate characters
+2. The interchange protocol attempts to encode these strings to UTF-8
+3. UTF-8 specification explicitly forbids encoding surrogate characters (U+D800-U+DFFF)
+4. Python's encode() method correctly raises UnicodeEncodeError for surrogates
+
+### Round-trip Property Violation
+
+The bug report correctly identifies that this violates the round-trip property:
+- Input: DataFrame with surrogate characters can be created
+- Export: `__dataframe__()` succeeds
+- Import: `from_dataframe()` fails with UnicodeEncodeError
+
+This is indeed an inconsistency in the API where the export suggests success but the import fails.

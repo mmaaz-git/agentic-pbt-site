@@ -1,0 +1,58 @@
+## Documentation Analysis for FixedForwardWindowIndexer
+
+### Official Documentation Review
+
+#### 1. Pandas API Documentation
+The official pandas documentation for `FixedForwardWindowIndexer`:
+- Describes it as creating "window boundaries for fixed-length windows that include the current row"
+- Shows examples only with positive window_size values (e.g., window_size=2)
+- Does not explicitly document any constraints on window_size values
+- Does not mention whether negative values are allowed or prohibited
+
+#### 2. Parameter Documentation
+For the `window_size` parameter:
+- Default value is 0
+- Described as "Size of the moving window" and "number of observations"
+- No explicit constraints documented regarding negative values
+- No validation requirements mentioned in the API documentation
+
+#### 3. BaseIndexer Class
+FixedForwardWindowIndexer inherits from BaseIndexer:
+- BaseIndexer.__init__ accepts window_size as an int with default 0
+- No validation is performed on window_size in the constructor
+- The parameter is simply stored as `self.window_size`
+
+#### 4. Source Code Analysis
+From the actual implementation of `get_window_bounds()`:
+```python
+start = np.arange(0, num_values, step, dtype="int64")
+end = start + self.window_size
+if self.window_size:
+    end = np.clip(end, 0, num_values)
+```
+
+The algorithm:
+1. Creates start indices from 0 to num_values
+2. Computes end as start + window_size
+3. Clips end values to be between 0 and num_values
+
+#### 5. Implicit Assumptions
+While not explicitly documented, the implementation clearly assumes:
+- window_size should be non-negative for correct operation
+- The algorithm produces start <= end only when window_size >= 0
+- Negative window_size values lead to end < start after clipping
+
+### Critical Findings
+
+1. **No Documented Constraints**: The documentation does not explicitly state that window_size must be non-negative.
+
+2. **No Input Validation**: Neither BaseIndexer nor FixedForwardWindowIndexer validates the window_size parameter.
+
+3. **Implementation Assumes Non-Negative**: The algorithm in get_window_bounds() is designed for non-negative window sizes and produces invalid results with negative values.
+
+4. **Semantic Meaning**: A "FixedForwardWindowIndexer" semantically implies looking forward (positive direction), making negative window sizes conceptually inconsistent with the class's purpose.
+
+5. **Window Bounds Invariant**: While not explicitly documented, window indexers universally assume start[i] <= end[i] for valid window boundaries. This is a fundamental invariant for slicing operations.
+
+### Conclusion
+The documentation lacks explicit constraints on window_size, but the implementation and semantic meaning of the class strongly suggest that negative values are not intended to be supported. The absence of input validation combined with an algorithm that assumes non-negative values creates the reported bug.

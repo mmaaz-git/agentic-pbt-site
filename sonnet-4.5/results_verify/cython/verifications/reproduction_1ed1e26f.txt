@@ -1,0 +1,60 @@
+BUG REPRODUCTION RESULTS
+========================
+
+Test Execution Summary:
+-----------------------
+
+1. Basic Bug Reproduction Test:
+   - Created a .pyxbld file with ONLY make_setup_args() function
+   - Result: AttributeError: 'NoneType' object has no attribute 'sources'
+   - This confirms the bug report's claim
+
+2. Hypothesis Test Results:
+   All four possible combinations were tested:
+
+   a) No pyxbld file: SUCCESS (ext=None, setup_args={})
+   b) Only make_ext: SUCCESS (ext=Extension object, setup_args={})
+   c) Both make_ext and make_setup_args: SUCCESS (both set correctly)
+   d) Only make_setup_args: FAILURE with AttributeError
+
+3. Detailed Combination Tests:
+   Confirmed the same pattern - the function crashes ONLY when:
+   - A .pyxbld file exists
+   - The file defines make_setup_args()
+   - The file does NOT define make_ext()
+
+Technical Analysis of the Crash:
+--------------------------------
+
+The crash occurs at line 131-132 in handle_special_build():
+    ext.sources = [os.path.join(os.path.dirname(special_build), source)
+                   for source in ext.sources]
+
+At this point:
+- ext is None (because make_ext was not defined)
+- The code tries to access ext.sources
+- Python raises AttributeError on NoneType
+
+The Bug Report's Claims:
+------------------------
+1. CORRECT: The function crashes with AttributeError when only make_setup_args is defined
+2. CORRECT: The crash happens because ext is None when make_ext is not defined
+3. CORRECT: Line 129's assertion allows ext to be None (assert ext or setup_args)
+4. CORRECT: Line 131 unconditionally accesses ext.sources causing the crash
+5. CORRECT: The proposed fix (adding if ext: before line 131) would prevent the crash
+
+Code Logic Analysis:
+-------------------
+The assertion at line 129 explicitly allows for the case where ext is None:
+    assert ext or setup_args, ("neither make_ext nor make_setup_args %s" % special_build)
+
+This assertion passes when:
+- ext is truthy (make_ext was defined and returned an Extension)
+- setup_args is truthy (make_setup_args was defined and returned a non-empty dict)
+- Both are truthy
+
+The assertion clearly indicates the developers intended to support having only make_setup_args without make_ext. However, the code immediately after (line 131) assumes ext is not None, creating an inconsistency in the implementation.
+
+Reproduction Confirmed:
+----------------------
+The bug is 100% reproducible using the provided test case. The behavior matches exactly what the bug report describes.

@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Test Execution Summary
+
+I successfully reproduced the bug described in the report. The test results confirm the issue:
+
+1. **Simple Reproduction Case**:
+   - When calling `_normalize_index_columns(None, ['0'], None, ['0'])`
+   - The function returns: `column_names=['0']` and `index_names=['0']`
+   - This creates an intersection `{'0'}` between columns and indices
+   - This overlap is problematic as it means the same name appears in both columns and indices
+
+2. **Hypothesis Test**:
+   - The property-based test failed with the exact example cited in the bug report
+   - Input: `user_columns=None, data_columns=['0'], user_index=None, data_index=['0']`
+   - The test correctly identifies that the intersection should be empty but found `{'0'}`
+
+3. **Contrast with User-Specified Overlap**:
+   - When users explicitly specify overlapping columns/indices (e.g., both containing '0')
+   - The function correctly raises: `ValueError: Specified index and column names must not intersect`
+   - This shows inconsistent behavior between user-specified and data-provided parameters
+
+### Code Analysis
+
+I examined the actual implementation in `/home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/io/parquet/utils.py`:
+
+- Lines 347-348: When both user columns and index are specified, the function checks for intersection and raises a ValueError if found
+- Lines 349-352: When neither user columns nor index are specified (both None), the function simply returns `data_columns` and `data_index` without any validation
+- Lines 332-341: When only one is specified, the function removes overlaps by filtering
+
+The bug is in the else block (lines 349-352) which doesn't check for or handle overlapping names when using defaults from the data.
+
+### Effect of the Bug
+
+This bug creates data ambiguity:
+1. A field name '0' appears in both the column list and index list
+2. This could lead to confusion about whether '0' is a data column or an index column
+3. Downstream operations that rely on distinct column/index names may behave unexpectedly
+4. The inconsistency means that data-provided overlaps are silently accepted while user-specified overlaps are rejected

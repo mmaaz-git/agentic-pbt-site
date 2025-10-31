@@ -1,0 +1,65 @@
+BUG REPRODUCTION RESULTS
+========================
+
+## Test Execution Summary
+
+The bug report was successfully reproduced with the provided test cases.
+
+### 1. Minimal Failing Case
+**Input**: Statistics dict with `statistics: None` in column metadata
+**Result**: CONFIRMED - AttributeError: 'NoneType' object has no attribute 'items'
+**Error Location**: Line 1922 in _agg_dicts function
+
+The exact error matches what was reported in the bug report.
+
+### 2. Valid Statistics Test
+**Input**: Same structure but with valid statistics dict
+**Result**: Function executes successfully
+**Output**: Properly aggregated statistics with min/max values preserved
+
+### 3. Property-Based Testing with Hypothesis
+**Test**: Generated 20 random test cases mixing None and valid statistics
+**Result**: All 20 cases with None statistics failed with the same AttributeError
+**Success rate**: 0% for inputs containing None statistics
+
+## Technical Analysis of Failure
+
+The failure occurs through this exact call chain:
+1. `_aggregate_statistics_to_file(stats)` receives input
+2. Calls `_agg_dicts(row_groups, agg_func)`
+3. agg_func includes `columns: partial(_aggregate_columns, agg_cols=agg_cols)`
+4. `_aggregate_columns` is called with column data
+5. `_aggregate_columns` calls `_agg_dicts(c, agg_cols)` for each column group
+6. agg_cols includes `statistics: partial(_agg_dicts, agg_funcs=agg_stats)`
+7. When statistics is None, `_agg_dicts` tries to call `d.items()` on None
+8. AttributeError is raised
+
+## Key Findings
+
+1. **The bug is 100% reproducible** - Every input with None statistics causes the crash
+2. **The error message is exact** - 'NoneType' object has no attribute 'items' at line 1922
+3. **The failure point is consistent** - Always in _agg_dicts when processing statistics
+
+## Comparison with _extract_stats
+
+Testing revealed that `_extract_stats` DOES handle None statistics correctly:
+- Input: `statistics: None`
+- Output: `statistics: {}` (empty dict)
+
+This shows inconsistent handling between different parts of the codebase:
+- `_extract_stats`: Protects against None by converting to empty dict
+- `_aggregate_statistics_to_file` -> `_agg_dicts`: Does not handle None
+
+## Real-World Impact Assessment
+
+The bug affects any parquet file with missing column statistics, which includes:
+- Files written with PyArrow/fastparquet with statistics disabled
+- Large string/binary columns where stats are omitted for performance
+- Files from older parquet writers
+- Files with certain logical types that don't support statistics
+
+This is not an edge case but a legitimate scenario in production parquet files.
+
+## Conclusion
+
+The bug report is technically accurate and reproducible. The code crashes exactly as described when processing valid parquet metadata that contains None statistics, which is explicitly allowed by the Apache Parquet specification.

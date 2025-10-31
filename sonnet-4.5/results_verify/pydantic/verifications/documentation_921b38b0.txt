@@ -1,0 +1,41 @@
+## Documentation Analysis
+
+### Function Docstring
+The `decimal_encoder` function's docstring (lines 34-46 in the source) states:
+
+"Encodes a Decimal as int of there's no exponent, otherwise float.
+
+This is useful when we use ConstrainedDecimal to represent Numeric(x,0) where a integer (but not int typed) is used. Encoding this as a float results in failed round-tripping between encode and parse. Our Id type is a prime example of this."
+
+### Key Claims and Contradictions
+
+1. **Primary claim**: The docstring says the function helps avoid "failed round-tripping between encode and parse"
+
+2. **Actual behavior**: The function only avoids round-trip failures for integer-valued decimals (exponent >= 0). For fractional decimals, it converts to float, which DOES cause round-trip failures.
+
+3. **Misleading implication**: The docstring's statement "Encoding this as a float results in failed round-tripping" is presented as something the function helps avoid, but the function actually DOES encode to float for fractional values, causing exactly this problem.
+
+### Context from GitHub Issue #1511
+Found a relevant GitHub issue where the community reported this exact problem in 2020:
+- Users complained that encoding Decimals as floats defeats the purpose of using Decimal for precision
+- The maintainer (Samuel Colvin) initially defended the behavior but later agreed to change it in v2
+- The consensus was that Decimals should be encoded as strings to preserve precision
+- Quote: "Serialising these as floats will cause loss of information. If you don't care about storing all digits, then you might as well use float."
+
+### Current Status
+- The function is in `pydantic.deprecated.json`, indicating it's deprecated
+- Pydantic v2 documentation recommends using `pydantic_core.to_jsonable_python` instead
+- The function still exists for backwards compatibility but with deprecation warnings
+
+### Documentation vs Implementation
+The docstring's examples work correctly:
+- `decimal_encoder(Decimal("1.0"))` → 1.0 (float) ✓
+- `decimal_encoder(Decimal("1"))` → 1 (int) ✓
+
+However, the docstring's general claim about avoiding round-trip failures is misleading because:
+1. It only works for integer-valued decimals (Numeric(x,0) as mentioned)
+2. For fractional decimals, it causes exactly the round-trip failure it claims to avoid
+3. The docstring doesn't clarify this limitation explicitly
+
+### Conclusion
+The documentation is technically accurate about WHAT the function does (int for no negative exponent, float otherwise), but misleading about the round-trip guarantee. The docstring overpromises by implying round-trip safety without clearly stating it only applies to integer-valued decimals.

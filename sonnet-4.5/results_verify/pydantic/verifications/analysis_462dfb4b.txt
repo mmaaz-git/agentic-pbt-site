@@ -1,0 +1,67 @@
+TRIAGE ANALYSIS
+===============
+
+## BUG
+**Arguments for BUG:**
+- Silent data loss is occurring without warning - input "0.5b" becomes 0
+- The regex pattern explicitly accepts decimal numbers (\d*\.?\d+), suggesting fractional inputs are intended to be supported
+- The round-trip property is violated: ByteSize("0.5b").to('b') != 0.5
+- Users reasonably expect "0.5b" to represent half a byte, not zero bytes
+- The behavior is inconsistent: "1.7kb" preserves value (1700 bytes) but "0.5b" doesn't
+- No error or warning is raised about precision loss
+
+**Arguments against BUG:**
+- ByteSize inherits from int, which fundamentally cannot store fractional values
+- The code explicitly uses int() conversion, suggesting integer-only design
+- Bytes are discrete units in computing - fractional bytes may not make practical sense
+
+## INVALID
+**Arguments for INVALID:**
+- ByteSize inherits from int, making fractional storage impossible by design
+- The int() conversion is explicit in the code, not accidental
+- Fractional bytes are conceptually questionable - you can't have half a byte in real systems
+- The documentation examples only show integer results
+
+**Arguments against INVALID:**
+- The regex accepts fractional inputs without error
+- The code doesn't reject fractional inputs, it silently truncates them
+- The behavior violates the principle of least surprise
+- If fractional bytes aren't supported, they should be explicitly rejected
+
+## WONTFIX
+**Arguments for WONTFIX:**
+- Fractional bytes (< 1 byte) are extremely rare use cases
+- The issue only affects values less than 1 byte when using 'b' unit
+- Changing the behavior would break backward compatibility
+- The inheritance from int is a fundamental design choice
+
+**Arguments against WONTFIX:**
+- Silent data loss is a serious issue regardless of frequency
+- The fix is straightforward (raise error for fractional bytes)
+- This affects data integrity and user trust
+
+## DOCUMENTATION_FIX
+**Arguments for DOCUMENTATION_FIX:**
+- The code works as designed (int inheritance requires integer values)
+- The documentation doesn't specify fractional byte behavior
+- Adding documentation about truncation would clarify expectations
+- The regex accepting decimals might be for larger units (1.5kb = 1500 bytes)
+
+**Arguments against DOCUMENTATION_FIX:**
+- Silent data loss is still a code bug, not just a documentation issue
+- Users shouldn't have to read documentation to avoid data loss
+- The principle of least surprise suggests rejecting invalid input
+
+## FEATURE_REQUEST
+**Arguments for FEATURE_REQUEST:**
+- Supporting fractional bytes would be a new capability
+- Current design (int inheritance) doesn't support this
+- Would require significant redesign to support float storage
+
+**Arguments against FEATURE_REQUEST:**
+- The regex already accepts fractional input, suggesting it was intended
+- This is about fixing data loss, not adding new functionality
+- The bug report shows current behavior is problematic, not missing
+
+## CONCLUSION
+This is most likely a BUG that should be fixed by raising an error when fractional bytes would be truncated. The silent data loss violates user expectations and data integrity principles. While ByteSize must store integers due to inheritance, it should explicitly reject inputs that would lose precision rather than silently truncating them.

@@ -1,0 +1,48 @@
+BUG REPRODUCTION RESULTS
+
+1. Bug Report Claims:
+   - When Authorization header is "Bearer" (without token), OAuth2PasswordBearer returns "" instead of None
+   - This is inconsistent with missing Authorization header which returns None
+   - The bug affects both OAuth2PasswordBearer and OAuth2AuthorizationCodeBearer
+
+2. Reproduction Test Results:
+   CONFIRMED - The bug exists as described:
+   - Missing header: Returns None ✓
+   - "Authorization: Bearer": Returns '' (empty string) ✗
+   - "Authorization: Bearer ": Returns '' (empty string) ✗
+   - "Authorization: Bearer  ": Returns ' ' (single space) ✗
+   - "Authorization: Bearer token123": Returns 'token123' ✓
+
+3. Property-Based Test:
+   FAILED - The assertion that "Bearer" should return None fails
+   - Input: "Bearer" consistently returns '' instead of expected None
+   - The test correctly identifies the inconsistency
+
+4. Root Cause Analysis:
+   The current implementation checks: "if not authorization or scheme.lower() != 'bearer'"
+
+   When Authorization is "Bearer":
+   - authorization = "Bearer" (truthy)
+   - scheme = "Bearer", param = ""
+   - not authorization = False
+   - scheme.lower() != "bearer" = False
+   - Overall condition = False, so it returns param (which is "")
+
+   When Authorization is missing:
+   - authorization = None
+   - not authorization = True
+   - Returns None
+
+5. Impact Assessment:
+   This inconsistency causes problems for user code:
+   - Code using "if token:" will handle both None and "" as falsy (works by accident)
+   - Code using "if token is not None:" will treat "" as valid token (BUG!)
+   - Code using "if not token:" might miss the distinction
+   - Type hints suggest Optional[str], but "" is not the same as None semantically
+
+6. Verification of Fix:
+   The proposed fix adds "or not param" to the condition, which would:
+   - Return None for missing header (unchanged)
+   - Return None for "Bearer" (fixes the bug)
+   - Return None for "Bearer " (fixes the bug)
+   - Return token for "Bearer token123" (unchanged)

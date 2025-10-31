@@ -1,0 +1,45 @@
+# Reproduction of Bug Report
+
+## Summary
+I successfully reproduced the bug described in the report. The Cython.Tempita template parser accepts invalid conditional syntax without raising errors during parsing.
+
+## Test Results
+
+### 1. Duplicate else clauses
+Tested template: `{{if x}}A{{else}}B{{else}}C{{endif}}`
+- Expected: TemplateError during parsing
+- Actual: Template created successfully
+- When x=False: Returns 'B' (first else clause)
+- When x=True: Returns 'A'
+- Additional else clauses are silently ignored
+
+### 2. elif after else
+Tested template: `{{if x}}A{{else}}B{{elif y}}C{{endif}}`
+- Expected: TemplateError during parsing (elif after else is invalid)
+- Actual: Template created successfully
+- The elif clause is never evaluated, regardless of y's value
+- Always returns 'B' when x=False, 'A' when x=True
+
+### 3. Multiple duplicate else clauses
+Tested templates with 2-5 else clauses
+- All templates parsed successfully without error
+- Only the first else clause is ever executed
+- Additional else clauses are silently ignored
+
+## Code Confirmation
+Found comment in source code at line 291 of _tempita.py:
+```python
+# @@: if/else/else gets through
+```
+This confirms the author was aware of the issue but had not fixed it.
+
+## Analysis of parse_cond function
+The `parse_cond` function doesn't track whether an else clause has already been seen. It simply collects all conditional parts without validation:
+- No check for duplicate else clauses
+- No check for elif after else
+- All clauses are collected in a list and passed to the interpreter
+
+During execution, the interpreter stops at the first matching clause, which masks the invalid syntax but doesn't prevent it from being accepted.
+
+## Conclusion
+The bug is confirmed as described. Templates with invalid conditional syntax (duplicate else, elif after else) are accepted by the parser when they should raise a TemplateError.

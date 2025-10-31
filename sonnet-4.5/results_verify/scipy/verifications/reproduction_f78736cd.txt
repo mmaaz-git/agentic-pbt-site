@@ -1,0 +1,55 @@
+Bug Reproduction Report for Django SQLite3 _sqlite_date_trunc TypeError
+======================================================================
+
+## Summary
+The bug report is accurate and reproducible. The `_sqlite_date_trunc` function in Django's SQLite3 backend crashes with a TypeError when processing date-only strings (e.g., "2023-06-15") with timezone-aware database connections.
+
+## Reproduction Steps and Results
+
+### 1. Direct Bug Reproduction
+When calling `_sqlite_date_trunc` with a date-only string and a connection timezone:
+
+```python
+import django.db.backends.sqlite3._functions as funcs
+result = funcs._sqlite_date_trunc('year', "2023-06-15", None, "UTC")
+```
+
+Result: **TypeError: replace() got an unexpected keyword argument 'tzinfo'**
+
+### 2. Root Cause Analysis
+The issue occurs in the `_sqlite_datetime_parse` function (line 114 of _functions.py):
+
+```python
+dt = dt.replace(tzinfo=zoneinfo.ZoneInfo(conn_tzname))
+```
+
+When `typecast_timestamp()` receives a date-only string like "2023-06-15", it returns a `datetime.date` object instead of a `datetime.datetime` object. The `date` class doesn't have a `replace` method that accepts a `tzinfo` parameter, causing the TypeError.
+
+### 3. Property-Based Test Confirmation
+The provided Hypothesis test confirms the bug across all lookup types:
+- year: TypeError
+- quarter: TypeError
+- month: TypeError
+- week: TypeError
+- day: TypeError
+
+All fail with the same error when `conn_tzname="UTC"` is provided.
+
+### 4. Conditions for Bug Occurrence
+The bug occurs when ALL of the following conditions are met:
+1. Input is a date-only string (e.g., "2023-06-15")
+2. A connection timezone is specified (conn_tzname is not None)
+3. The function attempts timezone-aware operations
+
+### 5. Normal Operation
+The function works correctly when:
+- No timezone is specified (conn_tzname=None)
+- Input includes time component (e.g., "2023-06-15 14:30:00")
+
+## Impact
+This is a real bug that affects Django applications using:
+- SQLite as the database backend
+- USE_TZ=True in settings (timezone-aware mode)
+- DateField queries with date truncation operations
+
+The bug prevents proper date truncation for DateField values in timezone-aware Django applications using SQLite.

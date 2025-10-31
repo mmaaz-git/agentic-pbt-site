@@ -1,0 +1,44 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Reproduction Status: CONFIRMED
+
+The bug occurs exactly as described when attempting to use Dask's rolling window functionality with:
+- A string/timedelta window specification (e.g., '1h', '2h', '1D')
+- The `center=True` parameter
+- A datetime-indexed DataFrame
+
+### Test Results:
+
+1. **Direct Reproduction**: The exact code from the bug report produces the TypeError:
+   - Error: `TypeError: unsupported operand type(s) for //: 'str' and 'int'`
+   - Location: `/home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/dask_expr/_rolling.py`, line 128
+   - The error occurs in `_lower` method when it attempts `self.window // 2` on a string value
+
+2. **Comparative Testing**:
+   - Pandas WORKS: `df.rolling(window='2h', center=True).mean()` executes successfully
+   - Dask FAILS: `ddf.rolling(window='2h', center=True).mean()` crashes with TypeError
+   - Dask WORKS: `ddf.rolling(window='2h', center=False).mean()` executes successfully
+
+3. **Pattern Analysis**:
+   - FAILS: window='1h', center=True (any npartitions)
+   - FAILS: window='2h', center=True (any npartitions)
+   - FAILS: window='1D', center=True (any npartitions)
+   - WORKS: window='30min', center=True, npartitions=1 (single partition case)
+   - WORKS: Any string window with center=False
+
+### Root Cause:
+
+The code in `_rolling.py` lines 127-129 incorrectly assumes `self.window` is always an integer when `center=True`:
+
+```python
+if self.kwargs.get("center"):
+    before = self.window // 2  # Fails when self.window is a string like '2h'
+    after = self.window - before - 1
+```
+
+This is a clear implementation bug where the code doesn't handle the case of time-based windows with centering, even though:
+1. Pandas supports this combination
+2. Dask claims to mirror pandas API
+3. The documentation doesn't exclude this combination

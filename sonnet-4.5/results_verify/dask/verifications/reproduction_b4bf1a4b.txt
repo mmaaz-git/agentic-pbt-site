@@ -1,0 +1,39 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+I have successfully reproduced the bug reported in dask.utils.key_split function.
+
+TEST RESULTS:
+-------------
+
+1. Property-based test with Hypothesis:
+   - The test fails with UnicodeDecodeError when given b'\x80'
+   - Error message: "'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte"
+   - This confirms the bug exists as reported
+
+2. Direct reproduction with b'\x80':
+   - Calling key_split(b'\x80') directly raises UnicodeDecodeError
+   - The error message matches exactly what was reported in the bug report
+   - The crash occurs at line 1979 in dask/utils.py: return key_split(s.decode())
+
+3. Valid UTF-8 bytes test:
+   - key_split(b'hello-world-1') works correctly and returns 'hello-world'
+   - This confirms that the function IS intended to work with bytes
+   - This exact example appears in the function's docstring
+
+4. Function identity verification:
+   - Confirmed that dask.widgets.FILTERS['key_split'] is the exact same function as dask.utils.key_split
+   - Both point to the same LRU cache wrapper object
+
+CRASH LOCATION:
+--------------
+The crash occurs at line 1979 in /home/npc/miniconda/lib/python3.13/site-packages/dask/utils.py:
+
+    if type(s) is bytes:
+        return key_split(s.decode())  # <- Crashes here
+
+The code calls .decode() without any error handling, which assumes all bytes are valid UTF-8.
+
+CONCLUSION:
+-----------
+The bug is 100% reproducible. The function crashes with UnicodeDecodeError when given non-UTF-8 bytes (like b'\x80'), despite the function's docstring explicitly showing that bytes input is supported. The implementation incorrectly assumes all bytes will be valid UTF-8 encoded text.

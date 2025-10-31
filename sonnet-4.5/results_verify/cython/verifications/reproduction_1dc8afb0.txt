@@ -1,0 +1,40 @@
+# Bug Reproduction Report
+
+## Summary
+The bug described in the report has been successfully reproduced. The `parse_list` function in Cython.Build.Dependencies crashes with a KeyError when parsing lists containing empty strings.
+
+## Reproduction Steps Performed
+
+### 1. Hypothesis Test
+Created and ran the property-based test from the bug report:
+- Test function: `test_parse_list_bracket_delimited_round_trip`
+- Failing input: `items=['']`
+- Input string generated: `[""]`
+- Result: KeyError: ''
+
+### 2. Simple Direct Tests
+Tested multiple scenarios:
+- `parse_list('[""]')` → KeyError: ''
+- `parse_list("['']")` → KeyError: ''
+- `parse_list('["hello"]')` → ['hello'] (works correctly)
+- `parse_list('["a", "", "b"]')` → KeyError: '' (fails on empty string)
+
+### 3. Root Cause Analysis
+Examined the source code and identified the exact cause:
+
+1. In `strip_string_literals` function (Dependencies.py:359):
+   - Line: `if quote and len(quote) != 2:`
+   - This condition explicitly skips processing empty string literals (`""` or `''`)
+   - Empty strings are left unchanged in the code instead of being replaced with labels
+
+2. In `parse_list` function (Dependencies.py:131-132):
+   - The `unquote` function assumes all quoted strings have been replaced with labels
+   - Line: `if literal[0] in "'\"": return literals[literal[1:-1]]`
+   - Tries to look up `''` (empty string) in the `literals` dictionary
+   - Since empty strings were never added to `literals`, this raises KeyError
+
+## Confirmed Bug Behavior
+The bug is 100% reproducible. Any attempt to parse a list containing empty string literals (whether double or single quoted) will crash with a KeyError. This affects both standalone empty strings and empty strings as part of larger lists.
+
+## Impact
+This bug prevents users from parsing configuration lists that contain empty strings, which is a valid use case in distutils-style configurations (e.g., `include_dirs=[""]` to represent current directory or placeholder values).

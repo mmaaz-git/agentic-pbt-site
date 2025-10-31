@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function behavior is not explicitly documented - there's no specification saying bytes must be valid UTF-8 or how bytes should be handled. Since the documentation is silent on this, one could argue that the current behavior (attempting UTF-8 decode) is not technically wrong, just one possible implementation choice. Additionally, the function is deprecated, and users are advised to migrate to newer APIs, which somewhat reduces the importance of fixing edge cases in deprecated code.
+
+**Why it might not be INVALID:**
+The bug causes a crash with a clear, reproducible error when given perfectly valid Python bytes objects. Python bytes can contain arbitrary binary data, not just UTF-8 text, so a JSON encoder that claims to handle bytes should handle all bytes, not just a subset. The crash prevents the encoder from working with common binary data like image headers, encrypted data, or network protocols.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The function is officially deprecated with clear migration paths to `pydantic_core.to_jsonable_python`. Fixing deprecated code that users shouldn't be using anyway might not be worth the effort. The error message is clear enough (UnicodeDecodeError) that developers can understand what went wrong. Additionally, since JSON doesn't have a native bytes type, any solution would be somewhat arbitrary - there's no "correct" way to encode arbitrary bytes in JSON.
+
+**Why it might not be WONTFIX:**
+The bug causes actual crashes in production code that may still be using the deprecated function during migration. The fix would be trivial (adding error handling or using base64/hex encoding). Many users may be stuck on deprecated APIs due to legacy codebases, and a crash is more severe than just suboptimal behavior. The issue has been known since Pydantic v1 and affects a basic Python type.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never specifies that bytes must be valid UTF-8 strings. If the intent was always to only support UTF-8 encoded bytes (not arbitrary binary data), then the documentation should explicitly state this limitation. The current implementation might be working as designed but poorly documented. Adding documentation that says "bytes must be valid UTF-8 strings" would clarify the expected behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+There is essentially no documentation to fix - the function has no docstring at all. The crash is in the implementation, not a documentation mismatch. A documentation fix would just be documenting a broken behavior rather than fixing the actual problem. Users would still experience crashes even with better documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrary binary data in JSON encoding could be seen as a new feature rather than a bug fix. The current implementation only handles UTF-8 text bytes, and adding support for non-UTF-8 bytes would be extending functionality. The suggested solutions (base64 or hex encoding) would be adding new encoding strategies that weren't originally implemented. Since JSON doesn't natively support bytes, this is asking for additional functionality beyond the JSON specification.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to handle the bytes type by having it in the ENCODERS_BY_TYPE dictionary. It's not asking for new functionality but fixing existing functionality that crashes. Python's bytes type has always supported arbitrary binary data, so supporting it fully isn't a new feature but fixing incomplete implementation. The bug report isn't asking for new features but for the existing feature to not crash.
+
+## BUG Considerations
+**Why it might be BUG:**
+The encoder explicitly handles bytes type but crashes on valid bytes objects that contain non-UTF-8 sequences. This is a clear implementation bug - the encoder shouldn't crash on valid Python objects it claims to support. The crash is deterministic, reproducible, and affects real-world use cases like encoding binary file data or network protocols. The fix is straightforward (use error handling or alternative encoding), and similar issues have been acknowledged in the past. A function that crashes instead of handling errors gracefully is typically considered buggy.
+
+**Why it might not be BUG:**
+The function is deprecated, which somewhat changes the bar for what constitutes a bug worth fixing. The behavior might have been intentional if the original design assumed bytes would only contain UTF-8 text. Without explicit documentation stating bytes should work with arbitrary binary data, this could be considered undefined behavior rather than a bug. The error message is clear and points to the exact problem, so it's not silently corrupting data or behaving mysteriously.
+
+## Overall Consideration
+
+Looking at the technical merits, this appears to be a legitimate bug. The `pydantic_encoder` function has an entry for bytes in its type handlers, indicating it intends to support bytes objects. However, it crashes on perfectly valid Python bytes that happen to contain non-UTF-8 sequences. This is a implementation flaw - if you're going to handle a type, you should handle all valid instances of that type, not just a subset that happens to be UTF-8 decodable.
+
+However, the function is officially deprecated, and this significantly affects the triage decision. Deprecated code is generally not maintained unless the issues are severe security problems or data corruption. While this bug causes crashes, it has a clear error message and workarounds exist (using the recommended migration path to `pydantic_core.to_jsonable_python`). Users still on deprecated APIs are expected to eventually migrate, and fixing bugs in deprecated code can actually discourage migration by making the old API "good enough."
+
+The strongest argument against calling this a bug is that without documentation specifying the intended behavior for bytes, we're inferring intent from implementation. The implementation clearly expects UTF-8 bytes, and one could argue that's a valid design choice, just poorly documented. Since JSON has no native bytes type, any encoding choice (UTF-8 strings, base64, hex) is somewhat arbitrary. The lack of documentation makes this more of a documentation issue than a clear bug - we don't know if the current behavior is wrong or just poorly explained.

@@ -1,0 +1,44 @@
+Bug Reproduction Analysis
+========================
+
+## Reproduction Steps
+
+I successfully reproduced the bug reported in the OAuth2PasswordRequestForm scope parsing issue.
+
+### Test Results
+
+1. **Hypothesis Test Case**: The reported failing input `scopes_list = ['\r']` was confirmed to fail:
+   - Input: `'\r'` (carriage return character)
+   - `split()` result: `[]` (empty list, as `\r` is whitespace)
+   - `split(' ')` result: `['\r']` (preserves the carriage return)
+   - These are different, confirming the test failure
+
+2. **Malicious Scope Example**: The example with newline injection worked as described:
+   - Input: `"read\nwrite"`
+   - `split()` result: `['read', 'write']` (splits on newline)
+   - `split(' ')` result: `['read\nwrite']` (preserves newline as single scope)
+   - This confirms that `split()` incorrectly interprets a single scope containing a newline as two separate scopes
+
+3. **Additional Test Cases Confirmed**:
+   - Tab character (`\t`): Incorrectly splits into separate scopes
+   - Carriage return (`\r`): Incorrectly splits into separate scopes
+   - Multiple spaces: `split()` treats as single separator, `split(' ')` preserves empty strings
+   - Leading/trailing spaces: `split()` strips them, `split(' ')` preserves as empty strings
+
+### FastAPI Source Code Verification
+
+I verified the actual FastAPI code at `/home/npc/miniconda/lib/python3.13/site-packages/fastapi/security/oauth2.py`:
+- Line 147 contains: `self.scopes = scope.split()`
+- This confirms the bug report's claim about the implementation
+
+### Impact
+
+The bug has the following effects:
+
+1. **Security Impact**: An attacker could potentially inject additional scopes by using non-space whitespace characters (newlines, tabs, carriage returns) to bypass validation logic that might check individual scope values.
+
+2. **Specification Violation**: The implementation violates the OAuth2 RFC 6749 specification which explicitly requires space-separated scopes.
+
+3. **Behavioral Inconsistency**: The current implementation treats various whitespace characters (space, tab, newline, carriage return, etc.) as scope separators, when only the space character (0x20) should be treated as a separator per the specification.
+
+The bug is real and reproducible. The test cases provided in the bug report are accurate and demonstrate the issue clearly.

@@ -1,0 +1,43 @@
+Bug Reproduction Report
+=======================
+
+I have successfully reproduced the bug described in the report. The issue affects the `__dask_tokenize__` method of `CombineKwargDefault` class in xarray's deprecation_helpers module.
+
+## Steps Taken
+
+1. Examined the source code in `/home/npc/pbt/agentic-pbt/envs/xarray_env/lib/python3.13/site-packages/xarray/util/deprecation_helpers.py`
+   - Found the class at line 151
+   - The `__dask_tokenize__` method at line 183 returns `normalize_token((type(self), self._value))`
+   - The `_value` property at line 177 returns different values based on `OPTIONS["use_new_combine_kwarg_defaults"]`
+
+2. Ran the provided reproduction code:
+   - Created `test_bug_reproduction.py` with the exact code from the bug report
+   - Output confirms that tokens differ:
+     * Token with use_new=False: ('tuple', (('c2bacaeba7fcaff398dc932633c8c187107cfc52', []), 'old_value'))
+     * Token with use_new=True: ('tuple', (('c2bacaeba7fcaff398dc932633c8c187107cfc52', []), 'new_value'))
+   - The tokens are indeed different when OPTIONS change
+
+3. Ran the Hypothesis property-based test:
+   - The test immediately failed on the first example with `name='0'`
+   - Confirms that the bug occurs for any name when `old != new`
+
+4. Additional discovery - hash() has the same problem:
+   - The `__hash__` method (line 180) also uses `self._value`
+   - This violates Python's requirement that hash must be constant for an object's lifetime
+   - Hash with use_new=False: -8930498140788274943
+   - Hash with use_new=True: -9014045879745213437
+
+## Effect of the Bug
+
+The bug has two critical effects:
+
+1. **Dask caching failure**: When dask uses `__dask_tokenize__` to determine if a computation can be reused from cache, the changing token means:
+   - The same object will be treated as different inputs at different times
+   - Cached results will be invalidated unnecessarily
+   - Computations will be re-executed even when they shouldn't be
+
+2. **Python hash violation**: The `__hash__` method returning different values violates a fundamental Python requirement that an object's hash must not change during its lifetime. This could cause:
+   - Dictionary/set corruption if the object is used as a key
+   - Unexpected behavior in any data structure that relies on hashing
+
+The bug report is accurate and the provided fix (using immutable attributes instead of the mutable `_value`) would resolve both issues.

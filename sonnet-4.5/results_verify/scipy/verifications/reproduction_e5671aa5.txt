@@ -1,0 +1,31 @@
+REPRODUCTION FINDINGS
+=====================
+
+Bug Successfully Reproduced: YES
+
+1. Property-Based Test Results:
+   - The hypothesis test fails with alpha=5e-324 (the smallest positive float64 value)
+   - The test correctly identifies that tukey() returns NaN values for very small alpha values
+   - Warnings are generated: "overflow encountered in divide" and "invalid value encountered in add"
+
+2. Manual Test Results:
+   - Confirmed NaN values appear for alpha values from 1e-320 to 1e-310
+   - At alpha=1e-300, the function works correctly (no NaN)
+   - The boundary appears to be around alpha ≈ 1e-308 (related to float64 max value)
+
+3. Root Cause Identified:
+   - Located in /home/npc/.local/lib/python3.13/site-packages/scipy/signal/windows/_windows.py, line 946
+   - The expression `-2.0/alpha` causes overflow when alpha is extremely small
+   - When alpha < ~1e-308, the division 2.0/alpha exceeds float64 max (~1.8e308)
+   - This overflow produces infinity, which propagates through cos() to create NaN
+
+4. Current Special Case Handling:
+   - Line 931-932: Handles alpha <= 0 by returning a rectangular window (all ones)
+   - Line 933-934: Handles alpha >= 1.0 by returning a Hann window
+   - No handling for very small positive alpha values that cause overflow
+
+5. Impact:
+   - The function produces mathematically invalid output (NaN) for valid inputs
+   - The alpha parameter is documented to accept values in range [0, 1]
+   - Very small positive alpha values (e.g., 1e-313) are technically within this valid range
+   - This causes the function to violate its contract of returning a valid window array

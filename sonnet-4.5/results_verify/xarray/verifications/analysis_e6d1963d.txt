@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The class could be considered an internal implementation detail for managing deprecation cycles, and the documentation doesn't explicitly promise that CombineKwargDefault objects can be used in sets or as dictionary keys. One could argue that this is a special-purpose class not meant for general hashable usage.
+
+**Why it might not be INVALID:**
+The class explicitly implements `__hash__()` and `__eq__()`, which indicates it's designed to be hashable. Python's data model explicitly requires that hashable objects have stable hash values during their lifetime. This is a fundamental Python requirement, not something that needs to be documented per-class. The bug causes real problems where objects become unfindable in sets/dicts.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This might be considered an edge case that rarely affects real users. The CombineKwargDefault class appears to be primarily used internally for managing deprecation transitions, and it's unlikely that users are storing these objects in sets or using them as dictionary keys. The workaround is simple - don't change the global option while these objects are in sets/dicts.
+
+**Why it might not be WONTFIX:**
+Hash stability is a fundamental Python requirement, not a nice-to-have feature. Even if this is an edge case, it violates core language semantics. The fix is straightforward (hash based on immutable attributes rather than mutable _value), and leaving this unfixed could cause subtle, hard-to-debug issues in production code.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the class should document that it's not meant to be used in sets/dicts due to its hash instability, warning users about this limitation. The documentation could clarify that these objects are special-purpose deprecation helpers not meant for general hashable usage.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't a documentation problem - it's a code bug. Python's hash contract is universal and doesn't need per-class documentation. Documenting "this class violates Python's hash requirements" would be admitting a bug exists rather than fixing it. The proper solution is to fix the implementation, not document the broken behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting stable hashing for CombineKwargDefault objects while maintaining the current deprecation behavior could be seen as a new feature. The current implementation prioritizes the deprecation mechanism over hashability, and adding proper hash support could be considered an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't a request for new functionality - the class already implements `__hash__()`. The issue is that the existing implementation is incorrect. Fixing a broken implementation isn't a feature request; it's a bug fix. The class claims to be hashable by implementing __hash__ but fails to meet the basic requirements.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of Python's fundamental data model requirement that hash values must remain stable during an object's lifetime. The bug is reproducible, has real impact (objects disappear from sets/dicts), and the fix is straightforward. The class implements __hash__ but does so incorrectly, which is the definition of a bug. Python's documentation explicitly states this requirement, and violating it can cause data corruption and incorrect program behavior.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if CombineKwargDefault was never intended to be hashable, but that contradicts the fact that it explicitly implements __hash__(). There's no reasonable interpretation where implementing __hash__ incorrectly isn't a bug.
+
+## Overall Consideration
+
+After careful analysis, this is unequivocally a BUG. The CombineKwargDefault class explicitly implements `__hash__()`, signaling its intent to be hashable. However, the implementation violates Python's fundamental requirement that an object's hash must remain constant during its lifetime. The Python documentation is crystal clear on this point: "An object is hashable if it has a hash value which never changes during its lifetime."
+
+The bug has real, demonstrable impact - objects added to sets or used as dictionary keys become unfindable when a global option changes. This isn't a theoretical issue; it's a practical problem that could cause data loss or incorrect behavior in production code. The test case clearly demonstrates this failure.
+
+The proposed fix is correct and straightforward: base the hash on the immutable attributes (name, old, new) rather than the mutable _value property. This maintains the object's identity-based hashing while respecting Python's hash stability requirement. There's no defensible reason to leave this bug unfixed, as it violates core language semantics that all Python code relies upon.

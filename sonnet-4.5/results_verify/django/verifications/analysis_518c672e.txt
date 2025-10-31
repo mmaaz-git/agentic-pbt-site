@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The use_caching parameter is not documented in Django's public API documentation. It appears to be an internal implementation detail that users should not be relying upon. If a feature is undocumented, its behavior is not guaranteed and using it could be considered unsupported. The bug only occurs when using this undocumented parameter, so one could argue this is not a valid bug against the public API.
+
+**Why it might not be INVALID:**
+The parameter is exposed in the public Signal constructor without any underscore prefix or other indication that it's private. The source code documentation doesn't mark it as internal-only. Additionally, the send() method's own inline documentation explicitly states that None is a valid sender, and this crashes regardless of whether use_caching is documented or not. The parameter exists and can be used, so it should work correctly with all documented sender types.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The use_caching feature is likely an optimization for specific use cases where senders are always proper objects. The performance benefit of caching might outweigh the need to support immutable types as senders. Since the feature is undocumented, Django maintainers might consider this an internal implementation detail that doesn't need to support all sender types. The workaround is simple: don't use caching with non-weakrefable senders.
+
+**Why it might not be WONTFIX:**
+The fix is straightforward and would make the caching feature work correctly with all sender types. The bug affects commonly used sender values (None and strings) that are explicitly mentioned as valid in the documentation. Simply marking this as WONTFIX would leave a landmine in the codebase where enabling caching breaks previously working code in non-obvious ways.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The code works as designed - WeakKeyDictionary inherently cannot handle certain types. The real issue might be that the documentation should clarify that use_caching has limitations and cannot be used with certain sender types. Adding documentation about this limitation would prevent users from encountering this error. The send() documentation could be updated to note that when caching is enabled, only weakrefable objects can be used as senders.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The send() method documentation already clearly states None is valid, and changing this would be a breaking change to the documented API. The issue is not that the documentation is wrong about what should work, but that the implementation fails to handle documented valid inputs. This is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting non-weakrefable types with caching could be seen as a new feature - extending the caching mechanism to handle these special cases. The current implementation works for its intended use case (caching with object senders), and adding support for other types would be an enhancement. This would require new code to handle the special cases rather than fixing broken existing functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but rather for existing functionality to work correctly. The Signal already accepts None and any Python object as senders according to its documentation. The caching feature should work with all valid inputs that the non-cached version accepts. This is fixing a limitation in the current implementation, not adding something new.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code crashes with a TypeError when using explicitly documented valid inputs (None as sender) with an available constructor parameter (use_caching=True). The source code documentation at line 174 explicitly states "Either a specific object or None" for the sender parameter. When a function crashes with valid, documented inputs, that's a clear bug. The implementation fails to handle inputs that the API contract promises to accept.
+
+**Why it might not be BUG:**
+The use_caching parameter is completely undocumented in Django's public documentation, suggesting it may be an internal feature not intended for public use. If the feature is internal-only, then its behavior with edge cases might not be considered a bug. Additionally, the error message is clear about what went wrong (cannot create weak reference), and developers using undocumented features should expect potential issues.
+
+## Overall consideration
+
+After careful analysis, this appears to be a gray area bug report that sits between WONTFIX and DOCUMENTATION_FIX. The core issue is that an undocumented parameter (use_caching) doesn't work correctly with documented valid inputs (None as sender). While the technical issue is real and reproducible, the severity is significantly diminished by the fact that use_caching is not part of Django's documented public API.
+
+The most compelling argument against this being a BUG is that use_caching is completely absent from Django's official documentation. This strongly suggests it's an internal implementation detail that external users shouldn't be relying upon. Django developers often use parameters without underscore prefixes for internal features that might become public later, but until they're documented, they're not part of the stable API contract. Users who dig into source code and use undocumented features do so at their own risk.
+
+However, the issue cannot be completely dismissed as INVALID because the parameter is technically accessible and the failure mode is quite problematic - it crashes with commonly used sender values that are explicitly documented as valid. The proper resolution would likely be to either document the limitations of use_caching (making it a DOCUMENTATION_FIX) or to consider it a minor issue not worth fixing (WONTFIX) given its undocumented status. Since Django maintainers typically don't document internal features just to note their limitations, WONTFIX seems more appropriate than DOCUMENTATION_FIX.

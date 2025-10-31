@@ -1,0 +1,50 @@
+## Reproduction of Bug Report
+
+### Test Results Summary
+
+I successfully reproduced the reported issue. The tests confirm the inconsistent behavior described in the bug report.
+
+### Key Findings from Reproduction
+
+1. **Numeric Arrays Accept Any hash_key:**
+   - hash_key='short' (5 bytes) - SUCCESS, no error
+   - hash_key='0123456789123456' (16 bytes) - SUCCESS
+   - hash_key='this_is_a_longer_key_than_16_bytes' (34 bytes) - SUCCESS, no error
+
+   ALL hash_keys are accepted for numeric arrays without validation.
+
+2. **Object Arrays Require Exactly 16 Bytes:**
+   - hash_key='short' (5 bytes) - ERROR: "key should be a 16-byte string encoded, got b'short' (len 5)"
+   - hash_key='0123456789123456' (16 bytes) - SUCCESS
+   - hash_key='this_is_a_longer_key_than_16_bytes' (34 bytes) - ERROR: "key should be a 16-byte string encoded, got b'this_is_a_longer_key_than_16_bytes' (len 34)"
+
+3. **hash_key Is Ignored for Numeric Arrays:**
+   When testing different 16-byte keys with numeric arrays:
+   - hash_array with key1='0123456789123456' produces identical hashes to
+   - hash_array with key2='abcdefghijklmnop'
+
+   This proves that the hash_key parameter is completely ignored for numeric dtypes.
+
+4. **Property-Based Test Failure:**
+   The hypothesis test that expects different keys to produce different hashes FAILS for numeric arrays because:
+   - All tests with different keys produce identical hashes
+   - The hash_key parameter has no effect on the output for numeric arrays
+
+### Technical Analysis
+
+The code path analysis shows:
+- For numeric arrays: The hashing algorithm in `_hash_ndarray` never uses the hash_key parameter
+- For object arrays: The code calls `hash_object_array(vals, hash_key, encoding)` which validates the 16-byte requirement
+
+This creates an inconsistent API where:
+1. The same parameter has different validation rules based on input type
+2. The parameter is silently ignored in some cases (numeric) but strictly validated in others (object)
+3. There is no warning when a hash_key is provided but ignored
+
+### Conclusion
+
+The bug report is technically accurate about the inconsistent behavior. The function does:
+- Accept any hash_key for numeric arrays (and ignores it)
+- Require exactly 16-byte hash_key for object arrays
+- Not document these requirements in the public API
+- Create a confusing user experience where the same code works with some data types but fails with others

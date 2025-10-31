@@ -1,0 +1,52 @@
+# Bug Reproduction Report
+
+## Summary
+The bug report is CONFIRMED and accurately describes a critical parsing issue in `Cython.Tempita._tempita.parse_signature`.
+
+## Reproduction Results
+
+### Hypothesis Test
+The property-based test immediately found a failing case:
+- Input: `['a']` (single argument name)
+- Expected: `sig_args = ['a']`
+- Actual: `sig_args = []`
+The test failed with `AssertionError: Expected 1 args, got 0`
+
+### Manual Reproduction
+All test cases from the bug report were confirmed:
+
+1. **Single argument without default**: `parse_signature("name", "test", (1, 1))`
+   - Expected: `['name']`
+   - Actual: `[]` ✗
+
+2. **Multiple arguments without defaults**: `parse_signature("name, greeting", "test", (1, 1))`
+   - Expected: `['name', 'greeting']`
+   - Actual: `['name']` ✗ (missing last argument)
+
+3. **Template usage**: Template with `{{def greet(name)}}...{{greet('World')}}`
+   - Expected: Works correctly
+   - Actual: `TypeError: Extra position arguments: 'World'` ✗
+
+### Additional Testing
+Tested cases with default values to verify the claim that defaults work:
+- `parse_signature("name='default'")` → `['name']` ✓
+- `parse_signature("name, greeting='hello'")` → `['name', 'greeting']` ✓
+
+This confirms that arguments with defaults are parsed correctly, while those without defaults fail.
+
+### Root Cause Verification
+Examined the tokenizer output and confirmed the bug report's analysis:
+- For input `"name"`, tokenizer produces: `NAME('name'), NEWLINE(''), ENDMARKER('')`
+- The code at line 967 checks for `ENDMARKER` or comma but NOT `NEWLINE`
+- When `NEWLINE` is encountered after storing `var_name`, the condition fails
+- Loop continues and hits `ENDMARKER` at line 957, breaking without adding `var_name` to `sig_args`
+
+## Impact
+This is a SEVERE bug that makes Tempita template functions completely unusable for basic function calls with positional arguments. Any template definition with arguments that don't have defaults will fail to parse correctly, causing runtime errors when the template is used.
+
+## Conclusion
+The bug report is accurate in all aspects:
+1. The bug exists and is reproducible
+2. The root cause analysis is correct
+3. The impact is severe (basic functionality is broken)
+4. The proposed fix correctly addresses the issue by adding NEWLINE/NL token handling

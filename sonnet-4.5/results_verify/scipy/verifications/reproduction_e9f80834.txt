@@ -1,0 +1,66 @@
+REPRODUCTION OF REPORTED BUG
+=============================
+
+I successfully reproduced the reported behavior and verified all claims made in the bug report.
+
+1. BASIC REPRODUCTION
+Using the exact test case from the report (10x10 array of ones, σ₁=1.0, σ₂=0.5):
+- Applying σ₁ then σ₂: corner value = 0.4233636458
+- Applying σ₂ then σ₁: corner value = 0.4314319273
+- Difference: -0.0080682815
+- Max absolute difference: 0.0104389987
+
+This matches the reported values exactly.
+
+2. BOUNDARY MODE TESTING
+Tested all boundary modes with same parameters:
+- mode='reflect': max difference = 0.00e+00 (perfect commutativity)
+- mode='constant': max difference = 1.04e-02 (fails commutativity)
+- mode='nearest': max difference = 0.00e+00 (perfect commutativity)
+- mode='mirror': max difference = 0.00e+00 (perfect commutativity)
+- mode='wrap': max difference = 0.00e+00 (perfect commutativity)
+
+CONFIRMED: Only 'constant' mode shows non-commutative behavior.
+
+3. SAME SIGMA TEST
+When σ₁ = σ₂ = 1.0 with mode='constant':
+- Max difference = 0.00e+00
+
+CONFIRMED: Commutativity holds when sigmas are equal, even with 'constant' mode.
+
+4. CENTER VS BOUNDARY TEST
+On a 50x50 array with mode='constant':
+- Center 10x10 region: max difference = 0.00e+00
+- Top 5 rows (boundary): max difference = 1.04e-02
+
+CONFIRMED: The issue only affects boundaries, not the interior.
+
+5. HYPOTHESIS TEST RESULTS
+Ran 50 random test cases:
+- 24 failures detected (48% failure rate)
+- Failures occur with various sigma combinations
+- Sample failures show differences ranging from 2.17e-02 to 1.11e-01
+
+6. MATHEMATICAL ANALYSIS
+a) Manual 1D convolution with proper padding shows perfect commutativity (difference ~1e-16)
+b) Different truncation values (2.0 to 6.0) all show same non-commutativity
+c) Different cval values affect the magnitude but issue persists:
+   - cval=0.0: max diff = 1.04e-02
+   - cval=0.5: max diff = 5.22e-03
+   - cval=1.0: max diff = 0.00e+00 (special case where boundary matches interior)
+
+7. ROOT CAUSE IDENTIFICATION
+The issue stems from different kernel sizes:
+- σ=1.0 produces kernel radius=4 (size 9x9)
+- σ=0.5 produces kernel radius=2 (size 5x5)
+- Different kernel sizes interact differently with 'constant' boundary padding
+- The asymmetry occurs because larger kernels "see" more padding when applied first
+
+8. SEPARABLE FILTER VERIFICATION
+Using gaussian_filter1d to apply filters separately along axes reproduces the same issue:
+- Corner difference: -0.0080682811
+- Max difference: 0.0104388230
+
+This confirms the issue is inherent to the separable implementation with 'constant' boundaries.
+
+SUMMARY: All technical claims in the bug report are accurate and reproducible.

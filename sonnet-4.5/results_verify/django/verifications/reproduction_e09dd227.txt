@@ -1,0 +1,25 @@
+Bug Reproduction Analysis
+=========================
+
+I successfully reproduced the reported bug. The issue is confirmed as follows:
+
+1. **Hypothesis Test Execution**: The provided hypothesis test failed with the exact input mentioned in the bug report (policy_value=[]). The test correctly identified that an empty list does not trigger a warning when it should.
+
+2. **Simple Reproduction**: The direct test case confirmed the inconsistent behavior:
+   - When SECURE_REFERRER_POLICY = None: Returns 1 warning (W022) - correct behavior
+   - When SECURE_REFERRER_POLICY = []: Returns 0 warnings - incorrect behavior
+
+3. **Root Cause Confirmed**:
+   - The check_referrer_policy function in django/core/checks/security/base.py (lines 260-271) only checks if the setting is None before issuing warning W022
+   - When the setting is an empty list [], it gets converted to an empty set() at line 268
+   - The empty set passes the subset check at line 269 (empty set is a subset of any set)
+   - No warning is generated despite no referrer policy being configured
+
+4. **Actual Effect in SecurityMiddleware**:
+   - Examined SecurityMiddleware implementation (django/middleware/security.py, line 49)
+   - The middleware only sets the Referrer-Policy header when self.referrer_policy is truthy
+   - An empty list is falsy in Python, so no header is set
+   - This means both None and [] result in no Referrer-Policy header being sent
+   - However, only None triggers the security warning
+
+The bug is real and affects security checking consistency. Users who accidentally set SECURE_REFERRER_POLICY=[] will not receive the expected security warning despite having no referrer policy protection.

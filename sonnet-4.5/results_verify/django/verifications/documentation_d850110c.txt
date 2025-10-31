@@ -1,0 +1,36 @@
+DOCUMENTATION ANALYSIS
+======================
+
+Function: django.db.backends.utils.split_tzname_delta
+
+1. Function Documentation:
+The function has minimal documentation - just a single line docstring:
+"Split a time zone name into a 3-tuple of (name, sign, offset)."
+
+This documentation does NOT specify:
+- What format the input timezone string should be
+- What formats are accepted for the offset portion
+- What format the returned offset will be in
+- How HHMM format offsets should be handled
+
+2. External Documentation:
+- Django's public documentation does not describe this function (it's an internal utility)
+- Django's database functions documentation doesn't specify timezone offset formats
+- PostgreSQL documentation confirms that AT TIME ZONE expects formats like '+HH:MM' or '-HH:MM', not 'HHMM:00'
+
+3. Function Behavior Analysis:
+The function uses django.utils.dateparse.parse_time() which can successfully parse:
+- '0530' as time(5, 30, 0)
+- '05:30' as time(5, 30, 0)
+- '05' as time(5, 0, 0)
+
+The logic at line 203-204 checks if ':' exists in the offset and blindly appends ':00' if not present. This assumes all inputs without colons are in HH format, but parse_time() also accepts HHMM format.
+
+4. Usage Context:
+The function is used by database backends (PostgreSQL, MySQL, Oracle, SQLite) to process timezone names for database operations. The PostgreSQL backend uses the result in AT TIME ZONE clauses, where the format must be valid PostgreSQL timezone offset syntax.
+
+5. Documentation Verdict:
+The documentation is insufficient and does not specify the expected behavior. However, the function is clearly producing invalid output for a common and reasonable input format (HHMM). The bug is not due to misunderstanding documentation - the function simply has incorrect logic that produces malformed timezone offsets.
+
+6. Reasonable Expectation:
+Given that parse_time() accepts HHMM format and successfully parses it, it's reasonable to expect split_tzname_delta() to handle this format correctly and produce valid timezone offset strings for database operations.

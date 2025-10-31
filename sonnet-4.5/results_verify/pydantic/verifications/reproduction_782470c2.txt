@@ -1,0 +1,32 @@
+REPRODUCTION OF BUG REPORT
+========================
+
+I have successfully reproduced the bug reported in pydantic.plugin._loader.get_plugins().
+
+1. CODE EXAMINATION:
+I examined the actual pydantic code at line 45 of _loader.py:
+```python
+if disabled_plugins is not None and entry_point.name in disabled_plugins.split(','):
+```
+
+This code splits the PYDANTIC_DISABLE_PLUGINS environment variable by commas but does NOT strip whitespace from the resulting strings.
+
+2. BUG REPRODUCTION:
+The bug was successfully reproduced using the example provided:
+- Input: PYDANTIC_DISABLE_PLUGINS='myplugin, yourplugin, theirplugin'
+- After split(','): ['myplugin', ' yourplugin', ' theirplugin']
+- Result: Only 'myplugin' would be disabled, NOT 'yourplugin' or 'theirplugin'
+
+3. EFFECT OF THE BUG:
+When users naturally write comma-separated lists with spaces after commas (which is standard formatting), the plugin disabling mechanism fails for all plugins except the first one. This is because:
+- Entry point names are 'yourplugin' (no space)
+- Split result contains ' yourplugin' (with leading space)
+- String comparison fails: 'yourplugin' != ' yourplugin'
+
+4. VERIFICATION:
+The hypothesis test provided in the bug report demonstrates this issue across various input combinations. The core issue is consistently reproduced: whitespace after commas prevents proper plugin name matching.
+
+5. PROPOSED FIX VALIDITY:
+The proposed fix to use `name.strip() for name in disabled_plugins.split(',')` would resolve this issue by removing leading/trailing whitespace from each plugin name after splitting.
+
+CONCLUSION: The bug is real, reproducible, and affects the intended functionality of the PYDANTIC_DISABLE_PLUGINS feature.

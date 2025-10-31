@@ -1,0 +1,35 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug as described in the report. The bytes encoder in `pydantic.deprecated.json.ENCODERS_BY_TYPE[bytes]` indeed crashes with a `UnicodeDecodeError` when attempting to encode bytes that contain non-UTF-8 data.
+
+## Reproduction Steps
+
+1. **Hypothesis Test**: Ran the property-based test provided in the bug report. The test failed on the first non-UTF-8 byte value `b'\x80'`, exactly as stated in the report.
+
+2. **Direct Reproduction**: Tested the specific failing case `b'\x80'`:
+   - Input: `b'\x80'` (a single byte with value 128, which is not valid UTF-8)
+   - Output: `UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte`
+   - This matches exactly what the bug report claims
+
+3. **Valid UTF-8 Test**: Confirmed that the encoder works correctly with valid UTF-8 bytes:
+   - Input: `b'Hello, World!'`
+   - Output: `'Hello, World!'` (successful string conversion)
+
+## Technical Analysis
+
+The issue is in line 55 of `/home/npc/miniconda/lib/python3.13/site-packages/pydantic/deprecated/json.py`:
+```python
+bytes: lambda o: o.decode(),
+```
+
+The `decode()` method without arguments defaults to UTF-8 decoding, which fails on any byte sequence that is not valid UTF-8. Since bytes can contain arbitrary binary data (values 0x00-0xFF), many valid byte sequences will cause this encoder to crash.
+
+## Impact
+
+This bug affects any use case where:
+- Binary data needs to be JSON-encoded (images, encrypted data, compressed data)
+- Raw protocol data or file data is processed
+- Any bytes with values >= 0x80 that don't form valid UTF-8 sequences
+
+The bug is real, reproducible, and matches the report's description exactly.

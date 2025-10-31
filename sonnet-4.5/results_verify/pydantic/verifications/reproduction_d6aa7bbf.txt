@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+I have successfully reproduced the behavior described in the bug report. Here are the findings:
+
+### Test Results
+
+**Failed Round-Trip Cases (without underscores before numbers):**
+- `aa1` → `Aa1` → `aa_1` (Expected: `aa1`, Got: `aa_1`) ❌
+- `field1` → `Field1` → `field_1` (Expected: `field1`, Got: `field_1`) ❌
+- `test2` → `Test2` → `test_2` (Expected: `test2`, Got: `test_2`) ❌
+- `var3x` → `Var3X` → `var_3_x` (Expected: `var3x`, Got: `var_3_x`) ❌
+- `hash256` → `Hash256` → `hash_256` (Expected: `hash256`, Got: `hash_256`) ❌
+
+**Successful Round-Trip Cases (without numbers):**
+- `hello` → `Hello` → `hello` ✓
+- `hello_world` → `HelloWorld` → `hello_world` ✓
+- `my_variable_name` → `MyVariableName` → `my_variable_name` ✓
+- `snake_case_example` → `SnakeCaseExample` → `snake_case_example` ✓
+
+**Successful Round-Trip Cases (with underscores already before numbers):**
+- `field_1` → `Field1` → `field_1` ✓
+- `test_2` → `Test2` → `test_2` ✓
+- `var_3_x` → `Var3X` → `var_3_x` ✓
+- `hash_256` → `Hash256` → `hash_256` ✓
+
+### Technical Analysis
+
+The behavior is exactly as described in the bug report:
+
+1. The `to_snake()` function at line 59 contains:
+   ```python
+   snake = re.sub(r'([a-z])([0-9])', lambda m: f'{m.group(1)}_{m.group(2)}', snake)
+   ```
+
+2. This regex pattern inserts an underscore between any lowercase letter followed by a digit.
+
+3. When converting `field1` to PascalCase, it becomes `Field1`. When converting back, the function sees the lowercase 'd' followed by '1' and inserts an underscore, resulting in `field_1`.
+
+4. Interestingly, if the original already had an underscore (like `field_1`), it round-trips correctly because `to_pascal()` removes the underscore when creating `Field1`, and `to_snake()` re-inserts it.
+
+### Key Finding
+
+The bug report is technically accurate about the behavior. The function DOES insert underscores before digits when converting from PascalCase/camelCase, regardless of whether the original snake_case had underscores before numbers. This creates an asymmetry where:
+- `field1` → `Field1` → `field_1`
+- `field_1` → `Field1` → `field_1`
+
+Both inputs map to the same output, making the transformation lossy for strings with adjacent letters and numbers.

@@ -1,0 +1,31 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug reported for scipy.io.hb_write when handling empty sparse matrices.
+
+### Property-Based Test
+The hypothesis test case fails exactly as described:
+- Input: rows=1, cols=1, sparsity=0.5 (generates a 1x1 matrix of all zeros)
+- Result: ValueError: zero-size array to reduction operation maximum which has no identity
+- Error location: scipy/io/_harwell_boeing/hb.py line 79
+
+### Simple Reproduction
+The simple test case with a 10x10 zero matrix also fails with the same error:
+```python
+A = csc_array(np.zeros((10, 10)))
+scipy.io.hb_write(fname, A)
+```
+Result: Same ValueError at the same location in the code.
+
+### Root Cause Analysis
+The bug occurs because:
+1. When a sparse matrix has no non-zero elements, the `indices` array is empty
+2. The code tries to compute `np.max(indices+1)` on line 79
+3. NumPy's max() function cannot operate on an empty array without an identity element
+4. This causes a ValueError crash
+
+### Verification of Claims
+1. **Empty sparse matrices are valid**: Confirmed - a sparse matrix with nnz=0 is a valid mathematical and computational construct
+2. **mmwrite handles empty matrices correctly**: Verified - scipy.io.mmwrite successfully writes and reads back empty sparse matrices
+3. **The crash is unexpected**: Confirmed - the function crashes with a low-level NumPy error rather than handling the edge case gracefully
+
+The bug is real, reproducible, and occurs exactly as described in the report.

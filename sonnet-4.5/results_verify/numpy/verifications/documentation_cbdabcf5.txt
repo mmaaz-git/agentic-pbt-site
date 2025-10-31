@@ -1,0 +1,55 @@
+# Documentation Analysis for numpy.linalg.matrix_rank
+
+## Official Documentation Review
+
+### Function Purpose
+The documentation clearly states that matrix_rank "Return matrix rank of array using SVD method" and that "Rank of the array is the number of singular values of the array that are greater than tol."
+
+### Default Tolerance Specification
+The documentation explicitly defines the default tolerance:
+- "If tol is None, and S is an array with singular values for M, and eps is the epsilon value for datatype of S, then tol is set to S.max() * max(M, N) * eps"
+- This is stated to be "the algorithm MATLAB uses"
+
+### Numerical Considerations
+The documentation acknowledges numerical issues:
+1. "The default threshold is designed to detect rank deficiency accounting for the numerical errors of the SVD computation"
+2. "Computing the SVD on A will not produce a singular value exactly equal to 0 in general: any difference of the smallest SVD value from 0 will be caused by numerical imprecision"
+3. The threshold "takes this numerical imprecision into account"
+
+### Source Code Analysis
+From the actual implementation:
+```python
+if tol is None:
+    if rtol is None:
+        rtol = max(A.shape[-2:]) * finfo(S.dtype).eps
+    else:
+        rtol = asarray(rtol)[..., newaxis]
+    tol = S.max(axis=-1, keepdims=True) * rtol
+```
+
+The code directly implements the documented formula without any safeguards against underflow.
+
+## Key Findings
+
+### 1. No Documentation of Underflow Behavior
+- The documentation does not mention what happens when the tolerance calculation underflows to 0.0
+- There is no warning about behavior with subnormal/denormal values
+- No mention of edge cases where S.max() is extremely small
+
+### 2. Mathematical Properties Not Guaranteed
+- While the documentation explains the SVD-based approach, it doesn't explicitly guarantee fundamental linear algebra properties
+- The rank product theorem (rank(AB) ≤ min(rank(A), rank(B))) is not mentioned as a requirement
+- The documentation focuses on numerical roundoff from SVD computation, not on underflow in tolerance calculation
+
+### 3. Alternative Thresholds Mentioned
+The documentation mentions an alternative from Numerical Recipes:
+- "S.max() * np.finfo(A.dtype).eps / 2. * np.sqrt(m + n + 1.)"
+- This suggests awareness that different thresholds may be appropriate
+
+### 4. User Guidance on Custom Tolerances
+The documentation advises:
+- "you may have more information about the sources of error in A that would make you consider other tolerance values"
+- "The most useful measure of the tolerance depends on the operations you intend to use on your matrix"
+
+## Conclusion
+The documentation accurately describes the current implementation but does not specify behavior for edge cases involving subnormal values and tolerance underflow. The violation of fundamental linear algebra properties (rank product theorem) when tolerance underflows is not addressed or warned against in the documentation.

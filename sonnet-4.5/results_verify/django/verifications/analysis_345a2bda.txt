@@ -1,0 +1,63 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG:
+**Arguments FOR classifying as BUG:**
+1. **Violates DNS Standards**: RFC 1035 explicitly mandates case-insensitive domain comparison. This is not optional.
+2. **Security Impact**: The function is used in Django's security infrastructure (CSRF/CORS protection, ALLOWED_HOSTS). Incorrect matching could lead to security vulnerabilities.
+3. **Partial Implementation Bug**: The code already lowercases the pattern (line 235), showing clear intent for case-insensitive matching. Forgetting to lowercase the host is an obvious oversight.
+4. **Asymmetric Behavior**: is_same_domain('a', 'A') returns True but is_same_domain('A', 'a') returns False. This asymmetry is clearly unintentional.
+5. **Real-world Impact**: HTTP Host headers can arrive in any case. Browsers and proxies may modify case. This bug would cause legitimate requests to fail.
+6. **Simple Fix**: The fix is trivial (add host = host.lower()) and has no negative side effects.
+
+**Arguments AGAINST:**
+- None. This is clearly a bug.
+
+### Consideration for INVALID:
+**Arguments FOR:**
+- Documentation doesn't explicitly state case-insensitive matching required
+
+**Arguments AGAINST:**
+1. DNS standards (RFC 1035) are explicit about case-insensitive comparison
+2. The function already partially implements case-insensitive matching (lowercases pattern)
+3. No reasonable developer would expect domain matching to be case-sensitive
+4. The asymmetric behavior is clearly wrong
+
+### Consideration for WONTFIX:
+**Arguments FOR:**
+- Could argue users should normalize input themselves
+
+**Arguments AGAINST:**
+1. This is a security-critical function - it MUST work correctly
+2. The bug causes actual failures in production systems
+3. The fix is trivial with no downsides
+4. The function already attempts case-insensitive matching (just incompletely)
+
+### Consideration for FEATURE_REQUEST:
+**Arguments FOR:**
+- Could argue case-insensitive matching is a new feature
+
+**Arguments AGAINST:**
+1. The function already partially implements this (lowercases pattern)
+2. DNS standards require case-insensitive comparison - it's not optional
+3. This is fixing broken behavior, not adding new functionality
+4. The current behavior is asymmetric and clearly buggy
+
+### Consideration for DOCUMENTATION_FIX:
+**Arguments FOR:**
+- Documentation could be clearer about case sensitivity
+
+**Arguments AGAINST:**
+1. The code behavior is wrong, not just the documentation
+2. Even if docs were updated to say "case-sensitive", that would violate DNS standards
+3. The partial implementation shows the intent was case-insensitive
+4. This needs a code fix, not just documentation
+
+### Final Assessment:
+This is unequivocally a **BUG**. The function:
+1. Violates DNS RFC 1035 standards
+2. Has asymmetric behavior that makes no sense
+3. Already partially implements case-insensitive matching (showing clear intent)
+4. Is used in security-critical contexts where correctness matters
+5. Has a trivial fix with no downsides
+
+The fact that the function already lowercases the pattern but not the host is the smoking gun - this is clearly an implementation oversight, not intentional behavior.

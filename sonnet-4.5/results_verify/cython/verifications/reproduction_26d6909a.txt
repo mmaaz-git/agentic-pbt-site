@@ -1,0 +1,37 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The function `build_hex_version` crashes with a `ValueError` when given version strings that end with release tags ('a', 'b', or 'rc') without a following number.
+
+### Test Results:
+
+1. **Hypothesis Test**: The property-based test revealed two issues:
+   - The function crashes on inputs like '0.0a', '0.0b', '0.0rc' with ValueError: "invalid literal for int() with base 10: ''"
+   - The function also produces output longer than expected for large version numbers (e.g., '300.0' produces '0x012C0000F0' which is 10 hex digits instead of 8)
+
+2. **Direct Reproduction**: I tested the specific cases mentioned:
+   - '0.0rc' → ValueError: invalid literal for int() with base 10: ''
+   - '0.0a' → ValueError: invalid literal for int() with base 10: ''
+   - '0.0b' → ValueError: invalid literal for int() with base 10: ''
+   - '1.0rc' → ValueError: invalid literal for int() with base 10: ''
+   - '2.3.4a' → ValueError: invalid literal for int() with base 10: ''
+   - '2.3.4rc' → ValueError: invalid literal for int() with base 10: ''
+
+### Root Cause:
+
+The bug occurs because of how the function parses the version string on line 604:
+```python
+for segment in re.split(r'(\D+)', version_string):
+```
+
+When splitting '0.0rc' with the pattern `(\D+)`, it produces:
+['0', '.', '0', 'rc', '']
+
+The final empty string '' is produced because there are no digits after 'rc'. When the code reaches line 610-611:
+```python
+elif segment != '.':
+    digits.append(int(segment))
+```
+
+It tries to convert the empty string to an integer, causing the ValueError.
+
+The bug report's analysis is correct: the parsing logic produces empty strings when release tags appear at the end without numbers, and line 611 crashes when trying to convert the empty string to an integer.

@@ -1,0 +1,67 @@
+## Documentation Analysis
+
+### Official Documentation Review
+
+1. **PyPerclip Documentation (pyperclip.readthedocs.io):**
+   - Mentions that waitForPaste() and waitForNewPaste() accept a timeout parameter
+   - States that PyperclipTimeoutException is raised if timeout elapses
+   - Only provides example with positive timeout (5 seconds)
+   - **Does NOT specify behavior for timeout=0 or negative values**
+   - **Does NOT specify timing precision or minimum wait times**
+
+2. **Function Docstrings (from source code):**
+   ```
+   waitForPaste: "This function raises PyperclipTimeoutException if timeout was set to
+   a number of seconds that has elapsed without non-empty text being put on
+   the clipboard."
+
+   waitForNewPaste: "This function raises PyperclipTimeoutException if timeout was set to
+   a number of seconds that has elapsed without non-empty text being put on
+   the clipboard."
+   ```
+   - Uses phrase "a number of seconds that has elapsed"
+   - **Does NOT specify behavior for timeout=0 or negative values**
+   - **Does NOT specify timing precision or polling interval**
+   - **Does NOT mention the 0.01s sleep between checks**
+
+### Key Documentation Gaps
+
+1. **Unspecified behavior for edge cases:**
+   - What should happen with timeout=0?
+   - What should happen with negative timeouts?
+   - What is the expected timing precision?
+
+2. **Hidden implementation details:**
+   - The 10ms (0.01s) polling interval is not documented
+   - The fact that timeout check happens AFTER the first sleep is not documented
+   - Minimum effective timeout of ~0.01s is not documented
+
+### Reasonable User Expectations
+
+Based on common programming patterns and similar timeout implementations:
+
+1. **timeout=0** typically means:
+   - Check once and return immediately if condition not met
+   - Or timeout immediately without any wait
+   - Common in polling/async functions (e.g., select() with timeout=0)
+
+2. **Negative timeouts** typically:
+   - Are either invalid (should raise error)
+   - Or treated as 0 (immediate timeout)
+   - Or mean "wait forever" (though None is used for that here)
+
+3. **Timing precision:**
+   - Users expect timeouts to be respected within reasonable precision
+   - A function that can't timeout faster than 10ms should document this limitation
+   - Users setting timeout=0.001 (1ms) reasonably expect ~1ms timeout, not 10ms
+
+### Conclusion
+
+The documentation does not explicitly define the expected behavior for timeout≤0 or specify timing precision. However, the current implementation violates reasonable user expectations by:
+1. Always waiting at least 10ms regardless of timeout value
+2. Not documenting this minimum wait time
+3. Accepting but ignoring the precision of small timeout values
+
+This could be considered either:
+- A BUG: The implementation doesn't match reasonable expectations
+- A DOCUMENTATION_FIX: The limitations should be documented

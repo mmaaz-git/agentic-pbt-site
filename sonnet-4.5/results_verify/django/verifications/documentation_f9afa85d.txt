@@ -1,0 +1,29 @@
+## Documentation Analysis
+
+### Official Django Documentation
+
+1. **From Django's cache documentation**:
+   - The function `make_template_fragment_key` is briefly mentioned with a simple usage example
+   - Takes `fragment_name` and `vary_on` parameters where `vary_on` is a list of variables
+   - No explicit documentation about collision prevention or uniqueness guarantees
+   - No specification about how the key generation algorithm works internally
+
+2. **From the cache template tag source code** (django/templatetags/cache.py):
+   - Line 82 states: "Each unique set of arguments will result in a unique cache entry"
+   - This is a critical statement that implies the function SHOULD guarantee unique keys for different argument sets
+   - The template tag uses `make_template_fragment_key` at line 50 to generate cache keys
+   - The `vary_on` list is resolved from template variables and passed directly to the function
+
+### Key Findings
+
+1. **Implicit uniqueness guarantee**: The documentation comment "Each unique set of arguments will result in a unique cache entry" strongly implies that different `vary_on` lists should produce different cache keys. This is a functional requirement, not just a nice-to-have.
+
+2. **No algorithm specification**: The documentation does not specify HOW the uniqueness is achieved, leaving the implementation details open. However, the expectation of uniqueness is clear.
+
+3. **Real-world usage context**: The function is used in Django's template caching system where collisions would cause incorrect content to be served to users. For example, if caching user-specific content, a collision between ['user1', 'data'] and ['user1:data'] would serve the wrong cached content.
+
+4. **No warnings about limitations**: The documentation does not warn about any limitations or special characters that should be avoided in the `vary_on` arguments, implying that any valid Python objects (that can be converted to strings) should work correctly.
+
+### Conclusion
+
+The documentation establishes that "Each unique set of arguments will result in a unique cache entry", which means the current implementation violates this documented guarantee when different `vary_on` lists produce the same cache key due to the separator collision issue.

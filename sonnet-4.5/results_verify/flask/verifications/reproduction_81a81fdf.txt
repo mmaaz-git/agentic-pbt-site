@@ -1,0 +1,51 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in Flask's Config.from_prefixed_env method.
+
+## Bug Confirmation
+
+The bug occurs exactly as described in the report:
+
+1. When setting environment variables:
+   - `FLASK_DB = json.dumps("sqlite")`
+   - `FLASK_DB__NAME = json.dumps("mydb")`
+
+2. Calling `config.from_prefixed_env(prefix="FLASK")` results in:
+   ```
+   TypeError: 'str' object does not support item assignment
+   ```
+
+## Root Cause
+
+The issue is in lines 176-183 of flask/config.py. When processing environment variables in sorted order:
+
+1. `FLASK_DB` is processed first (alphabetically before `FLASK_DB__NAME`)
+2. It sets `config['DB'] = "sqlite"` (a string value)
+3. Then `FLASK_DB__NAME` is processed
+4. The code tries to traverse `DB` as a dictionary with `current = current[part]` (line 181)
+5. Since `current['DB']` is a string, not a dict, line 183 crashes when trying `current[tail] = value`
+
+## Code Analysis
+
+The problematic code section:
+```python
+for part in parts:
+    # If an intermediate dict does not exist, create it.
+    if part not in current:
+        current[part] = {}
+
+    current = current[part]  # Assumes current[part] is a dict
+
+current[tail] = value  # Crashes if current is not a dict
+```
+
+The code checks if a key doesn't exist and creates a dict, but it doesn't handle the case where the key exists but contains a non-dict value.
+
+## Impact
+
+This bug makes it impossible to use both simple and nested configuration keys that share a prefix when using from_prefixed_env. This is a legitimate use case that violates user expectations based on the documentation.
+
+The bug is reproducible and affects real-world usage patterns where users might have both:
+- A simple database connection string: `FLASK_DB="sqlite://..."`
+- And nested database configuration: `FLASK_DB__NAME="mydb"`, `FLASK_DB__HOST="localhost"`

@@ -1,0 +1,49 @@
+Reproduction Analysis for pandas.core.computation.parsing.clean_column_name Bug
+================================================================================
+
+Bug Reproduction Status: CONFIRMED
+
+Test Environment:
+- Python 3.13
+- pandas installed via miniconda
+
+Reproduction Steps:
+1. Executed the minimal reproduction code from the bug report
+2. Confirmed the exact error described in the report
+
+Test Code Used:
+```python
+from pandas.core.computation.parsing import clean_column_name
+name_with_null = '\x00'
+result = clean_column_name(name_with_null)
+```
+
+Observed Behavior:
+- The function raises a TokenError with message: "source code cannot contain null bytes"
+- The exact error type is: tokenize.TokenError
+- The error occurs at line 189 in tokenize_string when tokenize.generate_tokens encounters the null byte
+
+Property-Based Test Result:
+- The Hypothesis test fails when given '\x00' as input
+- The test expects the function to be idempotent (applying it twice gives same result)
+- The test fails because the function crashes instead of returning the input unchanged
+
+Source Code Analysis:
+The clean_column_name function (lines 128-133):
+- Wraps the name in backticks: f"`{name}`"
+- Passes it to tokenize_string
+- Catches only SyntaxError exceptions
+- Returns the name unmodified when SyntaxError is caught
+- Does NOT catch TokenError, which is raised for null bytes
+
+The error propagation path:
+1. clean_column_name calls tokenize_string with "`\x00`"
+2. tokenize_string creates a tokenizer via tokenize.generate_tokens
+3. The tokenizer raises TokenError when it encounters the null byte
+4. This TokenError is not caught by the except SyntaxError clause
+5. The error propagates to the caller
+
+Conclusion:
+The bug report is accurate. The function crashes with TokenError on null byte input,
+which contradicts its documented behavior of returning the name unmodified when
+tokenization fails.

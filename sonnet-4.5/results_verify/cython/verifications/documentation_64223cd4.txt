@@ -1,0 +1,58 @@
+DOCUMENTATION ANALYSIS
+======================
+
+After thorough research of available documentation, I found the following:
+
+1. NO EXPLICIT DOCUMENTATION FOR get_extension_attr
+--------------------------------------------------
+- The `get_extension_attr` method itself has no documentation, comments, or docstrings
+- There's no official documentation explaining how this method should behave
+- The implementation is a single line with no explanatory comments
+
+2. IMPLICIT BEHAVIOR FROM CODE STRUCTURE
+----------------------------------------
+From the code context (lines 86-129 in build_ext.py), the method is used to retrieve options that can come from either:
+- Command-line options (stored as attributes on the build_ext instance)
+- Extension-specific options (stored as attributes on Extension objects)
+
+The usage pattern shows it's called like:
+- `self.get_extension_attr(ext, 'cython_cplus')`
+- `self.get_extension_attr(ext, 'cython_compile_time_env', default=None)`
+
+3. ESTABLISHED PRECEDENCE PRINCIPLES IN PYTHON BUILD SYSTEMS
+------------------------------------------------------------
+From distutils/setuptools documentation:
+- Command-line options traditionally override configuration file settings
+- Later options override earlier options (e.g., in gcc compiler flags)
+- The general principle is that more specific/local settings override more general ones
+
+From Cython documentation on directives:
+- Local directives take precedence over file-level directives
+- Command-line `-X` options override header comments
+- More specific settings override less specific ones
+
+4. EXPECTED BEHAVIOR BASED ON STANDARD PRACTICES
+------------------------------------------------
+Based on established patterns in Python build tools:
+- Command-line options (self attributes) SHOULD take precedence over extension attributes
+- This is consistent with how other build systems work (Make, CMake, etc.)
+- Users expect command-line flags to override defaults/configuration
+
+5. THE CURRENT IMPLEMENTATION'S PROBLEM
+----------------------------------------
+The use of `or` operator is problematic because:
+- It conflates "not set" with "set to a falsy value"
+- This violates the expected precedence order
+- A user explicitly setting `cython_cplus=0` expects it to override an extension's `cython_cplus=1`
+
+6. DOCUMENTATION VERDICT
+------------------------
+While there's no explicit documentation stating how `get_extension_attr` should handle falsy values, the behavior violates:
+1. Common conventions in build systems where command-line overrides configuration
+2. The principle of least surprise - users expect explicit settings to be honored
+3. The pattern established elsewhere in Python build tools
+
+The lack of explicit documentation about this specific behavior does NOT invalidate the bug because:
+- The current behavior is counterintuitive and breaks expected precedence rules
+- Users have reasonable expectations based on how other similar tools work
+- The inability to set falsy values via command-line is a functional limitation

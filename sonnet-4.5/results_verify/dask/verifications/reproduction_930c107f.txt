@@ -1,0 +1,37 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug reported in dask.utils.format_bytes.
+
+### Test Results
+
+1. **Direct reproduction**: The value `1125899906842624000` produces the output `'1000.00 PiB'` which has 11 characters, not 10.
+
+2. **Boundary testing**: I found that the bug occurs exactly when the input reaches 1000 * 2**50:
+   - `999.99 * 2**50` produces `'999.99 PiB'` (10 characters) ✓
+   - `1000.00 * 2**50` produces `'1000.00 PiB'` (11 characters) ✗
+
+3. **Property-based testing**: The Hypothesis test fails with the provided examples, confirming the violation of the documented invariant.
+
+### Technical Analysis
+
+The bug occurs because:
+1. The function uses `.2f` format specifier which always shows 2 decimal places
+2. When the value divided by 2**50 reaches 1000 or higher, we get a 4-digit number before the decimal point
+3. The format "1000.00 PiB" has 11 characters: 4 digits + 1 decimal point + 2 decimal places + 1 space + 3 characters for "PiB"
+
+### Verification of Precondition
+
+The failing values ARE indeed less than 2**60:
+- `1000 * 2**50 = 1125899906842624000`
+- `2**60 = 1152921504606846976`
+- The failing value is only 97.66% of 2**60
+
+Therefore, the documented invariant "For all values < 2**60, the output is always <= 10 characters" is violated.
+
+### Bug Report Accuracy
+
+The bug report is technically correct:
+- The code does violate the documented guarantee
+- The test case correctly demonstrates the issue
+- The mathematical analysis in the report is accurate
+- The proposed fix would address the problem by reducing decimal places for large values

@@ -1,0 +1,37 @@
+## Reproduction Results for scipy.io.arff._arffread.NumericAttribute._basic_stats
+
+### Bug Report Accuracy
+The bug report contains a CRITICAL ERROR in its description. It claims the method returns NaN for single-element arrays, but in reality it raises a ZeroDivisionError. This is a fundamental misrepresentation of the actual behavior.
+
+### Actual Behavior (scipy 1.16.2)
+When calling `_basic_stats` with a single-element array:
+```python
+attr = NumericAttribute('test')
+data = np.array([5.0])
+min_val, max_val, mean_val, std_val = attr._basic_stats(data)
+```
+
+**Result**: ZeroDivisionError: float division by zero
+**Line 227**: `nbfac = data.size * 1. / (data.size - 1)` causes division by zero when data.size=1
+
+### Hypothesis Test Results
+The provided hypothesis test fails immediately with ZeroDivisionError for any single-element list, not NaN as claimed.
+
+### Mathematical Analysis
+The method attempts to compute sample standard deviation using Bessel's correction:
+1. For n>1: Works correctly, computing `np.std(data) * n/(n-1)` which equals `np.std(data, ddof=1)`
+2. For n=1: Attempts `1/(1-1) = 1/0` causing ZeroDivisionError
+
+### Comparison with NumPy
+- `np.std([5.0], ddof=0)` returns 0.0 (population std)
+- `np.std([5.0], ddof=1)` returns NaN with a RuntimeWarning about degrees of freedom <= 0
+- scipy's _basic_stats raises ZeroDivisionError instead
+
+### Multi-element Arrays
+The method works correctly for arrays with 2+ elements:
+- Correctly applies Bessel's correction factor
+- Results match manual calculation of `np.std(data) * n/(n-1)`
+- Does NOT match `np.std(data, ddof=1)` exactly due to different calculation approach
+
+### Key Finding
+The bug report is INCORRECT about the symptom (claims NaN, actually ZeroDivisionError) but correct about the root cause (division by zero in the correction factor calculation). The proposed fixes would prevent the error, but the question is whether this internal method should handle this edge case at all.

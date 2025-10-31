@@ -1,0 +1,31 @@
+Bug Reproduction Analysis
+==========================
+
+I have successfully reproduced the bug described in the report. The truncate_string function in llm.utils indeed violates its documented contract when max_length < 3.
+
+Reproduction Results:
+--------------------
+
+1. Hypothesis Testing:
+   The property-based test from the bug report fails immediately. Hypothesis finds a counterexample with text='00' and max_length=1, which returns '...' (length 3) instead of respecting the max_length of 1.
+
+2. Specific Test Cases:
+   - truncate_string("hello world", 1) returns 'hello wor...' with length 12 (expected max: 1)
+   - truncate_string("test", 1) returns 'te...' with length 5 (expected max: 1)
+   - truncate_string("test", 2) returns 'tes...' with length 6 (expected max: 2)
+   - truncate_string("example", 1) returns 'examp...' with length 8 (expected max: 1)
+   - truncate_string("example", 2) returns 'exampl...' with length 9 (expected max: 2)
+
+3. Root Cause:
+   The bug is in line 476 of utils.py:
+   ```python
+   return text[: max_length - 3] + "..."
+   ```
+
+   When max_length < 3:
+   - max_length=1 gives text[:-2] which takes all but the last 2 characters
+   - max_length=2 gives text[:-1] which takes all but the last character
+
+   These negative indices cause most of the original string to be included, then "..." is appended, resulting in strings much longer than max_length.
+
+The bug report is accurate in its description and the provided fix would resolve the issue by handling max_length < 3 as a special case.

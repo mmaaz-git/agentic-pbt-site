@@ -1,0 +1,31 @@
+## Bug Reproduction Results
+
+### Technical Verification
+I successfully reproduced the bug as described in the report. The findings are:
+
+1. **File descriptor for non-socket (e.g., file)**: When passing a valid file descriptor that points to a non-socket (like a regular file), the function raises `ValueError` with message "the file descriptor does not refer to a socket". This happens because `errno.ENOTSOCK` is explicitly caught and converted to ValueError.
+
+2. **Invalid file descriptor (e.g., 999999)**: When passing an invalid file descriptor that doesn't exist at all, the function raises `OSError` with errno=9 (EBADF). This OSError is NOT converted to ValueError but is instead re-raised as-is.
+
+### Test Results
+All test cases confirmed the inconsistent behavior:
+- File FD: Raises ValueError ✓ (as expected by the error conversion)
+- Invalid FD 999999: Raises OSError with errno=9 (EBADF) ✗
+- Invalid FD 10000: Raises OSError with errno=9 (EBADF) ✗
+- Invalid FD 50000: Raises OSError with errno=9 (EBADF) ✗
+- Closed socket FD: Raises OSError with errno=9 (EBADF) ✗
+
+The property-based test simulation shows that 100% of invalid file descriptors raise OSError instead of ValueError.
+
+### Technical Correctness of Bug Report
+The bug report is technically accurate:
+1. The code does handle ENOTSOCK and EBADF differently
+2. ENOTSOCK (errno 88) is converted to ValueError
+3. EBADF (errno 9) is re-raised as OSError
+4. The suggested fix (adding EBADF to the check) would make the behavior consistent
+
+### Semantics of the Errors
+- **ENOTSOCK**: "Socket operation on non-socket" - occurs when the FD exists but isn't a socket
+- **EBADF**: "Bad file descriptor" - occurs when the FD doesn't exist or is invalid
+
+Both represent cases where the file descriptor "does not refer to a socket" (the error message used), so there's an argument for treating them consistently.

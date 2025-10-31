@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function _resample_series is an internal/private function (indicated by underscore prefix) with no public documentation or specification of its expected behavior. The bug report assumes it should match pandas behavior exactly, but internal functions are implementation details that may have intentional differences or limitations. The error message itself suggests using "larger partitions" as a workaround, implying this might be a known and accepted limitation of the dask implementation.
+
+**Why it might not be INVALID:**
+The function is called by the public resample API, which is documented to work like pandas. Users calling the public df.resample('ME').sum() would encounter this error, making it a real user-facing issue. The function clearly attempts to replicate pandas behavior (it calls series.resample internally), so the mismatch appears unintentional rather than by design.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The error message already provides guidance ("use larger partitions, or unambiguous frequencies: 'Q', 'A'..."), suggesting the maintainers are aware of this limitation and have decided not to fix it. Supporting anchor-based frequencies on small data spans might require significant refactoring of the partitioning logic. The workaround of using larger partitions may be considered acceptable for a distributed computing framework where small partitions are generally inefficient anyway.
+
+**Why it might not be WONTFIX:**
+This affects common business use cases (monthly/quarterly/annual reporting) that work fine in pandas. The suggested workarounds don't actually solve the problem - using larger partitions won't help when the entire dataset spans less than a month. The fix appears relatively straightforward (use the actual resampled index rather than reconstructing it), making it worth fixing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state that dask resample supports all pandas resample frequencies without limitations. The error message implies this is expected behavior that users need to work around. The documentation could be updated to clarify that anchor-based frequencies require data spanning at least one complete period, making this a documentation issue rather than a code bug.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The public API documentation suggests dask resample should work like pandas resample. There's no mention of limitations with anchor-based frequencies. The code clearly attempts to support these frequencies (it doesn't reject them upfront), it just implements the logic incorrectly. This is a code bug, not a documentation gap.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting anchor-based frequencies on partial period data could be viewed as a new feature rather than a bug fix. The current implementation might have been designed with the assumption that partitions would span complete periods. Adding support for partial period resampling with anchor frequencies could be considered an enhancement to handle edge cases better.
+
+**Why it might not be FEATURE_REQUEST:**
+The code already attempts to support these frequencies - it accepts 'ME', 'QE', 'YE' as valid inputs and processes them. The functionality exists but is broken. Fixing broken existing functionality is a bug fix, not a new feature. Pandas supports this, and dask aims for pandas compatibility.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code demonstrably fails for valid pandas operations that users would reasonably expect to work. The implementation has a clear logic error: it uses pd.date_range to reconstruct an index that should match what resample produces, but date_range and resample use different logic for anchor-based frequencies. The fix is straightforward and the impact is significant for users doing time-series analysis. The error occurs in production use cases, not just edge cases.
+
+**Why it might not be BUG:**
+This is an internal function with no public documentation defining its behavior. The error message suggests this is a known limitation with documented workarounds. The function might be working as designed within the constraints of dask's partitioned architecture. Since 90% of bug reports from this user are invalid, and this involves complex internal implementation details, skepticism is warranted.
+
+## Overall Consideration
+After careful analysis, this appears to be a legitimate bug. The technical details are correct: pandas resample() creates indices at anchor points (month-end, quarter-end, year-end) even when these fall outside the input data range, while pd.date_range() with the same start/end/freq parameters does not. This mismatch causes _resample_series to fail with a ValueError for perfectly valid resampling operations that work in pandas.
+
+The bug affects real-world use cases - any time-series data that doesn't span a complete calendar period cannot be resampled to month-end, quarter-end, or year-end frequencies. This is a common scenario in financial and business analytics where you might have partial month data that needs monthly aggregation. The error message's suggestion to use "larger partitions" is misleading since the problem isn't partition size but the fundamental logic of index construction.
+
+While _resample_series is technically an internal function, it's called by the public resample API that users interact with directly. The bug manifests when users call standard operations like df.resample('ME').sum() on valid data. The implementation clearly intends to support these frequencies (it doesn't reject them) but fails due to an incorrect assumption about pd.date_range behavior. Given the clear technical error, user impact, and straightforward fix, this should be classified as a BUG.

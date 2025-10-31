@@ -1,0 +1,56 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the reported bug in `Cython.Build.Dependencies.parse_list`. The function crashes with a KeyError when given a string containing an unclosed quote character.
+
+## Reproduction Steps
+
+### Test 1: Direct Reproduction
+```python
+from Cython.Build.Dependencies import parse_list
+parse_list('"')
+```
+**Result**: KeyError: '__Pyx_L1'
+
+### Test 2: Single Quote
+```python
+parse_list("'")
+```
+**Result**: KeyError: '__Pyx_L1'
+
+### Test 3: Property-Based Test
+The hypothesis test provided in the bug report successfully identifies the issue:
+```python
+from hypothesis import given, strategies as st, settings
+from Cython.Build.Dependencies import parse_list
+
+@given(st.text())
+@settings(max_examples=1000)
+def test_parse_list_returns_list(s):
+    result = parse_list(s)
+    assert isinstance(result, list)
+```
+**Result**: The test fails immediately on input `"'"` with KeyError: '__Pyx_L1'
+
+## Root Cause Analysis
+
+Through debugging, I identified the exact cause of the bug:
+
+1. When `strip_string_literals()` encounters an unclosed quote, it creates a placeholder label with a trailing underscore (e.g., `__Pyx_L1_`)
+2. The `unquote()` function in `parse_list()` tries to look up the literal using `literal[1:-1]`
+3. This slicing removes both the closing character AND the trailing underscore, resulting in `__Pyx_L1`
+4. The key `__Pyx_L1` doesn't exist in the literals dictionary (which has `__Pyx_L1_` with underscore)
+
+## Debug Output
+When parsing `"`:
+- `strip_string_literals('"')` returns: `('"__Pyx_L1_', {'__Pyx_L1_': ''})`
+- The unquote function tries to look up `__Pyx_L1` but the dictionary has `__Pyx_L1_`
+
+## Valid Input Behavior
+For comparison, properly quoted strings work correctly:
+- `parse_list('"hello"')` returns `['hello']`
+- `parse_list("'world'")` returns `['world']`
+- `parse_list('" "')` returns `[' ']`
+
+## Impact
+The bug occurs when parsing distutils/cython directives from source file comments (line 198 of Dependencies.py). If a user has malformed comments with unclosed quotes in their .pyx files, the parser crashes with an internal KeyError rather than handling the error gracefully.

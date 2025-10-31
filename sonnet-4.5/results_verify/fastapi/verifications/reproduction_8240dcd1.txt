@@ -1,0 +1,41 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The HTTPSRedirectMiddleware incorrectly strips port 443 from URLs when redirecting from HTTP to HTTPS.
+
+### Reproduction Steps
+
+1. **Ran the provided Hypothesis test**: The test fails as expected, demonstrating that port 443 is incorrectly stripped when redirecting from HTTP to HTTPS.
+
+2. **Ran the concrete example**:
+   - Input: `http://example.com:443/test`
+   - Output: `https://example.com/test`
+   - Expected: `https://example.com:443/test`
+   - Result: Port 443 is incorrectly stripped
+
+3. **Verified the middleware implementation**: The code at line 14 of `starlette/middleware/httpsredirect.py` shows:
+   ```python
+   netloc = url.hostname if url.port in (80, 443) else url.netloc
+   ```
+   This unconditionally strips both ports 80 and 443, regardless of the source scheme.
+
+### Additional Testing
+
+I tested various port combinations to understand the behavior:
+
+- `http://example.com:80` → `https://example.com` (Correct: port 80 is standard for HTTP)
+- `http://example.com:443` → `https://example.com` (INCORRECT: port 443 is non-standard for HTTP and should be preserved)
+- `http://example.com:8080` → `https://example.com:8080` (Correct: non-standard port preserved)
+- `ws://example.com:443` → `wss://example.com` (INCORRECT: port 443 is non-standard for WS and should be preserved)
+
+### Impact
+
+The bug causes incorrect behavior when:
+1. An HTTP service runs on port 443 (non-standard)
+2. A WebSocket service runs on port 443 (non-standard)
+
+In these cases, the middleware incorrectly strips the port number, potentially redirecting clients to a different service or causing connection failures.
+
+### Conclusion
+
+The bug is real and reproducible. The middleware treats port 443 as "always strippable" regardless of whether it's the standard port for the source scheme, which is incorrect behavior.

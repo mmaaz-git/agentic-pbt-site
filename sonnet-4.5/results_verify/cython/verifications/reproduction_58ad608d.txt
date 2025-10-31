@@ -1,0 +1,50 @@
+REPRODUCTION REPORT FOR pyximport.handle_special_build BUG
+
+## Bug Reproduction Status
+SUCCESSFULLY REPRODUCED - The bug is real and occurs exactly as described in the report.
+
+## Test Results
+
+### Direct Reproduction Test
+When creating a .pyxbld file with only make_setup_args() function (no make_ext):
+- Result: AttributeError: 'NoneType' object has no attribute 'sources'
+- Location: pyximport.py line 132
+- This matches exactly what the bug report claims
+
+### Control Tests
+1. With both make_ext and make_setup_args:
+   - Result: SUCCESS - Both ext and setup_args are returned properly
+
+2. With only make_ext (no make_setup_args):
+   - Result: SUCCESS - ext is returned, setup_args is empty dict
+
+3. With only make_setup_args (no make_ext):
+   - Result: FAILURE - AttributeError on accessing ext.sources
+
+### Hypothesis Test Results
+The property-based test from the bug report was run successfully:
+- When include_make_ext=True: Test passes
+- When include_make_ext=False: Test fails with AttributeError
+- The failure occurs consistently on line 132 when trying to access ext.sources
+
+## Technical Analysis
+The crash occurs because:
+1. When only make_setup_args is defined, make_ext is None, so ext remains None (line 112)
+2. The code correctly validates this scenario with "assert ext or setup_args" (line 129)
+3. However, immediately after, the code unconditionally accesses ext.sources (line 131-132)
+4. Since ext is None, this causes AttributeError
+
+## Verification of the Fix
+The proposed fix in the bug report is:
+```python
+if ext:
+    ext.sources = [os.path.join(os.path.dirname(special_build), source)
+                   for source in ext.sources]
+```
+
+This fix is correct because:
+- It only processes ext.sources when ext is not None
+- It preserves the existing behavior when ext exists
+- It allows the function to return (None, setup_args) when only make_setup_args is defined
+
+The bug report's analysis and proposed fix are technically accurate.

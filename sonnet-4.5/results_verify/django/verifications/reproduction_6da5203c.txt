@@ -1,0 +1,37 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the bug described in the report. The issue occurs exactly as stated.
+
+Test Results:
+-------------
+
+1. **Exact Bug Reproduction**:
+   - When `ModelFormMixin.get_success_url()` is called with `success_url = "/object/{id}/success"`
+   - And the object has an empty `__dict__` (no 'id' attribute)
+   - The method raises a bare `KeyError: 'id'`
+   - This matches the bug report exactly
+
+2. **Verified Behavior**:
+   - The error occurs at line 120 of `django/views/generic/edit.py`
+   - The problematic line: `url = self.success_url.format(**self.object.__dict__)`
+   - No try/except block exists around this format() call
+   - The KeyError is unhelpful - it just says 'id' without context
+
+3. **Additional Testing**:
+   - Tested with multiple missing placeholders: all raise bare KeyError
+   - Tested with valid object attributes: works correctly
+   - Tested with multiple placeholders where some are missing: fails on first missing one
+
+4. **Hypothesis Testing**:
+   - Created property-based tests that generate various URL templates
+   - All templates with placeholders that don't exist in the object raise KeyError
+   - The error message provides no context about where the error occurred
+
+Confirmation:
+------------
+The bug is real and behaves exactly as described. The current implementation:
+- Raises an unhelpful KeyError when placeholders don't match object attributes
+- Provides no context about what went wrong
+- Does not follow Django's pattern of raising ImproperlyConfigured for configuration issues
+- Makes debugging difficult for developers who encounter this issue

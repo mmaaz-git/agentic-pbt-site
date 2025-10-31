@@ -1,0 +1,50 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+Test Results:
+------------
+I successfully reproduced the bug exactly as reported. The key findings:
+
+1. MAIN BUG CONFIRMED:
+   With null_value=1.00001 and an edge value of 1.0:
+   - Expected: Edge should be preserved (3 edges total)
+   - Actual: Edge is lost (only 2 edges preserved)
+   - The edge with value 1.0 is incorrectly treated as null because |1.0 - 1.00001| = 1e-5
+
+2. SYSTEMATIC TESTING RESULTS:
+   Edge Lost Cases (edge value close to null_value):
+   - edge=1.0, null=1.00001: LOST
+   - edge=1.0, null=0.99999: LOST
+   - edge=5.0, null=5.00001: LOST
+   - edge=-1.0, null=-1.00001: LOST
+   - edge=100.0, null=100.00001: LOST
+
+   Edge Preserved Cases:
+   - edge=0.0, null=0.00001: PRESERVED (difference > atol)
+   - edge=1.0, null=1.0001: PRESERVED (difference > rtol * null)
+
+3. TOLERANCE THRESHOLD IDENTIFIED:
+   The function uses numpy.ma.masked_values with defaults:
+   - rtol (relative tolerance) = 1e-5
+   - atol (absolute tolerance) = 1e-8
+
+   Values are treated as equal if: |a - b| <= atol + rtol * |b|
+
+4. SPECIAL CASE FOR ZERO:
+   When null_value is near zero, the tolerance is primarily atol (1e-8):
+   - edge=0.0, null=1e-7: Edge preserved
+   - edge=0.0, null=1e-8: Edge LOST
+   This explains why the bug report noted "edge_val=0.0, null_val=0.00001 works correctly"
+
+5. ROUND-TRIP TEST:
+   The round-trip test (from_dense -> to_dense) fails for null_value=1.00001
+   because the edge with value 1.0 is lost during conversion.
+
+Technical Explanation:
+---------------------
+The root cause is that csgraph_from_dense internally uses numpy.ma.masked_values()
+which performs approximate floating-point comparison, not exact comparison. This
+behavior is undocumented and unexpected based on the function's documentation which
+says null_value is "Value that denotes non-edges" (suggesting exact match).
+
+The behavior is consistent and reproducible across all test cases.

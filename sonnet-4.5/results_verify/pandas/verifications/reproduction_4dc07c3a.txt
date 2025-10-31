@@ -1,0 +1,50 @@
+REPRODUCTION RESULTS FOR BUG REPORT
+
+## Bug Reproduction - SUCCESSFUL
+
+The bug was successfully reproduced exactly as described in the report.
+
+### Test Results
+
+1. **Specific Failing Input Test**
+   - Input: days=4,735,838,584,154,958,556
+   - Expected: Should either handle properly or raise an error
+   - Actual: Produced negative datetime '-292277022657-01-28T03:24:48'
+   - Result as int64: -9223372036854707712 (negative despite positive input)
+
+2. **Boundary Testing**
+   - Maximum safe days: 106,751,991,167,300 (approx 292 billion years)
+   - With max safe days: Works correctly, produces '292277026596-12-04T00:00:00'
+   - With max safe days + 1: Overflows, produces negative datetime '-292277022657-01-27T16:59:44'
+
+3. **Hypothesis Test**
+   - Test FAILED as reported
+   - Found counterexample: days=5,300,770,121,412,313,574
+   - Produced negative result: -9223372036854728448
+
+### Technical Analysis
+
+The overflow occurs exactly as described:
+1. Function converts days to uint64 to "avoid overflow" (line 385)
+2. Multiplies by 86400 (seconds per day)
+3. For days > 106,751,991,167,300, the multiplication result exceeds 2^63-1
+4. When cast to datetime64[s], the overflowed value becomes negative
+
+### Code Behavior Verification
+
+The actual code at line 385:
+```python
+data = (data.astype(np.uint64) * (24 * 60 * 60)).astype("datetime64[s]")
+```
+
+This confirms:
+- The comment about "converting to uint64 to avoid overflow" is misleading
+- The conversion doesn't prevent overflow during multiplication
+- The overflow wraps around silently, producing incorrect negative dates
+
+### Conclusion
+
+The bug report is technically accurate:
+- The function does silently overflow for large day values
+- It produces incorrect negative datetime values instead of raising an error
+- The behavior violates the principle of data integrity (silent corruption)

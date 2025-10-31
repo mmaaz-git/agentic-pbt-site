@@ -1,0 +1,63 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+1. REPRODUCING THE BUG
+----------------------
+I successfully reproduced the bug using both the provided test code and the Hypothesis property-based test.
+
+Test 1: Direct reproduction
+----------------------------
+Code executed:
+```python
+from pandas.io.sas.sas_xport import _split_line
+
+parts = [("name", 10), ("age", 5)]
+s = "John Doe  30   "
+
+result = _split_line(s, parts)
+```
+
+Result: KeyError: '_'
+The function raises a KeyError when trying to delete the '_' key from the output dictionary, since no field named '_' exists in the provided parts list.
+
+Test 2: Control test with '_' field
+------------------------------------
+When providing a parts list that includes a '_' field:
+```python
+parts_with_underscore = [("name", 10), ("_", 2), ("age", 3)]
+s2 = "John Doe  --30 "
+result2 = _split_line(s2, parts_with_underscore)
+```
+
+Result: {'name': 'John Doe', 'age': '30'}
+The function works correctly, parsing the fields and removing the '_' field from output.
+
+Test 3: Hypothesis property-based test
+---------------------------------------
+The Hypothesis test generated 10 random test cases with various field names (all excluding '_'), and each one correctly raised a KeyError, confirming that the function consistently fails when no '_' field is present in the parts parameter.
+
+2. FUNCTION BEHAVIOR
+--------------------
+The _split_line function (lines 156-175 in sas_xport.py):
+- Takes a fixed-length string and a list of (name, length) field specifications
+- Extracts substrings based on the field specifications
+- Strips whitespace from each extracted value
+- UNCONDITIONALLY attempts to delete the '_' key from the output dictionary (line 174)
+- Returns the resulting dictionary
+
+3. ACTUAL USAGE IN THE CODEBASE
+--------------------------------
+The function is used internally in 3 places within XportReader._read_header():
+1. Line 307: Parsing file info with ["_", 24] as padding field
+2. Line 336: Parsing member info with ["_", 24] as padding field
+3. Line 338: Parsing additional member info with ["_", 16] as padding field
+
+In all actual uses, the parts list includes a field named "_" representing padding/ignored bytes in the XPORT format, so the deletion succeeds.
+
+4. ERROR MANIFESTATION
+----------------------
+When called without a '_' field in parts, the function fails at line 174:
+```python
+del out["_"]
+```
+This raises KeyError: '_' because no such key exists in the dictionary.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if the documentation didn't explicitly state what should be returned for empty lists, or if returning None was an acceptable alternative to returning 0. Someone might argue that since no messages were sent, None (representing "nothing happened") could be a valid return value, distinct from 0 (representing "zero messages were sent successfully").
+
+**Why it might not be INVALID:**
+The documentation is crystal clear: "return the number of email messages sent". The number of messages sent from an empty list is 0, not None. The base class establishes this contract explicitly, and 3 out of 5 backends already follow it correctly. The type annotation would be int, not Optional[int], and returning None breaks type safety.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be WONTFIX if the console and filebased backends were intentionally designed to return None for empty lists as a special case, perhaps to indicate "no operation performed" vs "operation performed with zero results". The bug has likely existed for a long time without causing major issues, and fixing it might break existing code that checks for None.
+
+**Why it might not be WONTFIX:**
+This is a clear violation of the documented API contract. The inconsistency between backends means code cannot be reliably switched between them. The bug breaks the Liskov Substitution Principle - subclasses should be substitutable for their base class. This is not a trivial edge case but a fundamental contract violation that affects API reliability.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the console and filebased backends were always intended to return None for empty lists, then the documentation should be updated to reflect this special case. The base class documentation could be clarified to say "returns the number of messages sent, or None if no messages were provided".
+
+**Why it might not be DOCUMENTATION_FIX:**
+The SMTP, dummy, and locmem backends already implement the documented behavior correctly by returning 0. Changing the documentation to accommodate a bug in 2 out of 5 backends would be backwards - the code should match the documentation, not vice versa. The documentation correctly describes the intended behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+This could be seen as a request to enhance the console and filebased backends to match the behavior of other backends, adding consistency as a new feature rather than fixing a bug. The current behavior might be considered "working as designed" with the request being to change that design.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but asking for existing backends to comply with their documented contract. The base class already defines what should happen, and other backends already implement it correctly. This is about fixing non-compliance with an existing specification, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a textbook bug: the implementation violates the documented contract. The base class documentation explicitly states the method should "return the number of email messages sent". Returning None instead of 0 breaks type safety, violates the Liskov Substitution Principle, and creates inconsistency between backends. The bug is easily reproducible, has a clear fix, and affects real-world usage where code expects an integer return value.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if there was some undocumented intention for these specific backends to behave differently, or if the current behavior was considered a legitimate interpretation of "number of messages sent" when no messages exist. However, this is a weak argument given the clear documentation and the behavior of other backends.
+
+## Overall Consideration
+
+After thorough analysis, this is unquestionably a valid BUG that should be fixed. The evidence is overwhelming:
+
+First, the documentation is unambiguous. The BaseEmailBackend.send_messages() docstring explicitly states it should "return the number of email messages sent." For an empty list, that number is 0, not None. This is a mathematical truth - the count of an empty set is zero. The Django documentation reinforces this, stating the method returns "the number of successfully delivered messages" without any exception for empty lists.
+
+Second, the inconsistency between backends is problematic. Three backends (SMTP, dummy, locmem) correctly return 0, while two (console, filebased) incorrectly return None. This violates the principle that backends should be interchangeable. Code written for one backend should work with another, but currently switching from SMTP to console backend could cause TypeErrors when the return value is used in arithmetic operations or comparisons.
+
+Third, this violates fundamental programming principles. The Liskov Substitution Principle states that objects of a subclass should be replaceable with objects of the base class without altering program correctness. The bug also breaks type safety - the implied return type is int, not Optional[int]. Modern Python with type hints would flag this as a type error. The fix is trivial (change "return" to "return 0" on line 31 of console.py), low-risk, and brings the code into compliance with its documented behavior.

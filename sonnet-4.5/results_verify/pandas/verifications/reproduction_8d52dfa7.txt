@@ -1,0 +1,22 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Direct Reproduction
+When calling `clean_column_name('\x00')`, the function raises a `tokenize.TokenError` with the message "source code cannot contain null bytes" at position (1, 0). This confirms the bug report's claim.
+
+### Hypothesis Test Reproduction
+The property-based test provided in the bug report also fails when it encounters a null byte character. The test correctly identifies that `TokenError` is being raised but not caught, which causes the test to fail with an AssertionError.
+
+### Root Cause Analysis
+The issue occurs in the `tokenize_string` function when it calls `tokenize.generate_tokens()`. When the Python tokenizer encounters a null byte, it raises `tokenize.TokenError` rather than `SyntaxError`. This happens at line 185 of `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/computation/parsing.py`.
+
+The `clean_column_name` function at line 128-133 only catches `SyntaxError`, not `TokenError`. This means that when a null byte is present in the input, the `TokenError` propagates up instead of being caught and handled by returning the name unmodified.
+
+### Additional Testing
+I tested `tokenize_string` with various inputs:
+- Normal strings like `valid`, `with space`, `with-dash`, `123` all work correctly
+- Strings with `#` raise `SyntaxError` as expected (and documented in comments)
+- Strings with null bytes (`\x00`) raise `TokenError`, not `SyntaxError`
+
+This confirms that the bug is real and occurs exactly as described in the report.

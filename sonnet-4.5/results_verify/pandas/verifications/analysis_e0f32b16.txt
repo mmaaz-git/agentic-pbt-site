@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The current behavior of sum and prod returning identity elements (0 and 1) for all-masked arrays with min_count=0 is mathematically correct and follows NumPy's documented behavior. The documentation for min_count states that NA is returned when there are "fewer than min_count non-NA values." With min_count=0, having 0 non-NA values satisfies the condition "0 >= 0", so returning a value (not NA) is consistent with the documented min_count behavior. The functions are working as designed according to their parameters.
+
+**Why it might not be INVALID:**
+There is a clear inconsistency within pandas itself - mean, var, and std return NA for all-masked arrays regardless of min_count, while sum and prod return identity elements. This inconsistency is not just an implementation detail but affects user-facing behavior in a way that could cause confusion and bugs in user code.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The behavior difference could be considered intentional - sum and prod have well-defined mathematical identity elements (0 and 1) for empty sets, while mean/var/std do not have meaningful values for empty sets. Changing this behavior would be a breaking change that could affect existing code that relies on getting 0/1 for empty sums/products. The workaround is simple - users can set min_count=1 if they want NA for all-masked arrays.
+
+**Why it might not be WONTFIX:**
+The inconsistency is significant enough to cause real confusion. Users working with masked arrays expect consistent behavior across reduction operations. The fact that mean returns NA but sum returns 0 for the same all-masked input is counterintuitive and could lead to subtle bugs in data analysis code.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state what should happen for all-masked arrays with min_count=0. It could be argued that the documentation should clarify that sum/prod return identity elements while mean/var/std return NA in this case. Adding this clarification would help users understand the current behavior without changing any code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not about unclear documentation but about inconsistent implementation. The documentation correctly describes min_count behavior, and the problem is that different reduction functions handle the all-masked case differently despite having the same parameters and similar purposes.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that having consistent behavior across all reduction operations for all-masked arrays would be a new feature rather than a bug fix. The proposed change would add new checking logic to sum and prod that doesn't currently exist, essentially adding a new capability to handle all-masked arrays consistently.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out inconsistent behavior in existing functionality. All the reduction functions already handle masked arrays; the issue is that they handle the edge case of all-masked arrays differently. This is more about fixing an inconsistency than adding a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The inconsistency between reduction functions is a clear design flaw. Users reasonably expect that all reduction operations in the masked_reductions module would handle all-masked arrays consistently. The fact that mean/var/std check for mask.all() and return NA while sum/prod don't perform this check appears to be an oversight rather than intentional design. The inconsistency could cause data analysis errors where users expect NA but get identity elements.
+
+**Why it might not be BUG:**
+The functions are working exactly as their implementation intends - sum and prod delegate to NumPy with the where parameter, which has well-defined behavior for empty selections. The min_count parameter is working as documented. One could argue this is a design choice rather than a bug.
+
+## Overall Consideration
+
+Looking at all considerations, this issue represents a genuine inconsistency in pandas' masked reduction operations. The key factors are:
+
+First, there is an undeniable inconsistency where mean, var, and std have explicit checks for all-masked arrays that return NA, while sum and prod lack these checks and return identity elements. This inconsistency exists within the same module and for functions that serve similar purposes in data analysis workflows. The code for mean/var/std shows that returning NA for all-masked arrays was a deliberate design decision for those functions.
+
+Second, while the mathematical argument for identity elements is valid (empty sum = 0, empty product = 1), in the context of missing data analysis, returning NA for all-masked data is more semantically appropriate. NA explicitly indicates "no valid computation possible," which better represents the situation where all data is missing. Users working with masked arrays are specifically using them to handle missing data, and getting 0 or 1 when all data is missing could lead to incorrect analyses.
+
+Third, the fact that setting min_count=1 makes sum and prod return NA for all-masked arrays shows that the framework already supports this behavior, but the default behavior is inconsistent. This suggests the issue is not a fundamental limitation but rather an oversight in the default case. The proposed fix is minimal and simply adds the same check that already exists in mean/var/std, making all reduction functions consistent in their handling of all-masked arrays.

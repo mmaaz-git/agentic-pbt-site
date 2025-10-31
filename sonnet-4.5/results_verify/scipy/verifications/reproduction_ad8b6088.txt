@@ -1,0 +1,41 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is accurate. There is an inconsistency in how scipy.io.wavfile handles mono audio when round-tripping through write and read operations.
+
+### Reproduction Results
+
+1. **Hypothesis Test**: CONFIRMED
+   - Test fails when n_channels=1
+   - Writing shape (N, 1) and reading it back returns shape (N,)
+   - Error: AssertionError: Shape mismatch: (1,) != (1, 1)
+
+2. **Simple Example Test**: CONFIRMED
+   - Writing [[100]] with shape (1, 1)
+   - Reading returns [100] with shape (1,)
+   - The shape is not preserved
+
+3. **Multi-Channel Comparison**: CONFIRMED INCONSISTENCY
+   - 1 channel: (100, 1) → (100,) ✗ Shape mismatch
+   - 2 channels: (100, 2) → (100, 2) ✓ Shapes match
+   - 3 channels: (100, 3) → (100, 3) ✓ Shapes match
+   - 4 channels: (100, 4) → (100, 4) ✓ Shapes match
+   - 1D input: (3,) → (3,) ✓ Shapes match
+
+### Key Findings
+
+1. **Inconsistent behavior**: Only mono audio with 2D shape (N, 1) fails to preserve shape on round-trip. All other cases work correctly.
+
+2. **The issue is in the read function**: Looking at the source code, wavfile.read() only reshapes multi-channel data when channels > 1:
+   ```python
+   if channels > 1:
+       data = data.reshape(-1, channels)
+   ```
+   For mono (channels == 1), data remains as a 1D array regardless of how it was written.
+
+3. **1D mono input works fine**: Writing a 1D array and reading it back preserves the 1D shape, showing that the issue is specifically with 2D mono arrays.
+
+4. **Documentation ambiguity**: The write() documentation says "To write multiple-channels, use a 2-D array of shape (Nsamples, Nchannels)", which suggests (N, 1) should be valid for mono. However, read() documentation explicitly states it returns "1-D for 1-channel WAV".
+
+### Conclusion
+The bug is real and reproducible. There is a shape inconsistency when round-tripping mono audio data that is provided as a 2D array with shape (N, 1).

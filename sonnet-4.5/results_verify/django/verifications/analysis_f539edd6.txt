@@ -1,0 +1,76 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG
+
+**Why it might be a BUG:**
+1. **Backend Inconsistency**: Two implementations of the same storage interface (FileSystemStorage and InMemoryStorage) behave differently for the same operation - opening text files with non-LF line endings.
+
+2. **Data Corruption**: FileSystemStorage silently modifies file content during round-trip operations (save then open), violating the fundamental expectation that storage systems preserve data.
+
+3. **Real-World Impact**: Applications that depend on specific line endings (Windows CRLF files, configuration files, checksums) will fail when using FileSystemStorage but work with InMemoryStorage.
+
+4. **Violation of Least Surprise**: Developers expect storage.open() to return the same content that was saved, not a modified version.
+
+5. **Easy Fix Available**: The bug report provides a simple, correct fix using Python's newline='' parameter.
+
+### Consideration for WONTFIX
+
+**Why it might be WONTFIX:**
+1. **Historical Behavior**: FileSystemStorage may have always behaved this way, and changing it could break existing applications that depend on line ending normalization.
+
+2. **Python Default**: FileSystemStorage is simply using Python's default open() behavior, which could be considered acceptable.
+
+3. **Workaround Available**: Users can open files in binary mode if they need to preserve exact line endings.
+
+**Counter-arguments:**
+- The inconsistency between backends is more problematic than any historical behavior
+- Silent data modification is generally unacceptable for storage systems
+
+### Consideration for INVALID
+
+**Why it might be INVALID:**
+1. **Undocumented Behavior**: Django's documentation doesn't explicitly promise that storage backends will preserve line endings in text mode.
+
+2. **Implementation Freedom**: Storage backends might be allowed to have different behaviors as long as they implement the required interface.
+
+**Counter-arguments:**
+- The lack of documentation doesn't excuse inconsistent behavior between backends
+- Storage systems have an implicit contract to preserve data
+
+### Consideration for FEATURE_REQUEST
+
+**Why it might be a FEATURE_REQUEST:**
+1. **New Capability**: If line ending preservation in text mode was never a design goal, adding it would be a new feature.
+
+2. **Configuration Option**: Could be reimplemented as a configurable behavior for FileSystemStorage.
+
+**Counter-arguments:**
+- This is fixing broken behavior, not adding new functionality
+- The storage already works correctly in binary mode, so preservation is expected
+
+### Consideration for DOCUMENTATION_FIX
+
+**Why it might be DOCUMENTATION_FIX:**
+1. **Unclear Expectations**: The documentation doesn't specify how storage backends should handle line endings.
+
+2. **Working as Designed**: If the current behavior is intentional, the documentation should explain the difference.
+
+**Counter-arguments:**
+- The behavior is objectively incorrect (data corruption)
+- Documentation alone won't fix the backend inconsistency
+
+### Final Assessment
+
+This is most clearly a **BUG** because:
+
+1. **Principle of Least Surprise**: Storage systems should not silently modify data. When you save content and then retrieve it, you expect to get back what you saved.
+
+2. **Backend Substitutability**: Django's storage backends are designed to be swappable. Having different behaviors for the same operation breaks this design principle.
+
+3. **Silent Data Corruption**: The modification happens silently without any warning, which can lead to hard-to-debug issues in production.
+
+4. **Clear Fix**: The solution is straightforward and aligns both backends to preserve content.
+
+5. **No Reasonable Use Case for Current Behavior**: There's no compelling reason why FileSystemStorage should normalize line endings while InMemoryStorage doesn't. If line ending normalization was desired, it should be consistent across all backends and documented.
+
+The bug is well-documented, reproducible, affects real-world use cases, and has a clear fix that maintains backward compatibility for binary mode while fixing the text mode inconsistency.

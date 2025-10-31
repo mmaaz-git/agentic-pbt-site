@@ -1,0 +1,66 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG (Valid Bug)
+**Strong Evidence:**
+1. **Data Corruption**: Missing values are silently converted to actual category values, causing data integrity issues
+2. **Violates Documented Behavior**: Pandas documentation clearly states -1 codes represent missing values
+3. **Protocol Violation**: The interchange protocol's USE_SENTINEL mechanism is not properly handled
+4. **Silent Failure**: No error or warning is raised when data is corrupted
+5. **Clear Root Cause**: The bug has two clear issues:
+   - Line 254 uses modulo operation that converts -1 to valid indices
+   - Line 521-522 early returns for USE_SENTINEL cases, preventing proper null handling
+6. **Reproducible**: The bug is consistently reproducible with the provided test cases
+
+**Verdict**: This is clearly a valid BUG that needs fixing.
+
+### Consideration for INVALID
+**Potential Arguments (All Weak):**
+1. Could argue the modulo operation is intentional for bounds checking - but this corrupts data
+2. Could argue users shouldn't use interchange protocol - but it's a supported pandas feature
+
+**Verdict**: Not INVALID - the behavior clearly violates documented expectations.
+
+### Consideration for WONTFIX
+**Potential Arguments:**
+1. The interchange protocol has known issues and pandas recommends using Arrow instead
+2. The warning in the docstring mentions "severe implementation issues"
+
+**Counter-arguments:**
+1. The feature is still officially supported and documented
+2. Data corruption is too severe to leave unfixed
+3. The fix appears straightforward
+
+**Verdict**: Not WONTFIX - data corruption is too severe to ignore.
+
+### Consideration for FEATURE_REQUEST
+**Arguments Against:**
+1. This is not requesting new functionality
+2. The expected behavior is already documented
+3. This is fixing broken existing functionality
+
+**Verdict**: Not a FEATURE_REQUEST - this is a bug in existing functionality.
+
+### Consideration for DOCUMENTATION_FIX
+**Arguments Against:**
+1. The documentation correctly describes the expected behavior
+2. The code is wrong, not the documentation
+3. The interchange protocol specification is also clear about USE_SENTINEL handling
+
+**Verdict**: Not a DOCUMENTATION_FIX - the documentation is correct, the implementation is wrong.
+
+## Final Assessment
+
+This is unequivocally a **BUG**. The implementation has clear defects that cause data corruption:
+1. The modulo operation in line 254 incorrectly transforms sentinel values
+2. The early return in set_nulls prevents proper USE_SENTINEL handling
+3. The result is silent data corruption where missing values become actual data
+
+The severity is high because:
+- Data integrity is compromised
+- The failure is silent (no errors/warnings)
+- The behavior violates documented specifications
+- Users would have no indication their data was corrupted
+
+The proposed fix in the bug report appears reasonable, though the real fix needs to address both issues:
+1. Don't use modulo on codes that might contain sentinels
+2. Fix set_nulls to properly handle USE_SENTINEL cases

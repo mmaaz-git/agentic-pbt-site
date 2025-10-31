@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+**Confirmation:** The bug is reproducible exactly as described in the report.
+
+**Test Results:**
+
+1. **Basic reproduction (gdict only, no ldict):** CRASHES
+   - Calling `np.bmat('A,B', gdict={'A': A, 'B': B})` raises TypeError
+   - Error message: "'NoneType' object is not subscriptable"
+   - This matches exactly what the bug report claims
+
+2. **With both ldict and gdict:** WORKS
+   - When both dictionaries are provided, the function works correctly
+   - This shows the function itself is not fundamentally broken
+
+3. **With empty ldict and gdict:** WORKS
+   - Calling `np.bmat('A,B', ldict={}, gdict={'A': A, 'B': B})` works correctly
+   - This demonstrates that providing an empty dictionary for ldict avoids the crash
+   - The function correctly falls back to gdict when ldict doesn't contain the variable
+
+4. **Mixed variables (some in ldict, some in gdict):** WORKS
+   - The function correctly searches ldict first, then falls back to gdict
+   - This is the intended behavior according to the code structure
+
+**Root Cause Analysis:**
+
+The crash occurs in the `_from_string` function at line 1030:
+```python
+thismat = ldict[col]  # This line crashes when ldict is None
+```
+
+The issue is in the `bmat` function at lines 1104-1105:
+```python
+else:
+    glob_dict = gdict
+    loc_dict = ldict  # ldict can be None here!
+```
+
+When `gdict` is provided but `ldict` is not (None by default), the code passes None to `_from_string`, which then tries to subscript None like a dictionary, causing the TypeError.
+
+**Expected Behavior:**
+
+Based on the documentation stating both parameters are optional, and the fact that providing an empty dict for ldict works correctly, users would reasonably expect that:
+- Providing only `gdict` should work without needing to also provide `ldict`
+- The function should treat a missing `ldict` the same as an empty `ldict`
+
+The proposed fix (`loc_dict = ldict if ldict is not None else {}`) would make this work as expected.

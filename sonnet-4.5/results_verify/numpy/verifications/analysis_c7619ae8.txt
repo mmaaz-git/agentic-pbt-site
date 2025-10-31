@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The current mapping might be intentional for compatibility reasons. Perhaps NPY_CDOUBLE was chosen deliberately to avoid platform-specific issues with long double complex types, as long double precision varies across platforms. The documentation doesn't explicitly state that complex types must preserve base type precision, so this could be working as designed.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies an inconsistency in the type mapping pattern. Every other numeric type follows the rule that complex variants preserve the precision of their base type (float→cfloat, double→cdouble). The c2pycode_map correctly uses 'G' for complex_long_double, which corresponds to NPY_CLONGDOUBLE, indicating this is likely an error rather than intentional behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue might be considered too minor to fix if very few users actually use long double complex types in Fortran code that gets wrapped with F2PY. The precision loss might be acceptable in practice since most scientific computing uses double precision. Changing this could potentially break existing code that depends on the current mapping.
+
+**Why it might not be WONTFIX:**
+This is a clear data type mapping error that causes silent precision loss, which is a serious issue in numerical computing. The fix is trivial (one-line change) and brings consistency to the codebase. The inconsistency between c2capi_map and c2pycode_map suggests this is an unintended bug rather than a design choice.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the current behavior is intentional but undocumented, the fix would be to update documentation to explain why complex_long_double maps to NPY_CDOUBLE instead of NPY_CLONGDOUBLE, warning users about potential precision loss when using extended precision complex types.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code shows an internal inconsistency (c2pycode_map uses 'G' which is NPY_CLONGDOUBLE, while c2capi_map uses NPY_CDOUBLE), suggesting this is a code bug, not a documentation issue. The pattern is clear and consistent for all other types, making this an implementation error rather than a documentation problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If F2PY was never intended to support extended precision complex types properly, then adding proper NPY_CLONGDOUBLE support could be considered a new feature. Users requesting better precision handling for complex long doubles might be asking for functionality that wasn't originally planned.
+
+**Why it might not be FEATURE_REQUEST:**
+NPY_CLONGDOUBLE already exists in NumPy's C API, and the c2pycode_map already correctly references it with 'G'. This isn't adding new functionality but fixing existing functionality to work correctly. The infrastructure is already in place; it's just incorrectly configured.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear inconsistency in the codebase where complex_long_double maps to NPY_CDOUBLE (losing precision) while long_double maps to NPY_LONGDOUBLE. The pattern is broken only for this one type. The c2pycode_map correctly uses 'G' (NPY_CLONGDOUBLE), showing internal inconsistency. This causes silent precision loss, which is particularly problematic in scientific computing where F2PY is used.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if this mapping was intentionally chosen for compatibility or stability reasons, but there's no evidence or documentation supporting this. The internal inconsistency strongly suggests this is an error.
+
+**Overall consideration**
+After analyzing all aspects, this appears to be a legitimate bug. The evidence is compelling: (1) There's a clear pattern that complex types should preserve the precision of their base types, which is broken only for complex_long_double. (2) The c2pycode_map correctly maps complex_long_double to 'G' (NPY_CLONGDOUBLE), but c2capi_map incorrectly maps it to NPY_CDOUBLE, showing internal inconsistency. (3) This causes silent precision loss when wrapping Fortran code with extended precision complex numbers, which is a serious issue in numerical computing.
+
+The bug is well-documented with a clear reproduction case, property-based test, and a simple one-line fix. The NPY_CLONGDOUBLE constant exists and is used elsewhere in NumPy. There's no documentation or code comment suggesting the current behavior is intentional.
+
+This should be classified as a BUG that needs to be fixed to maintain consistency and prevent precision loss in scientific computations using F2PY with extended precision complex types.

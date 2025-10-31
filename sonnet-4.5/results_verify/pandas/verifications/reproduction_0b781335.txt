@@ -1,0 +1,26 @@
+Bug Reproduction Report
+======================
+
+I have successfully reproduced the bug as described in the report.
+
+## Test Results:
+
+1. **Property-based test with hypothesis**: The test fails in multiple ways:
+   - For extremely tiny values (e.g., 5e-324), it raises a ValueError about duplicate bin edges
+   - For slightly larger but still tiny values (e.g., 2.2250738585e-313), it silently loses data returning all NaN values
+
+2. **Specific failing example from report**:
+   - Input: [0.0, 1.1125369292536007e-308]
+   - Expected: Two binned values
+   - Actual: [nan, nan] - complete data loss with no error
+   - The bins are computed correctly: [-1.11253693e-311, 5.56268465e-309, 1.11253693e-308]
+   - But the IntervalIndex is empty: IntervalIndex([], dtype='interval[float64, right]')
+
+3. **Root cause identified**:
+   The issue occurs in the _round_frac function within _format_labels. When processing very small float values near machine epsilon:
+   - The function calculates extremely large digit precision (310+ digits)
+   - np.around(value, 310) returns NaN instead of a rounded value
+   - This causes IntervalIndex.from_breaks() to receive NaN values and fail to create valid intervals
+   - The result is an empty IntervalIndex with all values becoming NaN
+
+The bug is confirmed and occurs exactly as described in the report. It causes silent data corruption with no warning or error message to the user.

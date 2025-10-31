@@ -1,0 +1,67 @@
+## Bug Report Triage Analysis
+
+### Considering BUG:
+**Arguments FOR classifying as BUG:**
+1. **Data Loss**: The function silently strips null characters, causing actual data loss without warning.
+2. **Inconsistent with Python**: Violates the principle of least surprise - numpy.strings.add is documented as equivalent to '+' operator, but behaves differently from Python's string concatenation.
+3. **Undocumented Behavior**: Documentation doesn't mention that null characters will be stripped.
+4. **Breaks Mathematical Properties**: Violates basic concatenation properties like length preservation (len(a+b) != len(a)+len(b) when nulls are present).
+5. **Inconsistent Internal Behavior**: Nulls in the middle of strings are preserved, but edge nulls are stripped - this inconsistency suggests unintended behavior.
+6. **Real-World Impact**: Null bytes are valid in many contexts (binary data, protocol delimiters, etc.) and their silent removal can cause serious issues.
+
+**Arguments AGAINST:**
+- Could be argued this is C-string compatibility behavior (though not documented as such)
+
+### Considering INVALID:
+**Arguments FOR classifying as INVALID:**
+1. Could argue that NumPy string arrays have different semantics than Python strings
+2. Might be intentional C-string compatibility (though undocumented)
+
+**Arguments AGAINST:**
+- The behavior causes actual data loss
+- No documentation suggests this is intended behavior
+- Inconsistent handling (middle nulls preserved, edge nulls stripped) suggests a bug rather than design
+
+### Considering WONTFIX:
+**Arguments FOR classifying as WONTFIX:**
+1. Null bytes in strings might be considered an edge case
+2. The numpy.char module is marked as legacy (though numpy.strings has the same issue)
+
+**Arguments AGAINST:**
+- This is not an obscure edge case - null bytes are valid string characters in Python
+- Data loss is a serious issue that shouldn't be ignored
+- The replacement module (numpy.strings) has the same bug
+
+### Considering DOCUMENTATION_FIX:
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+1. If this is intended behavior, the documentation should warn about null stripping
+2. Users need to know their data might be modified
+
+**Arguments AGAINST:**
+- The behavior appears to be a bug, not a documentation issue
+- Simply documenting data loss doesn't make it acceptable
+- The inconsistent behavior (middle vs edge nulls) suggests implementation bug
+
+### Considering FEATURE_REQUEST:
+**Arguments FOR classifying as FEATURE_REQUEST:**
+1. Could frame it as "requesting support for null characters in concatenation"
+
+**Arguments AGAINST:**
+- This isn't a new feature - it's fixing broken existing functionality
+- Python strings already support nulls, so this should too
+- The function already partially works with nulls (in the middle), just not at edges
+
+### Conclusion:
+This should be classified as **BUG** because:
+
+1. **Clear Data Loss**: The function silently removes valid data without warning or documentation.
+
+2. **Violates Documented Contract**: Documentation claims equivalence to Python's '+' operator, but behavior differs significantly.
+
+3. **Inconsistent Implementation**: The fact that middle nulls are preserved while edge nulls are stripped strongly suggests an implementation bug rather than intentional design. If null stripping were intentional, it would be consistent.
+
+4. **Not an Edge Case**: Null bytes are valid Python string characters used in many real-world scenarios (binary protocols, data serialization, testing, etc.).
+
+5. **Breaks Fundamental Properties**: String concatenation should preserve all input data. Silent data modification violates basic expectations.
+
+The bug likely stems from improper handling of Python strings as C-strings somewhere in the implementation, causing null bytes to be treated as terminators rather than valid characters.

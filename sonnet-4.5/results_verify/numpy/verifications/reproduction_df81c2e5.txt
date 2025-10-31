@@ -1,0 +1,40 @@
+REPRODUCTION RESULTS
+====================
+
+I have successfully reproduced the bug described in the report. The testing confirms the inconsistent behavior between 3D numpy array and 3D list inputs to the matrix constructor.
+
+Test Results:
+-------------
+
+1. Direct Reproduction Test:
+   - 3D numpy array input (shape (1,1,2)): SUCCEEDS, produces matrix of shape (1,2)
+   - 3D list input [[0.0, 0.0]]: FAILS with ValueError "matrix must be 2-dimensional"
+   - Both inputs represent exactly the same data structure
+
+2. Property-Based Test with Hypothesis:
+   - The test fails consistently across all tested dimensions (n=1-5, m=2-5)
+   - Every 3D array of shape (1, n, m) succeeds when passed as numpy array
+   - Every equivalent 3D list fails with ValueError
+   - This confirms the issue is systemic, not limited to specific dimensions
+
+3. Verified Data Equivalence:
+   - Confirmed that np.array(list_3d) produces the exact same shape as arr_3d
+   - np.array_equal confirms the data content is identical
+   - The only difference is the input type (ndarray vs list)
+
+Code Path Analysis:
+-------------------
+
+The source code inspection confirms two distinct code paths:
+
+1. For ndarray inputs (lines 134-145):
+   - Uses data.view(subtype) which triggers __array_finalize__
+   - __array_finalize__ squeezes dimensions with size 1 (lines 182-186)
+   - This allows 3D arrays like (1,1,2) to become 2D matrices (1,2)
+
+2. For list inputs (lines 150-172):
+   - Converts to array first with np.array()
+   - Immediately checks if ndim > 2 and raises ValueError (line 156)
+   - No opportunity for dimension squeezing before the check
+
+The bug report accurately describes this inconsistency where logically equivalent inputs produce different results based solely on their type.

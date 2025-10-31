@@ -1,0 +1,48 @@
+# Bug Reproduction Analysis
+
+## Summary
+I have successfully reproduced the reported bug in `pandas.core.indexes.api.union_indexes`. The function indeed fails to remove duplicate values when all input indexes are equal.
+
+## Reproduction Results
+
+### Property-Based Test
+The hypothesis test failed as reported, confirming that `union_indexes([idx, idx])` does not equal `idx.unique()` when idx contains duplicates.
+
+### Manual Test Cases
+1. **Test with Index([0, 0])**:
+   - Result: [0, 0] (duplicates retained)
+   - Expected: [0] (duplicates removed)
+   - Bug confirmed ✓
+
+2. **Test with Index([1, 1])**:
+   - Result: [1, 1] (duplicates retained)
+   - Expected: [1] (duplicates removed)
+   - Bug confirmed ✓
+
+3. **Comparison with Index.union()**:
+   - Index([2, 2, 3]).union(Index([2, 2, 3])) = [2, 2, 3]
+   - union_indexes([Index([2, 2, 3]), Index([2, 2, 3])]) = [2, 2, 3]
+   - Both retain duplicates when indexes are equal
+
+4. **Different indexes test**:
+   - union_indexes([Index([1, 1, 2]), Index([2, 2, 3])]) = [1, 2, 3]
+   - Correctly removes duplicates when indexes differ ✓
+
+## Key Findings
+
+### Behavioral Inconsistency
+The `union_indexes` function exhibits inconsistent behavior:
+- When indexes are **different**: Removes duplicates (returns unique values)
+- When indexes are **equal**: Retains duplicates (returns original with duplicates)
+
+### Root Cause
+The issue is in the optimization at line 318 of `pandas/core/indexes/api.py`:
+```python
+if not all(index.equals(other) for other in indexes[1:]):
+    index = _unique_indices(indexes, dtype)
+```
+
+This code only calls `_unique_indices` (which removes duplicates) when indexes are different. When all indexes are equal, it skips the duplicate removal step and returns the first index as-is.
+
+### Impact
+The `_unique_indices` helper function (lines 231-263) explicitly calls `.unique()` to remove duplicates, showing that removing duplicates is the intended behavior for `union_indexes`. The current implementation violates this expectation when all input indexes are identical.

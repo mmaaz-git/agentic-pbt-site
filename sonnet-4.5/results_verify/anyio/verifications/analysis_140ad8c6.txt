@@ -1,0 +1,82 @@
+## Bug Report Triage Analysis
+
+### Consideration for BUG Classification
+**Arguments For:**
+1. The error message is objectively misleading - it says "socket must be connected" when the real issue is "bad file descriptor"
+2. This creates debugging confusion - developers will waste time trying to connect a non-existent socket
+3. The fix is straightforward and improves user experience
+4. The code already correctly handles ENOTSOCK (errno 88) with an accurate message
+5. Error messages should accurately reflect the actual problem, even if not explicitly documented
+
+**Arguments Against:**
+1. `_validate_socket` is a private function (leading underscore), not public API
+2. No documentation explicitly promises specific error messages
+3. The function technically does raise a ValueError as might be expected
+
+**Verdict:** This IS a valid bug. Misleading error messages are bugs even when not explicitly documented, as they violate the principle of least surprise and harm debugging experience.
+
+### Consideration for INVALID Classification
+**Arguments For:**
+1. The function is private/internal (starts with underscore)
+2. No documentation specifies what error messages should be
+3. The bug report claims it "violates the API contract" but there's no explicit contract about error messages
+4. A ValueError is raised, which is a reasonable exception type
+
+**Arguments Against:**
+1. The error is reproduced exactly as described
+2. The misleading nature is objective, not subjective
+3. Even private functions should have sensible error messages
+4. The function is used by public API methods, so its errors bubble up to users
+
+**Verdict:** NOT invalid. The bug is real and reproducible.
+
+### Consideration for WONTFIX Classification
+**Arguments For:**
+1. This is an edge case - users shouldn't normally pass invalid file descriptors
+2. The function is private/internal
+3. Users who pass invalid file descriptors are already doing something wrong
+4. The error still indicates something is wrong, even if the message is misleading
+
+**Arguments Against:**
+1. The fix is trivial and safe
+2. Better error messages improve debugging experience
+3. Invalid file descriptors can happen in real scenarios (e.g., closed descriptors, typos)
+4. The misleading message actively harms debugging by pointing in wrong direction
+
+**Verdict:** NOT wontfix. The issue is worth fixing given the simple fix and clear benefit.
+
+### Consideration for DOCUMENTATION_FIX Classification
+**Arguments For:**
+1. The code behavior might be considered "working as designed"
+2. Documentation could be updated to warn about error messages for invalid descriptors
+
+**Arguments Against:**
+1. The issue is with the code's error handling logic, not documentation
+2. Documenting misleading error messages doesn't fix the root problem
+3. The proposed fix changes code behavior, not documentation
+
+**Verdict:** NOT a documentation issue. This is a code behavior problem.
+
+### Consideration for FEATURE_REQUEST Classification
+**Arguments For:**
+1. Better error messages could be seen as an enhancement
+2. No existing documentation promises accurate error messages
+
+**Arguments Against:**
+1. This is fixing incorrect behavior, not adding new functionality
+2. Accurate error messages are a basic expectation, not a feature
+3. The current behavior is misleading, not just suboptimal
+
+**Verdict:** NOT a feature request. This is fixing a defect in existing functionality.
+
+## Final Assessment
+
+This is a **BUG** that should be fixed. The error messages are objectively misleading when invalid file descriptors are passed with `require_connected=True` or `require_bound=True`. While the function is private and there's no explicit documentation about error messages, the principle of least surprise and basic usability standards mean that error messages should accurately describe the actual problem.
+
+The bug:
+- Is reproducible and correctly described
+- Has a real negative impact on debugging experience
+- Has a simple, safe fix
+- Improves the library's usability without breaking changes
+
+The fact that the code already correctly handles ENOTSOCK with an appropriate message shows that the developers care about accurate error reporting. The EBADF case should be handled similarly.

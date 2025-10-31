@@ -1,0 +1,52 @@
+## Bug Reproduction Analysis
+
+### Reproduction Steps Performed
+
+1. **Hypothesis Test Execution**:
+   - Ran the property-based test from the bug report
+   - Test failed with input `['\x1f']` (different from report's `['\x85']`, but same issue)
+   - The test correctly identifies the round-trip failure
+
+2. **Specific Example Reproduction**:
+   - Executed the exact code from the bug report with `scopes_list = ['\x85']`
+   - Confirmed the bug:
+     - Input: `['\x85']`
+     - scope_str: `'\x85'`
+     - Reconstructed via split(): `[]` (empty list)
+   - The scope is completely lost during round-trip
+
+3. **Extended Testing**:
+   - Tested multiple Unicode whitespace characters
+   - All Unicode whitespace characters cause the same issue:
+     - `'\x85'` (NEL - Next Line)
+     - `'\xa0'` (NBSP - Non-breaking space)
+     - `'\u2000'` (En Quad)
+     - `'\u2028'` (Line separator)
+     - `'\u2029'` (Paragraph separator)
+   - Normal ASCII text scopes work correctly
+
+### Root Cause Analysis
+
+The bug occurs due to inconsistent string operations:
+
+1. **SecurityScopes.scope_str** (line 638): Uses `" ".join(self.scopes)`
+   - Joins with regular space character (U+0020)
+
+2. **OAuth2PasswordRequestForm.__init__** (line 147): Uses `scope.split()`
+   - Splits on ALL Unicode whitespace when no argument provided
+
+This inconsistency means:
+- A scope containing Unicode whitespace like `'\x85'` becomes the scope_str `'\x85'`
+- When `'\x85'.split()` is called, Python treats `'\x85'` as whitespace and returns `[]`
+- The scope is silently lost
+
+### Impact
+
+The bug causes silent data loss when:
+1. A scope name contains Unicode whitespace characters
+2. The scope string is round-tripped through join/split operations
+3. This could lead to security issues where expected scopes are missing
+
+### Verification
+
+The bug is consistently reproducible and the report's analysis is accurate.

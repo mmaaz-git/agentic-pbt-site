@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The current implementation might be considered acceptable if max_bytes is interpreted as a "soft limit" for when to stop trying to find the delimiter, rather than a hard limit on buffer size. Some might argue that since the method needs to read data in chunks from the underlying stream, it's reasonable to finish processing the current chunk even if it exceeds max_bytes. The implementation does check the limit before each read operation, just not after.
+
+**Why it might not be INVALID:**
+The documentation explicitly states "maximum number of bytes that will be read" without any qualifier suggesting this is approximate or a soft limit. The phrase uses "will be read" which is a definitive statement about behavior. Users relying on this parameter for memory management or security purposes would have a reasonable expectation that the limit is enforced strictly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue could be considered a minor implementation detail that rarely causes problems in practice. Most users likely use reasonable max_bytes values (like 4096 or 8192) with default chunk sizes (65536), where the excess would be proportionally small. Fixing this might require additional complexity or performance overhead for limiting reads, which could be deemed not worth the effort for an edge case.
+
+**Why it might not be WONTFIX:**
+The bug can cause the buffer to exceed the specified limit by up to 65KB (or more with custom streams), which is significant. For applications with strict memory constraints or security requirements, this could be a serious issue. The violation is not trivial - in the test case, the buffer grew to 10x the specified limit. This is not a minor discrepancy but a fundamental contract violation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The implementation has worked this way consistently, and changing the documentation to reflect the actual behavior might be less disruptive than changing the code. The documentation could be updated to say "approximately max_bytes" or explain that the limit is checked before each read but not enforced on the buffer size itself. This would align the documentation with the existing behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation language is clear and unambiguous about max_bytes being a maximum. Users have likely written code expecting this limit to be enforced. Changing the documentation to match the buggy behavior would be admitting that the API contract was wrong rather than the implementation. The parameter name itself, "max_bytes," strongly implies a hard maximum.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If the current behavior is considered "working as designed," then adding strict enforcement of max_bytes could be seen as a new feature. A new parameter like "strict_max_bytes" or a different method could be added to provide the strict limiting behavior for users who need it, while maintaining backward compatibility.
+
+**Why it might not be FEATURE_REQUEST:**
+The documented behavior already exists in the API specification - it's not a new feature being requested. The user is asking for the implementation to match what's already documented, not for new functionality. The parameter max_bytes already promises this behavior; it's the implementation that's failing to deliver it.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation clearly violates its documented contract. The docstring unambiguously states that max_bytes is the "maximum number of bytes that will be read before raising DelimiterNotFound." The actual behavior can read and buffer significantly more data (up to max_bytes + chunk_size - 1). This is a straightforward case where the code doesn't do what the documentation says it does. For users who set max_bytes to limit memory usage or prevent denial-of-service attacks, this violation could have security implications.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if there were some other documentation or design document that clarifies max_bytes as a soft limit, or if this behavior was intentionally designed this way for performance reasons. However, no such documentation exists, and the parameter name and docstring are clear about the intended behavior.
+
+## Overall consideration
+This appears to be a clear bug in the implementation. The documentation establishes an unambiguous contract: max_bytes is the maximum number of bytes that will be read before raising DelimiterNotFound. The implementation violates this contract by reading and buffering potentially much more data than specified - in the test case, 10 times the limit. This isn't a minor edge case or a documentation ambiguity; it's a fundamental failure to enforce a documented limit.
+
+The bug has practical implications. Users who rely on max_bytes to limit memory usage (perhaps to prevent DoS attacks or handle untrusted input safely) would find their applications using significantly more memory than expected. The fact that the excess can be up to the full chunk size (default 65KB) makes this a non-trivial violation. A user setting max_bytes=1000 could end up with 66,000 bytes in the buffer - a 66x increase.
+
+While the maintainers might choose to fix this as a documentation update for backward compatibility reasons, from a technical correctness standpoint, this is unquestionably a bug. The implementation fails to honor its documented contract in a way that could have real consequences for applications depending on the documented behavior. The fix proposed in the bug report is reasonable and would bring the implementation in line with its documentation.

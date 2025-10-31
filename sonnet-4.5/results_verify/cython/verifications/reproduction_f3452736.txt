@@ -1,0 +1,56 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python version: 3.13
+- Cython location: /home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages
+- Module: Cython.Plex.Machines.FastMachine
+- Method: chars_to_ranges
+
+### Bug Report Claims
+The bug report claims that `chars_to_ranges` creates duplicate ranges when the input contains duplicate characters, instead of producing a minimal set of non-overlapping ranges.
+
+### Reproduction Results
+
+#### Test Case 1: ['0', '0']
+- **Input**: ['0', '0'] (duplicate character)
+- **Output**: (('0', '0'), ('0', '0'))
+- **Expected**: Single range (('0', '0'),) since only one unique character
+- **Result**: ✓ BUG CONFIRMED - Creates TWO identical ranges
+
+#### Test Case 2: ['a', 'a', 'a']
+- **Input**: ['a', 'a', 'a'] (triple duplicate)
+- **Output**: (('a', 'a'), ('a', 'a'), ('a', 'a'))
+- **Expected**: Single range (('a', 'a'),)
+- **Result**: ✓ BUG CONFIRMED - Creates THREE identical ranges
+
+#### Test Case 3: ['a', 'b', 'b', 'c']
+- **Input**: ['a', 'b', 'b', 'c'] (consecutive with duplicate)
+- **Output**: (('a', 'b'), ('b', 'c'))
+- **Expected if deduplicated**: (('a', 'c'),)
+- **Result**: Creates overlapping ranges due to duplicate 'b'
+
+#### Property Test Result
+The hypothesis property test from the bug report FAILS as claimed:
+- Assertion: "Ranges should not be adjacent or overlapping"
+- Failure case: ['0', '0'] produces overlapping ranges
+- Error confirms the bug exists
+
+### Root Cause Analysis
+Manual tracing reveals the algorithm flaw:
+
+1. The function sorts the input but doesn't deduplicate
+2. When processing duplicates:
+   - First occurrence creates a range (e.g., ('0', '0'))
+   - The inner while loop checks if next char == current + 1
+   - For duplicates, ord('0') != ord('0') + 1, so loop exits
+   - Second occurrence is processed separately, creating another identical range
+
+3. The algorithm assumes each character in the sorted list is unique, but doesn't enforce this
+
+### Technical Impact
+1. **Incorrect output**: Multiple identical ranges instead of a single range
+2. **Inefficiency**: Redundant ranges in the output
+3. **Misleading debug output**: Since this is used in `dump_transitions`, it produces confusing debug output with duplicate ranges
+
+### Conclusion
+**The bug is REAL and REPRODUCIBLE**. The `chars_to_ranges` method fails to handle duplicate characters correctly, creating duplicate ranges in the output. This violates the reasonable expectation that the output should contain non-overlapping, minimal ranges.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is receiving malformed input where min > max, which violates the fundamental invariant of Parquet statistics. In a well-formed Parquet file, min should always be <= max within each row group. The function could be argued to have no obligation to handle corrupted or malformed Parquet metadata gracefully, as this represents invalid input that should never occur in practice. The documentation doesn't specify that the function must handle such edge cases, and the assertion could be seen as a reasonable validity check.
+
+**Why it might not be INVALID:**
+The function is part of a data processing library that reads real-world Parquet files, which may be corrupted, manually modified, or written by buggy writers. The function crashes with an unhelpful AssertionError instead of providing a meaningful error message or degrading gracefully. Users encountering this error cannot read their Parquet files at all, even if the actual data might be recoverable. The assertion is an implementation detail that causes a hard failure.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case that only occurs with malformed Parquet files that violate the format specification. Well-behaved Parquet writers will never produce statistics where min > max. The effort to fix this might not be justified given how rarely it would occur in practice. The assertion serves as a sanity check that catches fundamentally broken input early. Files with such malformed statistics are likely corrupted in other ways and shouldn't be trusted.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (validate min <= max before processing) and would prevent crashes for users with corrupted files. The function already handles other edge cases like missing statistics gracefully. Data processing libraries should be robust against malformed input, especially when reading external files. The current behavior prevents users from reading potentially valid data just because statistics are incorrect.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function's documentation doesn't specify its behavior for malformed statistics. Adding documentation about the requirement that min <= max would clarify the expected input format. The assertion could be kept if the documentation explicitly states that the function expects well-formed Parquet statistics and will fail on malformed input. This would set proper expectations for users.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not just about unclear documentation but an actual crash in the code. Even with better documentation, users with malformed files would still be unable to read them. The fundamental problem is the ungraceful handling of edge cases, not a misunderstanding of the function's purpose. Documentation alone wouldn't solve the user's problem of being unable to read their files.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting malformed Parquet files with invalid statistics could be seen as a new feature rather than a bug fix. The function currently assumes well-formed input, and adding support for corrupted files would be extending its capabilities. This would be adding robustness features for handling edge cases that weren't originally designed for. The request is essentially asking for graceful degradation in the presence of invalid input.
+
+**Why it might not be FEATURE_REQUEST:**
+The function is already designed to handle various edge cases (missing statistics, unsorted columns), so handling min > max is fixing an oversight rather than adding a feature. Reading Parquet files is the core functionality, and crashing on malformed statistics prevents this basic operation. This is more about fixing a crash than adding new functionality. The proposed fix doesn't add features but prevents failures.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an unhelpful AssertionError when encountering Parquet files with min > max statistics, preventing users from reading their data. The assertion at line 442 is an internal implementation check that shouldn't cause user-facing crashes. The function already handles other edge cases gracefully (missing statistics, overlapping row groups) but fails on this one. The fix is straightforward and would make the function more robust without changing its core behavior.
+
+**Why it might not be BUG:**
+The function is receiving fundamentally invalid input that violates Parquet specification invariants. The assertion is catching genuinely malformed data that shouldn't exist. This is more like passing null to a function that doesn't accept null - the function isn't wrong to fail. The real bug is in whatever created the malformed Parquet file, not in Dask's handling of it.
+
+## Overall Consideration
+
+After careful analysis, this bug report presents a complex case that sits at the intersection of robustness and correctness. The sorted_columns function encounters an AssertionError when processing Parquet statistics where min > max within a row group. While such statistics violate the Parquet specification and indicate malformed files, the way the function handles this situation is problematic.
+
+The key consideration is that data processing libraries, especially those reading external file formats, should be robust against malformed input. While min > max statistics should never occur in properly written Parquet files, they can appear due to file corruption, bugs in writers, or manual manipulation. When they do occur, the current behavior - crashing with an AssertionError - provides no useful information to users and completely prevents them from reading their files, even if the actual data might be valid or partially recoverable.
+
+The proposed fix is minimal and reasonable: validate that min <= max before processing, and either skip the malformed column from sorted detection or handle it gracefully. This would align with how the function already handles other edge cases like missing statistics. However, given that this represents genuinely malformed input that violates the Parquet specification, and that the function's documentation doesn't promise to handle such cases, this leans more toward being an edge case that could be rejected. The assertion serves as a sanity check that catches fundamental data corruption, and removing it might hide deeper issues with the files being processed.

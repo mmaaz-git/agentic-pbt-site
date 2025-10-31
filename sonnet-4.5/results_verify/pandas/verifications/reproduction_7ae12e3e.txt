@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `adjoin` function in `pandas.io.formats.printing` does not consistently use the provided `strlen` parameter for all input lists.
+
+### Hypothesis Test Results
+The Hypothesis test failed as expected, confirming the bug:
+- Test assertion: Expected at least 2 calls to strlen, but got 1
+- Falsifying example: `test_adjoin_uses_strlen_consistently(list1=['0'], list2=['0'])`
+- This proves that the custom `strlen` function is only called for the first list, not the second.
+
+### Manual Test Results
+Running the manual test code with a custom `strlen` function that prints when called and adds 10 to the length:
+
+Test 1: adjoin(1, ["a"], ["b"], strlen=custom_strlen)
+- Output shows: "custom_strlen called with: 'a'"
+- Notable: No call for "b" from the second list
+- Result: 'a           b' (spacing based on custom strlen for first column, but not second)
+
+Test 2: adjoin(1, ["a", "bb"], ["c", "dd"], strlen=custom_strlen)
+- Output shows: "custom_strlen called with: 'a'" and "custom_strlen called with: 'bb'"
+- Notable: No calls for "c" or "dd" from the second list
+- The custom strlen is only applied to the first list
+
+### Code Analysis
+Examining the source code at `/home/npc/miniconda/lib/python3.13/site-packages/pandas/io/formats/printing.py`:
+
+Line 51: `lengths = [max(map(strlen, x)) + space for x in lists[:-1]]`
+- This line correctly uses the custom `strlen` parameter for all lists EXCEPT the last one
+
+Line 53: `lengths.append(max(map(len, lists[-1]))`
+- This line incorrectly uses the built-in `len()` function for the last list
+- It completely ignores the `strlen` parameter
+
+### Impact
+This inconsistency means that when using `adjoin` with a custom `strlen` function (particularly important for unicode text with display widths different from character counts), the last column will not be formatted correctly. The function's documented purpose of handling unicode text properly is broken for the last column.
+
+### Conclusion
+The bug is confirmed and reproducible. The implementation clearly shows inconsistent handling where `strlen` is used for all lists except the last one, which uses the built-in `len()` function instead.

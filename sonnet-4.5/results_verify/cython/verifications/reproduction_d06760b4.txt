@@ -1,0 +1,35 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the bug described in the report. The bug occurs in pyximport.get_distutils_extension() when non-string paths are passed as arguments.
+
+## Reproduced Behavior
+
+1. **Bytes path failure:**
+   - When passing a bytes object (e.g., b'/tmp/test.pyx'), the function crashes
+   - Error: "TypeError: can't concat str to bytes"
+   - This occurs in handle_special_build() at line 111 when trying to concatenate bytes with a string (PYXBLD_EXT)
+
+2. **Path object failure:**
+   - When passing a pathlib.Path object (e.g., Path('/tmp/test.pyx')), the function crashes
+   - Error: "AttributeError: 'PosixPath' object has no attribute 'encode'"
+   - This occurs at line 102 when the code tries to call encode() on a Path object
+
+## Root Cause
+
+The code contains Python 2 legacy logic at lines 99-102:
+```python
+if not isinstance(pyxfilename, str):
+    # distutils is stupid in Py2 and requires exactly 'str'
+    # => encode accidentally coerced unicode strings back to str
+    pyxfilename = pyxfilename.encode(sys.getfilesystemencoding())
+```
+
+This code was meant to handle unicode strings in Python 2 but in Python 3:
+- bytes objects pass the `not isinstance(pyxfilename, str)` check but don't have an encode() method
+- pathlib.Path objects also pass the check but don't have an encode() method
+- Even when bytes pass through unchanged (not hitting the encode call), they fail later when concatenated with strings
+
+## Impact
+
+The function fails to handle modern Python 3 path types (bytes and pathlib.Path) despite having code that suggests it was intended to handle non-string paths. This limits the usability of the function with modern Python conventions.

@@ -1,0 +1,67 @@
+REPRODUCTION OF THE BUG REPORT
+==============================
+
+1. BUG REPRODUCED SUCCESSFULLY
+
+The bug report is accurate and can be reproduced exactly as described. The issue occurs when numpy.strings.replace is called on an array with a string dtype that is too small to hold the replacement result.
+
+2. HYPOTHESIS TEST REPRODUCTION
+
+Ran the provided hypothesis test and it immediately failed with the exact case mentioned:
+- Input: arr=['0'] with dtype <U1
+- Replacement: '0' -> '00' with count=1
+- Expected result: ['00']
+- Actual result: ['0']
+
+The test correctly identifies that numpy.strings.replace does not match Python's str.replace semantics.
+
+3. MANUAL REPRODUCTION
+
+Confirmed the bug with multiple test cases:
+
+Case 1: arr=['0'], replace '0' with '00'
+- Input dtype: <U1 (max 1 character)
+- Result: ['0'] instead of ['00']
+- The replacement string '00' gets truncated to '0'
+
+Case 2: arr=['x'], replace 'x' with 'xyz'
+- Input dtype: <U1
+- Result: ['x'] instead of ['xyz']
+- The replacement string 'xyz' gets truncated to 'x'
+
+Case 3: arr=['cat'], replace 'cat' with 'elephant'
+- Input dtype: <U3 (max 3 characters)
+- Result: ['ele'] instead of ['elephant']
+- The replacement string gets truncated to 3 characters
+
+4. ROOT CAUSE ANALYSIS
+
+The bug occurs in the implementation at lines 1358-1359 of numpy/_core/strings.py:
+```python
+old = old.astype(old_dtype or a_dt, copy=False)
+new = new.astype(new_dtype or a_dt, copy=False)
+```
+
+The replacement string 'new' is cast to the input array's dtype (a_dt) BEFORE calculating the buffer size. This truncates the replacement string if it's longer than the input array's dtype can hold.
+
+The buffer size calculation on line 1363 then uses the truncated strings:
+```python
+buffersizes = str_len(arr) + counts * (str_len(new) - str_len(old))
+```
+
+For the failing case:
+- str_len(arr) = 1
+- str_len(new) = 1 (truncated from 2)
+- str_len(old) = 1
+- buffersizes = 1 + 1 * (1 - 1) = 1
+
+This results in an output dtype of <U1, which cannot hold the expected result '00'.
+
+5. IMPACT
+
+This bug affects any use case where:
+- The replacement string is longer than the original string
+- The input array's dtype is sized to fit the original data, not the potential replacements
+- This is a common scenario in real-world string processing
+
+The bug causes silent data corruption - the function returns incorrect results without raising any errors or warnings.

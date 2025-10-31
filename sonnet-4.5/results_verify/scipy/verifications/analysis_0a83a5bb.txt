@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The user might be misunderstanding how the convergence criterion works internally. The documentation states the criterion is checked against the "exact root," but the algorithm doesn't know the exact root. The internal implementation might use a different practical convergence check based on interval width or successive approximations, which could be working as designed.
+
+**Why it might not be INVALID:**
+The bug is clearly reproducible and demonstrates asymmetric behavior that cannot be justified by the documentation. The algorithm finds the root to machine precision (f(root) = -4.44e-16) but reports non-convergence, while accepting a much less precise positive root (f(root) = -2.88e-03) as converged. This contradicts any reasonable interpretation of convergence.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs with specific tolerance combinations (rtol=1e-3) and can be worked around by using default tolerances or only adjusting xtol. Users encountering this can easily switch to brentq or other methods. The documentation already warns that "The routine used here diverges slightly from standard presentations in order to be a bit more careful of tolerance."
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it affects a core functionality of the function (custom tolerances) and produces objectively incorrect results. The function claims convergence failed when it actually found the root to machine precision. This could cause production code to fail unnecessarily when users set reasonable custom tolerances for their applications.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be incomplete about how the convergence criterion is actually implemented. Perhaps the algorithm uses a different internal check that doesn't match the documented formula exactly, especially for negative roots. The documentation could be updated to warn about this specific behavior with custom rtol values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation is very clear: "abs(x - x0) <= xtol + rtol * abs(x0)" is the convergence criterion. The algorithm violates this documented behavior by reporting non-convergence when this criterion is satisfied. The code is wrong, not the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper handling of custom rtol for negative roots is a new feature that wasn't fully implemented. The current implementation might only properly support the default tolerances, and adding support for custom rtol with negative roots would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already accepts xtol and rtol parameters and documents their behavior. This isn't requesting new functionality but reporting that existing, documented functionality doesn't work correctly. The parameters are already there and should work as documented.
+
+## BUG Considerations
+**Why it might be BUG:**
+The algorithm demonstrably violates its documented behavior. It finds a root to machine precision (satisfying any reasonable convergence criterion) but reports convergence failure. The asymmetric behavior between positive and negative roots with identical tolerance settings cannot be justified. The function accepts less precise positive roots while rejecting more precise negative roots.
+
+**Why it might not be BUG:**
+The documentation mentions the implementation "diverges slightly from standard presentations" which might cover this behavior. The issue might be in the C implementation's design choices rather than a coding error. Users have workarounds available.
+
+## Overall consideration
+This appears to be a genuine bug in the scipy.optimize.ridder implementation. The reproduction clearly shows that when using custom tolerances (specifically rtol=1e-3), the algorithm finds the negative root of x²-2 to machine precision (-4.44e-16 residual) but incorrectly reports convergence failure after 100 iterations. Meanwhile, it accepts a positive root with much worse precision (-2.88e-03 residual) as converged in just 3 iterations. This asymmetric behavior cannot be justified by any reasonable interpretation of the documented convergence criterion.
+
+The documented convergence criterion states "abs(x - x0) <= xtol + rtol * abs(x0)" where x is the exact root and x0 is the computed root. In the failing case, this evaluates to 2.22e-16 <= 2.41e-03, which is clearly satisfied. The algorithm has found the root to the limits of floating-point precision but fails to recognize this achievement, exhausting all iterations unnecessarily.
+
+While the documentation notes the implementation "diverges slightly from standard presentations," this cannot excuse reporting convergence failure when the root has been found to machine precision. This is a clear violation of the function's contract with the user. The bug specifically affects users who need custom tolerances for their applications, causing spurious failures in what should be successful root-finding operations. This is particularly problematic because the failures are silent when disp=False, potentially causing downstream issues in production code that expects reliable convergence detection.

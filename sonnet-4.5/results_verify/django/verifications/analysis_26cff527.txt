@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that different vary_on lists MUST produce different cache keys. One could argue the function is working as designed and users should be aware that certain character combinations might cause collisions. The documentation doesn't guarantee collision-free hashing.
+
+**Why it might not be INVALID:**
+The entire purpose of the vary_on parameter is to create unique cache keys for different contexts. The documentation example shows caching per-user content with make_template_fragment_key("sidebar", [username]), which clearly implies different usernames should produce different keys. If two different usernames could produce the same key, the function would be fundamentally broken for its documented use case.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue only occurs when vary_on elements contain colons, which might be considered an edge case. Developers could work around this by avoiding colons in their vary_on values. The impact might be considered minimal since most real-world usage probably doesn't include colons in the vary_on parameters.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it's a fundamental flaw in the hashing algorithm that can cause cache poisoning and security vulnerabilities. Users cannot reasonably be expected to sanitize all inputs to avoid colons, especially when dealing with user-generated content. The security implications (serving wrong user's cached content) make this too serious to ignore.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to warn users that vary_on elements containing colons may cause collisions. This would at least inform developers of the limitation and let them code defensively. The function could be considered "working as designed" with just poor documentation of its limitations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting a cache key collision bug doesn't fix the underlying security and correctness issues. The function's purpose is to create unique cache keys - documenting that it fails at this core purpose doesn't make the failure acceptable. This would be like documenting that a hash function has collisions for common inputs.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting vary_on lists with arbitrary content (including colons) without collisions could be seen as a new feature request. The current implementation might be considered "simple but limited" and adding collision-free hashing could be viewed as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality - the function already claims to create unique cache keys from different vary_on values. This is about fixing existing functionality that doesn't work correctly. The function already accepts lists with colons; it just handles them incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates its fundamental contract: different inputs produce the same cache key. This causes real problems: cache poisoning, security vulnerabilities (User A gets User B's cached content), and correctness issues. The bug is easily reproducible, affects a core caching function, and has serious implications for any Django app using template fragment caching with user-controlled data.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly guarantee collision-free hashing. The function technically works - it produces valid cache keys. The collisions only occur with specific input patterns that might be rare in practice.
+
+## Overall consideration
+This is clearly a BUG. The make_template_fragment_key function has a fundamental design flaw where different vary_on lists can produce identical cache keys. The bug report correctly identifies a serious issue where ["a:", "b"] and ["a", ":b"] produce the same key because both result in the concatenated string "a::b:" being hashed.
+
+The security implications are severe. In a multi-user application, if usernames or user-controlled data containing colons are used in vary_on, different users could receive each other's cached content. This is not just a theoretical issue - any Django application using template fragment caching with user data is potentially vulnerable.
+
+While the documentation doesn't explicitly state "collision-free," this is an implicit requirement for any cache key generation function. The entire purpose of vary_on is to create distinct cache entries for different contexts. If this doesn't work reliably, the function fails at its core purpose. The proposed fixes (length-prefixing or null byte separators) are standard solutions to this well-known problem in hash construction. This is a legitimate bug that should be fixed in Django's codebase.

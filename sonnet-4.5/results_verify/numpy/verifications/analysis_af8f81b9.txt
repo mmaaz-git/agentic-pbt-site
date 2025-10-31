@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The numpy polynomial documentation never explicitly guarantees that the mathematical property a = b*q + r will hold to machine precision. The documentation simply states that polydiv "Divides one polynomial by another" and returns quotient and remainder, without specifying numerical precision requirements. The observed error of 3e-5 could be considered acceptable for an algorithm prioritizing efficiency over perfect numerical accuracy, especially given the large intermediate coefficients (up to 2e11) involved in the computation.
+
+**Why it might not be INVALID:**
+The fundamental mathematical property a = b*q + r is universally expected to hold for polynomial division - it's the defining property of division. An error of 3e-5 is far beyond typical floating-point precision expectations (machine epsilon is 2.2e-16). The error is not due to limitations of floating-point arithmetic but rather the specific algorithm implementation, as evidenced by other test cases working perfectly with zero error.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The error only occurs with specific edge cases involving high-degree polynomials and particular coefficient ratios. The source code explicitly notes that the current implementation is "more efficient than `pu._div(polymul, c1, c2)`", suggesting a deliberate trade-off between speed and numerical stability. The error magnitude decreases exponentially with polynomial degree (3e-5 for degree 7, 1e-11 for degree 3), making it negligible for most practical applications. Given numpy's focus on performance, accepting small numerical errors for efficiency gains could be considered reasonable.
+
+**Why it might not be WONTFIX:**
+An error of 3e-5 is not trivial - it's visible and could propagate through calculations. The bug affects a core mathematical operation that users rely on for correctness. The fact that other similar operations (with different coefficient values) work perfectly suggests this is fixable without fundamental changes. The error pattern shows systematic accumulation rather than random noise, indicating an algorithmic issue that could be addressed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify expected numerical precision or warn about potential accumulation of errors in edge cases. Users might reasonably expect exact arithmetic (within machine precision) but the documentation doesn't clarify that efficiency optimizations may introduce larger errors. Adding a note about numerical stability trade-offs would help users understand when to expect such errors and potentially use alternative methods when precision is critical.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The mathematical property a = b*q + r is so fundamental that it shouldn't need documentation to state it should hold. Documenting this as expected behavior would essentially be documenting a bug as a feature. The error magnitude (3e-5) is too large to be considered a documentation issue - it's an implementation problem that produces mathematically incorrect results beyond any reasonable tolerance.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report essentially asks for better numerical stability in polynomial division. This could be viewed as requesting an enhancement to use a more numerically stable algorithm (like the mentioned `pu._div` alternative). Adding an optional parameter for users to choose between fast-but-less-accurate and slow-but-more-accurate algorithms could be a feature addition rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for correct implementation of existing functionality. Polynomial division that satisfies a = b*q + r is not a feature request - it's the basic mathematical requirement for the operation. The current behavior violates the fundamental contract of what divmod should do, making it a bug rather than a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The divmod operation fails to satisfy the fundamental mathematical property a = b*q + r within reasonable tolerance. The error (3e-5) is far larger than machine precision and represents actual mathematical incorrectness, not just rounding. The bug is reproducible and occurs due to numerical instability in the algorithm when certain coefficient combinations cause large intermediate values. The fact that similar cases work perfectly (error = 0) proves this is not inherent to polynomial division but specific to the implementation.
+
+**Why it might not be BUG:**
+The numpy documentation doesn't explicitly guarantee any specific level of numerical precision for polynomial operations. The error could be viewed as an acceptable trade-off for the efficiency gains mentioned in the source code. The algorithm produces the correct structural result (correct degrees for quotient and remainder) with only small coefficient errors. Without explicit precision requirements in the specification, this could be considered working as designed.
+
+## Overall consideration
+
+After thorough analysis, this appears to be a legitimate numerical stability issue in numpy's polynomial division implementation. The error of 3e-5 is substantially larger than what would be expected from normal floating-point arithmetic limitations. The mathematical property a = b*q + r is fundamental to polynomial division and should hold within reasonable numerical tolerance.
+
+The pattern of errors (exponentially decreasing with lower degrees) and the massive intermediate values (coefficients up to 2e11) strongly suggest numerical instability in the iterative algorithm. The fact that other test cases with similar or even larger coefficient ratios work perfectly (with exactly zero error) indicates this is not an inherent limitation but a specific algorithmic issue with certain input combinations.
+
+While the documentation doesn't explicitly specify precision requirements, the mathematical correctness of fundamental operations like division is an implicit requirement. Users reasonably expect polynomial division to satisfy its defining mathematical property within floating-point precision limits. An error that's 11 orders of magnitude larger than machine epsilon represents a genuine algorithmic problem rather than an acceptable trade-off.

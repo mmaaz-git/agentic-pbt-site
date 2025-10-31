@@ -1,0 +1,46 @@
+## Bug Reproduction Report
+
+### Test Execution
+
+I successfully reproduced the reported bug using both the provided test methods:
+
+1. **Hypothesis Test**:
+   - Ran the property-based test with the specific failing input `header_upper='A'`
+   - The test failed as expected, confirming that different cases of the same header produce different internal states
+   - Result: FAILED - cors_upper.allow_headers != cors_lower.allow_headers
+
+2. **Manual Reproduction**:
+   - Executed the provided reproduction code exactly as given
+   - Observed output matched the bug report exactly:
+
+   With uppercase 'A':
+     allow_headers: ['a', 'accept', 'accept-language', 'content-language', 'content-type']
+     preflight: A, Accept, Accept-Language, Content-Language, Content-Type
+
+   With lowercase 'a':
+     allow_headers: ['accept', 'accept-language', 'content-language', 'content-type', 'a']
+     preflight: Accept, Accept-Language, Content-Language, Content-Type, a
+
+   The headers are ordered differently and the preflight response headers have different casing.
+
+### Source Code Analysis
+
+Examined the source code at `/home/npc/pbt/agentic-pbt/envs/fastapi_env/lib/python3.13/site-packages/starlette/middleware/cors.py`:
+
+- Line 58: `allow_headers = sorted(SAFELISTED_HEADERS | set(allow_headers))`
+  Headers are sorted while still in their original case
+
+- Line 60: `preflight_headers["Access-Control-Allow-Headers"] = ", ".join(allow_headers)`
+  The original-case headers are put into the preflight response
+
+- Line 67: `self.allow_headers = [h.lower() for h in allow_headers]`
+  Headers are lowercased AFTER sorting
+
+The bug occurs because Python's `sorted()` function is case-sensitive (uppercase letters sort before lowercase in ASCII order). When 'A' is provided, it sorts before 'accept', but when 'a' is provided, it sorts after 'content-type'.
+
+### Impact
+
+This bug causes:
+1. Inconsistent internal state (`self.allow_headers`) based on input case
+2. Different CORS preflight responses for semantically identical configurations
+3. Potential confusion for API consumers who might get different responses based on header casing

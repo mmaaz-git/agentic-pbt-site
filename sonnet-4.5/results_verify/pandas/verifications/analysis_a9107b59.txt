@@ -1,0 +1,70 @@
+## Bug Report Analysis
+
+### Consideration for BUG
+**Arguments for:**
+- The behavior is inconsistent: __dataframe__() succeeds but from_dataframe() fails
+- This violates the fail-fast principle - errors should occur as early as possible
+- Python naturally supports arbitrary-precision integers, and pandas handles them with object dtype
+- The interchange protocol should either fully support or fully reject such DataFrames
+- Creating a partially-usable interchange object is poor API design
+- The error occurs in a common use case (integers that exceed int64 range)
+
+**Arguments against:**
+- The code explicitly raises NotImplementedError, suggesting this is a known limitation
+- The error message says "not supported yet", implying future support is planned
+
+### Consideration for INVALID
+**Arguments for:**
+- The error message clearly states this is "not supported yet"
+- The code is working as designed with an explicit NotImplementedError
+
+**Arguments against:**
+- The documentation doesn't state this limitation
+- Users have no way to know in advance that large integers will fail
+- The failure point (from_dataframe instead of __dataframe__) is unexpected
+- Round-tripping DataFrames is a fundamental expectation of an interchange protocol
+
+### Consideration for WONTFIX
+**Arguments for:**
+- Large integers outside int64 range might be considered an edge case
+- The interchange protocol might have design limitations that make this hard to fix
+
+**Arguments against:**
+- This is not an obscure edge case - Python's arbitrary precision integers are a core feature
+- Financial and scientific applications commonly use large integers
+- The bug causes a crash, not just incorrect behavior
+- The fix (early validation) is straightforward
+
+### Consideration for FEATURE_REQUEST
+**Arguments for:**
+- The error message says "not supported yet", suggesting it's a missing feature
+- Supporting object dtype integers could be seen as an enhancement
+
+**Arguments against:**
+- This is about fixing inconsistent behavior, not adding new functionality
+- The interchange protocol already claims to support DataFrames
+- The issue is about WHERE the error occurs, not WHETHER it occurs
+
+### Consideration for DOCUMENTATION_FIX
+**Arguments for:**
+- The documentation doesn't mention this limitation
+- Adding documentation about unsupported dtypes would help users
+- The behavior might be intentional but poorly documented
+
+**Arguments against:**
+- The core issue is the inconsistent error behavior, not just documentation
+- Even with documentation, creating unusable interchange objects is poor design
+- Documentation wouldn't fix the fail-fast violation
+
+### Conclusion
+This is most likely a **BUG** because:
+
+1. **API Design Violation**: The interchange protocol creates an object that cannot be used, violating basic API design principles. If data is unsupported, __dataframe__() should fail immediately.
+
+2. **Inconsistent Behavior**: The success of __dataframe__() implies the operation is supported, but then from_dataframe() fails. This inconsistency is a bug regardless of documentation.
+
+3. **Common Use Case**: Python's arbitrary precision integers are not an obscure edge case. Many applications rely on them.
+
+4. **Clear Fix Available**: The bug report even provides a reasonable fix - validate during __dataframe__() creation.
+
+While the error message says "not supported yet", this doesn't excuse the poor error handling design. The bug is not about whether object dtype integers are supported (they're not), but about WHERE and HOW the error is raised.

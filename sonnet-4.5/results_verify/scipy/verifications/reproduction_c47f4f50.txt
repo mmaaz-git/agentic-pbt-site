@@ -1,0 +1,38 @@
+# Bug Reproduction Analysis
+
+## Reproduction Confirmation
+
+I have successfully reproduced the bug described in the report. The bug occurs exactly as described when calling `split_data_line("")` with an empty string.
+
+### Test Results:
+
+1. **Direct test with empty string:**
+   - Called: `split_data_line("")`
+   - Result: `IndexError: string index out of range`
+   - Stack trace confirms the error occurs at line 476 in `_arffread.py` where `line[-1]` is accessed without checking if the line is empty.
+
+2. **Hypothesis tests:**
+   - Both hypothesis tests failed as expected, confirming that the function cannot handle empty strings.
+   - The test `test_split_data_line_handles_any_string` immediately fails when hypothesis generates an empty string.
+
+3. **Specific edge cases verified:**
+   - `"".split("\n")` produces `['']` - causes IndexError
+   - `"foo\n".split("\n")` produces `['foo', '']` - the empty string causes IndexError
+   - `"\n".split("\n")` produces `['', '']` - both empty strings cause IndexError
+   - `"\n\n".split("\n")` produces `['', '', '']` - all empty strings cause IndexError
+
+### Code Path Verification:
+
+I confirmed the code path described in the bug report:
+1. `RelationalAttribute.parse_data` (line 373) splits data by newlines: `for raw in escaped_string.split("\n"):`
+2. Each resulting string is passed to `split_data_line` (line 374): `row, self.dialect = split_data_line(raw, self.dialect)`
+3. When empty strings are passed, line 476 in `split_data_line` crashes: `if line[-1] == '\n':`
+
+### Impact:
+
+The bug is real and will crash the ARFF parser whenever:
+- Empty relational attribute data is encountered
+- Relational attribute data ends with a newline (common in many text formats)
+- Multiple consecutive newlines are present in the data
+
+The proposed fix (`if line and line[-1] == '\n':`) would correctly prevent the IndexError by checking if the line is non-empty before attempting to access its last character.

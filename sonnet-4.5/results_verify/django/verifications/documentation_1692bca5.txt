@@ -1,0 +1,40 @@
+## Django Signal Documentation Analysis
+
+### Official Documentation Review
+
+1. **Django's Public Documentation**:
+   - The official Django documentation (topics/signals and ref/signals) does NOT mention the `use_caching` parameter at all
+   - There is no documentation about requirements for sender types when using caching
+   - No warnings about weak references in relation to sender types
+   - The documentation only mentions weak references in the context of receivers (not senders)
+
+2. **Source Code Documentation**:
+   - The `Signal.__init__` docstring simply states "Create a new signal" without documenting the `use_caching` parameter
+   - The source code comment explains caching: "For each distinct sender we cache the receivers that sender has in 'sender_receivers_cache'. The cache is cleaned when .connect() or .disconnect() is called and populated on send()."
+   - The implementation shows: `self.sender_receivers_cache = weakref.WeakKeyDictionary() if use_caching else {}`
+
+3. **Critical Finding**: The `use_caching` parameter is:
+   - An internal/undocumented feature
+   - Not mentioned in public API documentation
+   - Only discoverable through source code inspection
+
+### Documentation Gap Analysis
+
+1. **Missing Documentation**:
+   - The `use_caching` parameter is completely undocumented in public docs
+   - No mention of WeakKeyDictionary usage or its limitations
+   - No warning that certain sender types (str, int, None, tuple, etc.) will fail with caching
+
+2. **Behavioral Inconsistency**:
+   - With `use_caching=False`: All sender types work
+   - With `use_caching=True`: Only weakly-referenceable types work
+   - This inconsistency is not documented anywhere
+
+3. **Use Case Analysis**:
+   - Django internally uses string senders in many places (model names, signal names)
+   - The bug report correctly notes this is a common pattern
+   - The failure only occurs at send() time, not connect() time, making it a runtime surprise
+
+### Conclusion
+
+The `use_caching` parameter appears to be an internal optimization feature that was not fully designed to handle all valid sender types. Since it's undocumented in the public API, users discovering and using this parameter are working with an internal implementation detail. However, the fact that it's exposed in the constructor signature makes it quasi-public, creating an ambiguous situation where users may reasonably expect it to work with all sender types that work in the non-caching mode.

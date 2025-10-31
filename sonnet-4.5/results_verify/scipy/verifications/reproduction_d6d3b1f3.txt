@@ -1,0 +1,40 @@
+# Bug Reproduction Report
+
+## Summary
+The bug report has been successfully reproduced. The claim that `get_window('hann', M)` produces different results than `hann(M)` is confirmed.
+
+## Hypothesis Test Results
+The property-based test using Hypothesis failed immediately with M=2 (and fails for all values of M). The test correctly identifies that when comparing:
+- `func(M, sym=True)` (where func is hann, hamming, blackman, or bartlett)
+- `windows.get_window(window_name, M, fftbins=True)`
+
+These two calls produce different results, even though the test incorrectly expects them to be equal (the test itself has a logic error - it should compare sym=False with fftbins=True).
+
+## Manual Reproduction Results
+Running the manual example with M=10 confirmed:
+
+1. `hann(10)` produces:
+   [0.         0.11697778 0.41317591 0.75       0.96984631 0.96984631
+    0.75       0.41317591 0.11697778 0.        ]
+
+2. `get_window('hann', 10)` produces:
+   [0.        0.0954915 0.3454915 0.6545085 0.9045085 1.        0.9045085
+    0.6545085 0.3454915 0.0954915]
+
+3. These are NOT equal.
+
+## Root Cause Confirmation
+Further testing revealed the exact relationship:
+- `hann(M)` defaults to `sym=True` (symmetric window)
+- `get_window('hann', M)` defaults to `fftbins=True` (which internally uses `sym=False`, periodic window)
+
+This was confirmed by:
+- `hann(10, sym=False)` == `get_window('hann', 10, fftbins=True)`: TRUE
+- `hann(10, sym=True)` == `get_window('hann', 10, fftbins=False)`: TRUE
+
+## Function Signatures
+Using inspect.signature() confirmed:
+- `hann(M, sym=True, *, xp=None, device=None)` - defaults to sym=True
+- `get_window(window, Nx, fftbins=True, *, xp=None, device=None)` - defaults to fftbins=True
+
+The bug report is accurate: there is an inconsistency in default parameters between the direct window functions and the get_window wrapper function.

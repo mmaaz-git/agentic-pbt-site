@@ -1,0 +1,63 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in Cython version 3.1.4.
+
+## Hypothesis Test Reproduction
+
+The Hypothesis test provided in the bug report was executed with the specific failing input (n=0, producing tag name '.0'):
+- Result: ValueError: Invalid tag name '.0'
+- This confirms the crash described in the report
+
+## Manual Test Cases Reproduction
+
+All three test cases from the bug report were executed and confirmed:
+
+### Case 1: '.0' as regular string
+- `is_valid_tag('.0')` returns `True` (should be False)
+- `writer.start('.0')` crashes with: "Invalid tag name '.0'"
+- Confirms bug: The validation function incorrectly allows '.0' through
+
+### Case 2: Digit-starting tag '0'
+- `is_valid_tag('0')` returns `True` (should be False per XML spec)
+- `writer.start('0')` crashes with: "Invalid tag name '0'"
+- Confirms bug: The validation function incorrectly allows digit-starting tags
+
+### Case 3: Control character '\x1f'
+- `is_valid_tag('\x1f')` returns `True` (should be False per XML spec)
+- `writer.start('\x1f')` crashes with: "All strings must be XML compatible: Unicode or ASCII, no NULL bytes or control characters"
+- Confirms bug: The validation function incorrectly allows control characters
+
+## Code Examination
+
+I examined the actual implementation in `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Debugger/DebugWriter.py`:
+
+The current `is_valid_tag()` function (lines 16-27):
+```python
+def is_valid_tag(name):
+    """
+    Names like '.0' are used internally for arguments
+    to functions creating generator expressions,
+    however they are not identifiers.
+
+    See https://github.com/cython/cython/issues/5552
+    """
+    if isinstance(name, EncodedString):
+        if name.startswith(".") and name[1:].isdecimal():
+            return False
+    return True
+```
+
+Key observations:
+1. The function only checks for '.N' pattern when `name` is an `EncodedString` instance
+2. Regular Python strings with '.N' pattern are not caught
+3. No validation for XML tag name rules (no digits at start, no control characters)
+4. The function is called in `start()`, `end()`, and `add_entry()` methods as a guard
+
+## Impact
+
+The bug causes crashes in the CythonDebugWriter when invalid XML tag names are used. These invalid names pass through the `is_valid_tag()` validation but then fail when lxml's TreeBuilder attempts to create XML elements with them. This affects Cython's debug info generation functionality.
+
+## Conclusion
+
+The bug report is accurate and reproducible. The `is_valid_tag()` function does not properly validate XML tag names according to XML specifications, leading to crashes in downstream lxml operations.

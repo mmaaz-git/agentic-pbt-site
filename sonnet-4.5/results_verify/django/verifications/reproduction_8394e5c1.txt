@@ -1,0 +1,64 @@
+## Bug Reproduction Analysis
+
+### Reproduction Status: CONFIRMED
+
+I successfully reproduced the bug reported in Django's Signal class when using `use_caching=True` with non-weakrefable senders.
+
+### Reproduction Steps and Results:
+
+1. **Hypothesis Test Reproduction**:
+   - The property-based test failed exactly as reported
+   - When `use_caching=True`, calling `has_listeners()` crashes with:
+     `TypeError: cannot create weak reference to 'NoneType' object`
+   - When `use_caching=False`, the test passes
+
+2. **Manual Test with sender=None**:
+   - Created a Signal with `use_caching=True`
+   - Connected a receiver
+   - Calling `signal.send(sender=None)` resulted in:
+     `TypeError: cannot create weak reference to 'NoneType' object`
+   - Stack trace shows the error occurs in line 183 of dispatcher.py when accessing `self.sender_receivers_cache.get(sender)`
+
+3. **Manual Test with sender=object()**:
+   - Same setup with `use_caching=True`
+   - Calling `signal.send(sender=object())` resulted in:
+     `TypeError: cannot create weak reference to 'object' object`
+   - Plain object instances cannot be weakly referenced in Python
+
+4. **Control Test (use_caching=False)**:
+   - All tests pass when `use_caching=False`
+   - Both `sender=None` and `sender=object()` work correctly
+   - Signals are sent and received as expected
+
+5. **has_listeners() Method**:
+   - Also crashes with `use_caching=True` when trying to check for listeners
+   - Error occurs on line 156/425 of dispatcher.py
+   - Same root cause: WeakKeyDictionary cannot handle non-weakrefable keys
+
+### Root Cause Analysis:
+
+The bug is located in `django/dispatch/dispatcher.py`, line 47:
+```python
+self.sender_receivers_cache = weakref.WeakKeyDictionary() if use_caching else {}
+```
+
+When `use_caching=True`, Django uses a `WeakKeyDictionary` for the sender cache. However, `WeakKeyDictionary` requires all keys to support weak references. Many common Python types cannot be weakly referenced:
+- `None` (NoneType)
+- Plain `object()` instances without __weakref__ slot
+- Built-in types like int, str, float, etc.
+
+The crash occurs whenever the code tries to access the cache with these sender types:
+- In `send()` method at line 183
+- In `_live_receivers()` method at line 425
+- In `has_listeners()` method which calls `_live_receivers()`
+- In `send_robust()` and async variants
+
+### Impact:
+
+This is a significant bug because:
+1. `sender=None` is explicitly documented and widely used in Django to receive signals from any sender
+2. The `use_caching` parameter is meant to be a transparent performance optimization
+3. The bug makes `use_caching=True` incompatible with core Django functionality
+4. It affects multiple Signal methods: send(), has_listeners(), send_robust(), asend(), asend_robust()
+
+The bug report accurately describes the issue and provides valid reproduction code.

@@ -1,0 +1,93 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## Evaluation Against Each Category
+
+### 1. BUG (Valid Bug Report)
+
+**Arguments FOR classifying as BUG:**
+- The behavior violates a fundamental mathematical property: min(X) <= mean(X) <= max(X)
+- This is a reasonable expectation that most users would have, even without explicit documentation
+- The violation occurs in practical scenarios (not just theoretical edge cases)
+- The property holds for most inputs but fails for specific float64 values
+- When all array elements are identical, users would reasonably expect mean = element value
+- The issue could cause downstream problems in statistical computations that rely on this invariant
+- Other numerical libraries (e.g., some using Kahan summation) maintain this property
+
+**Arguments AGAINST:**
+- The documentation does warn about floating-point inaccuracy
+- The documentation suggests using higher precision dtype as a workaround
+- This is inherent to IEEE floating-point arithmetic, not a coding error
+
+### 2. INVALID (Incorrect Bug Report)
+
+**Arguments FOR classifying as INVALID:**
+- The documentation explicitly warns about floating-point precision issues
+- The behavior follows from standard floating-point arithmetic rules
+- The documentation never guarantees the min <= mean <= max property
+- The suggested workaround (using dtype=np.float64) doesn't always help
+
+**Arguments AGAINST:**
+- The bug is real and reproducible
+- The violation of mathematical properties is surprising to users
+- The documentation's warning is too general and doesn't mention this specific issue
+
+### 3. WONTFIX (Trivial/Uninteresting)
+
+**Arguments FOR classifying as WONTFIX:**
+- The issue only occurs with extremely small numbers (near denormalized range)
+- These values (e.g., 1.46875144e-290) are rarely used in practice
+- The relative error is tiny (difference is around 1e-306)
+- Fixing this would require changing fundamental summation algorithms with performance implications
+- The workaround of using different algorithms is available to users who need it
+
+**Arguments AGAINST:**
+- The issue violates a fundamental mathematical property
+- It occurs with values that, while small, are valid float64 numbers
+- The Hypothesis test found this automatically, suggesting it's not that obscure
+- Some array sizes trigger the bug while others don't, making it unpredictable
+
+### 4. FEATURE_REQUEST (New Functionality)
+
+**Arguments FOR classifying as FEATURE_REQUEST:**
+- Requesting a more numerically stable algorithm (Kahan summation) is asking for new functionality
+- The current implementation works as designed with standard summation
+- Adding optional stable summation algorithms would be a feature enhancement
+
+**Arguments AGAINST:**
+- This is about fixing incorrect behavior, not adding new capabilities
+- Users expect mathematical properties to hold by default
+- The mean function should work correctly for all valid inputs
+
+### 5. DOCUMENTATION_FIX (Documentation Issue)
+
+**Arguments FOR classifying as DOCUMENTATION_FIX:**
+- The code works as implemented using standard floating-point arithmetic
+- The documentation could be clearer about this specific limitation
+- Adding a note that "min <= mean <= max may not hold for certain float64 values" would help
+- The current warning about floating-point precision is too vague
+
+**Arguments AGAINST:**
+- The behavior itself is problematic, not just the documentation
+- Users shouldn't need to be warned about violations of fundamental properties
+- Documenting a bug doesn't make it not a bug
+
+## RECOMMENDATION
+
+This is a **BUG** that should remain open.
+
+### Reasoning:
+
+1. **Mathematical Invariant Violation**: The property min(X) <= mean(X) <= max(X) is fundamental to the concept of mean. When violated, it breaks user expectations and potentially downstream computations.
+
+2. **Identical Elements Case**: When all array elements are identical, the mean MUST equal that value mathematically. This is not a matter of precision but of correctness. The current behavior is objectively wrong in this case.
+
+3. **Not Just Rounding Error**: While floating-point arithmetic has limitations, modern libraries use techniques like Kahan summation or pairwise summation to minimize these issues. NumPy could do the same.
+
+4. **Real-World Impact**: The bug was found through property-based testing, showing it's discoverable in practice. Scientific computing often deals with extreme values where this could matter.
+
+5. **Fixable Problem**: The bug report demonstrates that Kahan summation would fix this issue. This is not an unsolvable problem.
+
+6. **Documentation Insufficient**: While the docs mention precision issues, they don't warn that basic statistical properties can be violated. Most users would not expect this behavior even after reading the documentation.
+
+The fact that the issue only occurs with certain array sizes and certain small values makes it even more problematic - it's unpredictable and hard to debug when encountered.

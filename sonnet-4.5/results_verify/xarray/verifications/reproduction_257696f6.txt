@@ -1,0 +1,37 @@
+## Bug Reproduction Analysis
+
+The bug report has been successfully reproduced. The issue is confirmed in xarray's implementation of `cumprod` and `cumsum` functions when `axis=None` is specified.
+
+### Test Results
+
+1. **Hypothesis Test**: The property-based test immediately fails with a shape mismatch error for any multi-dimensional array (e.g., 2x2 array). The test shows that xarray returns shape (2, 2) while numpy returns shape (4,) for a 2x2 input array.
+
+2. **Direct Reproduction**: Running the provided reproduction code confirms the exact issue:
+   - For `cumprod` with input [[1, 2], [3, 4]]:
+     * xarray returns: shape=(2, 2), values=[1, 2, 3, 24]
+     * numpy returns: shape=(4,), values=[1, 2, 6, 24]
+
+   - For `cumsum` with the same input:
+     * xarray returns: shape=(2, 2), values=[1, 3, 4, 10]
+     * numpy returns: shape=(4,), values=[1, 3, 6, 10]
+
+### Root Cause
+
+The bug is located in the `_nd_cum_func` function at lines 785-786 of duck_array_ops.py:
+
+```python
+if axis is None:
+    axis = tuple(range(array.ndim))
+```
+
+This code incorrectly interprets `axis=None` as "apply the cumulative operation to all axes sequentially" rather than the correct numpy behavior of "flatten the array and apply the operation to the flattened 1D array."
+
+The function then proceeds to apply the cumulative operation iteratively on each axis (lines 791-792), which produces entirely different results than numpy's flattening behavior.
+
+### Impact
+
+This bug causes xarray to produce:
+1. Wrong output shape (maintains original shape instead of returning 1D array)
+2. Incorrect values (due to sequential axis-by-axis application instead of flattened computation)
+
+The bug affects any multi-dimensional array when using `axis=None` with `cumprod` or `cumsum` functions in xarray.

@@ -1,0 +1,38 @@
+BUG REPRODUCTION RESULTS
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The property-based test fails as reported:
+- Input: items=['#', '0']
+- Expected: parse_list('# 0') should return 2 items
+- Actual: parse_list('# 0') returns ['#__Pyx_L1_'] (1 item)
+- The test correctly identifies that # is being treated specially
+
+2. MAIN BUG REPRODUCTION:
+Confirmed the reported behavior with DistutilsInfo:
+- Input: "# distutils: libraries = foo # this is a comment"
+- Expected: ['foo']
+- Actual: ['foo', '#__Pyx_L1_']
+
+The bug is CONFIRMED - inline comments result in placeholder labels being included in the parsed values.
+
+3. ADDITIONAL TESTING REVEALS:
+Multiple scenarios tested show consistent problematic behavior:
+- "libraries = foo # comment" → ['foo', '#__Pyx_L1_']
+- "libraries = foo bar # comment" → ['foo', 'bar', '#__Pyx_L1_']
+- "libraries = [foo, bar] # comment" → ['[foo,', 'bar]', '#__Pyx_L1_'] (also incorrectly parsed)
+
+4. ROOT CAUSE IDENTIFIED:
+The strip_string_literals function is being used by parse_list to process directive values. This function:
+- Treats # as a comment marker (correct for Python code)
+- Replaces comment text with placeholder labels like __Pyx_L1_
+- These placeholders are then included in the final parsed list
+
+The function works correctly for its intended purpose (normalizing string literals in code), but is inappropriate for parsing configuration values where comments should be stripped entirely.
+
+5. PRACTICAL IMPACT:
+This bug would cause build failures when:
+- The linker tries to find a library named "#__Pyx_L1_"
+- Include directories named "#__Pyx_L1_" are searched
+- Any other build tool receives these placeholder values
+
+The bug report's claim is TECHNICALLY CORRECT - the implementation does not handle inline comments properly in distutils directives.

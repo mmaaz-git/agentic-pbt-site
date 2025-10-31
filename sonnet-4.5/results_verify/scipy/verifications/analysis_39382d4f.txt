@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The inputs provided are mathematically extreme and arguably outside the reasonable operating range of a rotation spline interpolator. An angular rate of 60 million radians per second represents a rotation of about 10 million revolutions per second, which is physically impossible for any real mechanical system. The function is working as intended for reasonable inputs, and the overflow is a natural consequence of trying to perform calculations with numbers that exceed floating-point limits. The documentation doesn't need to specify every possible numerical limitation, especially for inputs that would never occur in practice.
+
+**Why it might not be INVALID:**
+The inputs are mathematically valid - the quaternions are unit norm, the times are strictly increasing, and all values are finite. The documentation explicitly states the requirements and these inputs meet all stated requirements. The function accepts these inputs without validation and only fails deep in the internal calculation, suggesting the API contract allows these values. Real sensor data could have timing glitches or high-frequency sampling that creates such scenarios.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case involving angular rates of 60 million rad/s, which would never occur in any real physical system. The time interval of 50 nanoseconds combined with a 180-degree rotation is so extreme that it's not worth adding code complexity to handle. The error occurs in a reasonable way (ValueError) and doesn't crash the interpreter. Adding checks for every possible numerical overflow scenario would slow down the common case for an issue that affects essentially no real users.
+
+**Why it might not be WONTFIX:**
+The issue causes the function to fail with an obscure error message that doesn't help users understand the problem. The overflow happens silently until it produces NaN values, at which point the error message doesn't indicate the root cause. The fix would be simple - just validate angular rates before computation. High-frequency sensor systems (MHz range) with occasional timing glitches could realistically encounter this issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation should warn users about numerical limitations when time intervals are very small relative to rotation magnitudes. A simple note stating "Very small time intervals combined with large rotations may cause numerical overflow" would help users understand this limitation. The current documentation doesn't mention that the internal calculations can overflow, which is important information for users working with high-frequency data. The function behaves reasonably given the extreme inputs; users just need to be warned.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is genuinely failing to handle inputs that meet all documented requirements. This isn't just a documentation issue - the code has a bug where it doesn't validate inputs that will cause overflow. Simply documenting the limitation doesn't fix the underlying problem that valid inputs cause an unhelpful error. Other numerical libraries handle overflow more gracefully or validate inputs proactively.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation doesn't handle extreme angular rates, and adding this capability would be a new feature. The request is essentially asking for the function to handle a broader range of inputs than originally designed. This would require either input validation with helpful error messages or internal rescaling to avoid overflow. The original implementation reasonably assumed physical constraints on angular velocities.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to handle any valid rotations and times that are strictly increasing. This isn't asking for new functionality but for the existing functionality to work with all valid inputs. The inputs satisfy all documented requirements, so making them work isn't a new feature but fixing existing functionality. The mathematical operations should work for any finite inputs.
+
+## BUG Considerations
+**Why it might be BUG:**
+The inputs are mathematically valid and meet all documented requirements, yet the function fails with an unhelpful error message. The overflow occurs in internal calculations without any input validation or warning to the user. Real applications with high-frequency sensors could encounter this issue. The fix is straightforward - validate angular rates and provide a meaningful error message. The fact that it works with 3 rotations but fails with 4 using the same extreme rates suggests an implementation issue rather than a fundamental limitation.
+
+**Why it might not be BUG:**
+The inputs represent a physically impossible scenario (10 million revolutions per second) that would never occur in practice. Numerical overflow with extreme inputs is expected behavior in numerical computing. The function works correctly for all reasonable inputs. The error (ValueError) is appropriate, even if the message could be clearer. This is more of an edge case limitation than a bug in the implementation.
+
+## Overall consideration
+After careful analysis, this appears to be a numerical overflow issue that occurs when using RotationSpline with extreme but mathematically valid inputs. The key facts are: (1) The inputs meet all documented requirements - unit quaternions and strictly increasing times, (2) The failure occurs deep in internal calculations without input validation, and (3) The error message "array must not contain infs or NaNs" doesn't help users understand the root cause.
+
+While the angular rate of 60 million rad/s is extreme, it could occur in real scenarios such as sensor data with timing glitches or numerical simulations with poor time stepping. The fact that the same extreme angular rates work fine with 3 rotations but fail with 4 rotations suggests this is an implementation issue in the spline calculation rather than a fundamental numerical limitation. The implementation should either validate inputs to provide a meaningful error or use more robust numerical methods.
+
+However, the practicality of this scenario is highly questionable. The bug report acknowledges these are extreme conditions, and fixing this might add unnecessary complexity for an edge case that essentially never occurs in real applications. The most pragmatic solution would be to document this limitation, making this a DOCUMENTATION_FIX rather than a BUG, since the current behavior is reasonable given the extreme inputs.

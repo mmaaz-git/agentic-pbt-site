@@ -1,0 +1,68 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python version: 3.13
+- xarray installation: /home/npc/pbt/agentic-pbt/envs/xarray_env/lib/python3.13/site-packages/xarray
+- Function location: xarray/backends/plugins.py lines 91-101
+
+### Reproduction Confirmed: YES
+
+The bug report is technically correct. The `sort_backends` function DOES mutate its input dictionary by removing entries that match the `NETCDF_BACKENDS_ORDER` list.
+
+### Test Results
+
+#### Test 1: Basic Reproduction (from bug report)
+- Input: `{"scipy": MockBackend, "custom": MockBackend}`
+- After calling `sort_backends()`:
+  - Input dictionary: `{"custom": MockBackend}` (scipy was removed)
+  - Returned dictionary: `{"scipy": MockBackend, "custom": MockBackend}`
+- **Result**: Input dictionary was mutated - "scipy" key was removed
+
+#### Test 2: Property-based test (from bug report)
+- Input: `{"scipy": MockBackend}`
+- After calling `sort_backends()`:
+  - Input dictionary: `{}` (empty - scipy was removed)
+  - Returned dictionary: `{"scipy": MockBackend}`
+- **Result**: Test FAILED as expected - input was mutated
+
+#### Test 3: All NETCDF_BACKENDS_ORDER entries
+- Input: 6 entries including all three NETCDF backends
+- After calling `sort_backends()`:
+  - All three NETCDF backends ("netcdf4", "h5netcdf", "scipy") were removed from input
+  - Only custom backends remained in the input dictionary
+- **Result**: Confirms the pattern - all NETCDF_BACKENDS_ORDER entries are removed
+
+#### Test 4: No NETCDF_BACKENDS_ORDER entries
+- Input: Only custom backends not in NETCDF_BACKENDS_ORDER
+- After calling `sort_backends()`:
+  - Input dictionary unchanged
+  - Result properly sorted alphabetically
+- **Result**: No mutation when no NETCDF_BACKENDS_ORDER entries present
+
+### Root Cause Analysis
+
+The mutation occurs at line 97 in plugins.py:
+```python
+ordered_backends_entrypoints[be_name] = backend_entrypoints.pop(be_name)
+```
+
+The `.pop()` method removes the key from the original dictionary while retrieving its value. This happens for every backend name in `NETCDF_BACKENDS_ORDER` that exists in the input.
+
+### Impact Assessment
+
+1. **The bug is real**: The function does mutate its input as claimed.
+
+2. **The mutation is consistent**: It always removes entries matching NETCDF_BACKENDS_ORDER.
+
+3. **The function still works correctly** from a functional perspective - it returns the properly sorted dictionary.
+
+4. **The mutation is a side effect**, not the primary purpose of the function.
+
+### Verification of Bug Report Claims
+
+✓ The function mutates the input dictionary - CONFIRMED
+✓ Uses `.pop()` which removes keys - CONFIRMED
+✓ The specific test case `has_scipy=True, num_custom=0` fails - CONFIRMED
+✓ The behavior violates principle of least surprise - This is a subjective claim but reasonable
+
+The technical details in the bug report are accurate and the reproduction code works as described.

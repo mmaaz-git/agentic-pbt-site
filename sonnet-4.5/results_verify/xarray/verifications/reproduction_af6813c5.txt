@@ -1,0 +1,49 @@
+## Bug Reproduction Analysis
+
+### Hypothesis Test Reproduction
+The provided hypothesis test was executed successfully:
+```python
+@given(st.integers(min_value=1, max_value=10))
+def test_combined_lock_locked_false_when_no_locks_held(num_locks):
+    locks = [threading.Lock() for _ in range(num_locks)]
+    combined = CombinedLock(locks)
+    assert combined.locked() == False
+```
+
+Result: **FAILS** with `num_locks=1` (and any positive integer)
+- Expected: `False` (no locks are held)
+- Actual: `True` (method object is truthy)
+
+### Simple Test Reproduction
+Created a simple test case that clearly shows the bug:
+```python
+lock1 = threading.Lock()
+lock2 = threading.Lock()
+combined = CombinedLock([lock1, lock2])
+print(combined.locked())  # Returns: True (INCORRECT)
+```
+
+The test confirms:
+1. `combined.locked()` returns `True` even when no locks are held
+2. `lock.locked` returns a method object: `<built-in method locked of _thread.lock object>`
+3. `lock.locked()` correctly returns `False` when the lock is not held
+
+### Root Cause Verification
+Examined the difference between `lock.locked` and `lock.locked()`:
+- `lock.locked` evaluates to a method object, which is always truthy
+- `lock.locked()` calls the method and returns the actual boolean state
+
+### Fixed Version Testing
+Created a fixed version with parentheses added:
+```python
+def locked(self):
+    return any(lock.locked() for lock in self.locks)  # Added ()
+```
+
+Results with the fix:
+- Returns `False` when no locks are held ✓
+- Returns `True` when a lock is acquired ✓
+- Returns `False` after releasing the lock ✓
+
+### Conclusion
+The bug is 100% reproducible and the proposed fix resolves the issue completely. The bug causes CombinedLock.locked() to always return True when it has constituent locks, regardless of whether those locks are actually held. This violates the documented behavior and the standard lock interface.

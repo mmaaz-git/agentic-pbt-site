@@ -1,0 +1,50 @@
+# Documentation Analysis
+
+## Official Documentation Review
+
+### pandas.qcut Documentation
+From the official pandas documentation and built-in help:
+
+1. **Function Purpose**: "Quantile-based discretization function. Discretize variable into equal-sized buckets based on rank or based on sample quantiles."
+
+2. **duplicates Parameter**:
+   - Type: {default 'raise', 'drop'}, optional
+   - Description: "If bin edges are not unique, raise ValueError or drop non-uniques."
+   - Default behavior: 'raise' - raises ValueError when bin edges are not unique
+   - Alternative: 'drop' - should drop non-unique bin edges
+
+3. **Expected Behavior**:
+   - The documentation clearly states that when duplicates='drop' is used, the function should "drop non-uniques" (duplicate bin edges)
+   - No mention of potential crashes or limitations when dropping duplicates
+   - No warning about edge cases with very small numbers or skewed data
+
+4. **Error Messages**:
+   - When duplicates='raise' (default), the error message is clear: "Bin edges must be unique: [list of edges]. You can drop duplicate edges by setting the 'duplicates' kwarg"
+   - This suggests that duplicates='drop' is the recommended solution for handling duplicate bin edges
+
+## Code Analysis
+
+### Implementation Details Found:
+1. When duplicates='drop' is specified, the code does attempt to drop duplicate bin edges using `algos.unique(bins)`
+2. After dropping duplicates, the code proceeds to create intervals using IntervalIndex.from_breaks()
+3. The _format_labels function applies rounding to bin edges for display purposes
+4. The _round_frac function has an edge case with very small numbers (near zero but not exactly zero) where it can produce NaN values
+
+### Root Cause Identified:
+The bug occurs because:
+1. When quantiles produce duplicate values (e.g., [0.0, 0.0, 0.0, 2.225074e-313, 1.0])
+2. Duplicates are correctly dropped to [0.0, 2.225074e-313, 1.0]
+3. The _round_frac function tries to round 2.225074e-313 with extreme precision (315 digits)
+4. np.around(2.225074e-313, 315) returns NaN due to numerical overflow
+5. The NaN in the bin edges causes IntervalArray validation to fail with "missing values must be missing in the same location"
+
+## Documentation vs Implementation Gap
+
+The documentation states that duplicates='drop' should handle non-unique bin edges, but:
+1. **No documented limitation**: Nothing mentions that the function may fail with very small numbers or extreme value distributions
+2. **Misleading error message**: The actual error ("missing values must be missing in the same location") doesn't indicate the real problem
+3. **Suggested solution doesn't work**: The error message for duplicates='raise' suggests using duplicates='drop', but this can lead to a crash instead
+
+## Conclusion
+
+The documentation creates a reasonable expectation that duplicates='drop' will successfully handle duplicate bin edges. The implementation attempts to fulfill this promise but fails due to an edge case in the numerical rounding logic. This is a genuine bug where the implementation doesn't match the documented behavior.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify how the LinearOperator should handle 1D vs 2D inputs internally. One could argue that users should only use the function call interface L(v) rather than the @ operator, or that users should ensure their vectors are 2D. The examples in the documentation show L(np.eye(3)) which is a 2D input, not a 1D vector case.
+
+**Why it might not be INVALID:**
+The scipy.sparse.linalg.LinearOperator documentation clearly states that matvec "must properly handle" both (N,) and (N,1) input shapes. The LinearOperator class is a well-established scipy interface with clear contracts. The @ operator is the standard Python matrix multiplication operator and should work correctly. The bug causes a crash, not just unexpected behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The workaround is simple - users can reshape their 1D vectors to 2D before multiplication, or use the function form instead of 'lo'. The issue only affects the LinearOperator form, which might be considered a less common use case. The memory-efficient benefits of the LinearOperator are still achieved even if users have to work around this limitation.
+
+**Why it might not be WONTFIX:**
+This is a clear violation of the LinearOperator interface contract. The crash prevents normal usage of a documented feature. LinearOperator is meant to be a drop-in replacement for matrices in iterative solvers, and this bug breaks that compatibility. The fix is straightforward and doesn't break any existing functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to warn users that the LinearOperator form requires 2D input vectors, or that the @ operator shouldn't be used with 1D vectors. The examples could be updated to show proper usage patterns. The documentation doesn't currently mention this limitation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is clearly broken - it violates the LinearOperator contract. Documenting a bug doesn't make it correct behavior. The LinearOperator class documentation already specifies the correct behavior, and the implementation should match that specification, not require special documentation for this specific case.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting 1D vectors with LinearOperator could be seen as a new feature that wasn't originally implemented. The current implementation might have been designed only for 2D arrays. Adding proper 1D support would enhance the functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't a new feature - LinearOperator already specifies that it should handle 1D vectors. The matvec method name itself implies vector (1D) support. Other LinearOperator implementations in scipy handle 1D vectors correctly. This is fixing broken functionality, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation clearly violates the scipy.sparse.linalg.LinearOperator interface contract. The matvec method is supposed to handle 1D input vectors and return 1D output vectors. The code crashes with a ValueError when using standard matrix-vector multiplication. The same operation works correctly with form='array', showing inconsistent behavior between different output formats. The fix is straightforward and the issue is in internal implementation details, not user error.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the documentation somewhere specified that the LinearOperator form has limitations or special requirements, but no such documentation exists. The crash is unambiguous and prevents normal usage of a documented feature.
+
+**Overall consideration**
+
+This is clearly a BUG. The implementation of the laplacian function with form='lo' returns a LinearOperator that doesn't conform to the scipy.sparse.linalg.LinearOperator interface specification. The LinearOperator class documentation explicitly states that matvec must handle (N,) shaped inputs, but the current implementation crashes when given 1D vectors due to incorrect broadcasting in the lambda functions.
+
+The evidence is overwhelming: (1) The code crashes with a ValueError when performing a standard operation that should work according to the LinearOperator contract, (2) The same operation works correctly with form='array', showing the expected behavior is well-defined, (3) The issue is in the internal implementation using v * d[:, np.newaxis] which incorrectly broadcasts 1D arrays to 2D, and (4) The fix is straightforward - check the input dimensions and reshape appropriately.
+
+This is not a documentation issue, feature request, or something to ignore. It's a clear implementation bug that prevents the documented functionality from working correctly. The LinearOperator returned by laplacian with form='lo' should behave identically to the array form for matrix-vector operations, but it doesn't due to this implementation error.

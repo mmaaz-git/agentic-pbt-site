@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function documentation doesn't explicitly state that domain comparisons should be case-insensitive. It says "exact string match" for non-wildcard patterns, which could be interpreted as requiring exact case matching. If the function was intentionally designed to be case-sensitive for security reasons or other purposes, then this would not be a bug but expected behavior.
+
+**Why it might not be INVALID:**
+DNS is fundamentally case-insensitive according to RFC 4343, which is an established internet standard. A function that compares domain names should follow DNS conventions unless there's a specific documented reason not to. The function currently behaves inconsistently - it lowercases the pattern but not the host, which suggests the case-sensitivity is unintentional rather than by design.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+If Django has been using this function with case-sensitive behavior for many years, changing it now could be considered a breaking change that might affect existing applications that somehow depend on the current behavior. The issue might be considered too minor to fix if no real-world security issues have been reported from this behavior.
+
+**Why it might not be WONTFIX:**
+This function is used in security-critical contexts (CSRF protection, host validation) where incorrect domain matching could have security implications. A domain not matching itself when uppercase is clearly incorrect behavior that violates the principle of least surprise. The fix is trivial (one line) and makes the function behavior consistent with DNS standards.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify case sensitivity behavior at all. If the function is intended to be case-sensitive, then the documentation should be updated to clearly state this, explaining that it performs case-sensitive matching contrary to DNS conventions. The documentation could be clarified to explain why it only lowercases the pattern parameter.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior appears to be a bug rather than an intentional design choice. The fact that the pattern is lowercased but the host is not suggests an incomplete implementation rather than a documentation issue. The function fails basic invariants like a domain matching itself, which no reasonable documentation would endorse.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If the original function was designed to be case-sensitive, then adding case-insensitive comparison could be viewed as a new feature request. Someone could argue that adding DNS-compliant case-insensitive matching is an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle case by lowercasing the pattern parameter, showing that case-insensitive comparison was intended. This is clearly a bug where the implementation is incomplete (forgot to lowercase the host), not a request for new functionality. The function is broken in its current state - it doesn't even satisfy the basic property that X equals X.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates fundamental properties: (1) A domain doesn't match itself when it contains uppercase letters, (2) It behaves asymmetrically where is_same_domain(a,b) != is_same_domain(b,a) when case differs, (3) It contradicts DNS specifications (RFC 4343) which require case-insensitive comparison, (4) The partial lowercasing (pattern but not host) suggests an incomplete implementation rather than intentional design, (5) It's used in security-critical code where incorrect domain matching could have security implications, (6) The fix is trivial and makes the behavior consistent.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if there was clear documentation stating that the function intentionally performs case-sensitive matching for some specific reason. However, no such documentation exists, and the partial lowercasing contradicts any claim of intentional case-sensitivity.
+
+## Overall consideration
+This is clearly a BUG. The function exhibits objectively incorrect behavior where a domain doesn't match itself when it contains uppercase letters. The hypothesis test `is_same_domain(domain, domain)` returning False for any uppercase domain violates the most basic identity property that any matching function should satisfy. The function is internally inconsistent - it lowercases the pattern but not the host, creating asymmetric behavior that serves no useful purpose.
+
+DNS has been case-insensitive since its inception, as confirmed by RFC 4343. A function named `is_same_domain` that's used for security-critical domain validation in Django's CSRF protection should follow DNS conventions. The current behavior could potentially lead to security issues where valid domains are incorrectly rejected or invalid domains incorrectly accepted based on case differences.
+
+The bug is not a matter of interpretation or preference - it's an objective failure of the function to implement correct domain comparison semantics. The one-line fix (`host = host.lower()`) is trivial and makes the function behave correctly and consistently with both DNS standards and common sense expectations. This should definitely be filed as a BUG that needs fixing.

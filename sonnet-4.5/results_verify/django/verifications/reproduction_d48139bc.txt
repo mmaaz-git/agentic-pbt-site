@@ -1,0 +1,40 @@
+## Bug Reproduction Analysis
+
+### Technical Details Verified
+
+1. **Current Behavior Confirmed**:
+   - Empty string `''` correctly raises `ImproperlyConfigured("Empty static prefix not permitted")`
+   - Whitespace-only strings like `' '`, `'\t'`, `'\n'` do NOT raise an exception
+   - Instead, they create URL patterns like `'^\ (?P<path>.*)$'` for a single space
+
+2. **Hypothesis Test Results**:
+   - The hypothesis test from the bug report FAILS as expected
+   - The test expects `pytest.raises(ImproperlyConfigured)` for whitespace-only strings
+   - But the function returns successfully without raising an exception
+
+3. **URL Patterns Created**:
+   - `static(' ')` creates pattern: `'^\ (?P<path>.*)$'`
+   - `static('\t')` creates pattern: `'^\t(?P<path>.*)$'`
+   - `static('\n')` creates pattern: `'^\n(?P<path>.*)$'`
+   - `static('   ')` creates pattern: `'^\ \ \ (?P<path>.*)$'`
+
+4. **Code Behavior Analysis**:
+   - Line 21: `if not prefix:` only catches empty string, not whitespace
+   - Line 28: Uses `prefix.lstrip("/")` which strips leading slashes but preserves whitespace
+   - The regex pattern uses `re.escape()` which escapes the whitespace characters
+
+### Key Observations
+
+1. **Inconsistency**: The error message says "Empty static prefix not permitted" but whitespace-only strings are not caught by the validation
+
+2. **Practical Impact**: URL patterns with only whitespace are essentially useless:
+   - A URL starting with just spaces would match paths like " /somefile.css"
+   - This is not a meaningful or useful URL pattern for serving static files
+
+3. **Python Truthiness**: In Python, non-empty strings (even if only whitespace) are truthy:
+   - `bool('')` is False (caught by current check)
+   - `bool(' ')` is True (not caught by current check)
+   - `bool('\t')` is True (not caught by current check)
+
+### Conclusion
+The bug report accurately describes the issue. The function accepts whitespace-only prefixes when they serve no practical purpose and are semantically "empty" even if not technically empty strings. The resulting URL patterns are malformed/useless.

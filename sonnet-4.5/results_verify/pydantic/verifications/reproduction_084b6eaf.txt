@@ -1,0 +1,37 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the `pydantic.deprecated.json.decimal_encoder` function.
+
+### Hypothesis Test Results
+
+Running the property-based test with Hypothesis immediately found a failing case:
+- Input: `Decimal('775306504452.5882')`
+- Encoded as float: `775306504452.5883`
+- Decoded back: `Decimal('775306504452.5883')`
+- Result: Round-trip failure - values are not equal
+
+### Specific Test Case Results
+
+Running the exact example from the bug report:
+- Original: `Decimal('252579977670696.67')`
+- Encoded as float: `252579977670696.66`
+- Decoded back: `Decimal('252579977670696.66')`
+- Result: Round-trip failure - precision lost
+
+### Source Code Analysis
+
+The current implementation is:
+```python
+def decimal_encoder(dec_value: Decimal) -> Union[int, float]:
+    exponent = dec_value.as_tuple().exponent
+    if isinstance(exponent, int) and exponent >= 0:
+        return int(dec_value)
+    else:
+        return float(dec_value)
+```
+
+The function converts Decimals with negative exponents (fractional parts) to float, which causes precision loss for values with more than ~15-17 significant digits due to float's limited precision (IEEE 754 double precision).
+
+### Effect of the Bug
+
+When Decimal values with fractional parts containing many significant digits are encoded using this function, precision is lost during the conversion to float. This prevents successful round-tripping between encode and decode operations, which directly contradicts the function's documented purpose.

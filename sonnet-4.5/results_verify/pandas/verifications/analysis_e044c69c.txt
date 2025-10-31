@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The code comment at lines 251-252 explicitly states the modulo operation is intentional to avoid IndexError for "out-of-bounds sentinel values." One could argue this is documented behavior within the source code itself, and that the interchange protocol doesn't guarantee perfect round-tripping of all data types. The warning in the documentation about "severe implementation issues" could be interpreted as covering this case.
+
+**Why it might not be INVALID:**
+The pandas documentation clearly establishes that -1 is the standard sentinel for null values in categorical codes. This is not just an implementation detail but a documented feature. The interchange protocol's purpose is data exchange with semantic preservation. Converting nulls to actual data values violates the fundamental contract of data integrity. The bug causes silent data corruption without any warning to users.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The pandas documentation explicitly warns against using the interchange protocol and recommends Arrow C Data Interface instead for pandas 2.3+. The documentation states there are "severe implementation issues" and recommends only limited use cases. Since there's an alternative solution (Arrow), fixing edge cases in a deprecated/discouraged protocol might not be worthwhile. The interchange protocol appears to be in maintenance mode rather than active development.
+
+**Why it might not be WONTFIX:**
+Data corruption is not a trivial issue - it's a fundamental correctness problem. Even if the protocol is discouraged, it's still part of the public API and users may rely on it. The fix appears relatively straightforward (checking for -1 before applying modulo). Silent data corruption is among the most serious types of bugs, regardless of whether the feature is preferred or not.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The behavior could be documented as a known limitation of the interchange protocol with categorical data. The documentation could specify that null values in categoricals are not preserved during interchange conversion. Users could be warned that categorical null handling is not supported and to use Arrow interface instead for such data.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This isn't a case of unclear documentation - it's incorrect behavior. The pandas documentation is clear that -1 represents null in categorical codes. Documenting data corruption as expected behavior would be inappropriate. The issue is not that documentation fails to describe the behavior, but that the behavior itself is wrong.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper null handling in categorical interchange is a feature that was never fully implemented rather than a bug. The comment in the code suggests the developers knew about sentinel values but chose a simple modulo solution. Adding proper null preservation could be seen as enhancing the protocol rather than fixing broken functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+Preserving null values is not an enhancement - it's a basic requirement for data integrity. The `set_nulls` function exists specifically to handle nulls, indicating this was intended functionality. The issue is not missing functionality but incorrect implementation of existing functionality. Data corruption is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code demonstrably converts null values into actual data values, causing silent data corruption. The pandas documentation clearly defines -1 as the null sentinel for categorical codes. The interchange protocol's purpose is semantic data preservation, which this violates. The bug is reproducible, deterministic, and causes incorrect results without warning. The fix is straightforward - check for -1 before indexing. This is a clear case of incorrect behavior leading to wrong results.
+
+**Why it might not be BUG:**
+The interchange protocol has documented "severe implementation issues" and users are warned against using it. The comment in the source suggests this behavior might be intentional to avoid errors. The protocol is essentially deprecated in favor of Arrow. One could argue this is working as designed, even if the design is flawed.
+
+## Overall consideration
+
+After thorough analysis, this appears to be a valid BUG. The core issue is that null values in categorical data are being converted to actual category values through an inappropriate modulo operation. This is not an edge case or undefined behavior - pandas explicitly documents that -1 is the sentinel value for nulls in categorical codes, and the interchange protocol's stated purpose is to preserve data semantics during conversion.
+
+The severity of this issue cannot be understated: it causes silent data corruption. Users who have missing data in their categoricals will get incorrect results with no warning or error. This violates the principle of least surprise and basic data integrity. While the interchange protocol may have known issues and alternatives exist, that doesn't excuse incorrect behavior in a published API that users may depend on.
+
+The fact that there's a straightforward fix (checking for -1 before applying the modulo operation) and that the `set_nulls` function already exists to handle null values suggests this is a bug rather than intentional behavior or a missing feature. The comment about avoiding IndexError shows a misunderstanding of what -1 represents - it's not just an out-of-bounds value but specifically the null sentinel. This is clearly a BUG that should be fixed to prevent data corruption.

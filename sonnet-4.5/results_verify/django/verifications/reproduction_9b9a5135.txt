@@ -1,0 +1,55 @@
+## Bug Reproduction Analysis
+
+### Summary
+I have successfully reproduced the bug reported in `django.db.backends.utils.truncate_name`. The function violates its documented contract when `hash_len >= length`, producing output that exceeds the specified `length` parameter.
+
+### Reproduction Steps
+1. Created a test script that runs both the Hypothesis property test and the specific failing case
+2. Confirmed that the Hypothesis test fails with the exact error described in the report
+3. Verified the specific failing case: `identifier='00', length=1, hash_len=2`
+
+### Test Results
+- **Hypothesis Test**: FAILED with "Truncated name '0b4' has length 3 > 1"
+- **Specific Case Output**:
+  - Input: `identifier='00', length=1, hash_len=2`
+  - Output: `'0b4'` (length 3)
+  - Expected: output length <= 1
+  - Actual: output length = 3
+
+### Root Cause Analysis
+After examining the source code at `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/db/backends/utils.py`, I identified the problem in the `truncate_name` function (lines 283-301):
+
+```python
+def truncate_name(identifier, length=None, hash_len=4):
+    namespace, name = split_identifier(identifier)
+
+    if length is None or len(name) <= length:
+        return identifier
+
+    digest = names_digest(name, length=hash_len)
+    return "%s%s%s" % (
+        '%s"."' % namespace if namespace else "",
+        name[: length - hash_len],  # This is problematic when hash_len >= length
+        digest,
+    )
+```
+
+The issue occurs at line 299: `name[: length - hash_len]`
+- When `hash_len >= length`, this produces a negative or zero slice index
+- Python handles negative slices by returning an empty string or a prefix from the start
+- The final result concatenates this with the digest, making the output longer than `length`
+
+For the failing case:
+- `length = 1`, `hash_len = 2`
+- `name[: 1 - 2]` = `name[: -1]` = `'0'` (everything except the last character)
+- `digest = 'b4'` (first 2 chars of MD5 hash)
+- Final result: `'0' + 'b4' = '0b4'` (length 3, exceeds the requested length of 1)
+
+### Impact
+This bug causes the function to violate its documented contract of producing identifiers no longer than the specified `length`. This could lead to:
+1. Database errors when identifiers exceed maximum allowed lengths
+2. Unexpected behavior in systems that rely on the length constraint
+3. Potential data truncation or corruption in database operations
+
+### Verification
+The bug is consistently reproducible and represents a clear violation of the function's documented behavior.

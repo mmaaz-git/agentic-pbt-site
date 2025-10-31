@@ -1,0 +1,79 @@
+TRIAGE ANALYSIS: dask.base.key_split UnicodeDecodeError
+
+## Analysis of Potential Classifications
+
+### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The docstring explicitly shows bytes inputs are supported with example: `key_split(b'hello-world-1')`
+- The function crashes on valid bytes input (b'\x80') with UnicodeDecodeError
+- The function has error handling for other edge cases (returns 'Other' for errors) but fails to handle this one
+- Inconsistent behavior: handles None gracefully but crashes on non-UTF8 bytes
+- No documentation specifies that bytes must be UTF-8 encoded
+- The crash prevents the function from working with arbitrary bytes data, which could be task keys from non-UTF8 sources
+
+**Arguments AGAINST:**
+- None substantial
+
+**Verdict:** STRONG case for BUG
+
+### 2. INVALID
+**Arguments FOR:**
+- One could argue that bytes should be UTF-8 by default in Python 3
+- The example in docstring uses ASCII-compatible bytes
+
+**Arguments AGAINST:**
+- The docstring doesn't specify UTF-8 requirement
+- Python bytes objects can contain any byte values, not just UTF-8
+- The function explicitly accepts bytes type, implying it should handle all bytes
+- Other parts of the function handle errors gracefully
+
+**Verdict:** WEAK case for INVALID
+
+### 3. WONTFIX
+**Arguments FOR:**
+- Non-UTF8 bytes in task keys might be extremely rare in practice
+- The fix is trivial (use errors='replace' or 'ignore')
+- Current behavior might be intentional to catch encoding issues early
+
+**Arguments AGAINST:**
+- The bug causes a crash rather than degraded functionality
+- The fix is simple and doesn't break existing functionality
+- The function already has error handling that should catch this
+
+**Verdict:** WEAK case for WONTFIX
+
+### 4. FEATURE_REQUEST
+**Arguments FOR:**
+- Supporting non-UTF8 bytes could be seen as a new feature
+- Current implementation might have assumed UTF-8 only
+
+**Arguments AGAINST:**
+- The docstring already shows bytes as supported
+- This is fixing broken existing functionality, not adding new features
+- The function signature already accepts bytes
+
+**Verdict:** WEAK case for FEATURE_REQUEST
+
+### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- Could update docs to specify "UTF-8 encoded bytes only"
+- The implementation works fine for UTF-8 bytes as shown in example
+
+**Arguments AGAINST:**
+- This would be documenting a limitation rather than intended behavior
+- The function's error handling philosophy suggests all inputs should be handled gracefully
+- Other similar functions in Dask handle encoding errors properly
+- Restricting to UTF-8 only limits the function unnecessarily
+
+**Verdict:** MODERATE case for DOCUMENTATION_FIX, but not ideal
+
+## Final Analysis
+
+This is clearly a **BUG**. The function:
+
+1. Explicitly documents bytes support without UTF-8 restrictions
+2. Has comprehensive error handling that should catch this case
+3. Crashes instead of degrading gracefully like it does for other errors
+4. Violates the principle of least surprise - if bytes are accepted, all bytes should work
+
+The proposed fix is reasonable and maintains backward compatibility while fixing the crash. Using `errors='replace'` or `errors='ignore'` would allow the function to handle all bytes inputs gracefully, consistent with its documented interface and error-handling philosophy.

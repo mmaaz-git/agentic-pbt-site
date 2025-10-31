@@ -1,0 +1,37 @@
+Bug Reproduction Analysis
+=========================
+
+I have successfully reproduced the reported bug in the `to_pascal` function from `pydantic.alias_generators`.
+
+Test Results:
+-------------
+
+1. Basic Reproduction:
+   - `to_pascal('a_a')` returns `'AA'` (correct conversion from snake_case to PascalCase)
+   - `to_pascal('AA')` returns `'Aa'` (unexpected modification of already-PascalCase string)
+   - `to_pascal(to_pascal('a_a'))` returns `'Aa'` instead of remaining `'AA'`
+
+2. Hypothesis Property Test:
+   The property test fails immediately with the example `'a_a'`, confirming that the function is not idempotent.
+   The assertion `to_pascal(snake) == to_pascal(to_pascal(snake))` fails.
+
+3. Root Cause Analysis:
+   Looking at the implementation:
+   ```python
+   def to_pascal(snake: str) -> str:
+       camel = snake.title()
+       return re.sub('([0-9A-Za-z])_(?=[0-9A-Z])', lambda m: m.group(1), camel)
+   ```
+
+   The problem is with `str.title()`:
+   - `'a_a'.title()` returns `'A_A'`
+   - `'AA'.title()` returns `'Aa'` (it lowercases all letters except the first of each word)
+
+Effect:
+-------
+The non-idempotent behavior means:
+1. Users cannot safely apply the function to strings that might already be in PascalCase
+2. The function cannot be used in pipelines where it might be called multiple times
+3. The function behaves unexpectedly on mixed-case input
+
+The bug report's assertions are all correct and the issue is reproducible.

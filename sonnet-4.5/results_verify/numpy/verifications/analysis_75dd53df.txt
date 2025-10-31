@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report contains an incorrect usage of the numpy.linalg.eig API (using result.eigenvalues instead of unpacking the tuple), suggesting the reporter may not fully understand the function. Additionally, the matrix contains an extreme value (1.175e-38, the smallest normal float32) mixed with normal values, which could be considered an edge case that falls outside normal usage patterns. One could argue that matrices with such extreme condition numbers (infinity in this case) are not expected to produce numerically stable results.
+
+**Why it might not be INVALID:**
+Despite the API error in the report, the core issue is real and reproducible. The eigenvector [1, 0, 0] returned for eigenvalue 0 clearly violates the fundamental eigenvalue equation A @ v = λ * v by a magnitude of 1.0, which is not a small numerical error but a complete mathematical failure. The documentation explicitly states that the function computes eigenvectors satisfying this equation without any caveats about extreme values or condition numbers.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The matrix has an infinite condition number and contains a value at the very edge of float32's representable range (1.175e-38). This is an extremely pathological case that would rarely occur in practice. The issue only affects matrices with these extreme numerical properties, and users encountering such matrices should probably be using specialized numerical methods or higher precision arithmetic anyway. Fixing this edge case might require significant changes to the underlying LAPACK routines for minimal practical benefit.
+
+**Why it might not be WONTFIX:**
+The error is not a minor numerical inaccuracy but a complete failure to return a valid eigenvector - the difference between A @ v and λ * v is 1.0, not a small rounding error. The function returns a mathematically incorrect result without any warning or error message. Even if the matrix is numerically challenging, the function should either return a correct result, raise an error, or at minimum issue a warning about numerical instability.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't mention any limitations regarding matrices with extreme value ranges, infinite condition numbers, or values near machine epsilon. If numpy.linalg.eig is known to fail for such matrices, the documentation should include warnings about these limitations. Adding a note about numerical stability requirements and expected behavior for ill-conditioned matrices would help users understand when the function might produce unreliable results.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation clearly states that the function computes eigenvalues and eigenvectors satisfying A @ v = λ * v. There's no ambiguity here - the function is returning a result that violates its documented behavior. This isn't a case of unclear documentation but rather the implementation failing to meet its specification. The eigenvalue equation is fundamental mathematics, not something that should require caveats.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that handling matrices with extreme value ranges or infinite condition numbers is a new feature request. The current implementation might not have been designed to handle such edge cases, and adding robust handling for these scenarios could be considered an enhancement. This might involve adding pre-conditioning, iterative refinement, or automatic precision upgrades for challenging matrices.
+
+**Why it might not be FEATURE_REQUEST:**
+Computing correct eigenvalues and eigenvectors is the core functionality of the eig function, not an additional feature. The function already claims to compute these values - it's not asking for new functionality but for the existing functionality to work correctly. The eigenvalue equation is the defining property of eigenvalues, not an optional feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns an eigenvector that violates the fundamental eigenvalue equation A @ v = λ * v by a magnitude of 1.0. This is not a small numerical error but a complete mathematical failure. The documentation states the function computes eigenvectors satisfying this equation with no caveats about extreme values. The error is reproducible and represents a clear violation of the function's mathematical contract. Even other eigensolvers handle this matrix correctly when the tiny value is set to exactly zero.
+
+**Why it might not be BUG:**
+The matrix is pathological with an infinite condition number and contains a value at the extreme edge of float32 representation. Numerical algorithms often have undefined behavior for such extreme inputs. The reporter used the wrong API (result.eigenvalues), suggesting potential user error. Most users would never encounter such matrices in practice, and those who do should know to use specialized methods for ill-conditioned problems.
+
+**Overall consideration**
+
+After careful analysis, this appears to be a legitimate bug, though an edge case one. The function numpy.linalg.eig returns a mathematically incorrect eigenvector that violates the fundamental eigenvalue equation by a large margin (1.0), not a small numerical error. While the matrix is admittedly pathological with an infinite condition number and a value near machine epsilon, the documentation makes no mention of such limitations, and the function returns results without any warning or error.
+
+The key factors supporting this being a bug are: (1) The error magnitude is 1.0, far beyond any reasonable numerical tolerance, (2) The eigenvalue equation A @ v = λ * v is the fundamental definition of eigenvectors, not an approximate relationship, and (3) The function silently returns an incorrect result without any indication of failure. Even if we acknowledge this is an edge case, a mathematical library should either handle edge cases correctly, explicitly document limitations, or fail gracefully with appropriate warnings.
+
+While one could argue this should be WONTFIX due to the extreme nature of the input, the severity of the mathematical error (complete failure, not minor inaccuracy) and the lack of any warning to the user tips the balance toward this being a valid bug report. Users of scientific computing libraries have a reasonable expectation that functions will either produce correct results or indicate when they cannot.

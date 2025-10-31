@@ -1,0 +1,61 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is technically accurate. The scipy.integrate.tanhsinh function does indeed crash with an IndexError when attempting to integrate any constant function.
+
+### Reproduction Results
+
+1. **Basic constant function test** (`f(x) = 1.0` on `[0, 1]`):
+   - Result: IndexError as reported
+   - Error location: _tanhsinh.py line 421
+   - Error message: "too many indices for array: array is 0-dimensional, but 1 were indexed"
+
+2. **Multiple constant functions tested**:
+   - `f(x) = 1.0`: FAILED
+   - `f(x) = 5.0`: FAILED
+   - `f(x) = 0.0`: FAILED
+   - `f(x) = -3.0`: FAILED
+   - All constant functions fail regardless of the constant value
+
+3. **Various integration limits tested**:
+   - `[0, 1]`: FAILED
+   - `[-1, 1]`: FAILED
+   - `[1, 2]`: FAILED
+   - All integration limits produce the same error for constant functions
+
+4. **Non-constant functions tested**:
+   - `f(x) = x`: SUCCESS (integral ≈ 0.5)
+   - `f(x) = x^2`: SUCCESS (integral ≈ 0.333)
+   - `f(x) = exp(-x^2)` with infinite bounds: SUCCESS (integral ≈ √π)
+   - All non-constant functions work correctly
+
+### Root Cause Analysis
+
+The investigation revealed:
+
+1. **Input shape**: The function receives inputs with shape `(1, 66)` (2D array) during integration
+2. **Scalar return problem**: When the function returns a scalar (like `1.0`), it becomes a 0-dimensional numpy array
+3. **Indexing failure**: The code at line 421 tries to use boolean indexing `fj[work.abinf]` on this 0-D array, causing the IndexError
+
+4. **Working functions**: Functions that work correctly are those that return arrays with the same shape as their input:
+   - `np.ones_like(x)`: SUCCESS (returns array matching input shape)
+   - `np.full_like(x, 1.0)`: SUCCESS (returns array matching input shape)
+   - `1.0`: FAILED (returns scalar)
+
+### Mathematical Validity
+
+Integrating a constant function is mathematically trivial and fundamental:
+- The integral of constant `c` from `a` to `b` is `c * (b - a)`
+- This is one of the most basic operations in calculus
+- Any numerical integration method should handle this case
+
+### Technical Details
+
+The problematic code is in `post_func_eval` at line 421:
+```python
+fj[work.abinf] *= ((1 + work.xj[work.abinf]**2) / (1 - work.xj[work.abinf]**2)**2)
+```
+
+When `fj` is a 0-dimensional array (scalar), the boolean indexing `fj[work.abinf]` fails because you cannot index a scalar.
+
+The bug is 100% reproducible and affects all constant functions without exception.

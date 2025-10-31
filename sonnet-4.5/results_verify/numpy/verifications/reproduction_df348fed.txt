@@ -1,0 +1,50 @@
+BUG REPRODUCTION REPORT
+======================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed and behaves exactly as described.
+
+## Hypothesis Test Reproduction
+
+The provided Hypothesis test fails when given data=[0.0]:
+- A Series with float64 dtype containing [0.0] is created
+- After JSON round-trip, the dtype changes to int64
+- The assertion pd.testing.assert_series_equal(s, result) fails due to dtype mismatch
+
+## Simple Example Reproduction
+
+The simple reproduction case also confirms the bug:
+- Original Series: [0.0] with dtype float64
+- JSON representation: {"0":0.0}
+- After round-trip: [0] with dtype int64
+- Bug confirmed: dtypes don't match
+
+## Pattern Analysis
+
+Testing with various float values revealed a clear pattern:
+- [0.0] → dtype changes from float64 to int64
+- [1.0] → dtype changes from float64 to int64
+- [1.5] → dtype remains float64
+- [0.0, 1.0] → dtype changes from float64 to int64
+- [0.5, 1.5] → dtype remains float64
+- [1.0, 2.0, 3.0] → dtype changes from float64 to int64
+
+The pattern is consistent: when ALL float values are integer-valued (e.g., 0.0, 1.0, 2.0),
+pandas infers them as int64 during deserialization. When at least one value has a fractional
+part, the float64 dtype is preserved.
+
+## Workaround Verification
+
+The suggested workaround using dtype=False was tested and confirmed:
+- With default dtype parameter (dtype=True): float64 → int64 (bug occurs)
+- With dtype=False: float64 → float64 (dtype preserved)
+- With dtype=True explicitly: float64 → int64 (bug occurs)
+
+This confirms that the issue is caused by pandas' automatic dtype inference when dtype=True
+(the default behavior), and can be avoided by setting dtype=False.
+
+## Impact
+
+This bug affects any code that:
+1. Serializes pandas Series with float64 dtype containing integer-valued floats
+2. Expects the dtype to be preserved during round-trip operations
+3. Relies on dtype consistency for downstream operations (e.g., numerical computations, C library interfaces)

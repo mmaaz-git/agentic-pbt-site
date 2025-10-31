@@ -1,0 +1,59 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug described in the report. The bug is confirmed to exist.
+
+TEST EXECUTION RESULTS:
+-----------------------
+
+1. Basic Reproduction Test:
+   - Created a function with a docstring that lacks a blank line after the summary
+   - The deprecate function ACCEPTED this malformed docstring (BUG CONFIRMED)
+   - Expected behavior: Should have raised an AssertionError
+
+2. Hypothesis Test:
+   - The property-based test failed as expected, confirming systematic failure
+   - Multiple examples of malformed docstrings were accepted when they should have been rejected
+   - Test failure proves that deprecate() does not properly validate docstring format
+
+3. Edge Case Testing:
+   - Docstring with no blank line after summary: INCORRECTLY ACCEPTED (Bug confirmed)
+   - Docstring with no initial blank line: Correctly rejected
+   - Docstring with no summary: INCORRECTLY ACCEPTED (Additional bug found)
+   - Properly formatted docstring: Correctly accepted
+
+SOURCE CODE ANALYSIS:
+---------------------
+
+The bug is located in line 84 of /home/npc/miniconda/lib/python3.13/site-packages/pandas/util/_decorators.py:
+
+```python
+if empty1 or empty2 and not summary:
+    raise AssertionError(doc_error_msg)
+```
+
+Due to Python operator precedence, this evaluates as:
+```python
+if empty1 or (empty2 and not summary):
+```
+
+This means the check only fails when:
+1. empty1 is truthy (first line after quotes is not empty), OR
+2. empty2 is truthy AND summary is falsy (no summary exists)
+
+The bug occurs because when:
+- empty1 is "" (empty, which is correct)
+- summary is "Summary line" (truthy, exists)
+- empty2 is "Next line" (not empty, which is incorrect)
+
+The condition evaluates to: False or (True and False) = False
+So no error is raised despite the malformed docstring.
+
+IMPACT:
+-------
+The deprecate function fails to enforce its documented requirement that docstrings must have:
+1. Opening quotes on their own line
+2. A one-line summary
+3. A blank line after the summary (for multi-line docstrings)
+
+This allows incorrectly formatted docstrings to pass validation, potentially causing issues with automatic documentation generation tools that expect properly formatted NumPy-style docstrings.

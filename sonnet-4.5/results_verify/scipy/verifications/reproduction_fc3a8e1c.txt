@@ -1,0 +1,41 @@
+REPRODUCTION ANALYSIS
+=====================
+
+1. Bug Report Reproduction
+--------------------------
+I successfully reproduced the bug as described in the report:
+
+a) When calling scipy.differentiate.derivative with initial_step=0.0 or any negative value:
+   - NO ValueError is raised (contrary to expected behavior)
+   - The function returns with success=False, status=-3 (non-finite value encountered), and df=nan
+
+b) Test results:
+   - initial_step=0.0: Returns success=False, status=-3, df=nan, nfev=9, nit=1
+   - initial_step=-1.0: Returns success=False, status=-3, df=nan, nfev=9, nit=1
+   - initial_step=1.0 (positive): Returns success=True, status=0, df=0.5403023058667242 (correct)
+
+2. Code Analysis
+----------------
+Looking at the source code (_differentiate.py):
+
+a) Line 27: Error message states "Tolerances and step parameters must be non-negative scalars"
+   - This message suggests that step parameters (including initial_step) should be validated
+
+b) Lines 28-34: Validation is performed ONLY for step_factor, atol, and rtol
+   - initial_step is NOT included in this validation array
+
+c) Line 408: The code explicitly handles non-positive initial_step values:
+   - h0 = xpx.at(h0)[h0 <= 0].set(xp.nan)
+   - This sets non-positive step sizes to NaN instead of raising an error
+
+d) This NaN then propagates through the calculation, eventually causing the algorithm to fail with status=-3 (non-finite value encountered) in the first iteration
+
+3. Behavior Observed
+--------------------
+The current implementation:
+- Accepts non-positive initial_step values without raising a ValueError
+- Silently converts them to NaN
+- Allows the computation to proceed until it fails with a cryptic status code
+- This violates the principle of "fail-fast" with clear error messages
+
+The bug report accurately describes this behavior and correctly identifies the issue.

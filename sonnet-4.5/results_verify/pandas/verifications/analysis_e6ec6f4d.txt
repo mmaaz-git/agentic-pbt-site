@@ -1,0 +1,91 @@
+## Bug Report Triage Analysis
+
+### Consideration for Each Category
+
+#### 1. BUG (Valid bug that should be filed)
+**Arguments FOR:**
+- The function silently corrupts data by transforming `'\x00'` into `''`
+- This violates the fundamental contract of unique() - returning values not in the input
+- The null character is a valid Unicode/ASCII character (code point 0)
+- Data loss occurs without warning or error
+- The behavior is inconsistent: works correctly with dtype=object but fails with default dtype
+- No documentation warns about this limitation
+
+**Arguments AGAINST:**
+- The root cause is in NumPy's Unicode string dtype, not pandas itself
+- This might be considered expected behavior for NumPy Unicode strings
+
+#### 2. INVALID (Incorrect report, code works as designed)
+**Arguments FOR:**
+- The issue is actually in NumPy's string handling, not pandas.unique()
+- NumPy's Unicode dtype has always treated '\x00' as a C-style terminator
+- pandas.unique() correctly processes what NumPy provides
+
+**Arguments AGAINST:**
+- Even if the root cause is NumPy, pandas should handle this case or document it
+- Users calling pandas.unique() expect it to preserve their data
+- The function returns values that weren't in the input, which is objectively wrong
+
+#### 3. WONTFIX (Trivial or uninteresting)
+**Arguments FOR:**
+- Null characters in strings are relatively rare in typical data analysis
+- Workaround exists (use dtype=object)
+- Fixing this would require changing NumPy's fundamental string handling
+
+**Arguments AGAINST:**
+- Silent data corruption is never trivial
+- Null characters are valid and used in binary protocols, embedded systems data, etc.
+- The workaround requires users to know about this issue in advance
+
+#### 4. FEATURE_REQUEST (New functionality needed)
+**Arguments FOR:**
+- Could be seen as requesting better null character support
+- Might require new parameter like `preserve_nulls=True`
+
+**Arguments AGAINST:**
+- This isn't asking for new functionality - unique() should already preserve all input values
+- The current behavior is a bug, not a missing feature
+
+#### 5. DOCUMENTATION_FIX (Documentation needs update)
+**Arguments FOR:**
+- The code behavior is consistent with NumPy's design
+- Could document that null characters are not preserved with default string dtype
+- Users should be warned about this limitation
+
+**Arguments AGAINST:**
+- This is actual data corruption, not just a documentation issue
+- Documenting a bug doesn't make it not a bug
+- Users shouldn't need to read warnings about valid characters being corrupted
+
+### Key Technical Findings
+
+1. **Root Cause**: NumPy's Unicode string dtype (`<U`) treats `\x00` as a C-style string terminator
+2. **Scope**: Affects any string ending with `\x00` when using default NumPy string conversion
+3. **Workaround**: Using `dtype=object` preserves null characters correctly
+4. **Inconsistency**: pandas.Series.unique() handles this correctly (uses object dtype by default)
+
+### Impact Assessment
+
+- **Data Integrity**: HIGH - Silent data corruption occurs
+- **User Expectation**: Violated - unique() returns values not in input
+- **Frequency**: LOW-MEDIUM - Null characters aren't common but are valid
+- **Severity**: HIGH when it occurs - complete loss of data after null character
+
+### Recommended Categorization
+
+This should be categorized as **DOCUMENTATION_FIX** with the following reasoning:
+
+1. The behavior is technically "correct" from NumPy's perspective - Unicode strings in NumPy have always treated '\x00' as a terminator
+2. pandas.unique() is working as designed with the arrays NumPy provides
+3. The issue is that users aren't warned about this NumPy limitation
+4. The pandas documentation should explicitly warn users that:
+   - Strings containing null characters may be truncated when using pandas.unique()
+   - Users should use dtype=object if preserving null characters is important
+   - This is a limitation inherited from NumPy's Unicode string handling
+
+While this could be argued as a BUG (since it causes data corruption), the fact that:
+- This is NumPy's documented behavior for Unicode strings
+- A workaround exists (dtype=object)
+- The issue is really about user expectations vs. documented behavior
+
+Makes this more appropriate as a DOCUMENTATION_FIX. The pandas documentation should clearly warn about this behavior so users can make informed decisions about their data handling.

@@ -1,0 +1,53 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug described in the report. The Starlette CORS middleware incorrectly rejects valid preflight requests when the Access-Control-Request-Headers header contains empty values.
+
+## Test Results
+
+All test cases from the bug report have been reproduced and confirmed:
+
+1. **Empty string ('')**: Returns 400 "Disallowed CORS headers" - CONFIRMED BUG
+2. **Multiple commas (',,,')**:  Returns 400 "Disallowed CORS headers" - CONFIRMED BUG
+3. **Content-Type with trailing commas ('Content-Type,,')**:  Returns 400 "Disallowed CORS headers" - CONFIRMED BUG
+4. **Content-Type with single trailing comma ('Content-Type,')**:  Returns 400 "Disallowed CORS headers" - CONFIRMED BUG
+5. **Valid header 'Content-Type'**: Returns 200 OK - WORKS AS EXPECTED
+6. **No Access-Control-Request-Headers header**: Returns 200 OK - WORKS AS EXPECTED
+
+## Root Cause Analysis
+
+The bug occurs in `/starlette/middleware/cors.py` at lines 127-131:
+
+```python
+elif requested_headers is not None:
+    for header in [h.lower() for h in requested_headers.split(",")]:
+        if header.strip() not in self.allow_headers:
+            failures.append("headers")
+            break
+```
+
+The issue is that:
+- When `requested_headers` is an empty string "", `split(",")` returns `[""]`
+- When `requested_headers` is ",,," or has trailing commas, split creates empty string elements
+- `"".strip()` is still `""`, which is not in `self.allow_headers`
+- This causes a false rejection with "Disallowed CORS headers"
+
+## Expected Behavior
+
+Based on common web practices and defensive parsing principles:
+- An empty Access-Control-Request-Headers should be treated as "no headers requested"
+- Trailing commas and multiple consecutive commas should be gracefully handled by filtering out empty values
+- These cases should not cause a 400 Bad Request response
+
+## Actual Behavior
+
+The middleware returns a 400 Bad Request with "Disallowed CORS headers" for all cases with empty strings or trailing/multiple commas, even though these are valid (if unusual) header formats that should be handled gracefully.
+
+## Hypothesis Test Result
+
+The provided hypothesis test also fails as expected:
+- Test assertion: `response.status_code == 200`
+- Actual result: `response.status_code == 400`
+- Error: "Expected 200, got 400"
+
+The bug is confirmed and reproducible.

@@ -1,0 +1,59 @@
+## Documentation Analysis
+
+### Flask TaggedJSONSerializer Documentation
+
+The TaggedJSONSerializer is documented in the source code (flask/json/tag.py) with the following key statement:
+
+**Line 5**: "A compact representation for lossless serialization of non-standard JSON types."
+
+This explicitly claims "lossless serialization" as a core feature.
+
+### Class Documentation
+
+The TaggedJSONSerializer class documentation (lines 220-232) states:
+- "Serializer that uses a tag system to compactly represent objects that are not JSON types"
+- Lists supported types including `datetime.datetime`
+- No mention of any limitations or special handling for naive vs timezone-aware datetimes
+
+### DateTime Handling Implementation
+
+The TagDateTime class (lines 205-217) uses:
+1. `http_date()` from Werkzeug for serialization (line 213)
+2. `parse_date()` from Werkzeug for deserialization (line 216)
+
+### Werkzeug Function Behavior
+
+Based on the Werkzeug function documentation:
+
+**http_date()**:
+- "assumes naive datetime objects are in UTC instead of raising an exception"
+- Formats datetime to RFC 2822 date string
+
+**parse_date()**:
+- "always returns a timezone-aware datetime object"
+- "If the string doesn't have timezone information, it is assumed to be UTC"
+- Changed in Werkzeug 2.0 to "Return a timezone-aware datetime object"
+
+### Critical Documentation Finding
+
+The parse_date function documentation explicitly states it "always returns a timezone-aware datetime object." This means the current implementation CANNOT maintain lossless serialization for naive datetimes by design.
+
+### GitHub Issues Found
+
+From web search, I found issue #4466 on pallets/flask GitHub: "TaggedJSONSerializer doesn't round-trip naive datetimes" - indicating this is a known issue.
+
+### Documentation vs Implementation Mismatch
+
+The documentation claims "lossless serialization" (line 5) but:
+1. The implementation uses functions that explicitly change timezone information
+2. Werkzeug's parse_date was changed in version 2.0 to ALWAYS return timezone-aware datetimes
+3. This breaks the "lossless" contract for naive datetime objects
+
+### No Warning or Documentation About Limitation
+
+The Flask documentation does not:
+- Warn users about this limitation with naive datetimes
+- Document that datetimes will be converted to UTC timezone-aware
+- Provide guidance on handling naive datetimes differently
+
+The documentation's claim of "lossless serialization" is incorrect for naive datetime objects given the current implementation.

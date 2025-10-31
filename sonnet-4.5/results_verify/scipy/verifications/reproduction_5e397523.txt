@@ -1,0 +1,43 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. PRIMARY TEST CASE (from bug report):
+   Input: y = [0.0, 0.0, 1.0] (all non-negative values)
+   Result from cumulative_simpson with initial=0: [0.0, -0.08333333, 0.33333333]
+
+   CONFIRMED: The cumulative integral goes NEGATIVE (-0.0833) at index 1
+   This happens despite all input values being non-negative (≥ 0)
+
+2. HYPOTHESIS PROPERTY-BASED TEST:
+   The property test successfully found MULTIPLE failing cases:
+   - [0.0, 0.0, 1.0]: produces negative value -0.08333333
+   - [1.0, 0.0, 0.0]: produces non-monotonic cumulative (decreases from 0.417 to 0.333)
+   - [257703.23, 0.0, 0.0]: produces large negative difference -21475.27
+   - Many other cases with similar patterns
+
+   The test confirms this is NOT an isolated edge case but a systematic issue.
+
+3. COMPARISON WITH cumulative_trapezoid:
+   Same input [0.0, 0.0, 1.0]:
+   - cumulative_trapezoid result: [0.0, 0.0, 0.5]
+   - No negative values, properly monotonic
+   - This shows the issue is specific to Simpson's method
+
+4. MATHEMATICAL VERIFICATION:
+   Manual calculation confirms the implementation is CORRECT:
+   - For points (0,0), (1,0), (2,1), Simpson fits quadratic p(x) = 0.5x² - 0.5x
+   - This quadratic is NEGATIVE on interval [0,1] with minimum at x=0.5
+   - Integral from 0 to 1 = -1/12 = -0.08333... (matches scipy output)
+   - The implementation correctly follows the mathematical formula
+
+5. ROOT CAUSE IDENTIFIED:
+   Simpson's rule fits a quadratic through three points. When data has sharp transitions
+   (like [0, 0, 1]), the fitted quadratic can "overshoot" and become negative between
+   the original non-negative data points. This is an inherent property of quadratic
+   interpolation, NOT an implementation bug.
+
+6. SEVERITY ASSESSMENT:
+   - The behavior is mathematically correct according to Simpson's rule
+   - But violates the fundamental calculus property that cumulative integral
+     of non-negative function should be non-decreasing
+   - This could cause silent errors in scientific computations expecting monotonicity

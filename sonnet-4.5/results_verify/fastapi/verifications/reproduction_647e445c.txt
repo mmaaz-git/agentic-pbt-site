@@ -1,0 +1,34 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the FastAPI `jsonable_encoder` function.
+
+### Bug Reproduction
+
+1. **Hypothesis Test**: The property-based test correctly identifies the failing case with input `{(0,): 0}`. The test crashes with `TypeError: unhashable type: 'list'` at line 297 in encoders.py.
+
+2. **Simple Reproduction**: The minimal example `jsonable_encoder({(0,): 0})` consistently reproduces the same error.
+
+3. **Root Cause Confirmed**: The issue occurs exactly as described in the bug report:
+   - Line 281-288: Dict keys are recursively encoded via `jsonable_encoder(key, ...)`
+   - Line 299-315: Tuples are converted to lists during encoding
+   - Line 297: Attempts to use the encoded key (now a list) as a dictionary key: `encoded_dict[encoded_key] = encoded_value`
+   - This fails because lists are unhashable and cannot be used as dictionary keys
+
+### Current Behavior Analysis
+
+Testing revealed that `jsonable_encoder` currently:
+- Successfully handles string keys (pass through unchanged)
+- Successfully handles integer, float, boolean, and None keys (keeps them as-is, relying on json.dumps to convert)
+- FAILS on tuple keys of any size (empty tuple, single element, multiple elements)
+- The failure occurs because tuples are encoded to lists, and lists cannot be dict keys
+
+### JSON Standard Behavior
+
+Testing Python's json.dumps() shows:
+- JSON only accepts string keys in the final output
+- Python's json.dumps() automatically converts non-string keys (int, float, bool, None) to strings
+- Python's json.dumps() raises TypeError for tuple keys: "keys must be str, int, float, bool or None, not tuple"
+
+### Impact
+
+This is a clear crash bug where valid Python dictionaries with hashable tuple keys cause `jsonable_encoder` to crash with an unhashable type error. The function's documented purpose is to "convert any object to something that can be encoded in JSON", but it fails on this valid Python object type.

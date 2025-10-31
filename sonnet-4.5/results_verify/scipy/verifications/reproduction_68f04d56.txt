@@ -1,0 +1,30 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported for scipy.spatial.distance.jensenshannon.
+
+### Test Results:
+
+1. **Property-based test**: The hypothesis test failed with the error message "jensenshannon(p, p) should be 0, got nan" when given the input [0.0, 0.0, 0.0].
+
+2. **Direct reproduction**:
+   - jensenshannon([0.0, 0.0, 0.0], [0.0, 0.0, 0.0]) returns `nan`
+   - The function generates RuntimeWarnings about "invalid value encountered in divide" at lines 1378 and 1379
+
+3. **Comparison with valid inputs**:
+   - jensenshannon([0.3, 0.3, 0.4], [0.3, 0.3, 0.4]) correctly returns 0.0, confirming the identity property works for valid probability distributions
+
+### Root Cause:
+
+Looking at the source code (lines 1378-1379):
+```python
+p = p / np.sum(p, axis=axis, keepdims=True)
+q = q / np.sum(q, axis=axis, keepdims=True)
+```
+
+When both p and q are all-zero arrays:
+- np.sum(p) = 0.0
+- np.sum(q) = 0.0
+- Division by zero results in nan values: 0.0/0.0 = nan
+- All subsequent calculations propagate the nan
+
+The bug report accurately describes the issue: the function attempts to normalize input vectors by dividing by their sum, but fails to handle the edge case where the sum is zero, resulting in nan instead of either returning 0 or raising a clear error.

@@ -1,0 +1,33 @@
+## Bug Reproduction Analysis
+
+### Hypothesis Test Results
+I successfully ran the property-based test from the bug report. The test failed exactly as described:
+- When `use_caching=True`, the test crashes with `TypeError: cannot create weak reference to 'NoneType' object`
+- When `use_caching=False`, the test passes without issues
+- The failure occurs in `has_listeners()` method when it tries to check the cache
+
+### Manual Reproduction Results
+I verified all the failing cases mentioned in the bug report:
+
+1. **sender=None**: Crashes with `TypeError: cannot create weak reference to 'NoneType' object`
+2. **sender="test_string"**: Crashes with `TypeError: cannot create weak reference to 'str' object`
+3. **sender=123**: Crashes with `TypeError: cannot create weak reference to 'int' object`
+4. **sender=object()**: Crashes with `TypeError: cannot create weak reference to 'object' object`
+
+All these failures occur ONLY when `use_caching=True`. When `use_caching=False`, all cases work correctly.
+
+### Root Cause Verification
+I examined the source code at line 47 in dispatcher.py and confirmed the root cause:
+```python
+self.sender_receivers_cache = weakref.WeakKeyDictionary() if use_caching else {}
+```
+
+The WeakKeyDictionary requires all keys to support weak references. Python built-in types like None, str, int, float, tuple, and plain object instances (without __weakref__ slot) cannot be weak referenced, causing the TypeError.
+
+### Effect of the Bug
+This bug completely breaks the caching feature for the most common use cases:
+- `sender=None` is the standard way to listen to all senders (documented behavior)
+- String and integer senders are reasonable for non-model signals
+- Plain object instances are commonly used as senders
+
+The bug makes `use_caching=True` unusable with these common sender types, forcing users to disable caching entirely.

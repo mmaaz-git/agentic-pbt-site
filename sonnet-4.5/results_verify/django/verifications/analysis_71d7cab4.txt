@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that delta=0 should be a no-op or preserve the key. The method is documented as "Add delta to the cache version for the supplied key" and it technically does that - it adds 0 to the version. The fact that this causes deletion could be considered expected behavior from the implementation perspective, and the user is passing an edge case value that doesn't make semantic sense (why increment a version by 0?).
+
+**Why it might not be INVALID:**
+The behavior is clearly counterintuitive and surprising. A reasonable developer would expect that incrementing by 0 would either be a no-op or at worst do nothing harmful. Silently deleting data is a severe consequence that violates the principle of least surprise. The method name "incr_version" implies incrementing, not data deletion.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case where someone calls incr_version with delta=0, which doesn't make logical sense in normal usage. Why would anyone want to increment a version by 0? The workaround is trivial - just don't call the method with delta=0. The fix might add unnecessary complexity for a case that shouldn't occur in practice.
+
+**Why it might not be WONTFIX:**
+Data loss is a severe consequence that should never happen silently, even in edge cases. The bug could occur accidentally (e.g., a calculated delta that happens to be 0) and cause production data loss. The fix is simple and would prevent a serious issue. This is not just a cosmetic or minor issue - it's actual data deletion.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what happens with delta=0, so this could be seen as a documentation gap. The current behavior, while surprising, follows logically from the implementation. The documentation could be updated to warn that delta=0 will delete the key, making this expected behavior rather than a bug.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior is so counterintuitive and destructive that documenting it as expected would be wrong. Users would reasonably expect that a method called incr_version would never delete data. The problem is with the code implementation, not the documentation. Documenting destructive behavior doesn't make it correct.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current code doesn't handle the delta=0 case, and adding support for it could be seen as a new feature. The user is requesting that the method handle this edge case gracefully, which is adding new functionality that wasn't previously considered. The method was designed for incrementing/decrementing, not for no-ops.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing functionality to not corrupt data. Not deleting data when incrementing by 0 is not a feature, it's fixing broken behavior. The method already claims to handle any delta value, so delta=0 should work correctly, not delete data.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is clearly a bug. The method silently deletes data when given a valid input (delta=0). This violates the principle of least surprise and can cause data loss in production. The implementation has a logic error where it deletes from the same version it just set to when delta=0. No reasonable developer would expect incr_version to ever delete their cached data. The fix is straightforward and prevents data loss.
+
+**Why it might not be BUG:**
+The edge case of delta=0 is unusual and arguably nonsensical - why increment by 0? The documentation doesn't promise any particular behavior for delta=0. The implementation follows its documented algorithm exactly, even if the result is unexpected. This could be seen as user error for passing a meaningless parameter value.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug that should be fixed. While delta=0 is an edge case, the consequence of silently deleting cached data is too severe to ignore or document away. The principle of least surprise strongly suggests that incr_version should never delete data, especially without any warning or error.
+
+The implementation has a clear logic flaw: when delta=0, it sets the value at version V and then immediately deletes it from version V. This is objectively wrong behavior. Even if we argue that delta=0 is nonsensical, the response should be either to make it a no-op or raise an error, not to silently delete data.
+
+Most importantly, this could happen accidentally in production code where delta is calculated dynamically, and a delta of 0 could occur legitimately (e.g., conditional version bumping where sometimes no bump is needed). The severity of data loss combined with the silent nature of the failure makes this a serious issue that warrants fixing rather than documenting or ignoring.

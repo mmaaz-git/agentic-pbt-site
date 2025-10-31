@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report complains about different internal state representations between middleware instances, but the documentation never specifies that internal state must be identical for functionally equivalent configurations. The Starlette documentation doesn't promise any particular internal representation or ordering of headers. The actual CORS functionality works correctly - all header validations succeed as expected regardless of the case used during configuration. The property-based test is asserting an implementation detail that was never part of the API contract. The internal state difference has zero functional impact on CORS behavior.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that HTTP headers are case-insensitive per RFC 7230, and it's reasonable to expect that two middleware instances configured with headers differing only in case should behave identically in all respects. The internal state difference is real and reproducible, not a misunderstanding of the code.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a trivial cosmetic issue with no functional impact. The ordering difference in the internal list affects nothing except the order headers appear in the "Access-Control-Allow-Headers" response header, which browsers ignore since they treat headers as an unordered set. The effort to fix this would provide virtually no value to users. The current implementation is simpler and works correctly for all practical purposes. This falls into the category of "technically correct but practically irrelevant" issues that maintainers typically close as WONTFIX.
+
+**Why it might not be WONTFIX:**
+The fix is extremely simple (normalize case before sorting) and would make the code more predictable. The bug report provides a clear fix that's only a few lines of code. If the project values consistency and predictability in its implementation, this could be worth fixing despite the minimal impact.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about how headers are normalized and stored internally. If users are expecting identical internal state for case-different headers, the documentation should explicitly state that internal representation may vary while functional behavior remains consistent. Adding a note that "headers are case-insensitive for validation but internal storage format is not guaranteed" would prevent this confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already implicitly follows HTTP standards by not promising any specific internal representation. Most users don't care about internal state as long as the middleware works correctly, which it does. The documentation appropriately focuses on functional behavior rather than implementation details.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially requesting a new guarantee about internal state consistency that doesn't currently exist. They want the middleware to normalize headers in a specific way to ensure identical internal representations for case-variant configurations. This could be viewed as requesting a new feature: "deterministic internal state for case-insensitive configurations."
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality but rather pointing out what they believe is incorrect behavior in existing functionality. They're not requesting an enhancement but reporting what they see as a violation of HTTP standards regarding case-insensitive headers.
+
+## BUG Considerations
+**Why it might be BUG:**
+HTTP RFC 7230 clearly states headers are case-insensitive, and having different internal states for case-different headers could be seen as violating this principle. The test case is well-crafted and demonstrates a real inconsistency. The fix is straightforward and would make the implementation more correct according to HTTP standards. Some developers might rely on the internal state for testing or debugging, and inconsistent representations could cause confusion.
+
+**Why it might not be BUG:**
+The CORS middleware works 100% correctly from a functional perspective. No actual CORS validation fails, no security issues exist, and no user-facing behavior is wrong. The internal state representation is an implementation detail not covered by any API contract. The only observable difference is the ordering of headers in a response string, which has no semantic meaning in HTTP. This is a purely cosmetic issue with zero functional impact.
+
+**Overall consideration**
+This bug report represents a classic case of technically correct but practically irrelevant issue. The reporter has accurately identified that two middleware instances with headers differing only in case have different internal state representations, specifically different ordering in their `allow_headers` lists. They correctly cite RFC 7230's requirement that HTTP headers be case-insensitive. However, the actual CORS functionality works perfectly - headers are validated correctly regardless of case, and the middleware behaves identically in all functional aspects.
+
+The core question is whether internal state consistency is part of the expected behavior. The documentation makes no promises about internal representation, focusing only on functional behavior. The difference manifests only in the ordering of headers in the internal list and in the "Access-Control-Allow-Headers" response header, neither of which affects CORS validation since headers are treated as unordered sets by browsers. The fix would be trivial to implement but provides no tangible benefit to users.
+
+Given that this is a low-severity issue with no functional impact, affecting only internal state ordering that users shouldn't depend on, and considering the general principle that libraries shouldn't guarantee implementation details not explicitly documented, this should be classified as WONTFIX. It's the type of pedantic correctness that, while technically valid, adds no real value and would likely be closed by maintainers as not worth the effort to change working code.

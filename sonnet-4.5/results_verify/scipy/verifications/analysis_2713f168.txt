@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly promise that columns with identical values will remain unchanged - it only says the function divides by standard deviation. The warning message is only triggered when std_dev is exactly zero, and technically the computed std_dev here (8.88e-16) is not zero. One could argue that the function is working as documented by dividing by the computed standard deviation.
+
+**Why it might not be INVALID:**
+The warning message in the code explicitly states "The values of these columns will not change" for zero standard deviation columns. A column with all identical values should logically have zero standard deviation, but floating-point precision prevents this. Users have a reasonable expectation that identical values in a column represent zero variance, and the function should handle this common case correctly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a floating-point precision edge case that occurs at the limits of numerical computation (values around 1e-16). Some might argue that such tiny standard deviations are so rare in practice that fixing this isn't worth the potential performance impact or code complexity. The issue only manifests with perfectly identical floating-point values, which could be seen as an artificial scenario.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - having columns with identical values is common in real datasets (e.g., a feature that hasn't varied in the sample, constant columns, or categorical features encoded as numbers). The bug produces catastrophically wrong results (values of 6e15 instead of 5.7), which could severely impact downstream analysis. The fix is simple and wouldn't significantly impact performance.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The online documentation doesn't mention the warning about zero standard deviation columns at all. One could update the documentation to clarify that the function uses exact equality to detect zero standard deviation and that near-zero values due to floating-point precision will still result in division. This would set proper expectations about the function's behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The existing warning message already promises specific behavior ("The values of these columns will not change"), and the code fails to deliver on this promise. The issue isn't that the documentation is wrong or unclear - it's that the implementation doesn't handle a common and reasonable use case correctly. Documenting a bug doesn't fix the bug.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation only handles exactly zero standard deviations. Adding tolerance-based checking for near-zero values could be seen as a new feature - extending the function to handle floating-point precision issues. The user is essentially asking for the function to be more robust to numerical precision limitations.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for the existing functionality to work correctly. The warning message already promises that columns with zero std will not change, and columns with all identical values should have zero std by mathematical definition. This is fixing broken behavior, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function promises through its warning message that "The values of these columns will not change" for zero standard deviation columns. Mathematically, a column with all identical values has zero standard deviation. Due to a floating-point precision issue in the implementation, the function fails to detect this case and produces wildly incorrect results (6e15 instead of 5.7). This violates the behavioral contract established by the warning message and breaks reasonable user expectations.
+
+**Why it might not be BUG:**
+The function technically works as implemented - it divides by the computed standard deviation. The std_dev is not exactly zero (it's 8.88e-16), so the exact equality check correctly evaluates to False. One could argue this is expected behavior when dealing with floating-point arithmetic and that users should handle such cases themselves.
+
+## Overall Consideration
+This bug report describes a genuine issue where scipy.cluster.vq.whiten fails to handle columns with identical values correctly due to floating-point precision limitations. The function's warning message explicitly promises that columns with zero standard deviation "will not change," but this promise is broken when floating-point arithmetic produces near-zero (but not exactly zero) standard deviations for identical values.
+
+The severity of the bug is significant: instead of leaving a constant column unchanged (value 5.72), the function returns astronomical values (6.44e15). This isn't a minor numerical error but a catastrophic failure that would corrupt any downstream analysis. The scenario is not obscure - having columns with constant values is common in real datasets, especially when dealing with subsets of data or features that haven't varied in a particular sample.
+
+The proposed fix is reasonable and standard practice in numerical computing: using a small tolerance (like 1e-10) instead of exact equality when checking for zero. This is a well-established pattern for handling floating-point comparisons. While one could argue about the exact threshold value, the principle of using tolerance-based comparison for floating-point "zero" checks is sound and widely accepted in scientific computing. Given that the function already has special handling for zero std columns (setting std_dev to 1.0 and warning the user), extending this to handle near-zero values is a natural and necessary improvement.

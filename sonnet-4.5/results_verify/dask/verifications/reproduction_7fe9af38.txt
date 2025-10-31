@@ -1,0 +1,41 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+## Summary
+I have successfully reproduced the bug described in the report. The `_resample_bin_and_out_divs` function in dask.dataframe.tseries.resample indeed produces output divisions (outdivs) where the first element can be before the first input division, extending the time range beyond the input data boundaries.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test Reproduction
+I ran the property-based test provided in the bug report:
+- Test: Assert that outdivs[0] >= divisions[0] (output divisions should not start before input divisions)
+- Result: FAILED with the specific example: n_divs=2, freq='h', closed='right', label='left'
+- Error: "First outdiv 1999-12-31 23:00:00 before first division 2000-01-01 00:00:00"
+
+### 2. Manual Reproduction
+I ran the manual reproduction code with the failing parameters:
+- Input divisions: [2000-01-01 00:00:00, 2000-01-31 00:00:00]
+- Output outdivs[0]: 1999-12-31 23:00:00
+- Output newdivs[0]: 2000-01-01 00:00:00
+- Confirmed: outdivs[0] is 1 hour before divisions[0]
+
+### 3. Source Code Analysis
+I examined the source code at lines 66-103 of /home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/tseries/resample.py:
+
+The function contains logic to adjust newdivs[0] if it extends before the input range (lines 90-91):
+```python
+if newdivs[0] < divisions[0]:
+    newdivs[0] = divisions[0]
+```
+
+However, there is NO corresponding adjustment for outdivs[0]. When closed='right', the code adds an offset to tempdivs (line 78), which can shift outdivs to start before the actual data range.
+
+## Bug Impact
+This is a legitimate bug because:
+1. The output divisions claim data exists before the input time range begins
+2. This violates the reasonable expectation that resampled data should stay within the original data boundaries
+3. It can lead to incorrect time range queries and confusion about the actual time span of resampled data
+4. The code already has logic to prevent newdivs from extending before divisions[0], showing this constraint was intended
+
+## Conclusion
+The bug report is accurate and reproducible. The proposed fix (adding similar constraint logic for outdivs[0]) appears correct and consistent with the existing code pattern for newdivs[0].

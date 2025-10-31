@@ -1,0 +1,57 @@
+REPRODUCTION OF BUG REPORT: django.templatetags.static.StaticNode.handle_token IndexError
+========================================================================================
+
+I have successfully reproduced the bug reported in django.templatetags.static.StaticNode.handle_token.
+
+BUG CONFIRMATION:
+The bug is REAL and REPRODUCIBLE. When StaticNode.handle_token receives a token with 3 elements where
+the second element (index 1) is "as", it raises an IndexError instead of a TemplateSyntaxError.
+
+REPRODUCTION STEPS:
+1. Created test case with MockToken and MockParser classes
+2. Tested with input: ['x', 'as', 'y']
+3. The bug occurs exactly as described
+
+ACTUAL BEHAVIOR:
+- Input: Token with split_contents() returning ['x', 'as', 'y']
+- The condition `len(bits) >= 2 and bits[-2] == "as"` evaluates to True
+  - len(bits) = 3, which is >= 2: True
+  - bits[-2] = bits[1] = 'as': True
+- Code then tries to access bits[3], which doesn't exist
+- Result: IndexError: list index out of range
+
+ROOT CAUSE ANALYSIS:
+The issue is in lines 147-148 of static.py:
+```python
+if len(bits) >= 2 and bits[-2] == "as":
+    varname = bits[3]
+```
+
+The condition checks if there are at least 2 elements and if the second-to-last element is "as",
+but then unconditionally accesses bits[3] (the 4th element). When bits has exactly 3 elements,
+the condition passes but bits[3] doesn't exist.
+
+EXPECTED BEHAVIOR:
+Based on Django documentation and conventions, template tags should:
+1. Validate their syntax properly
+2. Raise TemplateSyntaxError for invalid syntax, not IndexError
+3. Either accept the syntax as valid or reject it with a meaningful error
+
+VALID SYNTAX EXAMPLES:
+- {% static "path/to/file.css" %}
+- {% static "path/to/file.css" as varname %}
+- {% static variable_with_path %}
+- {% static variable_with_path as varname %}
+
+The input ['x', 'as', 'y'] represents "{% static x as y %}" which is syntactically incomplete -
+it's missing the tag name at the beginning. However, this should be caught with a proper
+TemplateSyntaxError, not crash with IndexError.
+
+PROPOSED FIX VERIFICATION:
+The proposed fix changes line 147 from:
+    if len(bits) >= 2 and bits[-2] == "as":
+to:
+    if len(bits) >= 4 and bits[-2] == "as":
+
+This ensures that bits[3] exists before accessing it. Testing confirms this fix prevents the IndexError
+for the problematic case while maintaining correct behavior for valid inputs.

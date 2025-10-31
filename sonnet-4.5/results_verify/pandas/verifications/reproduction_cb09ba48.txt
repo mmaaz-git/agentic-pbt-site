@@ -1,0 +1,61 @@
+REPRODUCTION RESULTS FOR BUG REPORT
+
+1. BUG REPRODUCTION STATUS: CONFIRMED
+
+The bug report is technically correct. The behavior described occurs exactly as stated.
+
+2. TEST RESULTS
+
+When creating a CompatValidator with an invalid method (e.g., "invalid_method" or "0"):
+
+First call with empty args and kwargs:
+- validator((), {}) returns None
+- NO exception is raised
+- The invalid method is silently accepted
+
+Second call with non-empty args:
+- validator((1,), {}) raises ValueError: "invalid validation method 'invalid_method'"
+- The same invalid method is now rejected
+
+3. CODE ANALYSIS
+
+Looking at the source code (lines 72-92 of function.py):
+
+```python
+def __call__(self, args, kwargs, fname=None, max_fname_arg_count=None, method=None):
+    if not args and not kwargs:
+        return None  # Line 73: Early return BEFORE method validation
+
+    # ... parameter resolution ...
+
+    if method == "args":
+        validate_args(...)
+    elif method == "kwargs":
+        validate_kwargs(...)
+    elif method == "both":
+        validate_args_and_kwargs(...)
+    else:
+        raise ValueError(f"invalid validation method '{method}'")  # Line 92
+```
+
+The early return at line 73 occurs BEFORE the method validation at lines 83-92.
+
+4. INCONSISTENCY CONFIRMED
+
+The behavior is inconsistent:
+- Invalid methods are silently accepted when args and kwargs are empty
+- The same invalid methods are rejected when args or kwargs contain values
+- This creates an inconsistent API where the same invalid input is sometimes accepted and sometimes rejected
+
+5. HYPOTHESIS TEST CONFIRMATION
+
+The hypothesis test provided in the bug report correctly identifies this issue:
+- It expects a ValueError to always be raised for invalid methods
+- The test fails because no exception is raised when args and kwargs are empty
+
+6. TECHNICAL CORRECTNESS
+
+The bug report's technical details are accurate:
+- The line numbers referenced are correct
+- The proposed fix would address the inconsistency
+- The reproduction code works as described

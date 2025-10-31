@@ -1,0 +1,38 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Reproduction Results
+
+1. **The bug is real**: The `attrs.converters.to_bool` function does indeed accept `1.0` and `0.0` (float values) despite them not being documented as accepted values.
+
+2. **Test Results**:
+   - `to_bool(1.0)` returns `True`
+   - `to_bool(0.0)` returns `False`
+   - `to_bool(1.5)` raises `ValueError: Cannot convert value to bool: 1.5`
+   - `to_bool(2.0)` raises `ValueError: Cannot convert value to bool: 2.0`
+   - `to_bool(0.5)` raises `ValueError: Cannot convert value to bool: 0.5`
+
+3. **Root Cause**: The bug occurs due to Python's numeric equality behavior. In Python:
+   - `1.0 == 1` evaluates to `True`
+   - `0.0 == 0` evaluates to `True`
+   - When using the `in` operator with a tuple, Python uses equality comparison
+   - Therefore, `1.0 in (1, ...)` returns `True`
+   - Similarly, `0.0 in (0, ...)` returns `True`
+
+4. **Implementation**: The code at lines 156-159 uses membership testing:
+   ```python
+   if val in (True, "true", "t", "yes", "y", "on", "1", 1):
+       return True
+   if val in (False, "false", "f", "no", "n", "off", "0", 0):
+       return False
+   ```
+
+   Since the tuples contain integer values `1` and `0`, and Python treats `1.0 == 1` and `0.0 == 0` as True, the float values `1.0` and `0.0` pass through the membership test unexpectedly.
+
+5. **Inconsistency**: The behavior is inconsistent because:
+   - Only `1.0` and `0.0` are accepted (due to their equality with `1` and `0`)
+   - Other float values like `1.5`, `2.0`, `0.5` are correctly rejected
+   - `2.0` is rejected even though `2.0 == 2` is `True` in Python (because `2` is not in the accepted tuple)
+
+The property-based tests provided in the bug report correctly identify this issue, and the reproduction code demonstrates the undocumented behavior clearly.

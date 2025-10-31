@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is accurate. The `_quote_params_for_last_executed_query` method in Django's SQLite3 backend crashes with `sqlite3.OperationalError: incomplete input` when called with an empty parameter tuple or list.
+
+### Reproduction Steps Performed
+
+1. **Simple SQLite3 Test (Direct)**
+   - Created test script to reproduce the SQL generation issue
+   - Generated SQL: `SELECT ` (with no QUOTE(?) clauses when params is empty)
+   - Result: sqlite3.OperationalError: incomplete input (CONFIRMED)
+
+2. **Django Integration Test**
+   - Set up minimal Django environment with SQLite3 backend
+   - Called `connection.ops._quote_params_for_last_executed_query(())` directly
+   - Result: OperationalError: incomplete input (CONFIRMED)
+   - Also tested with empty list converted to tuple - same error (CONFIRMED)
+
+### Code Analysis
+
+The function at line 171 in `/django/db/backends/sqlite3/operations.py`:
+```python
+sql = "SELECT " + ", ".join(["QUOTE(?)"] * len(params))
+```
+
+When `len(params) == 0`:
+- `["QUOTE(?)"] * 0` produces an empty list `[]`
+- `", ".join([])` produces an empty string `""`
+- `sql = "SELECT " + ""` produces `"SELECT "`
+- This is invalid SQL syntax that SQLite cannot execute
+
+### Current Usage Context
+
+The function is called by `last_executed_query()` (lines 181-196), which does check `if params:` before calling this method. This means in normal Django usage through the public API, the empty params case is already avoided.
+
+However, the function itself is marked as "private" (underscore prefix) but lacks defensive handling of the empty case.
+
+### Impact Assessment
+
+- The bug exists and reproduces exactly as reported
+- The function crashes on empty parameter input
+- Currently mitigated by calling code checking for empty params
+- Direct calls to this private method will crash with empty params

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report claims that `_range2cols` returning duplicates is a bug that affects the Excel reader, but this is not actually true. While `_range2cols` does return duplicate indices, these duplicates are automatically removed by the parser's base_parser.py at line 1040 where `usecols = set(usecols)` is called. The end user never experiences duplicate columns in their DataFrame. The function is working as designed - it's an internal utility that generates a list of indices, and deduplication happens at a more appropriate layer. The documentation for `read_excel` doesn't promise that the internal `_range2cols` function would deduplicate, and the behavior the user sees (no duplicate columns) is correct.
+
+**Why it might not be INVALID:**
+The function `_range2cols` is technically returning duplicate values when given overlapping ranges or repeated columns, which the bug report correctly identifies. The docstring for `_range2cols` doesn't explicitly say that duplicates are expected or that deduplication happens elsewhere. If someone were to use this internal function directly (though it's private), they would get unexpected duplicates.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal implementation detail of a private function (prefixed with underscore). The duplicates are handled correctly downstream, and users never see duplicate columns in their DataFrames. Changing this would be a micro-optimization that adds complexity to `_range2cols` while providing no user-visible benefit. The current design keeps `_range2cols` simple (just concatenate results) and lets the parser handle deduplication where it naturally fits with other data cleaning operations.
+
+**Why it might not be WONTFIX:**
+The current implementation creates unnecessarily large intermediate lists when there are overlapping ranges. For example, 'A:Z,A:Z' would create a list with 52 elements instead of 26. This could have minor performance implications for memory usage and the time to convert to a set, especially with very large overlapping ranges in big Excel files.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation and docstring for `_range2cols` don't mention that it can return duplicates or that deduplication happens elsewhere in the pipeline. The phrase "Returns a subset of the columns" in the `read_excel` documentation could be interpreted to mean the internal functions also return subsets (unique values). Adding a note to the `_range2cols` docstring clarifying that it returns a list that may contain duplicates would prevent confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is private (underscore prefix) and not part of the public API. Users shouldn't be relying on its behavior, and documenting internal implementation details could lead to people depending on behavior that might change. The public-facing documentation for `read_excel` is accurate about what users experience.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report essentially asks for `_range2cols` to return unique column indices, which would be a new feature/enhancement rather than fixing broken functionality. The current behavior isn't broken - it just doesn't deduplicate. Adding deduplication to `_range2cols` would be an optimization feature that could slightly improve performance by reducing intermediate list sizes.
+
+**Why it might not be FEATURE_REQUEST:**
+The report frames this as a bug ("duplicate columns"), not as a request for optimization. The reporter believes the current behavior is incorrect, not just suboptimal. Feature requests are typically for new functionality, not for changing existing internal behavior that already works correctly from the user's perspective.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function `_range2cols` returns duplicate indices when given overlapping ranges, which seems counterintuitive for a function that converts column specifications to indices. The docstring examples don't show overlapping cases, suggesting this might not have been considered in the original design. The word "subset" in the documentation implies uniqueness.
+
+**Why it might not be BUG:**
+The function works exactly as coded - it processes each comma-separated segment independently and concatenates the results. The deduplication is intentionally handled at a different layer (base_parser.py). The end-user experience is correct, with no duplicate columns appearing in DataFrames. This is a deliberate architectural choice to keep `_range2cols` simple and let the parser handle data cleaning. The function is private (underscore prefix) and its behavior is an implementation detail.
+
+## Overall Consideration
+This bug report is technically accurate in identifying that `_range2cols` returns duplicate indices for overlapping ranges. However, this is fundamentally an implementation detail of a private function that doesn't affect end users. The Excel reader correctly deduplicates columns before creating the DataFrame, so users never experience the duplicate columns mentioned in the report.
+
+The report's claim that this "causes the Excel reader to include the same columns multiple times" is false - I've verified that `pd.read_excel()` with overlapping ranges correctly returns unique columns. The deduplication happens in base_parser.py where the list is converted to a set.
+
+The current design appears intentional: `_range2cols` is kept simple (just process and concatenate), while deduplication happens at the parser level along with other data validation. This is a reasonable architectural decision that separates concerns. The report seems to misunderstand how the internal pipeline works, assuming that `_range2cols` output directly determines the final DataFrame columns, which it doesn't.

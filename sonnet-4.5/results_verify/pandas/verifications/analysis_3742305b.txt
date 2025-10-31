@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report might be considered invalid if pandas is simply passing through NumPy's behavior and the issue is entirely in NumPy's domain. Since pandas doesn't explicitly document that it guarantees correct quantile calculations for all dtypes, one could argue that this is not a pandas bug but a NumPy bug, and users should report it to NumPy instead. Additionally, int8 is a relatively uncommon dtype for statistical operations, and the documentation doesn't explicitly promise support for all edge cases with small integer types.
+
+**Why it might not be INVALID:**
+The bug produces objectively incorrect mathematical results - a median of -1 and 127 cannot be 191. This violates the fundamental definition of quantiles, which must be monotonically increasing. Even if the root cause is in NumPy, pandas is responsible for providing correct statistical functions to its users. The fact that the bug originates in a dependency doesn't absolve pandas from ensuring correctness of its API.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be WONTFIX if the maintainers decide that int8 arrays are rarely used in practice for statistical operations, and the workaround (converting to int64) is simple enough for users to implement themselves. Since this is ultimately a NumPy bug affecting only NumPy 2.3.0, maintainers might prefer to wait for NumPy to fix it rather than adding workaround code to pandas. The performance overhead of the workaround might also be considered unacceptable for the rare cases where int8 is used.
+
+**Why it might not be WONTFIX:**
+The bug produces fundamentally incorrect mathematical results that could lead to serious errors in data analysis. Users expect quantile functions to work correctly regardless of dtype. The proposed fix is minimal (a few lines of code) and similar to existing handling for datetime types. The bug affects not just int8 but potentially other small integer types, making it more widespread than initially apparent.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the documentation should explicitly state that int8 arrays with negative values may produce incorrect results with certain NumPy versions, and users should convert to larger dtypes for correct behavior. This would acknowledge the limitation without requiring code changes. The documentation could list known dtype limitations and recommend best practices for statistical operations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+This is not a documentation issue because the function produces mathematically incorrect results. A median value larger than the maximum is not a matter of documentation - it's objectively wrong. Users reasonably expect mathematical functions to produce correct results, and documenting incorrect behavior doesn't make it acceptable. The issue is with the implementation, not with how it's documented.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting proper quantile calculations for all dtypes could be viewed as a new feature rather than a bug fix. The current code works correctly for the most common dtypes (float64, int64), and adding support for less common dtypes like int8 could be considered an enhancement. The request to add automatic dtype conversion for small integer types is essentially asking for new functionality that doesn't currently exist.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a feature request because quantile calculation is already a supported feature - it just produces incorrect results for certain inputs. Users aren't asking for new functionality but for existing functionality to work correctly. The mathematical definition of quantiles doesn't change based on dtype, so correct behavior for all numeric types should be expected, not considered a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+This produces objectively incorrect mathematical results that violate the fundamental properties of quantiles. A median of 191 for the values -1 and 127 is mathematically impossible. The issue is reproducible and affects a legitimate use case (int8 arrays are valid numeric arrays). The bug could cause serious errors in data analysis if users rely on these incorrect quantile values. The code already has precedent for dtype conversion (datetime/timedelta types), suggesting that ensuring correct results across dtypes is within pandas' responsibility.
+
+**Why it might not be BUG:**
+The root cause is in NumPy, not pandas code. Pandas is correctly calling NumPy's percentile function, and the incorrect behavior originates there. One could argue that pandas shouldn't be responsible for working around bugs in its dependencies. The issue only affects NumPy 2.3.0 and might be fixed in future NumPy versions, making a pandas-level fix potentially unnecessary.
+
+## Overall consideration
+
+After careful analysis, this issue represents a legitimate bug that should be addressed. While the root cause lies in NumPy 2.3.0's percentile function, pandas has a responsibility to ensure its statistical functions produce mathematically correct results. The bug violates the fundamental mathematical property that quantiles must be monotonically increasing - getting a median of 191 for values -1 and 127 is not just unexpected behavior but mathematically impossible.
+
+The severity of this bug is significant because it could lead to serious errors in data analysis. Users who work with int8 data (common in memory-constrained environments or when dealing with sensor data) would get silently incorrect results that could propagate through their analysis pipeline. The fact that the bug only affects arrays with negative values makes it particularly insidious, as it might not be caught in testing with positive-only data.
+
+The proposed fix is minimal and follows established patterns in the codebase - the `_nanpercentile` function already performs dtype conversion for datetime/timedelta types. Adding similar handling for small integer types is a natural extension of this pattern. This is not about adding new features or changing expected behavior, but about ensuring mathematical correctness of existing functionality. Therefore, this should be triaged as a BUG that needs to be fixed to maintain the integrity of pandas' statistical functions.

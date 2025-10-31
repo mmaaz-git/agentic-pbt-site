@@ -1,0 +1,32 @@
+REPRODUCTION OF BUG REPORT
+
+I successfully reproduced the bug described in the report. The reproduction involved:
+
+1. Running the simple reproduction case:
+   - Created an LRU cache with maxsize=1
+   - Added key 0 with value "value0"
+   - Accessed key 0 using lru[0] (which should mark it as recently used)
+   - Added key 1 with value "value1"
+   - Result: Key 0 was evicted from the cache
+
+2. Running the property-based test:
+   - The test failed with maxsize=1 as reported
+   - The test creates a cache, fills it, accesses the first key, then adds one more item
+   - It expects the accessed key to remain in the cache, but it gets evicted
+
+OBSERVED BEHAVIOR:
+- When the cache is at maximum capacity (len(cache) >= maxsize), the __setitem__ method unconditionally calls popitem(last=False) before adding any item
+- This happens even when updating an existing key (which shouldn't require eviction)
+- With maxsize=1, after accessing the only item in the cache, adding a new item evicts it despite it being the most recently accessed
+
+EFFECT:
+The primary issue is that the current implementation has a flaw in __setitem__:
+1. It evicts an item whenever len(self) >= maxsize, even when updating an existing key
+2. When updating an existing key, this causes the key to be removed and then re-added unnecessarily
+
+However, there's a secondary consideration for the maxsize=1 case:
+- With maxsize=1, there's only room for one item
+- When adding a NEW item to a full size-1 cache, the existing item must be evicted regardless
+- The test's expectation that accessing the item should prevent its eviction may be unrealistic for size-1 caches
+
+The more significant bug is that updating an existing key causes unnecessary eviction and re-insertion.

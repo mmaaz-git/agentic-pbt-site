@@ -1,0 +1,28 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug as described in the report. The issue occurs when numpy.rec.fromarrays silently corrupts data during type conversion from uint64 to int64.
+
+### Hypothesis Test
+The provided Hypothesis test fails when run, confirming that the property-based test correctly identifies the issue. The test found multiple distinct failures where data is not preserved when converting arrays with values outside the int64 range.
+
+### Manual Reproduction
+The specific test case with value 9,223,372,036,854,775,808 (2^63) reproduces exactly as described:
+- Original value: 9223372036854775808 (uint64)
+- After fromarrays: -9223372036854775808 (int64)
+- Data corruption confirmed: The value wraps around from positive to negative
+
+### Technical Analysis
+1. When NumPy creates an array from the input value 9,223,372,036,854,775,808, it automatically selects uint64 as the dtype since the value exceeds int64's maximum (2^63 - 1).
+
+2. When fromarrays is called with dtype=[('a', 'i8'), ('b', 'i8')], it attempts to store this uint64 value in an int64 field.
+
+3. The assignment at line 659 in records.py (_array[name] = obj) performs an implicit unsafe cast, causing integer overflow.
+
+4. Testing reveals that:
+   - Direct array assignment in NumPy performs unsafe casting by default
+   - Safe casting (astype with casting='safe') would raise a TypeError for this conversion
+   - The default astype behavior without casting parameter is 'unsafe'
+
+### Impact
+The bug causes silent data corruption through integer overflow/underflow when input data exceeds the target dtype's range. This is particularly dangerous as it provides no warning to users that their data has been modified.

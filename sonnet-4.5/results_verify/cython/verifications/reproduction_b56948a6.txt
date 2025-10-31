@@ -1,0 +1,38 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug as described in the report:
+
+### 1. Hypothesis Test Reproduction
+The hypothesis test from the bug report fails as expected. Running it with `@given(st.text())` quickly finds a failing example (`'00000'`) that causes an IndexError.
+
+### 2. Specific Error Cases
+All odd-length strings tested cause IndexError:
+- `'a'` → IndexError: string index out of range
+- `'abc'` → IndexError: string index out of range
+- `'abcde'` → IndexError: string index out of range
+- `'1'` → IndexError: string index out of range
+- `'123'` → IndexError: string index out of range
+
+### 3. Even-Length String Behavior
+The function works correctly with even-length strings:
+- `'ab'` → `'a-b'`
+- `'abcd'` → `'a-bc-d'`
+- `'abcdef'` → `'a-bc-de-f'`
+- `''` (empty string) → `''`
+
+### 4. Current Usage Analysis
+I verified that in actual Cython usage:
+- `unicode_start_ch_range` has length 1068 (even)
+- `unicode_continuation_ch_range` has length 638 (even)
+- Both are always even-length strings generated from Unicode data
+- The function processes these correctly, creating range patterns like `'A-Za-zÀ-ÖØ-ö...'`
+
+### 5. Root Cause Confirmation
+The bug occurs exactly as described: the function iterates with `range(0, len(chrs), 2)` and accesses `chrs[i+1]` without checking bounds. For odd-length strings, the final iteration tries to access an index beyond the string length.
+
+### 6. Impact Assessment
+- **Current impact**: None in normal Cython operation, as the function is only called with even-length strings from Lexicon.py
+- **Potential impact**: If corrupted data or future changes introduce odd-length inputs, the module initialization would crash with IndexError
+- **API exposure**: This is a private function (underscore prefix) not intended for external use
+
+The technical details of the bug report are 100% accurate.

@@ -1,0 +1,36 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is accurate. FixedForwardWindowIndexer produces invalid window bounds when given a negative window_size, violating the fundamental invariant that start[i] <= end[i] for all windows.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Reproduction**
+   - Ran the property-based test with negative window sizes
+   - Test failed with AssertionError: "Invalid window: start[1]=1 > end[1]=0"
+   - Falsifying example: num_values=2, window_size=-1, step=1
+
+2. **Manual Example Reproduction**
+   - Created a FixedForwardWindowIndexer with window_size=-1
+   - Called get_window_bounds(num_values=2, step=1)
+   - Result:
+     - start: [0 1]
+     - end: [0 0]
+   - Confirmed: start[1]=1 > end[1]=0 (invariant violated)
+
+### Root Cause
+The bug occurs in the get_window_bounds method:
+```python
+start = np.arange(0, num_values, step, dtype="int64")
+end = start + self.window_size  # When window_size is negative, end < start
+if self.window_size:
+    end = np.clip(end, 0, num_values)  # Clips negative values to 0
+```
+
+When window_size is negative:
+1. `end = start + window_size` produces values less than start
+2. `np.clip(end, 0, num_values)` clips negative end values to 0
+3. This creates cases where start[i] > end[i], violating the window bounds invariant
+
+### Impact
+Any code that assumes valid window bounds (start <= end) will fail or produce incorrect results when using FixedForwardWindowIndexer with negative window_size values.

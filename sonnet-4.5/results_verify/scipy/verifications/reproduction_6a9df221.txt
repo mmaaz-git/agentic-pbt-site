@@ -1,0 +1,46 @@
+# Bug Reproduction Report for scipy.sparse.eye_array
+
+## Hypothesis Test Reproduction
+
+I successfully ran the provided Hypothesis property-based test and confirmed it fails. The test attempts to verify that `scipy.sparse.eye_array` produces the same results as `numpy.eye` for various values of `n` and `k`.
+
+Result: The test fails immediately with the error "Offset 2 (index 0) out of bounds" for input `n=1, k=2`.
+
+## Manual Test Case Reproduction
+
+I ran all the manual test cases provided in the bug report and confirmed the behavior:
+
+1. **numpy.eye(1, k=2)** returns `[[0.]]` (a 1x1 zero matrix)
+   **scipy.sparse.eye_array(1, k=2)** raises `ValueError: Offset 2 (index 0) out of bounds`
+
+2. **numpy.eye(2, k=3)** returns a 2x2 zero matrix
+   **scipy.sparse.eye_array(2, k=3)** raises `ValueError: Offset 3 (index 0) out of bounds`
+
+3. **numpy.eye(3, k=4)** returns a 3x3 zero matrix
+   **scipy.sparse.eye_array(3, k=4)** raises `ValueError: Offset 4 (index 0) out of bounds`
+
+4. **numpy.eye(2, k=-3)** returns a 2x2 zero matrix
+   **scipy.sparse.eye_array(2, k=-3)** raises `ValueError: Offset -3 (index 0) out of bounds`
+
+5. **numpy.eye(1, 3, k=-2)** returns `[[0. 0. 0.]]` (a 1x3 zero matrix)
+   **scipy.sparse.eye_array(1, 3, k=-2)** raises `ValueError: Offset -2 (index 0) out of bounds`
+
+## Pattern Identified
+
+The bug occurs whenever the diagonal offset `k` is out of bounds for the given matrix dimensions:
+- For square matrices (n×n): fails when `k >= n` or `k <= -n`
+- For rectangular matrices (m×n): fails when the diagonal is completely outside the matrix bounds
+
+## Behavior Comparison
+
+When the diagonal is within bounds (e.g., `eye_array(3, k=1)`), both functions produce identical results:
+- Both return a matrix with ones on the specified diagonal
+- Both handle positive and negative diagonal offsets correctly when within bounds
+
+The discrepancy only occurs when the diagonal offset places the entire diagonal outside the matrix bounds, where:
+- **numpy.eye**: Returns a zero matrix of the requested shape (graceful handling)
+- **scipy.sparse.eye_array**: Raises a ValueError (fails with an exception)
+
+## Confirmed Bug
+
+The bug report is accurate. There is a clear behavioral inconsistency between `numpy.eye` and `scipy.sparse.eye_array` for out-of-bounds diagonal offsets. The scipy function fails with an exception where numpy returns a valid (albeit all-zero) matrix.

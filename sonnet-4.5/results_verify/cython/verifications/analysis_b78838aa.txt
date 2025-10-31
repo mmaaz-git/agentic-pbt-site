@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function's docstring only says it generates a "normalised, simple digits string representation" for "string comparisons" - it doesn't explicitly promise to preserve numeric values. One could argue that the function is working as designed for its internal purpose and the bug reporter is misusing an internal utility function that was never meant for general float value preservation.
+
+**Why it might not be INVALID:**
+The test suite at line 198 explicitly checks `self.assertEqual(float(float_str), float(result))`, which unambiguously requires that the numeric value must be preserved. The function demonstrably fails this requirement for certain inputs. The test suite's expectation is clear documentation of intended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function in Cython.Utils, not part of the public API. It only fails for edge cases with many decimal places in scientific notation that might never occur in Cython's actual compiler usage. The existing test suite passes, suggesting the function works for all cases Cython actually needs. Fixing this might introduce risk to the compiler for no practical benefit.
+
+**Why it might not be WONTFIX:**
+The magnitude of error is extreme (off by factors of 10^10), which could cause serious problems if these cases ever do occur. The function is fundamentally broken for a whole class of valid inputs. Even if it's internal, correctness matters, especially for a compiler utility that might affect generated code.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The docstring could be updated to clarify that the function only works correctly for scientific notation with limited decimal places in the mantissa. The documentation could specify the function's limitations and that it's only meant for Cython's internal use with specific input patterns.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The test suite already documents the expected behavior (numeric value preservation), and the function fails to meet that expectation. This isn't a documentation problem - it's a code problem. The tests show what the function is supposed to do, and it doesn't do it correctly.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting scientific notation with many decimal places could be seen as a new feature, since the existing test suite doesn't cover these cases. One could argue that proper handling of arbitrary precision scientific notation is an enhancement beyond the original design scope.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - the function already claims to handle scientific notation and the test suite already requires numeric value preservation. The function is just broken for certain inputs. Fixing bugs isn't a feature request.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces objectively wrong numeric values for valid floating-point string inputs. The test suite explicitly requires numeric value preservation (line 198), which fails for these inputs. The error magnitude is extreme (10^10x), not a minor rounding issue. The algorithm has a clear logic error in how it handles the exponent after removing the decimal point. This is a textbook bug: the code doesn't do what it's supposed to do.
+
+**Why it might not be BUG:**
+The function works correctly for all test cases in the existing test suite, suggesting it handles all inputs that Cython actually uses. The failing cases might be outside the intended input domain. As an internal utility, its requirements might be narrower than general float parsing.
+
+## Overall Consideration
+
+Looking at all the evidence, this appears to be a legitimate BUG. The test suite explicitly verifies that `float(input) == float(output)`, establishing a clear contract that the function must preserve numeric values. The function dramatically fails this requirement for certain scientific notation inputs, producing values that are wrong by factors of 10^10 or more.
+
+The root cause is clear: the algorithm incorrectly adjusts the exponent after removing the decimal point from the mantissa. When the mantissa has many decimal places and the exponent is negative, this creates a cascading error that places the decimal point in completely the wrong position. This isn't a subtle edge case or a documentation issue - it's a fundamental algorithmic error.
+
+While it's true that this is an internal utility function and the existing test suite passes, the fact remains that the function is objectively broken for a class of valid inputs. The test suite's gap (only testing up to 3 decimal places in scientific notation) doesn't excuse the bug; it just explains why it wasn't caught earlier. Given that Cython is a compiler that generates C code, correctness in float representation is critical - even internal utilities should work correctly to avoid potential issues in generated code.

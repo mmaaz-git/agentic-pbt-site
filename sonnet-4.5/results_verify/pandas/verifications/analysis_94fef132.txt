@@ -1,0 +1,74 @@
+## Bug Report Triage Analysis
+
+### Evaluation Against Each Category
+
+#### BUG (Valid Bug Report)
+**Arguments FOR:**
+1. The function crashes with an unclear error deep in the stack rather than handling the error gracefully
+2. Surrogate characters are valid in Python strings and can legitimately appear in DataFrames
+3. JSON specification allows surrogates when properly escaped (e.g., \uD800)
+4. pandas.to_csv() already has an 'errors' parameter to handle this exact scenario (PR #32702)
+5. The crash is unrecoverable - there's no workaround using existing parameters
+6. The error message doesn't clearly indicate the problem or solution
+7. This is a data loss scenario - users cannot export their data to JSON if it contains surrogates
+
+**Arguments AGAINST:**
+- None significant
+
+#### INVALID
+**Arguments FOR:**
+- Surrogates are technically invalid UTF-8, so one could argue the crash is expected
+
+**Arguments AGAINST:**
+1. Python strings support surrogates, so pandas should handle Python data
+2. The same issue was considered valid for to_csv() and fixed
+3. JSON can represent surrogates through escape sequences
+4. No documentation states this limitation
+5. The error occurs in internal processing, not at the API boundary
+
+#### WONTFIX
+**Arguments FOR:**
+- Surrogate characters are relatively rare in practice
+- Could be considered an edge case
+
+**Arguments AGAINST:**
+1. Not that rare - they appear in emoji, corrupted data, or data from certain sources
+2. pandas already fixed this for to_csv(), showing it's worth fixing
+3. The fix is straightforward (add errors parameter like to_csv())
+4. Silent data loss or crashes are serious issues for a data processing library
+
+#### FEATURE_REQUEST
+**Arguments FOR:**
+1. Adding an 'errors' parameter would be a new feature
+2. Current behavior could be considered "working as designed"
+
+**Arguments AGAINST:**
+1. This is fixing a crash, not adding new functionality
+2. to_csv() treating this as a bug (not feature) sets precedent
+3. Basic error handling is expected functionality, not a feature
+
+#### DOCUMENTATION_FIX
+**Arguments FOR:**
+- If the crash is intended, the documentation should warn about it
+
+**Arguments AGAINST:**
+1. The code behavior (crashing) is clearly wrong
+2. Documenting a limitation doesn't fix the underlying issue
+3. pandas already established the pattern of handling this in code (to_csv())
+
+### Precedent Analysis
+The most relevant precedent is GitHub Issue #22610 where the identical problem with to_csv() was:
+1. Accepted as a valid issue
+2. Fixed by adding an 'errors' parameter
+3. Not dismissed as invalid or wontfix
+4. Implemented to "satisfy the principle of least surprise"
+
+### Consistency Argument
+pandas should be internally consistent. If to_csv() handles encoding errors gracefully with an 'errors' parameter, to_json() should too. Having different error handling behavior for similar I/O operations is confusing and problematic.
+
+### Conclusion
+This is clearly a **BUG**. The function should handle surrogate characters gracefully rather than crashing, especially since:
+1. The same issue was fixed for to_csv()
+2. JSON can represent these characters
+3. There's no way to work around the issue with current parameters
+4. The crash prevents legitimate data export

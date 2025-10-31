@@ -1,0 +1,47 @@
+BUG REPRODUCTION ANALYSIS
+=========================
+
+## Reproduction Results
+
+I successfully reproduced the reported bug exactly as described:
+
+**Input**: `data=[1.1125369292536007e-308, -1.0], n_bins=2`
+**Expected**: Successful binning into 2 categories
+**Actual**: `ValueError: missing values must be missing in the same location both left and right sides`
+
+## Technical Analysis
+
+The bug occurs through this chain of events:
+
+1. **Input validation**: The extreme value 1.1125369292536007e-308 is a valid finite float64 (subnormal but valid)
+
+2. **Internal calculation in _round_frac()**:
+   - For input x = 1.1125e-308 with precision=3
+   - Calculates: digits = -int(np.floor(np.log10(abs(1.1125e-308)))) - 1 + 3
+   - This yields: digits = 310
+
+3. **numpy.around() failure**:
+   - Calling np.around(1.1125e-308, 310) returns NaN
+   - Testing shows np.around() returns NaN for decimals >= 310 with this input
+   - This appears to be an undocumented numpy limitation
+
+4. **Cascade failure**:
+   - NaN values in bin edges cause IntervalIndex creation to fail
+   - Results in the misleading error about "missing values"
+
+## Verification Tests
+
+I confirmed:
+- The extreme value is a valid finite float64 (though subnormal)
+- numpy.around() consistently returns NaN when decimals >= 310 for this value
+- numpy.around() works correctly with decimals <= ~300
+- The hypothesis test passes for most random inputs but fails on this specific edge case
+- Float64 has only ~15-17 decimal digits of precision, so requesting 310 decimal places is far beyond meaningful precision
+
+## Root Cause
+
+The root cause is that _round_frac() can calculate extremely large decimal place requirements for very small floats, exceeding numpy.around()'s undocumented operational limits. The calculation doesn't account for:
+1. Float64 precision limits (~15-17 significant digits)
+2. numpy.around()'s apparent maximum decimal parameter (~300-309)
+
+The bug report's proposed fix of clamping digits to 15 would prevent the numpy.around() failure and is consistent with float64's actual precision capabilities.

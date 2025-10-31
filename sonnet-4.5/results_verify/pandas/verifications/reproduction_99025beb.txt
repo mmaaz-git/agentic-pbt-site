@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Hypothesis Test Results
+The Hypothesis property-based test from the bug report was executed and it FAILED as reported:
+- Test expected all empty or whitespace-only strings to raise ValueError
+- Test failed on input ' ' (single space)
+- The failure confirms that whitespace-only strings are NOT raising ValueError as expected
+
+### Direct Function Test (_check_expression)
+Testing _check_expression directly confirms the issue:
+- Empty string "" correctly raises ValueError: "expr cannot be an empty string"
+- Single space " " does NOT raise ValueError (passes check)
+- Tab "\t" does NOT raise ValueError (passes check)
+- Newline "\n" does NOT raise ValueError (passes check)
+- Carriage return "\r" does NOT raise ValueError (passes check)
+- Mixed whitespace "  \t\n  " does NOT raise ValueError (passes check)
+
+### pandas.eval() Behavior Test
+Testing pandas.eval() with the same inputs shows inconsistent behavior:
+- Empty string "" correctly raises ValueError: "expr cannot be an empty string"
+- Single space " " returns None (no error, no valid result)
+- Tab "\t" returns None (no error, no valid result)
+- Newline "\n" returns None (no error, no valid result)
+- Carriage return "\r" returns None (no error, no valid result)
+
+### Code Analysis
+Looking at the implementation in pandas/core/computation/eval.py:
+1. Line 122-123: _check_expression uses `if not expr:` which only checks truthiness
+   - Empty string "" is falsy, so it raises ValueError
+   - Whitespace strings like " " are truthy, so they pass the check
+
+2. Line 307: After _check_expression, the code does:
+   ```python
+   exprs = [e.strip() for e in expr.splitlines() if e.strip() != ""]
+   ```
+   - For whitespace-only input, this produces an empty list []
+   - The loop at line 326 `for expr in exprs:` never executes
+   - The function eventually returns None at line 421
+
+### Confirmed Bug
+The bug report is ACCURATE:
+- There is inconsistent behavior between empty string and whitespace-only strings
+- _check_expression's implementation doesn't match its documented intent
+- pandas.eval() returns None for whitespace input instead of raising an error
+- The proposed fix (checking `not expr or not expr.strip()`) would address this inconsistency

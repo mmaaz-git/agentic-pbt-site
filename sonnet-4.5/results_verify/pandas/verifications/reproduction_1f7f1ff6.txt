@@ -1,0 +1,44 @@
+# Reproduction Analysis
+
+## Summary
+I successfully reproduced a variant of the reported bug, though with slightly different behavior than described in the bug report.
+
+## Test Results
+
+### 1. Basic Reproduction Test
+When running the exact reproduction code from the bug report using `pandas.plotting.register_matplotlib_converters()` and `deregister_matplotlib_converters()`:
+
+**Actual Output:**
+```
+Initial state:
+datetime.datetime in registry: False
+
+First cycle:
+After register: True
+After deregister: True  # Bug: Should be False
+
+Second cycle:
+After register: True
+After deregister: True  # Bug: Should be False
+```
+
+**Expected Output (per bug report):**
+The bug report claimed the first cycle would work correctly (deregister returning to False), but my testing shows it fails from the first cycle itself.
+
+### 2. Hypothesis Tests
+When running the property-based tests that import from `pandas.plotting._matplotlib.converter` directly (using `register()` and `deregister()` functions), both tests PASSED. This suggests the issue is specific to how the functions are exposed through the public API.
+
+### 3. Detailed Investigation
+The key finding is that the behavior differs depending on the initial state of matplotlib's registry:
+
+- When matplotlib starts with converters already registered (typical case when using the public API), the bug manifests immediately
+- When starting with an empty registry (as in the direct converter module test), the functions work correctly
+
+### 4. Root Cause Verification
+The bug report correctly identifies the issue with the `_mpl_units` cache persisting across calls. However, in my testing:
+- The `_mpl_units` dictionary remains empty throughout all cycles
+- The problem appears to be that matplotlib has default converters pre-registered
+- When deregister is called, it's not correctly removing pandas converters when matplotlib had pre-existing converters
+
+## Conclusion
+The bug is CONFIRMED, though with slightly different behavior than reported. The core issue is that `deregister_matplotlib_converters()` does not properly restore the registry to its original state after `register_matplotlib_converters()` has been called, particularly when matplotlib has pre-existing converters registered.

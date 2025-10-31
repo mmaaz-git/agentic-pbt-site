@@ -1,0 +1,67 @@
+# Bug Triage Analysis
+
+## Consideration for Each Category
+
+### BUG (Valid bug that should be filed)
+**Strong evidence FOR this categorization:**
+1. The code demonstrably creates wrong directory structure when extracting cached files
+2. The implementation violates Python's documented API for `zipfile.extract()`
+3. The bug would break compilation when multiple artifacts are cached and later loaded
+4. The fix is simple and correct: change `z.extract(artifact, join_path(dirname, artifact))` to `z.extract(artifact, dirname)`
+5. The current behavior creates directories where files should be, making subsequent compilation impossible
+6. The complementary `store_to_cache` method stores files with basename only, indicating files should be extracted flat into the target directory
+
+**Evidence AGAINST:**
+- None. This is clearly incorrect behavior.
+
+### INVALID (Report is incorrect)
+**Evidence FOR this categorization:**
+- None. The report accurately describes a real bug.
+
+**Evidence AGAINST:**
+1. The bug is reproducible exactly as described
+2. The code analysis confirms the incorrect implementation
+3. The Python documentation confirms the correct usage of `zipfile.extract()`
+
+### WONTFIX (Trivial/uninteresting bug)
+**Evidence FOR this categorization:**
+- Could argue that multi-artifact caching might be rare in practice
+
+**Evidence AGAINST:**
+1. This completely breaks caching functionality for any Cython module that generates multiple output files
+2. Caching is a performance-critical feature for large codebases
+3. The bug silently creates wrong directory structures that would cause confusing compilation errors
+4. The fix is trivial but the impact is significant
+
+### FEATURE_REQUEST (Not currently supported)
+**Evidence FOR this categorization:**
+- None. The caching feature exists and is supposed to work.
+
+**Evidence AGAINST:**
+1. The Cache class already implements multi-file caching via zip files
+2. The `store_to_cache` method successfully creates multi-file caches
+3. Only the loading part is broken due to incorrect API usage
+
+### DOCUMENTATION_FIX (Documentation issue)
+**Evidence FOR this categorization:**
+- The Cache class methods lack documentation/docstrings
+
+**Evidence AGAINST:**
+1. This is not a documentation problem - the code is objectively wrong
+2. The Python zipfile documentation is clear about correct usage
+3. Adding documentation wouldn't fix the broken functionality
+
+## Analysis Summary
+
+This is unquestionably a **BUG**. The code incorrectly uses `zipfile.extract()` by passing a file path where a directory path is required. This causes:
+
+1. **Incorrect directory structure**: Files end up in `path/file.c/file.c` instead of `path/file.c`
+2. **Compilation failures**: The C compiler cannot find source files at expected locations
+3. **Cache invalidation**: The caching mechanism fails to provide its intended performance benefit
+
+The bug specifically affects:
+- Cython modules that generate multiple output files (triggering zip storage)
+- Users relying on caching for build performance
+- Any automated build system using Cython's cache feature
+
+The severity is high because it completely breaks a documented feature (caching) in a specific but not uncommon scenario (multiple output files).

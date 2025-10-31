@@ -1,0 +1,44 @@
+BUG REPRODUCTION RESULTS
+
+1. Test Execution:
+I successfully ran both the manual reproduction code and the hypothesis test provided in the bug report.
+
+2. Manual Test Results:
+```
+Inner listeners before: 2
+Inner listeners after: 0
+Outer listeners count: 3
+```
+
+This confirms the reported behavior:
+- A MultiListener with 2 listeners initially has len(inner_multi.listeners) == 2
+- After being passed to another MultiListener constructor, it has 0 listeners
+- The outer MultiListener correctly has 3 listeners (1 MockListener + 2 from the flattened inner)
+
+3. Hypothesis Test Results:
+The hypothesis test failed as expected with any value of num_inner from 1 to 5. The assertion `assert len(inner_multi.listeners) == num_inner` fails because the inner MultiListener's listeners list is cleared after being nested.
+
+4. Code Analysis:
+Looking at lines 114-116 in stapled.py:
+```python
+if isinstance(listener, MultiListener):
+    listeners.extend(listener.listeners)
+    del listener.listeners[:]  # type: ignore[attr-defined]
+```
+
+The code indeed:
+- Extends the new listeners list with the nested MultiListener's listeners
+- Explicitly clears the nested MultiListener's listener list with `del listener.listeners[:]`
+
+5. Technical Correctness:
+The bug report is technically correct in its description:
+- The nested MultiListener IS mutated
+- Its listeners list IS cleared
+- The nested MultiListener IS left in an "empty" state
+- The flattening logic DOES work correctly for the outer MultiListener
+
+6. Comparison with Documentation:
+The class docstring states: "Any MultiListeners in the given collection of listeners will have their listeners moved into this one."
+The word "moved" (not "copied") suggests the current behavior might be intentional.
+
+SUMMARY: The reported behavior is confirmed - nested MultiListener objects are destructively modified during the construction of an outer MultiListener, leaving them with an empty listeners list.

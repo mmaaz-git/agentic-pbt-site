@@ -1,0 +1,38 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported for FixedForwardWindowIndexer with negative window_size values.
+
+### Hypothesis Test Reproduction
+The Hypothesis test failed as expected with the following error:
+- Input: num_values=2, window_size=-1, step=1
+- Result: AssertionError: Invalid window: start[1]=1 > end[1]=0 with window_size=-1
+- The test correctly identifies that start[1] > end[1], violating the invariant that window bounds should have start <= end
+
+### Manual Test Reproduction
+The manual reproduction code produced the exact output claimed in the bug report:
+- start array: [0 1]
+- end array: [0 0]
+- Confirms that start[1]=1 > end[1]=0
+- The rolling window operation with this indexer returns all NaN values, demonstrating the silent failure mode
+
+### Bug Impact
+1. The indexer produces invalid window bounds where start > end
+2. This causes rolling operations to fail silently, returning NaN values rather than raising an error
+3. Users get incorrect results without any indication that something went wrong
+
+### Source Code Analysis
+Looking at the implementation in FixedForwardWindowIndexer.get_window_bounds():
+```python
+start = np.arange(0, num_values, step, dtype="int64")
+end = start + self.window_size
+if self.window_size:
+    end = np.clip(end, 0, num_values)
+```
+
+When window_size is negative:
+- start is created normally as [0, 1, 2, ...]
+- end = start + window_size produces values less than start (e.g., [0, 1] + (-1) = [-1, 0])
+- The clipping operation clips negative values to 0, resulting in end=[0, 0]
+- This creates the invalid condition where start[1]=1 > end[1]=0
+
+The bug is confirmed and reproducible.

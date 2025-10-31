@@ -1,0 +1,42 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The bug is real and occurs exactly as described.
+
+### Test Results
+
+1. **Property-based test with Hypothesis**: The test runs and fails on the input `'"'` (a single quote character).
+
+2. **Manual reproduction with the specific failing input**:
+   - Input: `'"'` (a single quote character)
+   - First call to `quote_etag('"')` returns: `'"""'`
+   - Second call to `quote_etag('"""')` returns: `'"""""'`
+   - Third call to `quote_etag('"""""')` returns: `'"""""""'`
+
+The function is clearly not idempotent. Each successive call adds more quotes, creating an unbounded growth pattern.
+
+### Code Analysis
+
+Looking at the implementation in `/home/npc/miniconda/lib/python3.13/site-packages/django/utils/http.py` lines 212-220:
+
+```python
+def quote_etag(etag_str):
+    """
+    If the provided string is already a quoted ETag, return it. Otherwise, wrap
+    the string in quotes, making it a strong ETag.
+    """
+    if ETAG_MATCH.match(etag_str):
+        return etag_str
+    else:
+        return '"%s"' % etag_str
+```
+
+The ETAG_MATCH regex (lines 15-25) expects `[^"]*` - meaning "any sequence of non-quote characters" between the quotes. This regex correctly identifies that `'"""'` is NOT a valid ETag (since it contains quotes inside), but the function then wraps it in quotes again, creating `'"""""'`, which also doesn't match, leading to further wrapping.
+
+### Effect
+
+The bug causes:
+1. Violation of the documented idempotence property
+2. Unbounded string growth on repeated applications
+3. Creation of invalid ETags that don't conform to RFC specifications
+
+The bug is confirmed and reproducible.

@@ -1,0 +1,32 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Hypothesis Test Results
+The property-based test using Hypothesis fails immediately with simple inputs:
+- name='0', old='', new=None
+- The hash value changes from 0 to 4238894112 back to 0 depending on the OPTIONS state
+- The test reliably fails for any case where old != new
+
+### Manual Reproduction Results
+Using the provided example code:
+- Created a CombineKwargDefault object with name="test", old="old_val", new="new_val"
+- Initial hash: -698507152136368438
+- Hash after set_options(use_new_combine_kwarg_defaults=True): 8985409324238247988
+- The hashes are clearly different
+- When the object is placed in a set, it cannot be found after OPTIONS changes (returns False)
+
+### Root Cause Confirmed
+The issue is exactly as described in the bug report:
+1. The __hash__ method returns hash(self._value)
+2. self._value is a property that returns either self._new or self._old based on OPTIONS["use_new_combine_kwarg_defaults"]
+3. When OPTIONS changes, _value changes, causing the hash to change
+4. This violates Python's fundamental hash invariant
+
+### Impact Verification
+The bug has real consequences:
+- Objects placed in sets become unretrievable after OPTIONS changes
+- Dictionary keys using these objects would similarly fail
+- Any hash-based container would exhibit undefined behavior
+
+The bug is 100% reproducible and matches the report's description exactly.

@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report is accurate. The `URL.replace()` method in starlette crashes with an `IndexError` when called on URLs with empty hostnames.
+
+### Test Results
+
+1. **Simple reproduction case**: CONFIRMED
+   - Input: `URL("http://@/path").replace(port=8000)`
+   - Result: `IndexError: string index out of range`
+   - Location: `starlette/datastructures.py`, line 121
+
+2. **Hypothesis property test**: CONFIRMED
+   - The property test fails immediately with any valid port number (1-65535)
+   - The crash is consistent and reproducible
+
+### Root Cause Analysis
+
+The issue occurs in the `URL.replace()` method at line 121 of `datastructures.py`:
+
+```python
+if hostname is None:
+    netloc = self.netloc
+    _, _, hostname = netloc.rpartition("@")
+
+    if hostname[-1] != "]":  # <-- CRASH HERE when hostname is empty
+        hostname = hostname.rsplit(":", 1)[0]
+```
+
+When the URL is `http://@/path`:
+- `netloc` is `"@"`
+- `netloc.rpartition("@")` returns `('', '@', '')`
+- `hostname` becomes an empty string `""`
+- Accessing `hostname[-1]` on an empty string raises `IndexError`
+
+### Validity of the Test URL
+
+The URL `http://@/path` is a syntactically valid URL according to RFC 3986:
+- It has a scheme (`http`)
+- It has an authority component with an empty host (`@` indicates userinfo separator)
+- It has a path (`/path`)
+
+While unusual, this URL structure is technically valid and should be handled gracefully by the library.
+
+### Impact
+
+This is a crash bug that causes the application to fail with an unhandled exception when processing URLs with empty hostnames. The bug affects any call to `URL.replace()` with parameters that trigger hostname processing (port, username, password, hostname) on such URLs.

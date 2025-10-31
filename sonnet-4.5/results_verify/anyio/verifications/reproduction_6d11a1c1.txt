@@ -1,0 +1,57 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+
+1. **Basic Bug Reproduction**: CONFIRMED
+   - Setting `total_tokens = 5.5` raises `TypeError: total_tokens must be an int or math.inf`
+   - The error occurs in both `CapacityLimiterAdapter` and asyncio `CapacityLimiter`
+
+2. **Type Validation Behavior**:
+   - Integer values: ACCEPTED (e.g., 5 works)
+   - math.inf: ACCEPTED
+   - Float values: REJECTED (any float like 1.0, 5.5, 1000.0 fails)
+
+3. **Hypothesis Test Results**:
+   - ALL float values between 1.0 and 1000.0 are rejected
+   - Even "integer-like" floats (1.0, 1000.0) are rejected
+   - The validation explicitly checks `isinstance(value, int)`, not numeric equivalence
+
+### Technical Analysis
+
+The validation code uses:
+```python
+if not isinstance(value, int) and value is not math.inf:
+    raise TypeError("total_tokens must be an int or math.inf")
+```
+
+This means:
+- `5` (int) → Accepted
+- `5.0` (float) → Rejected (even though mathematically equivalent to 5)
+- `5.5` (float) → Rejected
+- `math.inf` → Accepted (special case)
+
+### Semantic Validity of Float Values
+
+I tested the underlying comparison logic:
+- The code uses `len(self._borrowers) >= self._total_tokens` to check capacity
+- This comparison works correctly with float values:
+  - If `total_tokens = 5.5`, then 5 borrowers are allowed but 6 are not
+  - This makes semantic sense - fractional tokens could represent partial capacity
+
+### Type Annotation vs Runtime Validation Mismatch
+
+**Type annotations consistently declare `float`:**
+- Constructor: `def __new__(cls, total_tokens: float)`
+- Setter: `def total_tokens(self, value: float) -> None`
+- Getter: `def total_tokens(self) -> float`
+
+**Runtime validation only accepts `int` or `math.inf`:**
+- This creates a clear contradiction between declared types and actual behavior
+
+### Conclusion
+
+The bug report is technically accurate:
+1. Type hints promise `float` support
+2. Runtime validation rejects all floats except `math.inf`
+3. The underlying logic would work correctly with float values
+4. There is a clear inconsistency between type annotations and implementation

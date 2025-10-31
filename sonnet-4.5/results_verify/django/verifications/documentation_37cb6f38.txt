@@ -1,0 +1,52 @@
+## Django Q Object Documentation Analysis
+
+### Official Django Documentation Review
+
+I reviewed the official Django documentation for Q objects at https://docs.djangoproject.com/en/stable/topics/db/queries/#complex-lookups-with-q-objects. The documentation states:
+
+1. **Purpose**: Q objects are designed to "encapsulate a collection of keyword arguments" for creating complex database queries.
+
+2. **Operator Support**: The documentation explicitly mentions support for `&` (AND), `|` (OR), and `^` (XOR) operators, and states that "combining Q objects yields a new Q object."
+
+3. **No Idempotence Guarantees**: The documentation makes NO mention of:
+   - Idempotence properties
+   - How Q objects should handle duplicate conditions
+   - Any optimization for redundant conditions
+   - Specific guarantees about Q object equality
+
+4. **No Performance Guarantees**: There are no explicit statements about performance optimization or avoiding redundant SQL conditions.
+
+### Source Code Documentation Review
+
+I examined the Django source code:
+
+1. **Q Class Docstring** (`django/db/models/query_utils.py`):
+   - States: "Encapsulate filters as objects that can then be combined logically (using `&` and `|`)."
+   - No mention of idempotence or optimization
+
+2. **`_combine` Method Implementation**:
+   - The method simply creates a new node and adds both operands as children
+   - No check for self-combination or duplicate detection
+   - No optimization for redundant conditions
+
+3. **Node Class Equality** (`django/utils/tree.py`):
+   - The `__eq__` method compares children lists directly
+   - `[('x', 0)]` is not equal to `[('x', 0), ('x', 0)]`
+   - This explains why `q != (q & q)`
+
+### Key Finding: No Documented Expectation of Idempotence
+
+The documentation and source code make no promises about:
+- Idempotent behavior for Q object operations
+- Optimization of redundant conditions
+- Semantic equality vs structural equality
+
+The Q objects are documented as a way to build complex queries, but there's no specification that they should follow mathematical properties of boolean algebra like idempotence.
+
+### Comparison with Boolean Algebra
+
+While the bug report correctly states that boolean algebra has idempotence properties (x ∧ x = x and x ∨ x = x), Django's Q objects are never documented as implementing pure boolean algebra. They are documented as query builders that combine conditions, not as mathematical boolean algebra operators.
+
+### Conclusion on Documentation
+
+The behavior observed is not contradicting any documented guarantees. The documentation describes Q objects as tools for combining filters, not as implementations of boolean algebra with all its mathematical properties. The current behavior follows what is documented: combining Q objects yields a new Q object that contains both operands.

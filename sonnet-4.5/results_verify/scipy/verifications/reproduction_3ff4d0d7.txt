@@ -1,0 +1,48 @@
+## Bug Reproduction Results
+
+### Test 1: Boundary Root Cases (Bug Condition)
+When the root is exactly at one of the boundaries (either a or b), the functions exhibit the reported bug.
+
+#### Case 1a: Root at upper boundary (b=5, f(b)=0)
+- bisect: iterations = 6050768 (GARBAGE VALUE)
+- ridder: iterations = 6050768 (GARBAGE VALUE)
+- brenth: iterations = 1920119424 (GARBAGE VALUE)
+- brentq: iterations = 1920119424 (GARBAGE VALUE)
+- All methods correctly found root = 5.0
+- All methods reported function_calls = 2
+- All methods reported converged = True
+
+#### Case 1b: Root at lower boundary (a=0, f(a)=0)
+- bisect: iterations = 6050768 (GARBAGE VALUE)
+- ridder: iterations = 6050768 (GARBAGE VALUE)
+- brenth: iterations = 1920119424 (GARBAGE VALUE)
+- brentq: iterations = 1920119424 (GARBAGE VALUE)
+- All methods correctly found root = 0.0
+- All methods reported function_calls = 2
+- All methods reported converged = True
+
+### Test 2: Normal Case (Root NOT at boundary)
+When the root is in the middle of the interval (root=2.5, interval=[0,5]), all functions work correctly:
+- bisect: iterations = 1 (CORRECT)
+- ridder: iterations = 1 (CORRECT)
+- brenth: iterations = 2 (CORRECT)
+- brentq: iterations = 2 (CORRECT)
+- All methods correctly found root = 2.5
+- All methods reported reasonable function_calls (3-4)
+- All methods reported converged = True
+
+### Key Findings
+1. **The bug is CONFIRMED and REPRODUCIBLE**: When the root is at a boundary, the iterations field contains garbage values (millions or billions instead of 0-2).
+
+2. **The bug ONLY occurs for boundary roots**: When the root is not at a boundary, the iterations field contains correct, small values (1-2).
+
+3. **Other fields are correct**: Even when iterations contains garbage, the root value, function_calls, and converged fields are all correct.
+
+4. **The garbage values appear to be uninitialized memory**: The values like 6050768 and 1920119424 are typical of uninitialized memory content, not meaningful iteration counts.
+
+5. **The bug is consistent**: The same garbage values appear repeatedly for the same method in the same Python session, suggesting uninitialized stack/heap memory.
+
+6. **Expected behavior**: Since the functions only need 2 function calls to detect a boundary root (f(a) and f(b)), the iterations should be 0 or 1, not millions.
+
+### Technical Analysis
+The bug report's diagnosis appears correct: When f(a)==0 or f(b)==0, the C/Cython implementation takes an early return path that doesn't initialize the iterations field before returning the RootResults structure. This leaves garbage values from uninitialized memory in that field.

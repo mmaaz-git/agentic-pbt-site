@@ -1,0 +1,36 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in the Django security check function `check_cross_origin_opener_policy`.
+
+### Test Results
+
+1. **Hypothesis Test**: The property-based test fails as expected when given a list (empty or otherwise) as the value for `SECURE_CROSS_ORIGIN_OPENER_POLICY`. The test crashes with:
+   ```
+   TypeError: unhashable type: 'list'
+   ```
+
+2. **Manual Reproduction**: I tested multiple scenarios:
+   - Empty list `[]`: Crashes with `TypeError: unhashable type: 'list'`
+   - Non-empty list `['same-origin']`: Crashes with `TypeError: unhashable type: 'list'`
+   - Dictionary `{'policy': 'same-origin'}`: Crashes with `TypeError: unhashable type: 'dict'`
+   - Valid string `'same-origin'`: Returns empty list (no errors, as expected)
+   - Invalid string `'invalid-value'`: Returns E024 error object (expected validation error)
+
+### Root Cause
+
+The bug occurs at lines 279-280 in `/home/npc/miniconda/lib/python3.13/site-packages/django/core/checks/security/base.py`:
+
+```python
+and settings.SECURE_CROSS_ORIGIN_OPENER_POLICY
+not in CROSS_ORIGIN_OPENER_POLICY_VALUES
+```
+
+The issue is that Python's `in` operator with sets requires the left operand to be hashable. When `SECURE_CROSS_ORIGIN_OPENER_POLICY` is set to an unhashable type like a list or dictionary, Python raises a TypeError instead of the check returning a proper validation error.
+
+### Expected vs Actual Behavior
+
+**Expected**: When an invalid value (including unhashable types) is provided for `SECURE_CROSS_ORIGIN_OPENER_POLICY`, the function should return the E024 validation error object to inform the user about the invalid configuration.
+
+**Actual**: The function crashes with a TypeError when given an unhashable value, preventing Django's check framework from properly reporting the configuration error.
+
+This is a legitimate bug because Django's check framework is designed to validate configuration and return helpful error messages, not crash with uncaught exceptions.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly state that window_size must be non-negative for FixedForwardWindowIndexer. Since there's no documented constraint, one could argue that accepting negative values is not a bug but simply undefined behavior. The function doesn't crash - it returns results (albeit nonsensical ones). Users passing negative values to a "Forward" indexer are using it incorrectly, and the library isn't obligated to validate every possible misuse.
+
+**Why it might not be INVALID:**
+The class name "FixedForwardWindowIndexer" semantically implies forward-looking windows, making negative values inherently contradictory. The produced bounds violate the basic mathematical property that end >= start, which is fundamental to window operations. The current behavior silently produces incorrect results (all NaNs) rather than alerting users to their error, which could lead to hard-to-debug issues in production code.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case that would rarely occur in practice - users are unlikely to accidentally pass negative values to a forward window indexer. The fix would add a validation check that slows down every legitimate use case for an error that semantic naming already prevents. The impact is limited to users who misuse the API in an obvious way, and the resulting NaN values make it clear something is wrong.
+
+**Why it might not be WONTFIX:**
+Window operations are fundamental to pandas' functionality, and maintaining invariants like end >= start is important for correctness. The fix is trivial (a single if statement) with negligible performance impact. Silent failure with NaN results is worse than explicit failure with a clear error message. This affects the reliability of pandas as a data analysis tool.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify that window_size must be non-negative, so this could be addressed by simply documenting the constraint rather than changing the code. The documentation could clarify that negative values produce undefined behavior. This would be the least invasive change that acknowledges the issue without modifying existing behavior that some edge cases might depend on.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The semantic meaning of "FixedForwardWindowIndexer" already implies non-negative values - documenting that negative values produce invalid results would be documenting a bug rather than fixing it. The current behavior produces mathematically invalid window bounds (end < start), which isn't just a documentation issue but a correctness problem. Users expect validation of invalid inputs, not just documentation warning against them.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding input validation for window_size could be seen as a new feature - enhanced error checking that doesn't currently exist. The library currently allows flexibility in window_size values, and adding constraints would be adding new functionality. This could be framed as "Add input validation to FixedForwardWindowIndexer" rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+Input validation for obviously invalid parameters is not a new feature but basic defensive programming. The class already validates other parameters (like center=True is rejected), so validating window_size follows existing patterns. This isn't adding new functionality but preventing existing functionality from producing incorrect results. The fix ensures the class works as its name implies.
+
+## BUG Considerations
+**Why it might be BUG:**
+The current implementation accepts negative window_size values and produces window bounds where end < start, violating a fundamental invariant of window operations. This causes rolling operations to produce incorrect results (all NaNs) silently rather than failing with a clear error. The class name "FixedForwardWindowIndexer" semantically requires non-negative values, and accepting negative values contradicts its purpose. The fix is straightforward and prevents silent data corruption.
+
+**Why it might not be BUG:**
+The documentation never explicitly states that window_size must be non-negative, so this behavior isn't violating any documented contract. The function doesn't crash or raise unexpected exceptions - it returns deterministic (if nonsensical) results. Users passing negative values to a "Forward" window are misusing the API in an obvious way, and pandas isn't required to validate every possible misuse. This could be considered user error rather than a library bug.
+
+## Overall Consideration
+
+The core issue is whether accepting negative window_size values in FixedForwardWindowIndexer constitutes a bug or merely undefined behavior. The technical analysis confirms that negative values produce window bounds where end < start, which is mathematically invalid for window operations and causes rolling operations to return all NaN values.
+
+Three key factors support treating this as a bug: First, the semantic meaning of "FixedForwardWindowIndexer" inherently implies forward-looking (non-negative) windows, making negative values contradictory to the class's purpose. Second, the class already validates other parameters (rejecting center=True and closed parameters), establishing a precedent for input validation. Third, the current behavior silently produces incorrect results rather than failing fast with a clear error message, which could lead to subtle bugs in data analysis pipelines.
+
+However, strong counterarguments exist: The documentation never explicitly requires non-negative window_size values, making this technically undefined behavior rather than a violation of documented behavior. The issue only affects users who misuse the API in an obvious way (passing negative values to a "forward" window), and the resulting all-NaN output makes the problem apparent. Adding validation would introduce a (minimal) performance overhead for all users to catch an edge case that semantic naming already discourages. Given that this unreliable user has a 90% rate of incorrect bug reports, and the documentation doesn't explicitly forbid negative values, this leans toward being invalid or at most a documentation issue rather than a true bug.

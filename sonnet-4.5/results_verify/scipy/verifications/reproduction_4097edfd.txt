@@ -1,0 +1,61 @@
+## Bug Reproduction Results
+
+### Test Case 1: Specific Failing Input
+**Input:** 4 repeated poles at s = -5
+```
+zeros = []
+poles = [-5+0j, -5+0j, -5+0j, -5+0j]
+gain = 1.0
+```
+
+**Results:**
+- Original poles: [-5, -5, -5, -5]
+- After round-trip conversion: [-5.00103355, -4.99999988, -4.99999988, -4.99896668]
+- Maximum error: 1.033553e-03
+- Relative error: 0.02%
+
+**Verification:** The bug report's claim is CONFIRMED. The error exceeds 0.001 as stated.
+
+### Test Case 2: Property-Based Testing
+Ran 50 random test cases with repeated poles between -5 and -0.1, with 2-5 repetitions.
+
+**Results:**
+- 8 out of 50 cases failed (16% failure rate)
+- Failures occurred mainly with 5 repeated poles
+- Maximum errors ranged from 1.15e-3 to 5.18e-3
+- Relative errors reached up to 0.12%
+
+### Test Case 3: Error vs Number of Repeated Poles
+Testing with pole at s = -5:
+- 2 repeated poles: max error = 0.000000e+00 (perfect)
+- 3 repeated poles: max error = 2.483190e-05 (acceptable)
+- 4 repeated poles: max error = 1.033553e-03 (exceeds 1e-3)
+- 5 repeated poles: max error = 5.956905e-03 (significant)
+
+**Key Finding:** Error increases dramatically with the number of repeated poles.
+
+### Test Case 4: Non-Repeated Poles
+**Input:** Distinct poles at [-1, -2, -3, -4]
+**Result:** Maximum error = 3.86e-14 (machine precision)
+
+**Conclusion:** The problem is specific to repeated poles, not a general conversion issue.
+
+### Mathematical Verification
+
+The conversion process:
+1. zpk2tf: Expands (s+5)^4 = s^4 + 20s^3 + 150s^2 + 500s + 625
+2. tf2zpk: Finds roots of this polynomial using numpy's polynomial root finder
+
+The issue is that finding repeated roots from polynomial coefficients is numerically unstable. This is a well-known problem in numerical analysis:
+- The condition number for root-finding increases with multiplicity
+- Small perturbations in coefficients (due to floating-point arithmetic) cause larger perturbations in computed roots
+
+### Summary
+
+The bug report is technically accurate:
+1. The round-trip conversion DOES lose precision with repeated poles
+2. The error DOES exceed 1e-3 for 4 or more repeated poles
+3. The relative error can reach 0.1% or more
+4. This is NOT documented in the function documentation
+
+The root cause is correctly identified: polynomial root-finding is inherently ill-conditioned for repeated roots. This is a fundamental mathematical limitation, not a coding error.

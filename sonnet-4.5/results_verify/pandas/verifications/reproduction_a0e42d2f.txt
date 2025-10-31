@@ -1,0 +1,56 @@
+## Bug Reproduction Results
+
+### Test Case 1: Basic Reproduction
+**Code**: `ns.slice(['hello'], 1, None)`
+**Result**: 'h'
+**Expected by bug report**: 'ello' (based on 'hello'[1:None])
+**Status**: REPRODUCED - The function does return 'h' instead of 'ello'
+
+### Test Case 2: Single Argument Behavior
+**Code**: `ns.slice(['hello'], 1)`
+**Result**: 'h'
+**Expected**: 'h' (based on 'hello'[:1])
+**Status**: Working as documented - single argument is treated as stop
+
+### Python slice() Object Comparison
+- `'hello'[slice(1)]` returns 'h' (slice from start to position 1)
+- `'hello'[slice(1, None)]` returns 'ello' (slice from position 1 to end)
+- `'hello'[1:None]` returns 'ello' (same as [1:])
+- `'hello'[:1]` returns 'h'
+
+### Additional Test Results
+1. `ns.slice(['hello'], 1, None)` → 'h' (expected 'ello') ❌
+2. `ns.slice(['hello'], 2, None)` → 'he' (expected 'llo') ❌
+3. `ns.slice(['world'], 0, None)` → '' (expected 'world') ❌
+4. `ns.slice(['test'], -1, None)` → 'tes' (expected 't') ❌
+5. `ns.slice(['example'], None, 3)` → 'exa' (expected 'exa') ✓
+6. `ns.slice(['sample'], 1, 4)` → 'amp' (expected 'amp') ✓
+
+### Technical Analysis
+
+The issue is confirmed: When `None` is explicitly passed as the stop parameter, the function treats it identically to omitting the parameter. The code contains:
+
+```python
+if stop is None:
+    stop = start
+    start = None
+```
+
+This logic executes whether:
+1. The user calls `ns.slice(arr, 1)` - where stop defaults to None
+2. The user calls `ns.slice(arr, 1, None)` - where stop is explicitly None
+
+### Root Cause
+
+Python functions with default parameters cannot distinguish between:
+- An argument that was omitted (uses default value)
+- An argument explicitly passed as the default value
+
+This is a fundamental limitation of Python's function parameter handling. The function signature `def slice(a, start=None, stop=None, step=None)` cannot tell the difference between `slice(a, 1)` and `slice(a, 1, None)`.
+
+### Verification of Bug Report Claims
+
+The bug report is technically correct about the behavior:
+- The function does treat `ns.slice(arr, 1, None)` as `arr[:1]` instead of `arr[1:]`
+- This differs from Python's native slice object behavior
+- The proposed fix using `*args` would technically solve the issue but requires an API change

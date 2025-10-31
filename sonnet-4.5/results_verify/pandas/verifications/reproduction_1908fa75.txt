@@ -1,0 +1,30 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. The issue occurs when pandas.describe() is called with extremely small percentile values (e.g., 5e-324).
+
+### Test Results:
+
+1. **With percentiles=[5e-324]:**
+   - Output index: ['count', 'mean', 'std', 'min', 'nan%', 'nan%', 'max']
+   - The median '50%' is MISSING from the output
+   - Invalid 'nan%' labels are produced instead of proper percentile labels
+   - Multiple RuntimeWarnings about overflow and invalid values are generated
+
+2. **With slightly larger but still small percentiles (1e-300, 1e-100, 1e-10):**
+   - These work correctly and include '50%' in the output
+   - The issue appears specific to extremely small values near the float64 minimum
+
+3. **Hypothesis test results:**
+   - The hypothesis test fails, confirming that the median is not always included
+   - Various small percentile values trigger the bug (e.g., 2.225073858507203e-309)
+   - The test produces 'inf%' and 'nan%' labels in some cases
+
+### Root Cause:
+
+The bug occurs due to numerical overflow in the precision calculation in pandas/io/formats/format.py. When calculating the precision for formatting extremely small percentiles:
+- The log10 of tiny differences produces very large negative values
+- This causes overflow when converting to int for precision
+- The overflow leads to NaN values in the formatted percentile labels
+- The median (50%) gets lost in the process
+
+The bug report accurately identifies the issue and provides a valid reproduction case.

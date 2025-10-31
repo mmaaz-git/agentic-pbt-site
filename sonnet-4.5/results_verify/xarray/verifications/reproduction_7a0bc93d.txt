@@ -1,0 +1,69 @@
+Bug Reproduction Results for xarray.testing._format_message
+
+1. BUG CONFIRMATION:
+   ✓ The bug is CONFIRMED and reproducible
+   ✓ The exact error matches the bug report: TypeError: 'numpy.float64' object is not iterable
+
+2. TEST RESULTS:
+
+   Test Case 1 - Different 0-d arrays:
+   - Input: np.array(5.0) vs np.array(3.0)
+   - Shape: () for both (0-dimensional)
+   - Expected: AssertionError with formatted message
+   - Actual: TypeError crash
+   - Error location: assertions.py line 264 in _format_message
+
+   Test Case 2 - Equal 0-d arrays:
+   - Input: np.array(5.0) vs np.array(5.0)
+   - Result: SUCCESS (no error, as expected)
+   - This shows the issue only occurs when arrays differ and error message is needed
+
+   Test Case 3 - 1-d arrays control test:
+   - Input: np.array([5.0]) vs np.array([3.0])
+   - Result: Proper AssertionError with formatted message
+   - This confirms the function works correctly for non-0-d arrays
+
+3. ROOT CAUSE ANALYSIS:
+
+   The exact problem is in line 264 of _format_message:
+   ```python
+   abs_diff = max(abs(diff))
+   ```
+
+   When diff is a 0-d array:
+   - diff = np.array(5.0) - np.array(3.0) = np.float64(2.0) (0-d array)
+   - abs(diff) = np.float64(2.0) (still 0-d)
+   - max(np.float64(2.0)) → TypeError because Python's max() expects an iterable
+
+   Testing alternatives:
+   - Python's max() on 0-d array: FAILS with TypeError
+   - numpy's np.max() on 0-d array: SUCCEEDS, returns 2.0
+
+4. IMPACT ANALYSIS:
+
+   Functions affected:
+   - assert_duckarray_equal() - crashes on 0-d arrays when values differ
+   - assert_duckarray_allclose() - would also crash on 0-d arrays when values differ
+
+   The bug only manifests when:
+   - Arrays are 0-dimensional AND
+   - Arrays have different values (requiring error message formatting)
+
+5. PROPOSED FIX VERIFICATION:
+
+   The suggested fix (replacing max() with np.max()) is correct because:
+   - np.max() handles 0-d arrays correctly
+   - np.max() also handles regular arrays correctly
+   - np.max() is already imported (numpy is imported as np)
+   - Using np.abs() with np.max() ensures consistent numpy operations
+
+6. ADDITIONAL EDGE CASES:
+
+   The current code would also fail on:
+   - Empty arrays: max() would error with "max() arg is an empty sequence"
+   - Complex arrays where abs() returns an array
+
+   Using np.max(np.abs(diff)) would handle all these cases correctly.
+
+CONCLUSION:
+The bug is real, reproducible, and the diagnosis is accurate. The issue is using Python's built-in max() instead of numpy's np.max() for array operations.

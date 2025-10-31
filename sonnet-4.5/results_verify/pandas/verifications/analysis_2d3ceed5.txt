@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The modulo operation has an explicit comment stating "Doing module in order to not get ``IndexError`` for out-of-bounds sentinel values in `codes`", suggesting this was an intentional design choice to prevent crashes. The interchange protocol specification doesn't explicitly mandate how sentinel values must be handled during conversion, leaving room for implementation-specific behavior.
+
+**Why it might not be INVALID:**
+The bug causes actual data corruption where null values are silently converted to valid category values. This violates the fundamental expectation that null values should be preserved during data interchange. The loss of null information is a serious data integrity issue that affects any downstream analysis.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The current implementation prevents crashes from IndexError and has been in place with an explicit comment explaining the rationale. Changing this behavior might break existing code that relies on the current implementation. The interchange protocol is relatively new and may not be widely adopted yet.
+
+**Why it might not be WONTFIX:**
+This is not a minor edge case but a fundamental data corruption issue. The bug affects all categorical columns with null values converted through the interchange protocol, making it impossible to correctly exchange categorical data with nulls between different dataframe libraries. The severity and scope make it unsuitable for WONTFIX.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't explicitly state how sentinel values in categorical codes should be handled. The comment in the code suggests the modulo behavior was intentional. Perhaps the documentation should clarify that null values in categoricals may not be preserved during interchange protocol conversion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The interchange protocol's purpose is to enable lossless data exchange between dataframe libraries. Converting null values to actual category values is clearly incorrect behavior, not a documentation issue. Users reasonably expect null values to remain null after conversion.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current code doesn't properly handle sentinel values in categorical codes. Adding proper sentinel value handling could be viewed as a new feature to support null preservation in categorical interchange. The proposed fix adds new logic to detect and handle sentinel values.
+
+**Why it might not be FEATURE_REQUEST:**
+Preserving null values is not a new feature but a basic requirement for correct data interchange. The interchange protocol already defines how nulls should be represented (including USE_SENTINEL). This is fixing broken existing functionality, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code demonstrably loses data by converting null values to valid category values. This is silent data corruption that violates the basic contract of data interchange - preserving the data's semantic meaning. The bug is reproducible, well-defined, and causes incorrect results in real-world usage. The interchange protocol defines null handling mechanisms that aren't being properly utilized.
+
+**Why it might not be BUG:**
+The modulo operation has an explicit comment indicating it was added intentionally to avoid IndexError. This suggests the behavior might be a known limitation rather than an unintended bug. The developer who added this code was aware of sentinel values and chose this approach.
+
+## Overall Consideration
+
+This issue represents a clear case of data corruption where null values in categorical columns are silently converted to actual category values during DataFrame interchange protocol conversion. The bug is severe, reproducible, and affects a core data integrity feature.
+
+The fact that there's a comment explaining the modulo operation doesn't justify the data corruption. The comment indicates the developer was trying to avoid IndexError but didn't properly handle the sentinel values. The correct solution would be to check for sentinel values explicitly rather than using modulo arithmetic that maps them to valid indices.
+
+The DataFrame interchange protocol is designed to enable lossless data exchange between different dataframe libraries. Converting nulls to valid values fundamentally breaks this contract. This is especially problematic because the corruption is silent - users won't get any warning that their null values have been replaced with actual data.
+
+Given that this causes actual data corruption in a documented API (the interchange protocol), affects data integrity, and has a clear technical solution, this should be classified as a BUG rather than any other category.

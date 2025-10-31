@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The bug exists in the `_resample_bin_and_out_divs` function in dask.dataframe.tseries.resample module.
+
+### Reproduction Steps Taken
+
+1. **Property-Based Test Reproduction:**
+   - Ran the provided Hypothesis test with 200 examples
+   - The test failed on the exact input specified in the bug report:
+     - Input: `([Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 06:00:00'), Timestamp('2000-01-01 12:00:00')], '12h', 'right', 'right')`
+     - Result: `newdivs` has length 3, `outdivs` has length 2
+     - Expected: Both should have the same length
+
+2. **Direct Function Test:**
+   - Called `_resample_bin_and_out_divs` directly with the failing input
+   - Confirmed the length mismatch:
+     - newdivs: (Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 00:00:00.000000001'), Timestamp('2000-01-01 12:00:00.000000001'))
+     - outdivs: (Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 12:00:00'))
+
+3. **End-to-End Dask Series Test:**
+   - Created a pandas series with the specified date range
+   - Converted to dask series with 2 partitions
+   - Applied resample operation with parameters: rule='12h', closed='right', label='right'
+   - Result: AssertionError in `/dask/dataframe/dask_expr/_repartition.py:192`
+   - The assertion `assert npartitions_input > npartitions` fails due to the length mismatch
+
+### Bug Behavior Verified
+
+The bug occurs exactly as described in the report. The root cause is in the adjustment logic (lines 89-101) of the `_resample_bin_and_out_divs` function:
+
+1. When `newdivs[-1] < divisions[-1]`, the code appends to `newdivs`
+2. The subsequent check for `outdivs` uses strict inequalities (`>` and `<`)
+3. When `outdivs[-1] == divisions[-1]`, neither condition is met
+4. This results in `newdivs` being modified while `outdivs` is not, creating a length mismatch
+
+### Impact
+
+The length mismatch between `newdivs` and `outdivs` causes downstream failures when these divisions are used to create BlockwiseDep objects for repartitioning. The function's implicit contract that both returned tuples should have the same length is violated, leading to assertion failures in the repartitioning logic.

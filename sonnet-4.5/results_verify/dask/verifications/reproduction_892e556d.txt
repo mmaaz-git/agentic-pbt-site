@@ -1,0 +1,58 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the reported bug and investigated the underlying behavior. Here are my findings:
+
+### Reproduction Results
+
+1. **Basic Multi-Partition Test:** CONFIRMED - The bug occurs as reported
+   - Original index: [0, 1, 2, 3]
+   - Result index: [0, 1, 0, 1]
+   - Each partition resets its index to start from 0
+
+2. **Custom Index Test:** CONFIRMED - Custom index values are completely lost
+   - Original index: [100, 200, 300, 400]
+   - Result index: [0, 1, 0, 1]
+   - Custom index values are not preserved
+
+3. **Single Partition Test:** WORKS CORRECTLY
+   - Original index: [0, 1, 2, 3]
+   - Result index: [0, 1, 2, 3]
+   - When using a single partition, the index is preserved
+
+4. **Hypothesis Testing:** Multiple failures confirmed across random test cases
+
+### Technical Investigation
+
+When examining the ORC files directly, I discovered:
+
+1. **Index IS Written to ORC Files:**
+   - With `write_index=True`, the index is stored as a regular column in the ORC file
+   - Named indexes (e.g., 'my_index') are stored with their column name
+   - Each partition file contains the correct index values for its portion of data
+
+2. **The Problem is in Reading:**
+   - When reading with `dd.read_orc()` without specifying an index column, Dask creates a new RangeIndex for each partition starting from 0
+   - The original index column is read as a regular data column, not as the index
+
+3. **Workaround Exists:**
+   - If you know the index column name, you can specify it: `dd.read_orc(path, index='my_index')`
+   - This correctly restores the original index values
+   - However, this requires knowing the index column name in advance
+
+### Key Finding
+
+The bug is NOT that the index isn't written to the ORC file - it is. The bug is that:
+
+1. For unnamed indexes (default RangeIndex), there's no way to automatically restore them
+2. The index is saved as a column named '__index_level_0__' or similar for unnamed indexes
+3. `read_orc()` doesn't automatically detect and restore this index column
+4. Each partition gets a fresh RangeIndex starting from 0, causing the reported issue
+
+### Verification
+
+The behavior is consistent and reproducible:
+- Multi-partition writes with `write_index=True` save the index as a column
+- Reading back without specifying the index column creates new per-partition indexes
+- This causes data misalignment and violates the expected round-trip property
+
+The bug report's claim is technically correct: writing with `write_index=True` and reading back does NOT preserve index values automatically, which is unexpected behavior and could lead to data corruption in operations that depend on index alignment.

@@ -1,0 +1,40 @@
+## Documentation Analysis
+
+### Function Documentation
+The `clean_column_name` function's docstring explicitly states in its Notes section:
+
+> For some cases, a name cannot be converted to a valid Python identifier.
+> In that case :func:`tokenize_string` raises a SyntaxError.
+> In that case, we just return the name unmodified.
+
+This documentation clearly indicates that:
+1. When tokenization fails, `tokenize_string` is expected to raise a `SyntaxError`
+2. When a `SyntaxError` is raised, the function should return the name unmodified
+
+### Implementation vs Documentation
+The implementation (lines 128-133) only catches `SyntaxError`:
+```python
+try:
+    tokenized = tokenize_string(f"`{name}`")
+    tokval = next(tokenized)[1]
+    return create_valid_python_identifier(tokval)
+except SyntaxError:
+    return name
+```
+
+However, `tokenize_string` can also raise `TokenError` (not just `SyntaxError`) when the Python tokenizer encounters certain invalid inputs like null bytes. The documentation does not mention `TokenError` at all.
+
+### API Status
+- `clean_column_name` is not part of the public pandas API (not in `dir(pandas)`)
+- It is part of the internal `pandas.core.computation.parsing` module
+- The function is documented with a proper docstring, suggesting it's meant to be used internally within pandas
+
+### Documentation Accuracy
+The documentation is incomplete because it doesn't account for all possible exceptions that `tokenize_string` might raise. The documentation states that tokenization failures result in `SyntaxError`, but this is not comprehensive - `TokenError` is also possible when the underlying Python tokenizer encounters null bytes or other specific invalid inputs.
+
+### Related Context
+Python's tokenizer raises different exceptions for different error conditions:
+- `SyntaxError`: For general syntax problems (e.g., when `exec('\x00')` is called)
+- `TokenError`: For tokenization-specific problems (e.g., when `tokenize.generate_tokens()` encounters null bytes)
+
+The documentation doesn't distinguish between these cases, leading to the current bug where `TokenError` is not caught.

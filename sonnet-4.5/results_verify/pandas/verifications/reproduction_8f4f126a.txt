@@ -1,0 +1,37 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug described in the report. The bug occurs when using `methodtype='classmethod'` with an instance (not a class) as the first parameter to `AbstractMethodError`.
+
+Test Results:
+-------------
+
+1. Running the Hypothesis test:
+   - The test fails exactly as described with `methodtype='classmethod'`
+   - Error: AttributeError: 'DummyClass' object has no attribute '__name__'
+   - The test passes for other methodtype values: 'method', 'staticmethod', 'property'
+
+2. Direct reproduction:
+   - Creating `pd.errors.AbstractMethodError(TestClass(), methodtype="classmethod")` crashes
+   - Error matches exactly: AttributeError: 'TestClass' object has no attribute '__name__'
+
+3. Additional testing revealed:
+   - Using a CLASS (not instance) with methodtype='classmethod' works correctly:
+     `pd.errors.AbstractMethodError(TestClass, methodtype="classmethod")` → Success
+   - All other methodtype values work fine with instances
+   - The issue is specific to the combination of instance + methodtype='classmethod'
+
+Root Cause:
+-----------
+The `__str__` method in AbstractMethodError (line 305 of pandas/errors/__init__.py) contains:
+```python
+if self.methodtype == "classmethod":
+    name = self.class_instance.__name__
+else:
+    name = type(self.class_instance).__name__
+```
+
+When methodtype='classmethod', it assumes `class_instance` is a class (which has `__name__`).
+When an instance is passed instead, it lacks the `__name__` attribute, causing the AttributeError.
+
+The bug is confirmed and reproducible.

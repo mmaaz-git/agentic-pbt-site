@@ -1,0 +1,39 @@
+## Bug Reproduction Analysis
+
+### Testing the Reported Bug
+
+I ran the exact reproduction code from the bug report and found a discrepancy:
+
+1. **Bug report claims**: `format_bytes(100 * 2**50)` produces `'100.00 PiB'` with length 11
+   **Actual result**: `'100.00 PiB'` with length 10 (verified character-by-character)
+
+2. **Bug report is correct about**: `format_bytes(2**60 - 1)` produces `'1024.00 PiB'` with length 11
+
+### Actual Boundary Analysis
+
+Through systematic testing, I found:
+- Values from `100 * 2**50` to `999 * 2**50`: produce 10 characters (e.g., "100.00 PiB", "999.00 PiB")
+- Values from `1000 * 2**50` onwards: produce 11+ characters (e.g., "1000.00 PiB")
+- The value `2**60 - 1` produces "1024.00 PiB" with 11 characters
+
+### Hypothesis Test Verification
+
+The hypothesis test does fail, but not at the claimed value:
+- First failure occurs at values >= `1000 * 2**50` (approximately 1.126e18)
+- This is still less than `2**60` (approximately 1.153e18)
+
+### Mathematical Verification
+
+- The constraint violation occurs when the formatted number before the unit has 4+ digits before the decimal
+- Since the format is `.2f`, we get patterns like:
+  - "999.99 PiB" = 10 characters
+  - "1000.00 PiB" = 11 characters
+  - "1024.00 PiB" = 11 characters
+
+### Core Issue Confirmation
+
+The documentation claim "For all values < 2**60, the output is always <= 10 characters" is indeed false. However:
+1. The bug report incorrectly identifies the boundary (claims 100 * 2**50, actually 1000 * 2**50)
+2. The core issue is valid: values between 1000 * 2**50 and 2**60 produce 11 characters, violating the documented constraint
+
+The bug exists, but the specific reproduction example in the bug report contains an error about where the boundary is.

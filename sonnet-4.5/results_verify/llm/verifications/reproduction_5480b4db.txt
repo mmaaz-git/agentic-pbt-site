@@ -1,0 +1,52 @@
+# Reproduction of the Bug
+
+## Summary
+I've successfully reproduced aspects of the bug report, finding that there IS a legitimate bug in the `not_nulls` function when it receives a dict input, but the bug report is partially incorrect about when this happens with Pydantic models.
+
+## Test Results
+
+### 1. Pydantic Model Input (as claimed in bug report)
+When `not_nulls` receives a Pydantic model (like `SharedOptions`):
+- **WORKS CORRECTLY** - The function succeeds
+- Iterating over a Pydantic model yields `(key, value)` tuples, not just field names as the bug report claims
+- The unpacking `for key, value in data` works as expected
+
+### 2. Dict Input (also mentioned in bug report)
+When `not_nulls` receives a dict:
+- **FAILS WITH ValueError** - "too many values to unpack (expected 2)"
+- Iterating over a dict yields only keys (strings), not (key, value) pairs
+- The unpacking `for key, value in data` fails because it tries to unpack a single string
+
+## The Real Bug
+
+The function on line 916 of openai_models.py:
+```python
+def not_nulls(data) -> dict:
+    return {key: value for key, value in data if value is not None}
+```
+
+This function is broken for dict inputs because iterating a dict yields keys only, not key-value pairs. It should use `data.items()` for dicts.
+
+## Where the Bug Could Manifest
+
+1. **Line 658**: `kwargs = dict(not_nulls(prompt.options))`
+   - `prompt.options` could theoretically be a dict based on line 365 in models.py: `self.options = options or {}`
+   - However, in practice, most code paths convert options to a Pydantic model before creating Prompt objects
+
+2. **Actual Risk**: The bug exists but appears to be masked in most normal usage because:
+   - Most Prompt creation paths use `model.Options(**options)` which creates a Pydantic model
+   - Direct Prompt instantiation with dict options seems rare in the codebase
+
+## Confirmed Behaviors
+
+1. `not_nulls(SharedOptions(temperature=0.7, max_tokens=None))` → Works, returns `{'temperature': 0.7}`
+2. `not_nulls({'temperature': 0.7, 'max_tokens': None})` → Fails with ValueError
+3. The function is only called once in the codebase (line 658)
+4. The input to `not_nulls` is `prompt.options`, which could be either a Pydantic model or a dict depending on how the Prompt was created
+
+## Conclusion
+
+The bug is REAL but the report's explanation is partially incorrect:
+- The function DOES work with Pydantic models (contrary to the report's claim)
+- The function DOES NOT work with dicts (which the report correctly identifies)
+- The bug could manifest if a Prompt is created with dict options directly, though this appears rare in practice

@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The code explicitly checks for trailing dots and intentionally raises ValueError with the comment "# '2.' is invalid", suggesting that numeric strings ending with dots are intended to be rejected as literals. One could argue that the current behavior (treating them as variable lookups) is the intended fallback behavior, and the user's expectation that these should work as literals is incorrect.
+
+**Why it might not be INVALID:**
+The bug is not about whether '42.' should be accepted as a literal - the code clearly intends to reject it. The bug is about the internal state inconsistency where both `literal` and `lookups` are set simultaneously. This violates the clear architectural pattern where these should be mutually exclusive, and causes a Variable that was successfully created to fail during resolution.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an obscure edge case involving numeric strings with trailing dots, which are unlikely to appear in real template code. The impact is minimal since users can simply use '42' or '42.0' instead. The current behavior has existed for years without causing significant issues, suggesting it's not a practical problem.
+
+**Why it might not be WONTFIX:**
+The bug violates a fundamental class invariant and causes unpredictable behavior. A Variable that is successfully created should either resolve correctly or fail during creation, not fail during resolution due to internal state corruption. This is a clear logic error that could affect code reliability and debugging.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify how numeric strings with trailing dots should be handled. One could update the documentation to clarify that such strings will be treated as variable lookups (resulting in errors) rather than as numeric literals. This would document the current behavior rather than fixing it.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not about unclear documentation but about broken implementation. The code has a clear intent (reject trailing dots as literals) but fails to implement it correctly by leaving the object in an inconsistent state. This is a code bug, not a documentation issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that the ability to parse '42.' as a float literal would be a new feature, since the current code explicitly rejects it. The user is essentially asking for the template system to handle a new format of numeric input that wasn't previously supported.
+
+**Why it might not be FEATURE_REQUEST:**
+The bug report is not asking for '42.' to be accepted as a literal. It's pointing out that the current implementation leaves the Variable object in an inconsistent state with both `literal` and `lookups` set. The fix is to maintain the existing behavior (reject trailing dots) while ensuring internal consistency.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear violation of the Variable class's internal invariant where `literal` and `lookups` should be mutually exclusive. The code successfully parses '42.' as a float, then intentionally rejects it, but fails to clean up the internal state properly. This leaves the object in an inconsistent state where `resolve()` checks `lookups` first and fails, even though `literal` contains a valid value. The proposed fix is minimal and correct.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the dual-state (both literal and lookups set) was intentional, but there's no evidence for this in the code. The resolve() method's structure clearly assumes only one will be set, and the comment "# A ValueError means that the variable isn't a number" suggests the intent is to fully transition from number parsing to variable parsing.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug in Django's template Variable class. The key evidence is:
+
+1. **Clear invariant violation**: The Variable class is designed with the assumption that either `literal` or `lookups` is set, never both. The resolve() method's if-else structure confirms this design intent.
+
+2. **Unintended state corruption**: When processing '42.', the code successfully sets `literal = 42.0`, then intentionally raises ValueError to reject trailing dots, but the exception handler fails to clear `literal` before setting `lookups`. This is clearly an oversight in the exception handling logic.
+
+3. **Predictable fix**: The proposed one-line fix (`self.literal = None`) is exactly what's needed to maintain the class invariant. It's not changing behavior or adding features, just ensuring the internal state remains consistent.
+
+This is not about whether '42.' should be accepted (the code clearly intends to reject it), nor about documentation or features. It's about maintaining internal consistency in the Variable object's state. Variables that are successfully created should not fail during resolution due to internal state corruption - they should either work correctly or fail during creation.

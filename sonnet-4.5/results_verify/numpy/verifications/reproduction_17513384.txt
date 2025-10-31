@@ -1,0 +1,49 @@
+BUG REPRODUCTION RESULTS
+========================
+
+I have successfully reproduced all the bugs described in the report. The issues are confirmed to exist in numpy.char functions when operations would expand strings beyond their original width.
+
+REPRODUCTION DETAILS:
+
+1. Bug 1: numpy.char.upper() truncates ligatures
+   - Input: 'ﬀ' (LATIN SMALL LIGATURE FF, U+FB00)
+   - Expected (Python's upper()): 'FF'
+   - Actual (numpy.char.upper()): 'F'
+   - Result: CONFIRMED - The result is truncated to 1 character
+
+2. Bug 2: numpy.char.swapcase() truncates expansions
+   - Input: 'ß' (German sharp S)
+   - Expected (Python's swapcase()): 'SS'
+   - Actual (numpy.char.swapcase()): 'S'
+   - Result: CONFIRMED - The result is truncated to 1 character
+
+3. Bug 3: numpy.char.replace() truncates when replacement expands string
+   - Input: '0'
+   - Operation: Replace '0' with '00'
+   - Expected (Python's replace()): '00'
+   - Actual (numpy.char.replace()): '0'
+   - Result: CONFIRMED - The replacement doesn't occur when it would expand the string
+
+4. Bug 4: numpy.char.translate() truncates when translation expands characters
+   - Input: 'a'
+   - Translation table: {'a': 'AA'}
+   - Expected (Python's translate()): 'AA'
+   - Actual (numpy.char.translate()): 'A'
+   - Result: CONFIRMED - The translation is truncated to 1 character
+
+ROOT CAUSE ANALYSIS:
+
+The dtype investigation confirms the root cause described in the bug report:
+- Arrays created with single characters have dtype '<U1' (1-character Unicode string)
+- Operations that would expand strings beyond this width are truncated to fit the original dtype
+- For example, 'ﬀ' starts as <U1 and remains <U1 after upper(), even though it should become <U2 to hold 'FF'
+
+EFFECT:
+
+This is a significant data loss issue. The functions silently truncate data without warning, leading to:
+1. Incorrect results that differ from Python's standard string methods
+2. Loss of information during Unicode operations
+3. Unexpected behavior that could cause bugs in downstream applications
+4. Violation of the principle of least surprise - users expect numpy.char functions to behave like Python's string methods
+
+The bug report's claims are accurate and the reproduction code provided works correctly.

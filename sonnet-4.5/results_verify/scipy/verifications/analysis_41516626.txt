@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function does emit a warning when the result is inaccurate, so technically it's alerting users to the problem. One could argue that dealing with values as extreme as 1e-50 is outside the reasonable operational domain of floating-point matrix operations, and users working with such extreme values should expect numerical issues. The documentation doesn't explicitly promise that the round-trip property will hold for all possible floating-point values.
+
+**Why it might not be INVALID:**
+The documentation explicitly states "expm(logm(A)) == A" as a fundamental property without any caveats about value ranges. The matrix in question is well-conditioned (condition number 2.62) and has a determinant of 1.0, so it's not a pathological case from a linear algebra perspective. The values like 1e-50 are valid IEEE 754 floating-point numbers, not denormalized numbers or special cases. The function returns a result that is off by 9 orders of magnitude, which is far beyond acceptable numerical error.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Working with matrix elements of magnitude 1e-50 is an extreme edge case that would rarely occur in practical scientific computing. The computational cost of making the algorithm robust to such extreme values might not be justified by the limited use cases. The function does warn about the inaccuracy, so users are informed. The specific test case is contrived and unlikely to appear in real applications.
+
+**Why it might not be WONTFIX:**
+The error magnitude (1e+9) is catastrophic, not just a minor numerical inaccuracy. The matrix is mathematically well-behaved (well-conditioned, non-singular) so there's no mathematical reason for the failure. The issue affects values starting around 1e-20, which while small, are not unreasonably extreme in scientific computing contexts. Silent data corruption (when warnings are suppressed) could lead to serious errors in downstream calculations.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to specify that the round-trip property only holds for matrices with elements within a certain magnitude range. Adding a note about numerical limitations with extremely small values would set proper expectations. The current documentation presents the property as absolute when it's actually subject to numerical limitations. This would be the minimal fix to align documentation with actual behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The magnitude of error (1e+9) suggests this is more than just a documentation issue - it's a fundamental algorithmic problem. Simply documenting the limitation doesn't address the fact that the function returns wildly incorrect results rather than failing gracefully. Other matrix operations in SciPy handle similar value ranges without such catastrophic errors.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting matrices with extremely small elements could be seen as a new feature rather than fixing existing functionality. The request for better numerical stability with extreme values could be considered an enhancement. Adding automatic scaling or alternative algorithms for edge cases would be new functionality. The current behavior (warning + result) could be considered the baseline, with better handling being an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The documented mathematical property "expm(logm(A)) == A" is already claimed to be supported, so making it actually work isn't a new feature. The matrix is well-conditioned and mathematically valid, so supporting it should be part of the base functionality. This is about fixing incorrect results, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates its explicitly documented mathematical property for well-conditioned, non-singular matrices. The error magnitude (1e+9) is catastrophic and cannot be dismissed as normal floating-point imprecision. The issue starts affecting results at 1e-20, which while small, is 300+ orders of magnitude above the smallest representable positive float64 (~1e-308). The function returns a result that is objectively wrong by any reasonable standard, not just slightly inaccurate. For a well-conditioned matrix, getting the (1,0) element wrong by a factor of 1.5 billion is a clear algorithmic failure.
+
+**Why it might not be BUG:**
+The function does emit a warning about the inaccuracy, so it's not completely silent about the problem. The extreme small values might be considered outside the intended operational domain. The mathematical property might be understood to apply only within the constraints of floating-point arithmetic. Numerical algorithms often have undocumented limitations with extreme values.
+
+## Overall consideration
+
+After thorough analysis, this appears to be a legitimate BUG. The key factors supporting this classification are: (1) The documentation explicitly promises that "expm(logm(A)) == A" without any stated limitations on matrix element magnitudes, (2) The test matrix is well-conditioned (condition number 2.62) and non-singular (determinant 1.0), making it a mathematically well-behaved input, and (3) The magnitude of error (1.5e+9) is catastrophically wrong, not merely inaccurate within expected numerical tolerances.
+
+While the function does emit a warning, returning a result that is wrong by 9 orders of magnitude violates user expectations and the documented contract. The fact that the issue begins affecting accuracy at 1e-20 (which is well within the normal float64 range) and gets progressively worse suggests a fundamental algorithmic issue with how the matrix logarithm handles matrices with disparate element scales. The warning message even acknowledges the massive error (7.6e+8) but still returns the garbage result.
+
+The most compelling evidence is that this is not about pushing the limits of floating-point arithmetic - the values involved (1e-50) are perfectly representable in float64, the matrix is well-conditioned, and basic matrix operations like multiplication and eigenvalue computation work fine with these values. The failure is specific to the logm implementation's numerical stability. When a mathematical function fails this badly on well-conditioned inputs that are within the representable range of the data type, it constitutes a bug rather than a limitation that should merely be documented.

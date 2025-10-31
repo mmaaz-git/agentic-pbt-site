@@ -1,0 +1,45 @@
+# Bug Reproduction Analysis
+
+## Summary
+The bug report is accurate and reproducible. The `RenameModel` and `RenameIndex` operations violate their immutability contract when exceptions occur during `database_backwards()`.
+
+## Reproduction Results
+
+### Hypothesis Test
+The provided hypothesis test correctly identifies the issue. Running the test fails with:
+```
+AssertionError
+Falsifying example: test_rename_model_immutability_after_exception(
+    old_name='A',
+    new_name='O',
+)
+```
+
+### Manual Reproduction
+The manual reproduction script produces the exact output claimed in the bug report:
+```
+Before: old_name='Article', new_name='Post'
+        old_name_lower='article', new_name_lower='post'
+After:  old_name='Post', new_name='Article'
+        old_name_lower='post', new_name_lower='article'
+```
+
+## Code Verification
+Examined the actual Django source code at:
+- `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/db/migrations/operations/models.py`
+
+Lines 538-551 confirm the issue in `RenameModel.database_backwards()`:
+1. The method swaps old_name/new_name and their lowercase versions (lines 539-543)
+2. It calls `database_forwards()` (line 545)
+3. It attempts to swap them back (lines 547-551)
+
+If `database_forwards()` raises an exception at line 545, the restoration code at lines 547-551 never executes, leaving the object in a mutated state.
+
+Lines 1140-1157 show identical issue in `RenameIndex.database_backwards()`.
+
+## Effect
+When `database_forwards()` raises an exception (which occurs with None schema_editor), the operation object is permanently mutated:
+- The old_name and new_name attributes are swapped
+- The old_name_lower and new_name_lower cached properties are swapped
+- This violates the immutability contract documented in the base class
+- Subsequent operations on the same object would be incorrect

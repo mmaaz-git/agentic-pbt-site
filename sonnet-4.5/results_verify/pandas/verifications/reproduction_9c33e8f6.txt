@@ -1,0 +1,59 @@
+## Bug Reproduction Analysis
+
+### Successfully Reproduced the Bug
+
+I have successfully reproduced the infinite recursion bug in `pandas.core.arrays.sparse.SparseArray.cumsum`.
+
+#### Test Results
+
+1. **Direct Test Case**:
+   - Created a `SparseArray([0, 1, 2], fill_value=0)`
+   - Called `cumsum()` method
+   - Result: RecursionError with "maximum recursion depth exceeded"
+   - This confirms the exact issue described in the bug report
+
+2. **Hypothesis Property-Based Test**:
+   - Ran the provided Hypothesis test
+   - All test cases with non-null fill values failed with RecursionError
+   - Examples of failing inputs:
+     - `data=[0], fill_value=0`
+     - `data=[43, -21], fill_value=0`
+     - `data=[-69, -100], fill_value=-2`
+   - This confirms the bug occurs for ANY non-null fill value
+
+### Root Cause Analysis
+
+The issue is in line 1550 of `/pandas/core/arrays/sparse/array.py`:
+
+```python
+if not self._null_fill_value:
+    return SparseArray(self.to_dense()).cumsum()
+```
+
+The problem:
+1. When `fill_value` is not null (e.g., 0), `_null_fill_value` is False
+2. The code calls `self.to_dense()` to convert to a dense array
+3. It wraps this in a new `SparseArray()` constructor
+4. The new SparseArray inherits the same non-null fill value (inferred from the data)
+5. This new SparseArray calls `cumsum()` again
+6. Since `_null_fill_value` is still False, it enters the same branch
+7. This creates infinite recursion
+
+### Expected Behavior
+
+When tested with proper logic:
+- Input: `SparseArray([0, 1, 2], fill_value=0)`
+- Expected output: `SparseArray([0, 1, 3], fill_value=0)`
+
+This is confirmed by:
+- Running `cumsum()` on the dense array directly: `[0, 1, 2].cumsum()` → `[0, 1, 3]`
+- The function should return the cumulative sum while preserving the sparse representation
+
+### Verification of Fix
+
+The proposed fix correctly addresses the issue:
+```python
+return SparseArray(self.to_dense().cumsum())
+```
+
+This computes cumsum on the dense array first, then wraps the result, avoiding recursion.

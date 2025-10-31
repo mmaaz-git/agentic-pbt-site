@@ -1,0 +1,39 @@
+REPRODUCTION ANALYSIS
+
+I successfully reproduced the bug as described in the report. Here are the technical details:
+
+1. HYPOTHESIS TEST REPRODUCTION:
+   - The hypothesis test failed immediately with: "cannot create weak reference to 'NoneType' object"
+   - This confirms the test correctly identifies the issue when use_caching=True
+
+2. MANUAL REPRODUCTION RESULTS:
+
+   With use_caching=False:
+   - None sender: SUCCESS - Returns expected response list
+   - String sender: Not tested but would work (confirmed in code review)
+   - Int sender: Not tested but would work (confirmed in code review)
+
+   With use_caching=True:
+   - None sender: FAILED - TypeError: cannot create weak reference to 'NoneType' object
+   - String sender: FAILED - TypeError: cannot create weak reference to 'str' object
+   - Int sender: FAILED - TypeError: cannot create weak reference to 'int' object
+   - Object instance: SUCCESS - Works as expected
+
+3. ROOT CAUSE CONFIRMED:
+   The error occurs at line 183 (and similarly at lines 232 and 296) where the code calls:
+   `self.sender_receivers_cache.get(sender)`
+
+   When sender_receivers_cache is a WeakKeyDictionary (created when use_caching=True), it attempts to create a weak reference to the sender. Python's weakref module cannot create weak references to:
+   - None (NoneType)
+   - Immutable built-in types (str, int, float, tuple, etc.)
+   - Several other built-in types
+
+4. IMPACT:
+   The bug makes the caching feature completely unusable with:
+   - None senders (which are explicitly documented as valid)
+   - String senders (commonly used in Django for model names, app labels)
+   - Integer senders
+   - Any other non-weakrefable types
+
+5. BUG VALIDITY:
+   The bug report is technically correct. The code crashes when using documented and expected sender types with the use_caching=True option. The send() method's own documentation states None is a valid sender, yet it crashes when caching is enabled.

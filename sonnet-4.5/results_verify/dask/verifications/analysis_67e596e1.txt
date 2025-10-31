@@ -1,0 +1,47 @@
+TRIAGE ANALYSIS FOR BUG REPORT
+==============================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `_aggregate_statistics_to_file` starts with an underscore, suggesting it's a private/internal function. The bug reporter might be using an internal API that was never intended for direct use, and internal functions don't necessarily need to handle all edge cases gracefully. The function might expect pre-processed data from `_extract_stats` which already converts None to empty dictionaries.
+
+**Why it might not be INVALID:**
+The function is called from other parts of the Dask codebase in contexts where raw parquet metadata could be passed directly. The parquet specification explicitly allows None statistics, and the codebase shows awareness of this possibility in other functions like `_extract_stats`. The crash occurs with legitimate, spec-compliant parquet metadata.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function (underscore-prefixed) handling an edge case that might be rare in practice. Most parquet writers include statistics by default, and users can work around this by ensuring statistics are present or by using higher-level APIs that handle this correctly. The fix would add a small performance overhead to check for None in a hot path.
+
+**Why it might not be WONTFIX:**
+The bug causes a complete crash with a cryptic error message rather than graceful degradation. Parquet files without statistics are not rare - they're common in production environments for performance reasons or with large string columns. The fix is trivial (2-3 lines) and the same pattern is already used elsewhere in the codebase. Other users will likely encounter this issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks documentation about its expected input format. If the function is only meant to process data that has been through `_extract_stats` first, this should be documented. Adding a docstring clarifying that statistics must be non-None dictionaries would prevent misuse.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code actually crashes rather than working in an undocumented way. This is not a case where the code works but the documentation is misleading - the code fails to handle valid input. The issue is in the implementation, not the documentation. Simply documenting the limitation doesn't fix the underlying problem of inconsistent None handling.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting None statistics could be seen as a new feature - extending the function to handle a broader range of inputs. The current implementation might have been designed with the assumption that statistics are always present, and adding None support would be an enhancement rather than a fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality but fixing a crash on valid input. The Parquet specification has always allowed None statistics, so supporting them is not a new feature but expected behavior. The codebase already handles None statistics in `_extract_stats`, showing this is an oversight rather than a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an AttributeError on valid Parquet metadata that complies with the Apache Parquet specification. The same codebase handles None statistics correctly in `_extract_stats`, showing inconsistent behavior. The crash prevents processing of legitimate parquet files that are common in production. The fix is straightforward and follows patterns already established elsewhere in the code. The error message gives no indication of the actual problem, making debugging difficult for users.
+
+**Why it might not be BUG:**
+The function is internal (underscore-prefixed) and might have implicit preconditions about its input. If the function is only meant to be called with data pre-processed by `_extract_stats`, then receiving None statistics indicates incorrect usage rather than a bug. The property-based test might be testing the function outside its intended contract.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be a legitimate BUG. The key factors are:
+
+First, the Apache Parquet specification explicitly allows statistics to be None/missing, and this is well-documented in the Parquet community. Files without statistics are common in production environments for valid reasons (performance optimization, large string columns, older writers). The function `_aggregate_statistics_to_file` processes parquet metadata, so it should handle all valid parquet metadata formats.
+
+Second, the codebase demonstrates awareness that statistics can be None through the `_extract_stats` function, which explicitly checks for and handles None statistics by converting them to empty dictionaries. This shows that None statistics are an expected case in the Dask parquet handling code. The fact that `_aggregate_statistics_to_file` doesn't handle this case appears to be an oversight rather than intentional design, especially since the fix would simply involve reusing the same None-checking pattern.
+
+Third, the impact is significant - the function crashes completely with an unhelpful error message rather than degrading gracefully. Users encountering this would have no indication that missing statistics are the cause, making it difficult to diagnose or work around. While the function is internal (underscore-prefixed), it's part of the parquet processing pipeline and affects user-facing functionality. The proposed fix is minimal, safe, and consistent with existing code patterns in the same module.

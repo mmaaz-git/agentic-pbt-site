@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for the reduce() method does not explicitly state that operations must be immutable or that the original operation should not be modified. The base Operation.reduce() documentation only specifies what should be returned, not whether the original can be modified. Without an explicit immutability contract in the documentation, the current behavior could be considered valid, even if unexpected.
+
+**Why it might not be INVALID:**
+The behavior is clearly inconsistent with every other reduce() implementation in the codebase. All other operations (RenameIndex, AddConstraint, CreateModel, AddField, etc.) create new objects instead of mutating the original. This consistent pattern establishes an implicit contract that AddIndex violates. The mutation causes actual problems where references to the original operation see unexpected state changes.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal implementation detail of Django's migration optimizer that likely doesn't affect end users in practice. Migration operations are typically generated and run automatically, and developers rarely interact with the reduce() method directly. The issue only manifests when someone holds a reference to the original operation and expects it to remain unchanged, which is an edge case.
+
+**Why it might not be WONTFIX:**
+The inconsistency with other operations suggests this is not just a minor issue but a violation of the established pattern in the codebase. The mutation could cause subtle bugs in migration optimization or in tools that analyze migrations. The fix is straightforward and aligns the code with the rest of the codebase.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never explicitly states that reduce() operations should not mutate the original operation. If the current behavior is intentional, the documentation should be updated to clarify that AddIndex.reduce() may mutate the original operation, unlike other operations. This would at least make the behavior documented and expected.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code pattern across all other operations clearly shows that creating new objects is the intended behavior. The issue is not that the documentation is wrong or unclear, but that the implementation doesn't follow the established pattern. Documenting this as an exception would be acknowledging a bug rather than fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that making AddIndex.reduce() immutable is a new feature - adding support for immutable reduction that the operation currently lacks. The current code works (it produces the correct reduced operations), and making it immutable would be an enhancement for better consistency and predictability.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not adding new functionality but fixing inconsistent behavior. The reduce() method already exists and should work consistently with other operations. The mutation is a bug in the implementation, not a missing feature. All other operations already implement this "feature" correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The AddIndex.reduce() method violates the consistent pattern established by every other reduce() implementation in the codebase, all of which create new objects instead of mutating the original. This mutation causes the original operation to be modified, which can lead to unexpected behavior for any code that retains references to the original operation. The behavior is clearly unintended, as evidenced by the fact that the method returns a new AddIndex operation but with a shared, mutated index object. The fix is straightforward and brings the code in line with all other implementations.
+
+**Why it might not be BUG:**
+The documentation does not explicitly state that operations must be immutable, so technically the current behavior doesn't violate any documented contract. The code produces the correct result for the migration optimizer, which is the primary consumer of the reduce() method. Without a clear specification that this behavior is wrong, it could be considered working as designed, even if the design is inconsistent.
+
+## Overall Consideration
+
+Looking at all the evidence, this appears to be a genuine bug in the AddIndex.reduce() implementation. The method mutates the original operation's index object, which is inconsistent with every other reduce() implementation in the Django codebase. While the documentation doesn't explicitly state an immutability requirement, the consistent pattern across all other operations establishes a clear implicit contract that AddIndex violates.
+
+The mutation causes real problems: any code that holds a reference to the original AddIndex operation will see its state unexpectedly change after reduce() is called. This violates the principle of least surprise and could lead to subtle bugs in migration optimization or analysis tools. The fact that the reduced operation shares the same index object with the original operation (rather than getting a copy) further indicates this is unintended behavior.
+
+The fix proposed in the bug report is correct and straightforward: create a new Index object with the new name instead of mutating the existing one. This aligns AddIndex.reduce() with the established pattern used by all other operations and eliminates the mutation side effect. Given that this is a clear deviation from the established pattern with a simple fix that improves code consistency and correctness, this should be classified as a valid BUG.

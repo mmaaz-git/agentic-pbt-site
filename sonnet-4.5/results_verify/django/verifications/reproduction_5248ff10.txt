@@ -1,0 +1,51 @@
+## Bug Reproduction Results
+
+### Test Execution
+I successfully ran both the basic reproduction test and the Hypothesis property-based test provided in the bug report. The results confirm the technical accuracy of the bug report.
+
+### Basic Test Results
+- **Input**: uri="/page/", referer="http://example.com/page", domain="example.com"
+- **Expected**: is_ignorable_request should return True (indicating this is an internal APPEND_SLASH redirect)
+- **Actual**: is_ignorable_request returns False
+
+### Root Cause Verification
+The comparison on line 165 of django/middleware/common.py:
+```python
+if settings.APPEND_SLASH and uri.endswith("/") and referer == uri[:-1]:
+```
+
+This compares:
+- `referer` = "http://example.com/page" (full URL from HTTP Referer header)
+- `uri[:-1]` = "/page" (path without trailing slash)
+
+These strings are fundamentally different types:
+- One is a complete URL with scheme and domain
+- One is just a path
+
+The comparison will ALWAYS fail when given real HTTP Referer headers.
+
+### Property-Based Test Results
+The Hypothesis test failed on the first generated example and would fail on ALL examples. This demonstrates the bug is not edge-case specific but affects 100% of cases where APPEND_SLASH redirects occur.
+
+### Additional Test Cases
+I tested multiple scenarios:
+1. Simple paths: /foo/ with referer http://example.com/foo
+2. Nested paths: /bar/baz/ with referer https://example.com/bar/baz
+3. Root path: / with referer http://example.com
+4. Different schemes: both http and https
+5. Subdomains: subdomain.example.com
+
+ALL cases failed because the fundamental comparison logic is incorrect.
+
+### Impact Assessment
+This bug means that whenever Django's APPEND_SLASH feature redirects from a URL without a trailing slash to one with a trailing slash:
+1. The redirect is successful (user sees the correct page)
+2. But BrokenLinkEmailsMiddleware incorrectly treats this as a broken link
+3. Site managers receive unnecessary email notifications
+
+This would affect any Django site with:
+- `APPEND_SLASH = True` (Django's default)
+- `BrokenLinkEmailsMiddleware` enabled
+- `DEBUG = False` (production sites)
+
+The bug report's technical analysis is completely accurate.

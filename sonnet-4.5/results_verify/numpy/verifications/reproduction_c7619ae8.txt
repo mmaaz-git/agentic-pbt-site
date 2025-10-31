@@ -1,0 +1,36 @@
+Bug Reproduction Report for numpy.f2py.capi_maps
+
+REPRODUCTION RESULTS:
+
+1. PROPERTY-BASED TEST EXECUTION:
+   The test correctly identifies the issue:
+   - float → NPY_FLOAT matches complex_float → NPY_CFLOAT (FLOAT == FLOAT) ✓
+   - double → NPY_DOUBLE matches complex_double → NPY_CDOUBLE (DOUBLE == DOUBLE) ✓
+   - long_double → NPY_LONGDOUBLE DOES NOT match complex_long_double → NPY_CDOUBLE (LONGDOUBLE != DOUBLE) ✗
+
+   Test fails with: "Precision mismatch: long_double -> NPY_LONGDOUBLE, but complex_long_double -> NPY_CDOUBLE"
+
+2. DIRECT INSPECTION:
+   Current mapping in numpy/f2py/capi_maps.py line 73:
+   - complex_long_double maps to NPY_CDOUBLE
+   - This breaks the consistent pattern where complex types preserve the precision of their base type
+
+3. INCONSISTENCY VERIFICATION:
+   - c2capi_map['complex_long_double'] = 'NPY_CDOUBLE' (line 73)
+   - c2pycode_map['complex_long_double'] = 'G' (line 93)
+   - 'G' corresponds to NPY_CLONGDOUBLE according to NumPy headers
+   - This internal inconsistency suggests an error in c2capi_map
+
+4. IMPACT ASSESSMENT:
+   The bug is real and would cause:
+   - Silent precision loss when F2PY wraps Fortran code using complex*16 or complex(kind=16) types
+   - Inconsistent behavior between the C API mapping and Python type code mapping
+   - Violation of the principle that complex types should preserve base type precision
+
+5. TECHNICAL VALIDITY:
+   - NPY_CLONGDOUBLE exists and is defined in NumPy headers
+   - The suggested fix (changing NPY_CDOUBLE to NPY_CLONGDOUBLE) is technically valid
+   - The pattern analysis strongly supports this change
+
+CONCLUSION:
+The bug report is technically accurate. The test correctly identifies that complex_long_double incorrectly maps to NPY_CDOUBLE instead of NPY_CLONGDOUBLE, causing a precision mismatch that breaks the consistent pattern observed in other type mappings.

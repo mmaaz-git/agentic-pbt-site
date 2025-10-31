@@ -1,0 +1,37 @@
+BUG REPRODUCTION RESULTS
+
+1. CONFIRMED CRASH:
+The bug report is technically accurate. When creating a SparseArray where all values equal the fill_value, both argmin() and argmax() crash with:
+  ValueError: attempt to get argmin of an empty sequence
+
+Test case: SparseArray([0], fill_value=0)
+- Result: CRASHES with ValueError
+- Expected (based on NumPy): Should return 0
+
+2. ROOT CAUSE ANALYSIS:
+- When all array values equal the fill_value, SparseArray optimizes storage by not storing any sparse values
+- The sp_values array becomes empty: []
+- The _argmin_argmax() method at line 1658 calls np.argmin(non_nans) on this empty array
+- NumPy's argmin/argmax raise ValueError when called on empty sequences
+- The code lacks a check for this edge case before calling np.argmin/argmax
+
+3. COMPARISON WITH EXPECTED BEHAVIOR:
+- NumPy array([0]).argmin() returns 0
+- NumPy array([0]).argmax() returns 0
+- SparseArray([0], fill_value=0).to_dense().argmin() returns 0
+- SparseArray([0], fill_value=0).to_dense().argmax() returns 0
+- SparseArray([0], fill_value=0).argmin() CRASHES
+- SparseArray([0], fill_value=0).argmax() CRASHES
+
+4. ADDITIONAL TEST CASES:
+- SparseArray([0, 0, 0], fill_value=0): CRASHES (all values equal fill_value)
+- SparseArray([0, 1, 0], fill_value=0): WORKS (returns correct indices)
+- The crash only occurs when ALL values equal the fill_value
+
+5. IMPACT:
+This is a legitimate edge case that breaks expected array behavior. Users would reasonably expect:
+- argmin/argmax to work on any non-empty array
+- SparseArray to behave like its dense equivalent
+- Methods not to crash on valid input data
+
+CONCLUSION: The bug report accurately describes a real crash that occurs in a reasonable use case where SparseArray fails to match the behavior of standard arrays.

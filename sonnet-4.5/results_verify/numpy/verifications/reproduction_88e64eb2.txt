@@ -1,0 +1,40 @@
+REPRODUCTION REPORT
+==================
+
+I have successfully reproduced the bug reported in numpy.ma.make_mask.
+
+HYPOTHESIS TEST RESULTS:
+- The provided Hypothesis test fails as expected
+- Failing input: masked_array(data=[0.0], mask=[False])
+- The assertion `mask.shape == arr.shape` fails because make_mask returns a scalar False instead of array([False])
+
+MANUAL REPRODUCTION RESULTS:
+The bug manifests exactly as described in the report:
+
+1. Input: np.array([False]) with shape (1,)
+   Output: scalar False with shape ()
+   Expected: array([False]) with shape (1,)
+
+2. Comparison shows inconsistent behavior:
+   - make_mask([True]) → array([True]) with shape (1,)  [SHAPE PRESERVED]
+   - make_mask([False]) → False with shape ()           [SHAPE LOST - BUG]
+   - make_mask([False, True]) → array([False, True]) with shape (2,) [SHAPE PRESERVED]
+
+3. Extended testing confirms the pattern:
+   - Any array containing at least one True preserves its shape
+   - Arrays containing only False values collapse to scalar False
+   - This happens for 1D and 2D arrays: [False], [False, False], [[False]], etc.
+   - With shrink=False, shape is always preserved as expected
+
+4. The bug also affects ma.mask_or as reported:
+   - mask_or([False], [False]) → scalar False (shape lost)
+   - mask_or([True], [False]) → array([True]) (shape preserved)
+
+EFFECT OF THE BUG:
+This is a real inconsistency that violates the principle of least surprise. Code that expects make_mask to preserve array shapes will break when the input happens to be an all-False array. This creates unpredictable behavior in downstream code that depends on shape consistency.
+
+The shrink parameter's documented purpose is to return nomask (which equals False) for all-False masks, but the documentation doesn't explicitly state that this should also collapse the dimensionality from an array to a scalar. The current behavior conflates two separate concepts:
+1. Returning a special nomask value vs an array of False values
+2. Preserving vs collapsing array dimensions
+
+This bug makes it impossible to reliably predict the output shape without inspecting the values, which is problematic for array operations that depend on shape consistency.

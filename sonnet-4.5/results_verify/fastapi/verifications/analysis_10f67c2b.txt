@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is an internal utility function used by FastAPI during OpenAPI schema generation and route validation. It's not documented as a public API, and users would not typically call it directly. The type signature `Union[int, str, None]` could be interpreted as accepting only specific types of strings that make sense in the OpenAPI context (pattern strings like "2XX" and numeric strings like "200"), not arbitrary strings. The function works correctly for all the string inputs it's designed to handle according to OpenAPI specifications.
+
+**Why it might not be INVALID:**
+The type signature explicitly states `Union[int, str, None]` without any constraints on what strings are acceptable. In Python's typing system, `str` means any string, not just specific strings. The function crashes with an unhandled ValueError for many string inputs, which violates the contract implied by the type signature. If only specific strings were intended, the signature should use `Literal` or document the constraints.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function that users should never call directly. The only way to trigger this bug is by passing invalid status codes to FastAPI routes, which would be a user error. The strings that cause the crash (like "invalid", "abc", etc.) are not valid HTTP status codes or OpenAPI patterns, so there's no legitimate use case for handling them. The error message clearly indicates what went wrong, even if it's not the most user-friendly.
+
+**Why it might not be WONTFIX:**
+The bug can cause FastAPI applications to crash at runtime when generating OpenAPI schemas, which could happen in production if invalid status codes slip through. A more graceful error handling would improve developer experience. The fix is trivial (add try-except) and would make the function more robust without breaking any existing functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function lacks any documentation about what string values are acceptable. It's an internal function that shouldn't be used directly by users, but FastAPI does allow arbitrary strings as status_code parameters in route decorators. The real issue might be that FastAPI's route decorators should document that only valid HTTP status codes and OpenAPI patterns are allowed as status_code values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The type signature is technically wrong if it doesn't handle all strings, so this is more than just a documentation issue. The function's behavior doesn't match its declared type signature, which is a code bug, not a documentation bug. Adding documentation wouldn't fix the fact that the function crashes on certain inputs.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrary strings as status codes could be seen as a new feature rather than a bug fix. The current implementation supports what it was designed for (OpenAPI patterns and numeric codes), and adding support for other strings would be extending its functionality. The proposed fix in the bug report (defaulting to True for invalid strings) is adding new behavior rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+The type signature already claims to support any string, so this isn't adding a new feature but fixing the existing implementation to match its declared interface. The function crashes rather than returning a boolean as promised, which is clearly a bug rather than a missing feature. The fix doesn't add new functionality but prevents crashes.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function has a clear type signature that accepts `Union[int, str, None]` but crashes with ValueError on many valid string inputs. This violates the contract established by the type signature. The function can cause FastAPI applications to crash when generating OpenAPI schemas if invalid status codes are used in route definitions. The crash happens at runtime rather than being caught during route registration, making it harder to catch during development.
+
+**Why it might not be BUG:**
+The function is internal and not meant for direct use by end users. It correctly handles all the string inputs it was designed to handle (OpenAPI patterns and numeric strings). The strings that cause crashes are not valid HTTP status codes or OpenAPI patterns, so they represent user errors in route configuration. The current behavior (crashing with a clear error message) helps developers identify misconfigured routes early.
+
+## Overall consideration
+After careful analysis, this bug report presents a nuanced case. The function `is_body_allowed_for_status_code` is an internal FastAPI utility that has a type signature accepting any string but only handles specific string patterns. The key question is whether this function's type signature represents a contract that should be honored or whether it's acceptable for an internal function to have constraints beyond what the type signature indicates.
+
+The function is used during OpenAPI schema generation and route validation, not directly by users. However, users can indirectly trigger this bug by passing invalid status codes to FastAPI route decorators. FastAPI accepts any string as a status_code parameter during route creation but then crashes when generating the OpenAPI schema. This represents a validation gap - invalid status codes should either be rejected at route creation time or handled gracefully during schema generation.
+
+The most compelling argument for INVALID or WONTFIX is that this is an internal function handling an edge case of user error (invalid status codes). The most compelling argument for BUG is that the type signature makes a promise the function doesn't keep, and the crash happens at runtime rather than during initialization. Given that this affects an internal API not meant for direct use, and the only way to trigger it is through user error (invalid status codes), this leans toward being INVALID rather than a legitimate bug.

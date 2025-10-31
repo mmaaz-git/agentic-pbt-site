@@ -1,0 +1,46 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is accurate. Django's Settings class does accept TIME_ZONE values with path traversal sequences that escape the intended /usr/share/zoneinfo directory.
+
+### Reproduction Steps Performed
+
+1. **Ran the provided reproduction code**: Successfully reproduced the issue. Django accepts a TIME_ZONE value like '../../../tmp/tmp9bg2ozeg/fake_timezone' that points to an existing file outside /usr/share/zoneinfo.
+
+2. **Ran the Hypothesis test**: The test fails with an AssertionError, confirming that Django incorrectly accepts timezone paths outside zoneinfo_root.
+
+3. **Examined the Django source code**: Located the vulnerable code in /home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/conf/__init__.py lines 195-205.
+
+### Technical Analysis
+
+The current implementation at lines 195-205 performs the following:
+1. Constructs a path by joining /usr/share/zoneinfo with the TIME_ZONE value split by "/"
+2. Only checks if the constructed file doesn't exist to raise an error
+3. If the file exists, it accepts it regardless of whether it's actually within /usr/share/zoneinfo
+
+The vulnerability occurs because:
+- The code uses `zoneinfo_root.joinpath(*self.TIME_ZONE.split("/"))` which naively joins path components
+- Path traversal sequences like "../" are processed, allowing escape from the zoneinfo directory
+- The only validation is checking if the file exists, not if it's within the intended directory
+
+### Impact
+
+When a TIME_ZONE value contains path traversal sequences (e.g., "../../../tmp/file"):
+1. The path is constructed as /usr/share/zoneinfo/../../../tmp/file
+2. This resolves to /tmp/file
+3. If /tmp/file exists, Django accepts it as a valid timezone file
+4. The TZ environment variable is set to this potentially malicious path
+5. time.tzset() is called with this value
+
+This allows timezone data to be loaded from arbitrary files on the filesystem, as long as they exist.
+
+### Verification
+
+Output from running the reproduction code:
+```
+BUG: Django accepted TIME_ZONE = '../../../tmp/tmp9bg2ozeg/fake_timezone'
+This path points to: /tmp/tmp9bg2ozeg/fake_timezone
+Which is outside: /usr/share/zoneinfo
+```
+
+This confirms that Django is accepting timezone files from outside the intended /usr/share/zoneinfo directory.

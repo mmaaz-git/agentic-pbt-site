@@ -1,0 +1,52 @@
+REPRODUCTION ANALYSIS
+
+## Bug Report Claims
+
+The bug report claims that `to_pascal` is not idempotent, specifically that:
+- `to_pascal(to_pascal('A_A'))` != `to_pascal('A_A')`
+- Expected: 'AA' == 'AA'
+- Actual: 'AA' != 'Aa'
+
+## Reproduction Results
+
+I successfully reproduced the reported behavior:
+
+1. **Primary Test Case ('A_A')**:
+   - First application: `to_pascal('A_A')` = 'AA'
+   - Second application: `to_pascal('AA')` = 'Aa'
+   - Confirmed: NOT idempotent
+
+2. **Additional Test Cases**:
+   - `'a_b'`: First='AB', Second='Ab' (NOT idempotent)
+   - `'AA'`: First='Aa', Second='Aa' (idempotent)
+   - `'test_case'`: First='TestCase', Second='Testcase' (NOT idempotent)
+   - `'TestCase'`: First='Testcase', Second='Testcase' (idempotent)
+   - `'ABC'`: First='Abc', Second='Abc' (idempotent)
+   - `'a_B_c'`: First='ABC', Second='Abc' (NOT idempotent)
+
+## Technical Analysis
+
+The function works in two steps:
+1. Applies Python's `.title()` method (capitalizes first letter after boundaries)
+2. Removes underscores between alphanumeric characters followed by uppercase
+
+For 'A_A':
+- Step 1: 'A_A'.title() = 'A_A' (already titlecased)
+- Step 2: Regex removes '_' between 'A' and 'A', yielding 'AA'
+
+For 'AA' (the output of first application):
+- Step 1: 'AA'.title() = 'Aa' (title() lowercases the second A)
+- Step 2: No underscores to remove, yields 'Aa'
+
+## Key Observations
+
+1. **The bug report is technically accurate**: The function is indeed not idempotent for certain inputs.
+
+2. **Root cause**: Python's `.title()` method treats consecutive uppercase letters differently than snake_case. 'AA'.title() becomes 'Aa', while 'A_A'.title() stays 'A_A'.
+
+3. **Pattern**: The non-idempotence occurs specifically when:
+   - Input has underscores between uppercase letters
+   - Output produces consecutive uppercase letters
+   - Re-applying the function to these consecutive uppercase letters changes them
+
+4. **The function assumes snake_case input**: The parameter is named "snake" and documentation says "Convert a snake_case string to PascalCase", indicating the function expects snake_case input, not arbitrary strings or already-converted PascalCase.

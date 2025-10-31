@@ -1,0 +1,54 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Dask version: 2025.9.1
+- Python version: 3.13
+- Function location: /home/npc/miniconda/lib/python3.13/site-packages/dask/dataframe/io/io.py
+
+### Docstring Example Tests
+All five docstring examples fail with the same error:
+
+1. `sorted_division_locations(['A', 'B', 'C', 'D', 'E', 'F'], chunksize=2)`
+   - Expected: `(['A', 'C', 'E', 'F'], [0, 2, 4, 6])`
+   - Actual: `TypeError: No dispatch for <class 'list'>`
+
+2. `sorted_division_locations(['A', 'B', 'C', 'D', 'E', 'F'], chunksize=3)`
+   - Expected: `(['A', 'D', 'F'], [0, 3, 6])`
+   - Actual: `TypeError: No dispatch for <class 'list'>`
+
+3. `sorted_division_locations(['A', 'A', 'A', 'A', 'B', 'B', 'B', 'C'], chunksize=3)`
+   - Expected: `(['A', 'B', 'C', 'C'], [0, 4, 7, 8])`
+   - Actual: `TypeError: No dispatch for <class 'list'>`
+
+4. `sorted_division_locations(['A', 'A', 'A', 'A', 'B', 'B', 'B', 'C'], chunksize=2)`
+   - Expected: `(['A', 'B', 'C', 'C'], [0, 4, 7, 8])`
+   - Actual: `TypeError: No dispatch for <class 'list'>`
+
+5. `sorted_division_locations(['A'], chunksize=2)`
+   - Expected: `(['A', 'A'], [0, 1])`
+   - Actual: `TypeError: No dispatch for <class 'list'>`
+
+### Working Input Types
+The function works correctly with:
+- numpy.ndarray: Successfully returns expected divisions and locations
+- pandas.Series: Successfully returns expected divisions and locations
+- pandas.Index: Successfully returns expected divisions and locations
+
+### Hypothesis Test
+Ran property-based test with random lists and chunksizes. All test cases with Python lists failed with the same `TypeError: No dispatch for <class 'list'>` error.
+
+### Root Cause Analysis
+Line 284 of the implementation calls `seq = tolist(seq)` where `tolist` is a dispatch function that only has registered handlers for:
+- numpy.ndarray
+- pandas.Series
+- pandas.Index
+- pandas.Categorical
+
+There is no dispatch handler registered for Python list type, causing the immediate failure.
+
+### Verification
+The error occurs consistently and deterministically for any Python list input, regardless of:
+- List size
+- List content
+- chunksize or npartitions parameter
+- Whether the list is sorted or has duplicates

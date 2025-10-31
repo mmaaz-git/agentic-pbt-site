@@ -1,0 +1,60 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug as reported. Here are my findings:
+
+### Direct Test Case Results
+
+When testing the specific failing case with pattern '[':
+- **Actual behavior**: The function raises `re.PatternError: unterminated character set at position 0`
+- **Expected behavior**: The function should return `False`
+
+Testing all invalid regex patterns mentioned in the report confirms the bug:
+- Pattern '[' raises: re.PatternError: unterminated character set at position 0
+- Pattern '(' raises: re.PatternError: missing ), unterminated subpattern at position 0
+- Pattern ')' raises: re.PatternError: unbalanced parenthesis at position 0
+- Pattern '?' raises: re.PatternError: nothing to repeat at position 0
+- Pattern '*' raises: re.PatternError: nothing to repeat at position 0
+- Pattern '+' raises: re.PatternError: nothing to repeat at position 0
+- Pattern '\' raises: re.PatternError: bad escape (end of pattern) at position 0
+
+### Hypothesis Test Results
+
+The Hypothesis property-based test found 7 distinct failures when testing 500 random strings:
+1. '\C' - bad escape \C at position 0
+2. '\1' - invalid group reference 1 at position 1
+3. '\p' - bad escape \p at position 0
+4. '[' - unterminated character set at position 0
+5. '(' - missing ), unterminated subpattern at position 0
+6. ')' - unbalanced parenthesis at position 0
+7. '?' - nothing to repeat at position 0
+
+All of these failures resulted in `re.PatternError` being raised by `is_re_compilable`, which should have been caught and returned as `False`.
+
+### Source Code Analysis
+
+The current implementation in `/home/npc/miniconda/lib/python3.13/site-packages/pandas/core/dtypes/inference.py` (lines 187-192) is:
+
+```python
+def is_re_compilable(obj) -> bool:
+    try:
+        re.compile(obj)
+    except TypeError:
+        return False
+    else:
+        return True
+```
+
+The function only catches `TypeError` (for non-string objects like integers) but does not catch `re.PatternError` which is raised by `re.compile()` for invalid regex patterns.
+
+### Impact
+
+The function is used in production code, specifically in `pandas/core/array_algos/replace.py` where line 38 shows:
+```python
+regex = regex and is_re_compilable(to_replace)
+```
+
+This means any code path using string replacement with regex may crash when given invalid regex patterns, when the expectation is that the function would gracefully return `False` and disable regex mode.
+
+### Conclusion
+
+The bug report is accurate and reproducible. The function fails to handle `re.PatternError` exceptions, causing crashes instead of returning `False` for invalid regex patterns.

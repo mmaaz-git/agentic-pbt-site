@@ -1,0 +1,32 @@
+REPRODUCTION OF BUG: scipy.cluster.hierarchy.fcluster
+
+CONFIRMED: The bug is reproducible as described in the report.
+
+1. Basic Reproduction:
+   - When all observations are identical (e.g., [[0,0,0], [0,0,0], [0,0,0]]), requesting 2 clusters with criterion='maxclust' returns only 1 cluster instead of 2.
+   - The actual output matches the bug report exactly: [1 1 1] (all assigned to cluster 1).
+
+2. Pattern Confirmation:
+   - With 4 identical observations, the pattern is consistent:
+     * k=1: Returns 1 cluster (correct)
+     * k=2: Returns 1 cluster (incorrect - should be 2)
+     * k=3: Returns 1 cluster (incorrect - should be 3)
+     * k=4: Returns 4 clusters (correct)
+   - This shows the function only works correctly for k=1 and k=n, failing for intermediate values.
+
+3. Linkage Method Testing:
+   - Tested all 7 linkage methods: single, complete, average, weighted, centroid, median, ward
+   - ALL methods exhibit the same bug with identical observations
+   - All merge distances in the linkage matrix are exactly 0.0 as expected
+
+4. Perturbation Testing:
+   - When tiny perturbations (1e-15) are added to the identical observations, the function works correctly
+   - With perturbations, all requested cluster counts (k=1,2,3,4) return the correct number of clusters
+   - This confirms the issue is specific to the edge case of exactly zero distances
+
+5. Property-Based Testing:
+   - The hypothesis test successfully finds failures when arrays contain all identical values
+   - The test correctly identifies that the failure occurs when np.all(obs == obs[0]) is True
+
+EFFECT:
+The bug causes fcluster with 'maxclust' criterion to silently return incorrect cluster counts when all observations are identical. This is a real-world scenario that can occur with duplicated data, constant features, or after certain data transformations. Users expecting k clusters will get 1 cluster for any 1 < k < n, leading to incorrect downstream analysis without any warning or error.

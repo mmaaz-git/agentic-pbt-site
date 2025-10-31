@@ -1,0 +1,67 @@
+DOCUMENTATION ANALYSIS
+======================
+
+1. pandas.factorize() Documentation Review
+-------------------------------------------
+
+The pandas documentation for factorize() specifies:
+- Returns two values: codes (integer indexers) and uniques (unique values)
+- With use_na_sentinel=True (default): NA values encoded as -1, NOT included in uniques
+- With use_na_sentinel=False: NA values get unique integer code, ARE included in uniques
+- Documentation states: "uniques.take(codes) will have the same values as values"
+
+Key finding: The documentation mentions "uniques.take(codes)" as the reconstruction method, NOT "uniques[codes]".
+
+2. Reconstruction Patterns
+--------------------------
+
+The bug report assumes "uniques[codes]" is the standard pattern, but documentation indicates:
+- Official pattern: uniques.take(codes)
+- Alternative with NA handling: uniques.take(codes, allow_fill=True, fill_value=pd.NA)
+
+Testing reveals:
+a) uniques[codes] fails with all-NA arrays (IndexError on empty array with -1 index)
+b) uniques.take(codes) also fails with all-NA arrays (cannot take from empty array)
+c) uniques.take(codes, allow_fill=True, fill_value=pd.NA) WORKS correctly
+
+3. Documentation Gaps
+---------------------
+
+The documentation does NOT explicitly address:
+- The edge case of arrays containing only NA values
+- That regular indexing uniques[codes] will fail when codes contains -1 and uniques is empty
+- That .take() requires special parameters to handle NA sentinels properly
+
+For mixed NA/non-NA arrays:
+- uniques[codes] gives incorrect results (replaces NA with last unique value)
+- uniques.take(codes, allow_fill=True, fill_value=pd.NA) gives correct results
+
+4. IntegerArray and Masked Array Documentation
+-----------------------------------------------
+
+The specific documentation for IntegerArray, BooleanArray, etc. does NOT:
+- Document their factorize() method behavior
+- Specify expected behavior with all-NA arrays
+- Clarify the reconstruction pattern
+
+The arrays are noted as "currently experimental" with APIs that may change.
+
+5. Key Documentation Insights
+-----------------------------
+
+a) The documentation does mention a reconstruction method, but it's uniques.take(codes), not uniques[codes]
+b) Even the documented method fails for all-NA arrays unless special parameters are used
+c) The simple indexing pattern uniques[codes] that the bug report assumes is standard is actually:
+   - Not the documented approach
+   - Fails for all-NA arrays
+   - Gives wrong results for mixed NA/non-NA arrays
+
+6. Conclusion
+-------------
+
+The documentation is incomplete regarding:
+- The all-NA edge case behavior
+- Clear guidance on the correct reconstruction pattern with NA handling
+- The need for allow_fill=True and fill_value parameters when using .take()
+
+However, the bug report's assumption that uniques[codes] is the "standard usage pattern" is not supported by documentation. The documented pattern is uniques.take(codes), though even this needs clarification for NA handling.

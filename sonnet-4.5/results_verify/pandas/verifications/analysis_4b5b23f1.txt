@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `get_level_lengths` is an internal pandas function that is only called by other pandas code, specifically by the Excel and HTML formatters. In actual usage, it's always called with the output of `MultiIndex._format_multi()`, which ALWAYS produces levels of uniform length. The function was never designed or intended to handle variable-length levels because its callers never provide such input. The docstring's vague wording "list of lists" doesn't constitute a specification that variable-length lists should be supported - it's just describing the data structure type. Since this is an internal function not part of the public API, and the bug can never occur through normal pandas usage, this could be considered an invalid bug report testing conditions that are outside the function's design scope.
+
+**Why it might not be INVALID:**
+The function signature accepts `levels: Any` and the docstring explicitly says "list of lists" without any documented constraint that the lists must be of equal length. The implementation clearly has a bug where it assumes all levels have the same length as the first level, causing an IndexError. Even internal functions should handle their documented inputs correctly or explicitly validate their assumptions. The bug is real and reproducible - the code crashes with a simple, valid-looking input that matches the parameter description.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function that in practice is never called with variable-length levels. The entire pandas codebase only calls this function with the output of `_format_multi()`, which guarantees uniform-length levels. The effort to fix this edge case that never occurs in real usage might not be justified. The function has been working correctly for its intended use cases for years. Adding complexity to handle a theoretical case that never happens in practice could introduce new bugs or performance issues without providing any real benefit to users.
+
+**Why it might not be WONTFIX:**
+The fix is trivial (changing one line to use `max(len(level) for level in levels)` instead of `len(levels[0])`). The current implementation contains an obvious bug that causes crashes. Even if it's rarely encountered, fixing clear bugs improves code quality and robustness. The issue could potentially affect future code that might use this function differently, or third-party extensions that might call internal pandas functions.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function works correctly for its intended use case (uniform-length levels from `_format_multi()`), but the documentation doesn't specify this requirement. The docstring could be updated to clarify that all levels must have the same length, making the current implementation correct according to the updated specification. This would align the documentation with the actual design intent and implementation assumptions. The vague docstring "list of lists" could be clarified to "list of equal-length lists" to prevent confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current documentation, while vague, doesn't explicitly state that levels must have equal length. The natural interpretation of "list of lists" would allow variable lengths. Changing the documentation to match a buggy implementation is backwards - the implementation should match the documentation, not vice versa. The parameter type `Any` suggests flexibility that would be contradicted by adding a same-length requirement to the docs.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting variable-length levels could be seen as a new feature rather than a bug fix, since the function was never designed for this use case. The current implementation works for all existing use cases within pandas. Adding support for variable-length levels would be extending the function beyond its original design scope. This would be adding new functionality that pandas itself doesn't need, purely for theoretical completeness or potential third-party use.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already claims to accept "list of lists" without length constraints, so making it actually work with such inputs is fixing existing functionality, not adding new features. The bug report demonstrates a crash with valid Python lists that match the documented parameter type. This isn't asking for new behavior but rather for the existing function to not crash on inputs that match its documented interface.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an IndexError on valid input that matches its documented parameters. The docstring says "list of lists" without any length constraint, yet the implementation incorrectly assumes uniform length. The bug is easily reproducible and has a clear root cause: the control array is sized based on the first level's length but accessed using indices from subsequent levels. The fix is straightforward and would make the function more robust. Even though it's an internal function, it's still exported from the pandas.io.formats.excel module and could be used by third-party code.
+
+**Why it might not be BUG:**
+This is an internal utility function that was clearly designed for a specific use case: processing output from `_format_multi()` which always produces uniform-length levels. The function works correctly for 100% of its actual usage within pandas. The "bug" only occurs when the function is called directly with artificial test data that would never occur in real pandas usage. Internal functions often have undocumented constraints and assumptions that are valid within their intended context. The fact that it's not in the public API suggests users shouldn't be calling it directly.
+
+**Overall consideration**
+
+After thorough investigation, this bug report presents an interesting edge case for an internal pandas function. The function `get_level_lengths` is not part of the public pandas API and exists solely as a utility function for the Excel and HTML formatters. In all actual usage within pandas, it receives uniform-length levels from `MultiIndex._format_multi()`, which explains why this bug has never surfaced in production use.
+
+The key question is whether internal functions should be held to the same standards as public APIs. The function's docstring doesn't explicitly require uniform-length levels, and the parameter type is `Any`, suggesting flexibility. However, the implementation clearly assumes uniform length, and this assumption is valid for all actual use cases within pandas. The function was evidently designed with this specific constraint in mind, even if not explicitly documented.
+
+Given that this is an internal function that works correctly for all its intended use cases, and the "bug" only manifests with artificial inputs that never occur in practice, this appears to be testing beyond the function's design scope. While the implementation could be more robust, requiring internal utility functions to handle all theoretically possible inputs when they're designed for specific internal use cases would be an unreasonable standard. The appropriate resolution would be to update the documentation to reflect the actual design constraint that all levels must have the same length, making it clear this is an internal function with specific requirements.

@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying what should happen when chunk_size > size. One could argue that since this is an internal function without public documentation, there's no specification that says chunks must sum to the size. The function might be designed for a specific use case where oversized chunks are acceptable or expected.
+
+**Why it might not be INVALID:**
+The function name "build_grid_chunks" strongly implies it should partition data into a grid of chunks. The fundamental concept of chunking in any data structure is to divide data into pieces that together equal the whole. Having chunks sum to more than the total size violates this basic principle. Additionally, the function is used in grid_rechunk where it's passed sum(var_chunks) as the size, clearly expecting it to properly partition that size.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function that might never be called with chunk_size > size in practice. The test suite only tests cases where size >= chunk_size, suggesting this edge case might not occur in real usage. If the calling code always ensures chunk_size <= size, fixing this might be unnecessary complexity for a situation that never happens.
+
+**Why it might not be WONTFIX:**
+The bug causes a clear mathematical incorrectness where chunks sum to more than the data size. This violates fundamental invariants about data chunking and could lead to data corruption or incorrect computations if ever triggered. Even if rare, such fundamental incorrectness should be fixed to prevent potential issues.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function has no documentation at all. One could add documentation stating that the function requires chunk_size <= size as a precondition, and that behavior is undefined otherwise. This would make the current behavior "correct" by specification.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't about unclear documentation - it's about mathematically incorrect behavior. The function returns chunks that sum to more than the input size, which is fundamentally wrong for any chunking operation. Adding documentation to say "this function returns incorrect results for certain inputs" doesn't fix the underlying problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that handling chunk_size > size is a new feature that the function doesn't currently support. The feature request would be to add proper handling for this edge case.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't about adding new functionality - it's about fixing incorrect behavior in existing functionality. The function already attempts to handle all size/chunk_size combinations but produces mathematically incorrect results for some. This is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the fundamental invariant of chunking: chunks should partition the data, meaning they sum to exactly the data size. When chunk_size > size, the function returns chunks summing to more than size, which is mathematically incorrect. This could lead to array out-of-bounds errors, data corruption, or incorrect computations. The proposed fix (using min(size, chunk_size - (region_start % chunk_size))) is simple, correct, and maintains backward compatibility for all existing valid uses.
+
+**Why it might not be BUG:**
+The function is internal and undocumented. There's no explicit specification that chunks must sum to size. The existing test suite doesn't test this case, suggesting it might not be an expected use case. Without clear documentation of intended behavior, it's difficult to definitively say this is a bug versus undefined behavior.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a **valid BUG** that should be fixed. Here's why:
+
+**First**, the mathematical incorrectness is undeniable. When a function named "build_grid_chunks" returns chunks that sum to more than the input size, it violates the fundamental concept of what chunking means in computer science. Chunks are meant to partition data, not exceed it. This isn't a matter of interpretation - it's a mathematical fact that partitioning 5 elements cannot result in 15 elements.
+
+**Second**, the context of usage strongly supports that this is a bug. The function is called in grid_rechunk with sum(var_chunks) as the size parameter, clearly expecting it to partition that exact size. If the chunks sum to more than the input, this would cause the aligned chunks to reference data beyond the array bounds, potentially leading to data corruption or crashes.
+
+**Third**, the fix is trivial and safe. The proposed change (adding min(size, ...)) ensures the first chunk never exceeds the total size while preserving correct behavior for all existing valid cases. This isn't a complex architectural change - it's a one-line fix for an obvious edge case oversight. The fact that the fix is so simple and maintains backward compatibility makes it clear this was an unintended behavior, not a design choice.
+
+While the function lacks documentation and the edge case isn't tested, these are indicators of oversight rather than intentional design. The absence of tests for chunk_size > size doesn't mean the incorrect behavior is acceptable - it means the edge case was overlooked during development.

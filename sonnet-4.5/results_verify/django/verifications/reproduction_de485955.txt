@@ -1,0 +1,38 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+1. BUG CONFIRMATION:
+   The bug exists exactly as described. When ServerHandler.__init__ receives a negative integer
+   string for CONTENT_LENGTH (e.g., "-1"), it successfully converts it to an integer but does
+   not validate that the value is non-negative, resulting in a LimitedStream with a negative limit.
+
+2. TEST RESULTS:
+   - Test with CONTENT_LENGTH="-1": Creates LimitedStream with limit=-1 (BUG CONFIRMED)
+   - Test with CONTENT_LENGTH="-100": Creates LimitedStream with limit=-100 (BUG CONFIRMED)
+   - Test with invalid strings ("abc", "", "1.5"): Correctly defaults to 0 (WORKS AS INTENDED)
+   - Test with None/missing: Correctly defaults to 0 (WORKS AS INTENDED)
+   - Test with positive values: Works correctly
+
+3. CODE BEHAVIOR:
+   The current code at django/core/servers/basehttp.py:124-127:
+   ```python
+   try:
+       content_length = int(environ.get("CONTENT_LENGTH"))
+   except (ValueError, TypeError):
+       content_length = 0
+   ```
+
+   This code catches conversion errors (ValueError for non-numeric strings, TypeError for None)
+   and defaults to 0, but it does not handle the case where int() successfully converts a
+   negative number string.
+
+4. IMPACT:
+   The bug creates a LimitedStream with a semantically invalid negative limit. According to
+   HTTP specifications, Content-Length must be non-negative. This violates the HTTP protocol
+   requirements and the clear intent of the error handling code (which tries to normalize
+   invalid values to 0).
+
+5. REPRODUCTION CONFIRMED:
+   Both the hypothesis-based property test and the manual reproduction code provided in the
+   bug report work correctly and demonstrate the bug.

@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Bug Reproduced: YES
+
+I successfully reproduced the bug as described in the report. The Django `Collate` function incorrectly accepts collation names with trailing newlines.
+
+### Steps Taken:
+
+1. **Ran the property-based test**:
+   - The test with input '0\n' fails as expected
+   - The Collate function accepts '0\n' when it should reject it
+   - Output: "ERROR: Collate accepted '0\n' when it should have rejected it"
+
+2. **Ran the specific reproduction example**:
+   - Input: "utf8_general_ci\n"
+   - Result: The Collate function accepts this input without raising ValueError
+   - The stored collation includes the newline: 'utf8_general_ci\n'
+
+3. **Verified the regex behavior**:
+   - Confirmed that Python's `$` anchor matches before a trailing newline
+   - Pattern `^[\w-]+$` matches "utf8_general_ci\n" (incorrectly)
+   - Pattern `^[\w-]+\Z` does NOT match "utf8_general_ci\n" (correct behavior)
+
+### Root Cause Confirmed:
+
+The issue is indeed in the regex pattern at line 109 of `/home/npc/miniconda/lib/python3.13/site-packages/django/db/models/functions/comparison.py`:
+
+```python
+collation_re = _lazy_re_compile(r"^[\w-]+$")
+```
+
+The `$` anchor in Python regex matches either at the end of the string OR before a newline at the end of the string. This allows strings like "utf8_general_ci\n" to pass validation when they shouldn't.
+
+### Impact:
+
+When a collation name with a trailing newline is accepted, it gets stored as-is and later inserted into SQL queries. This could potentially lead to:
+1. Malformed SQL queries
+2. Unexpected behavior when the SQL is executed
+3. Potential security implications if the newline affects SQL query structure

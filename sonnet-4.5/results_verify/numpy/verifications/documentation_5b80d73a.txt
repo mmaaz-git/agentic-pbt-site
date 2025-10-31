@@ -1,0 +1,31 @@
+## Documentation Analysis for combine_hash_arrays
+
+### Function Documentation
+The function has minimal documentation:
+- Parameters: `arrays` (Iterator[np.ndarray]) and `num_items` (int)
+- Returns: np.ndarray[uint64]
+- Comment: "Should be the same as CPython's tupleobject.c"
+
+### Key Findings
+
+1. **No Explicit Contract Documentation**: The documentation does not explicitly state what should happen when `num_items` doesn't match the actual number of arrays in the iterator. There's no documentation about:
+   - Whether `num_items` must exactly match the number of arrays
+   - What happens if they don't match
+   - The purpose of the `num_items` parameter
+
+2. **Internal Function**: This is an internal utility function in `pandas.core.util.hashing` module, not part of the public API. It's used internally by:
+   - `hash_pandas_object` for combining hash arrays from Series with index (line 148)
+   - `hash_pandas_object` for DataFrames (line 174)
+   - `hash_tuples` for MultiIndex (line 228)
+
+3. **CPython Reference**: The comment references CPython's tupleobject.c, suggesting the function should behave similarly to Python's tuple hashing. However, CPython's implementation doesn't have a separate `num_items` parameter - it determines the count from the tuple itself.
+
+4. **Assertion as Documentation**: The assertion at line 78 (`assert last_i + 1 == num_items, "Fed in wrong num_items"`) serves as implicit documentation that `num_items` MUST match the actual count. The error message "Fed in wrong num_items" clearly indicates this is a programming error check.
+
+5. **Usage Pattern**: In all observed internal uses, the callers know the exact number of items they're passing:
+   - Line 148: `combine_hash_arrays(arrays, 2)` - combining value hash with index hash
+   - Line 174: `combine_hash_arrays(hashes, num_items)` - where num_items is calculated from len(obj.columns) + 1 if index
+   - Line 228: `combine_hash_arrays(hashes, len(cat_vals))` - using the actual length
+
+### Conclusion
+While not explicitly documented, the assertion and usage patterns make it clear that `num_items` is intended to exactly match the number of arrays in the iterator. The assertion is a consistency check to catch programming errors where these don't match. The bug is that this check is bypassed for empty iterators, violating the implicit contract that the function should validate this consistency in all cases.

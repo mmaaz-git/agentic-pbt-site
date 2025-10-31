@@ -1,0 +1,37 @@
+## Documentation Analysis for CORSMiddleware
+
+### Starlette Documentation
+The official Starlette documentation for CORSMiddleware describes the `allow_headers` parameter as:
+- "A list of HTTP request headers that should be supported for cross-origin requests"
+- Defaults to an empty list `[]`
+- Can be set to `['*']` to allow all headers
+- By default, certain headers are always allowed: "Accept", "Accept-Language", "Content-Language", and "Content-Type" (the SAFELISTED_HEADERS)
+
+The documentation does NOT specify:
+- How headers with different cases should be handled
+- Whether duplicate headers (same header in different cases) should be treated as one or multiple headers
+- Any specific behavior regarding header case normalization
+
+### RFC 2616 (HTTP/1.1 Specification)
+RFC 2616 Section 4.2 explicitly states: "Field names are case-insensitive."
+
+This is a fundamental HTTP specification that establishes headers like "Content-Type", "content-type", and "CONTENT-TYPE" must be treated as identical.
+
+### Code Implementation
+Looking at the actual code in cors.py:
+- Line 58: Headers are combined with SAFELISTED_HEADERS using set union, then sorted
+- Line 67: The headers are then lowercased when stored in self.allow_headers
+- Line 60: The headers are joined for the Access-Control-Allow-Headers response header
+
+The code performs operations in this order:
+1. Union with SAFELISTED_HEADERS (line 58) - operates on original case
+2. Sort the result (line 58) - still in original/mixed case
+3. Lowercase when storing (line 67)
+
+### Gap in Documentation
+The documentation does not explicitly state that:
+1. Headers will be normalized to lowercase internally
+2. Headers differing only in case will or will not create duplicates
+3. The expected behavior when providing headers like ['X-Custom', 'x-custom']
+
+Since HTTP headers are case-insensitive per RFC 2616, a reasonable expectation would be that the middleware treats headers differing only in case as the same header. However, this specific behavior is not documented in Starlette.

@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The class is clearly an internal utility in the deprecation_helpers module and might not be intended for use as a hashable key. The documentation doesn't explicitly promise hash stability, and the class is designed to change its value based on global options, which is its intended purpose for handling deprecation cycles. Since it's an internal class, users shouldn't be using it directly in their code.
+
+**Why it might not be INVALID:**
+The class implements __hash__ and __eq__ methods, making it explicitly hashable. Python's data model has clear requirements for hashable objects - the hash must remain constant during the object's lifetime. There's no indication in the code or documentation that this violation is intentional. The class is used as parameter defaults that could theoretically end up in user code or internal caching mechanisms.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility class that's not part of the public API, used specifically for managing deprecation of keyword argument defaults. The issue only manifests when global OPTIONS change, which is a rare occurrence in typical usage. The class serves its intended purpose of providing different default values based on options, and fixing this might complicate the implementation for a non-critical edge case that likely doesn't affect real users.
+
+**Why it might not be WONTFIX:**
+The bug causes actual failures in fundamental Python operations (dict/set lookups). Even if it's an internal class, xarray's own code might cache these objects or use them in ways that assume hash stability. The fix is simple and doesn't compromise the class's functionality - just hash the immutable attributes instead of the computed value. This is not a trivial issue but a violation of Python's core contracts.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The code works as designed for its intended purpose - providing different default values based on global settings. The real issue might be that the documentation doesn't warn about the hash instability or specify that these objects shouldn't be used as dict keys. Adding documentation about this limitation would clarify the intended usage without changing the implementation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The bug is in the code implementation, not the documentation. Python's hash contract is well-established and doesn't need to be re-documented for every class. The fact that __hash__ is implemented incorrectly is a code bug, not a documentation issue. Documenting broken behavior doesn't make it correct.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting stable hashes for CombineKwargDefault objects could be seen as a new feature since the class currently works for its primary purpose of providing deprecation defaults. The request to make these objects safely usable as dict keys is an enhancement beyond the original design scope.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but fixing broken existing functionality. The class already implements __hash__, indicating it's meant to be hashable. Making the hash work correctly according to Python's requirements is a bug fix, not a feature addition. The proposed change doesn't add capabilities but corrects a violation of fundamental Python contracts.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation clearly violates Python's hash contract, which states that an object's hash value must remain constant during its lifetime. The bug causes real, reproducible failures in dict and set operations. The class implements __hash__ but does so incorrectly, making it unsuitable for use in any hash-based collection. This is a fundamental correctness issue that could cause silent failures in code that uses these objects, even internally within xarray.
+
+**Why it might not be BUG:**
+The class is an internal utility not documented as part of the public API. Its primary purpose is to handle deprecation cycles, not to serve as a hashable key. The current implementation might be considered working as intended for its specific use case, with the hash reflecting the current effective value. The issue only occurs during the relatively rare event of changing global options.
+
+**Overall consideration**
+This appears to be a legitimate bug in the implementation of the CombineKwargDefault class. While the class is internal and primarily used for deprecation handling, it explicitly implements __hash__ and __eq__ methods, making it a hashable type. Python's data model has clear and non-negotiable requirements for hashable objects - the hash must remain stable during the object's lifetime. The current implementation violates this contract by making the hash dependent on global state that can change.
+
+The bug is not theoretical - it causes actual failures in fundamental Python operations. When a CombineKwargDefault object is used as a dictionary key or added to a set, it becomes unfindable after the global OPTIONS change. This could lead to subtle bugs in any code (including xarray's internal code) that might cache these objects or use them in collections. The fact that the bug might be rare in practice doesn't diminish its severity - it's a correctness issue that violates core Python contracts.
+
+The proposed fix is simple and doesn't compromise the class's intended functionality. By hashing the immutable attributes (name, old, new) instead of the computed _value property, the hash would remain stable while the class continues to provide different effective values based on global options. This would make the implementation correct according to Python's requirements without affecting its deprecation handling purpose. Given that the fix is straightforward and the current implementation is objectively incorrect according to Python's documented requirements, this should be classified as a BUG rather than dismissed as intended behavior or a limitation that just needs documentation.

@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+### Summary
+The bug has been successfully reproduced. The `finalize_options` method in `Cython.Distutils.build_ext` does not parse the `cython_directives` option when it's provided as a string from the command line, causing a crash in `build_extension`.
+
+### Reproduction Steps
+
+1. **Hypothesis Test**: The property-based test correctly identified that ANY string value for `cython_directives` fails the assertion that it should be converted to a dict after `finalize_options()`.
+   - Failure: AssertionError: cython_directives should be dict after finalize, got <class 'str'>
+   - Falsifying example: directive_value='0' (or any other string)
+
+2. **Manual Reproduction**:
+   - Setting `cmd.cython_directives = "boundscheck=True"`
+   - After `finalize_options()`, the value remains a string: "boundscheck=True"
+   - When attempting `dict(cmd.cython_directives)` (as done in line 107 of build_extension), it raises:
+     `ValueError: dictionary update sequence element #0 has length 1; 2 is required`
+
+3. **Build Extension Test**: Confirmed that calling `build_extension()` with a string value for `cython_directives` crashes with the same ValueError at line 107.
+
+### Code Analysis
+
+In `build_ext.py`:
+- Line 44-45: Defines `('cython-directives=', None, 'compiler directive overrides')` as a user option, indicating it can be set from command line as a string
+- Line 63: `initialize_options()` sets `self.cython_directives = None`
+- Lines 77-78: `finalize_options()` only converts None to {}, but does NOT handle string values:
+  ```python
+  if self.cython_directives is None:
+      self.cython_directives = {}
+  ```
+- Line 107: `build_extension()` assumes `cython_directives` is dict-like:
+  ```python
+  directives = dict(self.cython_directives)
+  ```
+
+### Impact
+Any user attempting to use the `--cython-directives` command-line option with setup.py will encounter a crash when building extensions. The option is defined but not functional.
+
+### Verification
+The bug is 100% reproducible and affects the core functionality of passing Cython compiler directives via command line.

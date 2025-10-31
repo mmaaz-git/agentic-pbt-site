@@ -1,0 +1,37 @@
+## Bug Reproduction Results
+
+### Hypothesis Test Results
+The hypothesis test successfully reproduced the bug. When testing `get_typed_annotation` with Python keywords as string annotations:
+
+- **Keywords that cause SyntaxError**: 'if', 'class', 'def', 'while', 'for', 'return', 'lambda', 'raise', 'as', 'with', 'import', 'await', 'except', 'and', 'or', 'not', 'in', 'is', 'elif', 'else', 'finally', 'from', 'global', 'nonlocal', 'pass', 'try', 'yield', 'assert', 'break', 'continue', 'del'
+
+- **Keywords that work**: 'True', 'False', 'None' (these are actually valid expressions, not just keywords)
+
+The error is consistent: `SyntaxError: Forward reference must be an expression -- got '<keyword>'`
+
+### FastAPI Endpoint Test Results
+1. **FastAPI endpoint with keyword annotation crashes during registration**:
+   - `@app.get("/test")` with `def test_endpoint(x: "if"):` raises SyntaxError
+   - The error occurs during route registration, not at runtime
+   - Full traceback shows the error originates from Python's typing.ForwardRef.__init__
+
+2. **Normal Python function works fine**:
+   - `def normal_func(x: "if"):` is syntactically valid Python
+   - The annotations are stored as strings: `{'x': 'if'}`
+   - Python doesn't evaluate string annotations unless explicitly requested
+
+3. **Compile mode tests confirm keywords are not expressions**:
+   - `compile('if', '<string>', 'eval')` raises SyntaxError
+   - Keywords cannot be compiled as expressions
+
+4. **Valid expression annotations work correctly**:
+   - `def test_endpoint2(x: "str"):` works fine in FastAPI
+   - The string 'str' is a valid expression that evaluates to the str type
+
+### Key Findings
+1. The bug is real and reproducible
+2. The error comes from Python's typing.ForwardRef, not FastAPI code
+3. Python allows keyword string annotations syntactically, but they're not meant to be evaluated
+4. FastAPI unconditionally tries to create ForwardRef objects from all string annotations
+5. The crash happens during application startup, not at runtime
+6. The error message comes from Python's standard library, not FastAPI

@@ -1,0 +1,55 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. TEST CASE VERIFICATION:
+
+The bug report's test case was successfully reproduced:
+- Divisor: [0.3125, 74.0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0]
+- Quotient: [1.5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+
+2. CONVOLUTION RESULT (FORWARD OPERATION):
+- Convolved signal produces a 30-element array
+- Key value: convolved[15] = 1.5
+- The convolution operation works correctly
+
+3. DECONVOLUTION RESULT (INVERSE OPERATION):
+scipy.signal.deconvolve produces:
+- Quotient with extreme values up to 4.18e+17 (instead of expected [1.5, 0, 0, ...])
+- Remainder with extreme values up to 3.10e+19 (instead of expected near-zero)
+
+4. RECONSTRUCTION TEST:
+When computing: reconstructed = convolve(divisor, recovered_quotient) + remainder
+- reconstructed[15] = 0.0 (INCORRECT)
+- Original convolved[15] = 1.5 (EXPECTED)
+- Maximum difference = 1.5
+
+5. PROPERTY VIOLATION:
+The documented property "signal = convolve(divisor, quotient) + remainder" FAILS:
+- np.allclose(convolved, reconstructed) returns False
+- Even with loose tolerances (rtol=1e-3, atol=1e-7) it still fails
+
+6. HYPOTHESIS TEST:
+The hypothesis test with the specific example consistently fails, confirming the bug is reproducible.
+
+7. ROOT CAUSE IDENTIFIED:
+- scipy.signal.deconvolve uses lfilter() internally
+- numpy.polydiv produces the CORRECT result: quotient=[1.5, 0, ...], remainder=[0]
+- When using numpy.polydiv, the reconstruction works perfectly
+- The lfilter approach suffers from numerical instability with this specific divisor structure
+
+8. NUMERICAL ANALYSIS:
+- The divisor has a small leading coefficient (0.3125) and large second coefficient (74.0)
+- This creates a ratio of 236.8, leading to numerical amplification
+- The divisor polynomial has an extremely high condition number (~7.85e+110)
+- Well-conditioned divisors work correctly with scipy.signal.deconvolve
+
+9. COMPARISON TEST:
+- With divisor [1.0, 2.0, 0, ..., 1.0] (better conditioned), deconvolve works correctly
+- The issue is specifically triggered by poorly conditioned divisors
+
+TECHNICAL DETAILS CONFIRMED:
+✓ The bug exists exactly as reported
+✓ The property violation is real and measurable
+✓ The root cause is the lfilter implementation's numerical instability
+✓ numpy.polydiv handles the same case correctly
+✓ The bug only affects poorly conditioned divisors

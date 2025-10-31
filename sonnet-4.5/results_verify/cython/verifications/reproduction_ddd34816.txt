@@ -1,0 +1,36 @@
+# Bug Reproduction Analysis
+
+## Test Execution
+
+I successfully reproduced the reported bug using both the direct reproduction code and the Hypothesis property-based test.
+
+### Direct Reproduction
+The direct reproduction test confirmed the issue:
+- Generated a first ULID: `01K61597J74D6XWJQYE7DQGETB`
+- Simulated clock going backward by 2 milliseconds
+- Generated a second ULID: `01K61597J5E56BB0CCGVTBERDT`
+- Comparison showed: `ulid1 >= ulid2` (True)
+- **Result: Monotonicity violation confirmed**
+
+### Hypothesis Testing
+The Hypothesis test ran multiple iterations and consistently failed with various backward time values (1ms to 1000ms). Every test case where the clock moved backward resulted in a monotonicity violation.
+
+## Technical Analysis
+
+The bug occurs because of how the `monotonic_ulid()` function handles different timestamp scenarios:
+
+1. When `now_ms == last_ms`: The function correctly increments the randomness portion while keeping the same timestamp
+2. When `now_ms != last_ms`: The function generates a completely fresh ULID with the current timestamp
+
+The problem is in case #2: this includes both forward clock movement (`now_ms > last_ms`) and backward clock movement (`now_ms < last_ms`). When the clock moves backward, the function generates a new ULID with an earlier timestamp, which violates the strict monotonicity guarantee.
+
+## Impact
+
+The violation is significant because:
+- ULIDs are lexicographically sorted primarily by their timestamp component (first 48 bits)
+- When the timestamp goes backward, the entire ULID becomes smaller than the previous one
+- This breaks the core guarantee stated in the function's docstring
+
+## Conclusion
+
+The bug is confirmed and reproducible. The function violates its documented guarantee of returning ULIDs that are "strictly larger" than all previously returned ULIDs when the system clock moves backward.

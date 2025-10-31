@@ -1,0 +1,50 @@
+Bug Report Analysis
+===================
+
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The documentation could be interpreted as only explicitly guaranteeing ValueError for negative values (alpha < 0), not for zero values. The actual text says "raises ValueError if any alpha value is less than zero" which technically doesn't include zero. If the behavior for zero is undefined in the documentation, then the function's current behavior might be considered acceptable, even if mathematically questionable.
+
+**Why it might not be INVALID:**
+The documentation clearly states that alpha should be "positive floats", and zero is not positive. The mathematical definition of the Dirichlet distribution requires strictly positive alpha values (α_i > 0). The function produces output that violates the fundamental mathematical property of the distribution (sum = 1), which makes this more than just undefined behavior - it's producing mathematically invalid results.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+This could be considered an edge case that rarely occurs in practice, as users typically don't intentionally pass all-zero alpha values to a Dirichlet distribution. The current behavior doesn't crash the program, and users who understand the mathematics would know not to use zero values. Adding validation might slow down the function for all users to protect against a rare misuse.
+
+**Why it might not be WONTFIX:**
+The bug produces silently incorrect results that violate fundamental mathematical constraints, which could lead to serious errors in statistical analyses. The related beta function already validates against zero parameters, showing that NumPy considers this validation important. The performance impact of adding a simple check for zero values would be negligible compared to the computation of the distribution itself.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The documentation says "positive floats" but then only explicitly mentions raising ValueError for "alpha < 0", creating ambiguity about zero values. The documentation could be updated to explicitly state that zero values are not allowed, or to document the current behavior when zeros are provided. This would at least warn users about the issue.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The mathematical definition is clear that zero is not allowed, and the function produces objectively incorrect output (sum ≠ 1) that violates the definition of the Dirichlet distribution. Simply documenting broken behavior doesn't fix the underlying problem of producing mathematically invalid results. The code should match the mathematical definition, not have the documentation excuse incorrect behavior.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Adding validation for zero alpha values could be seen as a new feature - enhanced input validation that wasn't previously implemented. The current code might have been designed to be permissive, and adding stricter validation would be extending its capabilities. This would be requesting the function to be more robust against edge cases.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but rather for the existing function to correctly implement the mathematical definition of the Dirichlet distribution. The function already validates for negative values, so validating for zero isn't a new feature but fixing an incomplete validation. The beta distribution already does this correctly, so this is about consistency, not new features.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The function accepts mathematically invalid input (alpha = 0) and produces mathematically incorrect output (sum = 0 instead of 1), violating the fundamental constraint of the Dirichlet distribution. The documentation describes alpha as "positive floats," which excludes zero. The inconsistency with beta distribution (which correctly rejects zero) suggests this is an oversight. The function silently produces wrong results that could corrupt statistical analyses.
+
+**Why it might not be BUG:**
+The documentation's ValueError description only explicitly mentions "alpha < 0", not "alpha <= 0", which could be interpreted as intentionally allowing zero. If this was a deliberate implementation choice for some reason, then it wouldn't be a bug but rather a design decision, albeit a mathematically questionable one.
+
+## Overall Consideration
+
+This appears to be a clear bug in NumPy's implementation of the Dirichlet distribution. The function accepts input values (zero alphas) that are mathematically invalid for the Dirichlet distribution and produces output that violates the fundamental mathematical constraint that samples must sum to 1. When all alphas are zero, the function returns all zeros (sum = 0), which is not a valid sample from any Dirichlet distribution.
+
+The evidence strongly supports this being a bug: First, the documentation describes alpha as "positive floats," and zero is not positive. Second, the mathematical definition universally requires α_i > 0. Third, NumPy's own beta distribution (the bivariate case of Dirichlet) correctly rejects zero parameters with "a <= 0", showing that NumPy intends to validate against non-positive parameters. Fourth, the produced output violates the simplex constraint, making it objectively wrong rather than just unexpected.
+
+While one could argue this is a documentation issue because the ValueError description only mentions "< 0" not "<= 0", the fact that the function produces mathematically invalid output (violating sum = 1) elevates this beyond a documentation problem. This is a correctness issue where the implementation fails to properly validate inputs according to the mathematical definition, leading to silently incorrect results that could cause serious errors in downstream calculations. The fix is straightforward - change the validation from "alpha < 0" to "alpha <= 0" to match the beta distribution's behavior and the mathematical requirements.

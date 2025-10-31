@@ -1,0 +1,37 @@
+REPRODUCTION RESULTS FOR THE BUG REPORT
+
+I successfully reproduced the bug using both the provided test case and the property-based test.
+
+TEST RESULTS:
+
+1. Simple Reproduction Test:
+   - Created a DataFrame with 2 columns ('A', 'B') and 3 rows
+   - Split into 2 partitions using dask
+   - Called `to_bag(ddf, format='frame')`
+   - EXPECTED: 2 DataFrame objects (one for each partition)
+   - ACTUAL: 4 string objects: ['A', 'B', 'A', 'B']
+
+   This confirms the bug - instead of getting DataFrame objects, we get column names as strings.
+
+2. Root Cause Analysis:
+   - When iterating over a pandas DataFrame, Python yields the column names (not rows)
+   - The current implementation for format='frame' directly assigns df.dask to the Bag's task graph
+   - When Bag.compute() collects results, it iterates over each DataFrame partition
+   - This iteration yields column names instead of preserving the DataFrame as a single object
+
+3. Comparison with Other Formats:
+   - format='tuple': Returns 3 tuples (one per row) - works correctly
+   - format='dict': Returns 3 dictionaries (one per row) - works correctly
+   - format='frame': Returns column names as strings - BUG
+
+4. Property-Based Test:
+   - Ran 200+ test cases with various DataFrame sizes and partition counts
+   - ALL test cases failed with the same issue
+   - Consistently returns 2 * npartitions strings (column names) instead of npartitions DataFrames
+
+5. The Bug Affects All Cases:
+   - Single partition: Returns 2 strings instead of 1 DataFrame
+   - Multiple partitions: Returns 2*n strings instead of n DataFrames
+   - Different DataFrame sizes: All exhibit the same bug
+
+The bug is 100% reproducible and matches exactly what the bug report describes. The implementation does not match the documented behavior.

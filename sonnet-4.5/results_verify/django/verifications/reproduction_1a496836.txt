@@ -1,0 +1,91 @@
+REPRODUCTION RESULTS FOR DJANGO AUTOCOMPLETE BUG
+=================================================
+
+1. HYPOTHESIS TEST REPRODUCTION:
+---------------------------------
+The hypothesis test from the bug report was successfully reproduced:
+
+Test Code:
+```python
+@given(st.lists(st.text(min_size=1, max_size=10), min_size=1, max_size=10), st.integers())
+def test_autocomplete_index_logic(cwords, cword):
+    try:
+        curr = cwords[cword - 1]
+    except IndexError:
+        curr = ""
+    if cword == 0 and len(cwords) > 0:
+        assert curr == "", f"When cword=0, expected curr='', but got {curr!r}"
+```
+
+Result: ✗ TEST FAILED
+- Failing input: cwords=['0'], cword=0
+- Expected: curr = ''
+- Actual: curr = '0'
+- The test correctly identifies the issue with negative indexing
+
+2. DIRECT BUG REPRODUCTION:
+----------------------------
+Test case from bug report:
+```python
+cwords = ["django-admin", "migrate"]
+cword = 0
+try:
+    curr = cwords[cword - 1]
+except IndexError:
+    curr = ""
+```
+
+Result: ✗ BUG CONFIRMED
+- Expected: curr = ''
+- Actual: curr = 'migrate'
+- Explanation: cwords[-1] accesses the last element due to Python's negative indexing
+
+3. PYTHON NEGATIVE INDEXING VERIFICATION:
+------------------------------------------
+Confirmed Python behavior:
+- list[0] returns first element
+- list[-1] returns last element
+- list[-2] returns second-to-last element
+- Negative indices do NOT raise IndexError unless out of range
+
+4. DJANGO CODE PATH ANALYSIS:
+------------------------------
+Testing Django's actual code path:
+
+Scenario: COMP_WORDS="django-admin migrate", COMP_CWORD=0
+- After split()[1:]: cwords = ['migrate']
+- Attempting: curr = cwords[0 - 1] = cwords[-1]
+- Result: curr = 'migrate' (BUG - should be '')
+
+Scenario: COMP_WORDS="django-admin", COMP_CWORD=0
+- After split()[1:]: cwords = []
+- Attempting: curr = cwords[-1]
+- Result: IndexError caught, curr = '' (CORRECT)
+
+5. PRACTICAL OCCURRENCE ANALYSIS:
+----------------------------------
+COMP_CWORD=0 occurrence likelihood:
+- In normal bash completion: UNLIKELY
+- Django's completion is registered for specific commands (django-admin, manage.py)
+- Completion function is called AFTER the command name is typed
+- Typically COMP_CWORD >= 1 when Django's autocomplete() is invoked
+
+However, COMP_CWORD=0 could occur in:
+- Manual testing with environment variables set
+- Unusual bash configurations
+- Edge cases in completion script behavior
+- Potentially malicious input
+
+TECHNICAL VERIFICATION:
+-----------------------
+✓ The bug is technically valid and reproducible
+✓ The code behaves exactly as described in the bug report
+✓ Python's negative indexing prevents the IndexError from being raised
+✓ The fix proposed in the bug report would resolve the issue
+
+IMPACT ASSESSMENT:
+------------------
+- The bug exists in the code
+- It causes incorrect behavior when COMP_CWORD=0
+- Real-world impact is likely minimal due to rarity of COMP_CWORD=0
+- Could be considered a defensive programming issue

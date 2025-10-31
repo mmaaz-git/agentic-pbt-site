@@ -1,0 +1,41 @@
+## Bug Reproduction: ResourceProfiler Negative dt Values
+
+### Summary
+I have successfully reproduced the bug reported for `dask.diagnostics.ResourceProfiler` when negative `dt` values are passed to the constructor.
+
+### Reproduction Steps
+
+1. **Direct Reproduction with dt=-1**:
+   - Created a ResourceProfiler instance with `dt=-1`
+   - The object was created successfully without immediate errors
+   - However, when using it in a context manager, the background _Tracker process crashes with:
+     `ValueError: sleep length must be non-negative`
+   - The error occurs in the background process at `/dask/diagnostics/profile.py`, line 286
+   - The main process continues and produces the correct result (11) but errors are printed from the background process
+
+2. **Hypothesis Property Testing**:
+   - Ran the property-based test with negative float values
+   - Multiple failures occurred with various negative values
+   - Errors included both:
+     - `ValueError: sleep length must be non-negative` for simple negative values
+     - `OverflowError: timestamp out of range for platform time_t` for very large negative values
+
+3. **Testing Multiple Negative Values**:
+   - Tested with values: -1, -0.5, -0.1, -0.001, -10, -100
+   - All values caused exceptions in the background _Tracker process
+   - The main computation still completed, but resource tracking failed
+
+### Key Observations
+
+1. **Delayed Failure**: The bug doesn't manifest during ResourceProfiler construction. It only appears when the background tracking process starts and attempts to call `sleep(self.dt)` with a negative value.
+
+2. **Background Process Crash**: The error occurs in a separate Process (_Tracker), not in the main thread, which explains why the main computation can still complete despite the tracking failure.
+
+3. **No Input Validation**: The ResourceProfiler.__init__ method (line 161-168 in profile.py) accepts the dt parameter without any validation, storing it directly as `self._dt = dt`.
+
+4. **Inconsistent Error Types**: Different negative values can cause different errors:
+   - Small negative values (e.g., -1) cause `ValueError: sleep length must be non-negative`
+   - Very large negative values can cause `OverflowError: timestamp out of range for platform time_t`
+
+### Conclusion
+The bug is confirmed as reported. The ResourceProfiler accepts negative dt values without validation but crashes when the background tracker process attempts to use these values in a sleep() call.

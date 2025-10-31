@@ -1,0 +1,34 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug in Cython.Build.Inline.strip_common_indent function.
+
+1. HYPOTHESIS TEST REPRODUCTION:
+The provided hypothesis test failed as expected, demonstrating that comment lines lose their '#' marker when indented differently than code lines. The test failed with this example:
+- Input: '  x = 1\n# comment\n  y = 2'
+- Output showed 'comment' without the '#' prefix
+
+2. MANUAL TEST REPRODUCTION:
+The manual test case also reproduced the issue:
+- Input: '    x = 1\n  # comment\n    y = 2'
+- Expected: 'x = 1\n# comment\ny = 2'
+- Actual: 'x = 1\ncomment\ny = 2'
+
+3. SOURCE CODE EXAMINATION:
+I examined the actual source code at /home/npc/miniconda/lib/python3.13/site-packages/Cython/Build/Inline.py lines 408-425.
+
+The bug is exactly as described in the report:
+- First loop (lines 411-419): Calculates minimum indentation among non-comment lines, BUT the 'indent' variable gets overwritten on EVERY line (including comments) at line 415
+- Second loop (lines 420-424): Uses the stale 'indent' variable from the first loop to check if a line is a comment
+- Line 422: `if not match or not line or line[indent:indent+1] == '#':`
+  This incorrectly uses the last value of 'indent' from the first loop instead of the current line's indentation
+
+4. BUG MECHANISM:
+When processing the example input:
+- First loop processes all lines and 'indent' ends up being 4 (from last line 'y = 2')
+- Second loop processes comment line '  # comment':
+  - It checks position [4:5] of '  # comment' which is 'c' (not '#')
+  - The comment check fails, so the line gets processed as code
+  - Line 424 strips min_indent (2 spaces), leaving 'comment' without '#'
+
+The bug is confirmed and reproducible. The '#' character is incorrectly stripped from comment lines when they have different indentation than the last non-comment line in the code.

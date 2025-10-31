@@ -1,0 +1,41 @@
+REPRODUCTION RESULTS
+====================
+
+I have successfully reproduced the bug described in the report. The bug exists in the read_setup_file function, which is actually imported from distutils.extension (specifically from setuptools._distutils.extension.py).
+
+Key Findings:
+-------------
+1. The bug is located at line 224 of /home/npc/miniconda/lib/python3.13/site-packages/setuptools/_distutils/extension.py
+2. The problematic code is: value[equals + 2 :] which should be value[equals + 1 :]
+3. This causes the first character of any macro value to be dropped when parsing -DMACRO=value syntax
+
+Test Results:
+-------------
+1. Basic Reproduction Test:
+   - Input: -DVERSION=1.2.3
+   - Expected: VERSION=1.2.3
+   - Actual: VERSION=.2.3
+   - Result: BUG CONFIRMED
+
+2. Single Character Value Test:
+   - Input: -DDEBUG=0
+   - Expected: DEBUG=0
+   - Actual: DEBUG='' (empty string)
+   - Result: BUG CONFIRMED - Single character values are completely lost
+
+3. Property-Based Test:
+   - Multiple test cases all failed with the first character being dropped
+   - Examples:
+     * -DMACRO=0 → '' (expected '0')
+     * -DMACRO=abc → 'bc' (expected 'abc')
+     * -DMACRO=TEST → 'EST' (expected 'TEST')
+
+4. Hypothesis Test:
+   - The hypothesis test from the bug report fails immediately
+   - Confirms that the bug affects all macro values with the = syntax
+
+Impact:
+-------
+This is a genuine parsing bug that affects any setup file using -D flags with values. The bug consistently drops the first character of the macro value due to an off-by-one error in string slicing. This would break any build configuration that relies on macro definitions with values in setup files.
+
+The bug is real and consistently reproducible.

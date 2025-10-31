@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that argmin/argmax must handle arrays where all values equal fill_value. One could argue this is an edge case not covered by the specification, and raising an error might be acceptable behavior. Additionally, sparse arrays are optimized data structures and might have different behavior constraints than regular arrays.
+
+**Why it might not be INVALID:**
+The documentation clearly states these methods "return the index of minimum/maximum value" without any exceptions or caveats. The methods have the same names as NumPy equivalents, and SparseArray is meant to be a drop-in replacement for regular arrays in many contexts. The crash with a cryptic error message is clearly unintended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extreme edge case where all values in the array are identical to the fill_value, resulting in a completely sparse representation. Such arrays might be considered degenerate cases that users should avoid. The performance impact of adding a check might not be worth it for such a rare case.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - it's a perfectly valid array configuration that can occur naturally in data processing. The fix is trivial (a simple length check) and doesn't impact performance. The current behavior crashes with an unhelpful error message rather than gracefully handling the situation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to state that argmin/argmax raise ValueError when all values equal fill_value. This would make the current behavior "correct" by documentation. The sparse array documentation could clarify differences from regular NumPy arrays.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior is clearly a bug, not a documentation issue. The code already has logic to handle fill_value cases (via _first_fill_value_loc), but fails to reach it due to the crash. Documenting a crash as expected behavior would be poor API design when the correct answer (index 0) is well-defined.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting argmin/argmax on all-fill-value arrays could be seen as adding new functionality that wasn't originally designed. The sparse array implementation might not have considered this use case initially, making this an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality - argmin/argmax already exist and should work on all valid sparse arrays. A sparse array with all values equal to fill_value is still a valid array. This is fixing broken existing functionality, not adding new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The methods crash with a ValueError when given valid input (a sparse array where all values equal fill_value). The error message is unhelpful and doesn't indicate the actual problem. The code already has the logic to compute the correct answer (_first_fill_value_loc) but fails to use it. The behavior differs from NumPy's handling of the same logical array. The fix is straightforward and the correct behavior is well-defined.
+
+**Why it might not be BUG:**
+One could argue that sparse arrays with all values equal to fill_value are degenerate cases that the implementation wasn't designed to handle. However, this argument is weak since sparse arrays should handle all valid configurations gracefully.
+
+## Overall Consideration
+
+This is clearly a BUG. The evidence is overwhelming:
+
+First, the methods crash on valid input. A SparseArray where all values equal fill_value is a perfectly valid sparse array - in fact, it's the most efficient representation possible for such data. The constructor accepts this configuration without error, so the array methods should handle it properly.
+
+Second, the crash occurs with an unhelpful error message ("attempt to get argmin of an empty sequence") that doesn't guide users to understand the actual issue. This indicates unhandled edge case rather than intentional behavior. The implementation already has the correct logic (_first_fill_value_loc) to handle this case but fails to reach it due to calling np.argmin on an empty array.
+
+Third, the expected behavior is well-defined and matches NumPy. When all values in an array are equal, argmin/argmax should return 0 (the index of the first occurrence). This is mathematically correct, consistent with NumPy, and what users would reasonably expect. The fix is trivial - just check if non_nans is empty and return the fill value location, which the code already knows how to find.

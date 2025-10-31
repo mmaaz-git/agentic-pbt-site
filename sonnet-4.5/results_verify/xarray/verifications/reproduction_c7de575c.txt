@@ -1,0 +1,53 @@
+BUG REPRODUCTION REPORT
+
+I successfully reproduced the bug as described in the report. Here are my findings:
+
+1. REPRODUCTION RESULTS:
+
+The bug is PARTIALLY reproducible with specific patterns:
+
+a) Strings that START with null bytes lose data:
+   - Input: '\x00' → Output: '' (LOSES DATA)
+   - Input: '\x00\x00\x00' → Output: '' (LOSES DATA)
+   - Input: '\x00hello' → Output: '' (when first byte is null, entire string truncated)
+
+b) Strings with null bytes NOT at the beginning preserve data:
+   - Input: 'hello\x00world' → Output: 'hello\x00world' (PRESERVES DATA)
+   - Input: 'test\x00' → Output: 'test' (truncates at null)
+
+c) Normal strings without null bytes work correctly:
+   - Input: 'hello world' → Output: 'hello world' (WORKS CORRECTLY)
+
+2. ROOT CAUSE ANALYSIS:
+
+The bug occurs due to numpy's behavior with dtype=bytes:
+- When np.array(encoded, dtype=bytes) is called, numpy creates a fixed-width S dtype
+- The S dtype treats null bytes as C-style string terminators
+- If a string starts with null bytes, numpy considers it an empty string
+- This is standard C string behavior where \x00 terminates the string
+
+3. TECHNICAL DETAILS:
+
+The problematic line is in encode_string_array (line 103):
+```python
+return np.array(encoded, dtype=bytes).reshape(string_array.shape)
+```
+
+When dtype=bytes is used:
+- np.array([b'\x00'], dtype=bytes) → creates S1 dtype array with value b''
+- np.array([b'\x00\x00\x00'], dtype=bytes) → creates S3 dtype array with value b''
+- np.array([b'hello\x00world'], dtype=bytes) → creates S11 dtype preserving the bytes
+
+With dtype=object:
+- All byte strings are preserved exactly as-is without null termination
+
+4. HYPOTHESIS TEST RESULTS:
+
+The hypothesis test failed on the explicit examples with null bytes at the start:
+- test='\x00' - FAILED (decoded as '')
+- test='\x00\x00\x00' - FAILED (decoded as '')
+- test='hello\x00world' - PASSED (preserved correctly)
+
+5. IMPACT:
+
+The bug affects only a specific subset of strings - those that begin with null bytes. The round-trip property is broken for these cases, but works for strings with null bytes in non-initial positions.

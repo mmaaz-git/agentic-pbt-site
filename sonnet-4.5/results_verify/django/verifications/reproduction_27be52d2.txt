@@ -1,0 +1,52 @@
+## Bug Reproduction Results
+
+### Test 1: Exact Reproduction from Bug Report
+The bug report's test case was successfully reproduced:
+- Created a DeletionMixin with success_url = '/category/{category_id}/'
+- Created a MockObject with only an 'id' attribute (no 'category_id')
+- Called get_success_url()
+- **Result**: KeyError: 'category_id' was raised as reported
+
+The error message is just the bare key name 'category_id' with no additional context about:
+- Which view/mixin raised the error
+- What attributes are available on the object
+- How to fix the issue
+
+### Test 2: Working Case
+When the placeholder matches an object attribute:
+- Created a DeletionMixin with success_url = '/object/{id}/'
+- Created a MockObject with an 'id' attribute = 42
+- Called get_success_url()
+- **Result**: Successfully returned '/object/42/'
+
+### Test 3: Consistency Check with ModelFormMixin
+ModelFormMixin has the exact same behavior:
+- Uses the same pattern: `self.success_url.format(**self.object.__dict__)`
+- Raises the same bare KeyError when placeholders don't match
+- No additional error handling or helpful messages
+
+### Test 4: Source Code Verification
+Confirmed the bug is at line 236 of DeletionMixin.get_success_url():
+```python
+return self.success_url.format(**self.object.__dict__)
+```
+
+### Property-Based Testing
+The property-based test from the bug report correctly identifies the issue:
+- When any placeholder in success_url doesn't exist in object.__dict__, a KeyError is raised
+- This happens consistently across all test cases
+
+### Impact Assessment
+1. **The error occurs in real-world scenarios:**
+   - Developer typos in placeholder names
+   - Refactoring where object attributes are renamed but success_url isn't updated
+   - Using a generic view with objects that have different attribute names
+
+2. **The current error is unhelpful:**
+   - Bare KeyError with just the missing key name
+   - No indication this is a configuration error vs runtime error
+   - No guidance on how to fix the issue
+
+3. **Both DeletionMixin and ModelFormMixin are affected**
+   - This is a pattern used in multiple places in Django's generic views
+   - Any fix should probably be consistent across both

@@ -1,0 +1,25 @@
+## Bug Reproduction Summary
+
+I have successfully reproduced the bug as reported. The issue occurs in the `Color.as_hsl()` method when converting very dark or very light colors to HSL string representation.
+
+### Test Results:
+
+1. **Hypothesis test execution**: The property-based test failed exactly as described, with the input `r=0, g=0, b=2` causing an assertion error when round-tripping through HSL format.
+
+2. **Specific reproduction**: Running the example code confirmed the exact behavior:
+   - Original color: RGB(0, 0, 2)
+   - HSL string generated: "hsl(240, 100%, 0%)"
+   - Color after parsing HSL: RGB(0, 0, 0)
+
+### Code Analysis:
+
+Looking at the source code in `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/v1/color.py`:
+
+- Line 159: `return f'hsl({h * 360:0.0f}, {s:0.0%}, {li:0.0%})'`
+- Line 162: `return f'hsl({h * 360:0.0f}, {s:0.0%}, {li:0.0%}, {round(a, 2)})'`
+
+The format specifiers `{s:0.0%}` and `{li:0.0%}` format percentages with zero decimal places. For RGB(0, 0, 2), the lightness value is approximately 0.39% (2/255 ≈ 0.0078, which is 0.39% when converted from HSL range), which rounds down to 0% when formatted.
+
+When "hsl(240, 100%, 0%)" is parsed back, it correctly interprets 0% lightness as pure black (RGB 0, 0, 0), thus losing the original blue component value of 2.
+
+The bug is confirmed and occurs exactly as described in the report.

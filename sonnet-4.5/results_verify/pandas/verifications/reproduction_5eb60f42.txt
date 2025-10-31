@@ -1,0 +1,55 @@
+## Bug Reproduction Results
+
+### Test Setup
+The bug report claims that `waitForPaste` and `waitForNewPaste` raise `PyperclipException` immediately when the clipboard is unavailable, instead of waiting for the timeout and raising `PyperclipTimeoutException`.
+
+### Reproduction Tests
+
+**Test 1: Hypothesis test with timeout=0.0625**
+- Expected: Should wait 0.0625 seconds then raise `PyperclipTimeoutException`
+- Actual: Immediately raised `PyperclipException` with message about clipboard not being available
+- Time elapsed: ~0.000 seconds (immediate)
+
+**Test 2: Longer timeout (1.0 second)**
+- Expected: Should wait 1.0 second then raise `PyperclipTimeoutException`
+- Actual: Immediately raised `PyperclipException` with message about clipboard not being available
+- Time elapsed: ~0.000 seconds (immediate)
+
+**Test 3: waitForNewPaste with timeout=0.1**
+- Expected: Should wait 0.1 seconds then raise `PyperclipTimeoutException`
+- Actual: Immediately raised `PyperclipException` with message about clipboard not being available
+- Time elapsed: ~0.000 seconds (immediate)
+
+**Test 4: Direct paste() call**
+- This confirmed that `paste()` itself raises `PyperclipException` when clipboard is unavailable
+- This is the root cause of the issue
+
+### Technical Analysis
+
+The bug is CONFIRMED. Here's what happens:
+
+1. When `set_clipboard('no')` is called, it sets up a `ClipboardUnavailable` object that raises `PyperclipException` whenever called.
+
+2. In `waitForPaste` (line 703), the code calls `clipboardText = paste()` without any exception handling.
+
+3. In `waitForNewPaste` (lines 723 and 725), the code calls `paste()` twice without exception handling.
+
+4. The `PyperclipException` from `paste()` propagates up immediately, bypassing all timeout logic.
+
+5. The timeout checking code (lines 708-711 and 730-733) is never reached because the exception occurs first.
+
+### Bug Validity
+
+The bug report is technically correct:
+- The functions DO raise the wrong exception type (`PyperclipException` instead of `PyperclipTimeoutException`)
+- The functions DO NOT wait for the specified timeout
+- The behavior violates the documented contract that specifically promises `PyperclipTimeoutException` for timeout scenarios
+
+### Proposed Fix Analysis
+
+The bug report's proposed fix is to catch `PyperclipException` and treat it as an empty clipboard. This would:
+1. Allow the timeout logic to execute properly
+2. Eventually raise the correct `PyperclipTimeoutException` after the timeout
+3. Make the behavior consistent with the documentation
+
+This approach makes sense because an unavailable clipboard could be considered equivalent to an empty clipboard for the purpose of waiting for content.

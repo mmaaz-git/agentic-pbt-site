@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+
+I have successfully reproduced the bug described in the report. The bug is real and occurs exactly as described.
+
+#### Test Results:
+
+1. **Specific failing examples confirmed:**
+   - Input: `['F', 'f']` → Output: `['accept', 'accept-language', 'content-language', 'content-type', 'f', 'f']`
+     - Contains duplicate 'f' entries
+
+   - Input: `['X-Custom-Header', 'x-custom-header']` → Output contains duplicate 'x-custom-header' entries
+
+2. **Root cause confirmed:**
+   The bug occurs due to the order of operations in the CORSMiddleware constructor:
+
+   - Line 58: `allow_headers = sorted(SAFELISTED_HEADERS | set(allow_headers))`
+     - This performs set union with original case preserved
+     - Example: `{'X-Custom', 'x-custom'}` both remain in the set
+
+   - Line 67: `self.allow_headers = [h.lower() for h in allow_headers]`
+     - This lowercases all headers AFTER the set operation
+     - Result: Both 'X-Custom' and 'x-custom' become 'x-custom'
+
+3. **Property-based test:**
+   The hypothesis test fails immediately with simple inputs like `['F0000', 'f0000']`, confirming that any headers differing only in case will create duplicates.
+
+### Technical Analysis:
+
+The bug is a **logical error** in the implementation. The code correctly recognizes that HTTP headers should be case-insensitive (hence the lowercasing), but performs the deduplication (set operation) before the normalization (lowercasing), rather than after.
+
+### Expected vs Actual Behavior:
+
+**Expected:** Headers differing only in case should be treated as the same header (per HTTP spec RFC 2616)
+**Actual:** Headers differing only in case create duplicate entries in the final list
+
+The bug manifests in the internal `allow_headers` attribute containing duplicates, which could potentially affect:
+- Header validation logic (line 129 checks if headers are in self.allow_headers)
+- The efficiency of header checking (redundant comparisons)
+
+### Impact Assessment:
+
+The bug appears to be mostly cosmetic/inefficient rather than causing functional failures:
+- The preflight response still works correctly because it uses the deduplicated headers for the response
+- Header validation still functions (checking 'x-custom' in a list with duplicates still works)
+- Main impact is the violation of the reasonable expectation that headers should be unique

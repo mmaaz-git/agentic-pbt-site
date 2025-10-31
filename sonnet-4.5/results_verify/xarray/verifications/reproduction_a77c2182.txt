@@ -1,0 +1,37 @@
+REPRODUCTION ANALYSIS
+=====================
+
+Bug Report Validity: CONFIRMED
+
+I have successfully reproduced the bug described in the report. The bug manifests exactly as described.
+
+Test Execution:
+1. The property-based test using Hypothesis correctly identifies the failure case. When run, it immediately finds an example where expand_dims() creates duplicate dimensions, specifically with dims=('dim_1',).
+
+2. The simple reproduction case provided works exactly as reported:
+   - Input: NamedArray with dims=('dim_1',)
+   - Output after expand_dims(): dims=('dim_1', 'dim_1')
+   - This creates duplicate dimensions
+
+Additional Test Cases Confirmed:
+- dims=('dim_0', 'dim_2') → expands to ('dim_2', 'dim_0', 'dim_2') ✓
+- dims=('a', 'b', 'dim_3') → expands to ('dim_3', 'a', 'b', 'dim_3') ✓
+- dims=('x', 'y') → expands to ('dim_2', 'x', 'y') (works correctly, no duplicates)
+
+Key Observations:
+1. The bug occurs specifically when the existing dimensions contain a name following the pattern 'dim_N' where N equals the number of dimensions in the array.
+
+2. When expand_dims() is called without an explicit dim parameter, it generates a default name using f"dim_{len(dims)}", which can collide with existing dimension names.
+
+3. The creation of duplicate dimensions triggers a UserWarning from the xarray codebase itself:
+   "Duplicate dimension names present: dimensions {'dim_1'} appear more than once in dims=('dim_1', 'dim_1'). We do not yet support duplicate dimension names..."
+
+4. The warning explicitly states that xarray does NOT support duplicate dimension names and that "most xarray functionality is likely to fail silently if you do not" fix them.
+
+Root Cause:
+The bug is in lines 187-188 of /xarray/namedarray/_array_api.py:
+```python
+if dim is _default:
+    dim = f"dim_{len(dims)}"
+```
+This logic naively generates a dimension name based on the current number of dimensions without checking if that name already exists in the array's dimensions.

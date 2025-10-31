@@ -1,0 +1,32 @@
+Bug Reproduction Report for attrs evolve() Double-Applies Converters
+=====================================================================
+
+## Reproduction Results
+
+I successfully reproduced the bug described in the report using both the Hypothesis test and the manual example.
+
+### Hypothesis Test Results
+The property-based test failed immediately with the simplest input (value=1):
+- Original instance: MyClass(x=1) creates object with x=2 (converter applied: 1*2)
+- Evolved instance: attr.evolve(original) creates object with x=4 (converter re-applied: 2*2)
+- Assertion failed: evolved.x (4) != original.x (2)
+
+### Manual Test Results
+The manual reproduction example produced the exact output described in the bug report:
+- Original: obj.x = 10 (converter applied to 5: 5*2)
+- Evolved: evolved.x = 20 (converter re-applied to 10: 10*2)
+- Expected: 10, Got: 20
+
+### Additional Testing
+I verified that:
+1. When evolve() is given an explicit new value, converters work correctly (e.g., evolve(obj, x=7) correctly produces 14)
+2. The issue only occurs when evolve() copies unchanged fields from the original instance
+3. Idempotent converters (like int()) don't exhibit visible problems, but non-idempotent converters (like lambda v: v*2) clearly demonstrate the bug
+
+## Effect of the Bug
+
+The bug causes silent data corruption when using evolve() with non-idempotent converters. The converter is applied twice:
+1. First during the original object's initialization
+2. Again during evolve() when the already-converted value is passed to __init__
+
+This violates the expected invariant that evolve(obj) should produce an identical copy when no changes are specified. The bug could lead to serious issues in production code that relies on evolve() to create modified copies of objects with converter functions that aren't idempotent.

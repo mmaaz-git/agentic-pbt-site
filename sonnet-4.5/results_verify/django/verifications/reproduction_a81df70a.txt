@@ -1,0 +1,50 @@
+BUG REPRODUCTION ANALYSIS
+
+## Reproduction Results
+
+1. **Basic Reproduction Test**:
+   - Input: `AppConfig.create("myapp.")`
+   - Result: IndexError: string index out of range
+   - Traceback points to line 172: `if mod_path and cls_name[0].isupper()`
+   - This matches the bug report exactly.
+
+2. **Root Cause Analysis**:
+   When `entry = "myapp."`, the `rpartition(".")` operation produces:
+   - mod_path = "myapp"
+   - cls_name = "" (empty string)
+
+   The condition `if mod_path and cls_name[0].isupper()` then tries to access the first character of an empty string, causing IndexError.
+
+3. **Hypothesis Test Results**:
+   The hypothesis test successfully found multiple failing inputs:
+   - 'a.', 'aj.', 'dilhz.', 'fvgwotxpuy.' and others
+   - All entries ending with a dot trigger the IndexError
+   - The test confirmed that any string ending with "." will cause this bug
+
+4. **Extended Edge Case Testing**:
+   Tested various edge cases:
+   - "." → TypeError (different error, handled correctly)
+   - ".." → IndexError (same bug)
+   - "..." → IndexError (same bug)
+   - "a." → IndexError (same bug)
+   - ".a" → TypeError (different error, handled correctly)
+   - "a.b." → IndexError (same bug)
+   - "a..b" → ImportError (handled correctly)
+   - "" → ValueError (handled correctly)
+
+## Technical Details Confirmed
+
+1. The bug occurs exactly as described in the report
+2. The line number (172) and error message match perfectly
+3. The root cause is correctly identified: accessing cls_name[0] when cls_name is empty
+4. The proposed fix (adding `and cls_name` check) would prevent the IndexError
+
+## Expected vs Actual Behavior
+
+**Expected**: When given an invalid entry like "myapp.", the method should raise either:
+- ImportError with a message like "No module named 'myapp'"
+- ImproperlyConfigured with a configuration error message
+
+**Actual**: The method crashes with IndexError, providing no useful information about what went wrong with the configuration.
+
+The bug report's technical analysis is completely accurate.

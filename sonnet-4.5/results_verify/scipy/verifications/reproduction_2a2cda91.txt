@@ -1,0 +1,42 @@
+## Bug Reproduction Analysis
+
+### Hypothesis Test Results
+
+The Hypothesis property-based test failed as reported, finding the counterexample:
+- M=3, beta=710.0
+- Error: RuntimeWarning: invalid value encountered in divide
+- Result: Kaiser window returned [0. nan 0.] instead of finite values
+
+### Simple Test Case Results
+
+The simple reproduction case confirmed the behavior:
+- Input: windows.kaiser(3, 710.0)
+- Output: [0. nan 0.]
+- NaN present: Yes
+- All values finite: No
+- RuntimeWarning generated about invalid value in divide operation
+
+### Root Cause Analysis
+
+The issue occurs in the implementation at line 1301 of _windows.py:
+```python
+w = (special.i0(beta * xp.sqrt(1 - ((n - alpha) / alpha) ** 2.0)) /
+     special.i0(xp.asarray(beta, dtype=xp.float64)))
+```
+
+Investigation of the Bessel function behavior revealed:
+- special.i0(710.0) returns inf (infinity)
+- special.i0(beta * sqrt(...)) for middle values also returns inf
+- Division inf/inf results in NaN
+
+The numerical overflow occurs because:
+1. The modified Bessel function i0 grows exponentially with its argument
+2. i0(710) exceeds the maximum float64 value (~1.8e308) and returns inf
+3. When both numerator and denominator are inf, the result is NaN
+
+### Verification
+
+The bug is reproducible and behaves exactly as described in the report:
+- The function returns NaN values for large beta (>=710) with small M
+- A RuntimeWarning is issued but no exception is raised
+- The NaN values propagate silently unless explicitly checked

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly state that context=None should be handled gracefully. The Starlette documentation emphasizes that the request must be included in the context, and all examples show passing either no context parameter (using default) or a dict with the request. One could argue that passing None explicitly is an invalid use case that falls outside the documented behavior.
+
+**Why it might not be INVALID:**
+The type signature explicitly allows `context: dict[str, Any] | None = None`, which is part of the public API contract. Type hints are a form of documentation that users rely on. When a function signature explicitly accepts None, it's reasonable for users to expect that passing None should work. The crash with AttributeError demonstrates that the implementation doesn't match the declared API.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered a trivial edge case. In practice, developers would either omit the context parameter entirely (letting it default) or pass a dictionary. Explicitly passing None seems unusual and arguably unnecessary. The workaround is simple - just don't pass context=None, either omit it or pass an empty dict.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue because it represents a clear violation of the type contract. Type hints are increasingly important in Python, and many tools (IDEs, type checkers, documentation generators) rely on them. Having a function crash when given a value that its type signature explicitly allows undermines the reliability of the API and could cause unexpected production failures.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The type hints could be considered incorrect documentation. If the function was never intended to accept None, then the type signature should be `context: dict[str, Any] = {}` instead of `context: dict[str, Any] | None = None`. Fixing the type hints to reflect the actual implementation would resolve the discrepancy.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The default value of None in the signature suggests that None was intended to be a valid value. The pattern of using None as a default and then converting to {} internally is common in Python. The implementation appears to be attempting to handle None (line 197 tries to provide a default), but does so incorrectly. This suggests the bug is in the implementation, not the documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting context=None is a new feature that hasn't been implemented yet. The current implementation only works with dict or omitted parameters, and adding support for explicit None would be an enhancement to make the API more flexible and consistent.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not a feature request because the type signature already claims to support None. The function signature is a contract with users, and this functionality is already promised but not delivered. It's a bug where the implementation fails to honor its declared interface, not a request for new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case where the implementation violates the contract established by the type hints. The function signature explicitly allows `context: dict[str, Any] | None = None`, indicating None is a valid value. The implementation fails with an AttributeError when this documented valid input is provided. The error occurs because of incorrect handling of the None case in the code. The fix is straightforward and the bug report even provides a working solution.
+
+**Why it might not be BUG:**
+The main argument against this being a bug would be that the documentation examples never show passing context=None, and one could argue that the type hints are overly permissive. However, this is a weak argument given that type hints are a formal part of the API contract.
+
+## Overall Consideration
+
+Looking at all the considerations, this appears to be a legitimate bug. The type signature explicitly declares that `context: dict[str, Any] | None = None` is acceptable, establishing None as a valid input value. This is reinforced by having None as the default value in the signature. When a user passes context=None, they have every reason to expect it to work the same as omitting the parameter.
+
+The implementation contains a clear error in how it handles the None case. Line 197 uses `kwargs.get("context", {})` which returns None when context=None is explicitly passed (since the key exists in kwargs). This leads to AttributeErrors on lines 198 and 205 where the code assumes context is a dictionary. The bug report correctly identifies this issue and provides a simple fix: changing line 197 to `context = kwargs.get("context") or {}`.
+
+While one could argue this is an edge case, it's a violation of the type contract that could cause unexpected crashes in production code. Type safety is increasingly important in Python, and having functions crash on inputs their signatures claim to accept undermines the reliability and predictability of the API. The fact that the fix is simple and safe (converting None to {} as intended) further supports treating this as a bug rather than dismissing it.

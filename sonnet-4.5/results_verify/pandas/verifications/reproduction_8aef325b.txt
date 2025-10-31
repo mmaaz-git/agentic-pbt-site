@@ -1,0 +1,37 @@
+## Reproduction Analysis
+
+### Technical Verification
+I successfully reproduced the bug report's findings:
+1. `_range2cols('A:C,B:D')` returns `[0, 1, 2, 1, 2, 3]` with duplicates
+2. `_range2cols('A,A,A')` returns `[0, 0, 0]` with tripled column
+3. `_range2cols('A,B,C,B:D')` returns `[0, 1, 2, 1, 2, 3]` with duplicates
+4. The hypothesis test fails for overlapping ranges as reported
+
+### Current Implementation Behavior
+The `_range2cols` function currently:
+- Splits the input string by commas
+- For each segment, either appends a single column index or extends with a range
+- Returns the list without deduplication
+- This results in duplicate indices when ranges overlap or columns are repeated
+
+### Downstream Handling
+Importantly, I discovered that the duplicate indices from `_range2cols` are handled later in the processing pipeline:
+- In `pandas/io/parsers/base_parser.py` line 1040, the usecols list is converted to a set: `usecols = set(usecols)`
+- This automatically removes duplicates before the columns are actually selected
+- As a result, `pd.read_excel(filename, usecols='A:C,B:D')` correctly returns columns A, B, C, D without duplicates
+
+### End-to-End Testing
+When testing the complete Excel reading flow:
+- Input: Excel file with columns A, B, C, D, E
+- Using `usecols='A:C,B:D'`: Results in columns [A, B, C, D] - no duplicates
+- Using `usecols='A,A,A'`: Results in column [A] - no duplicates
+- The deduplication happens downstream, so users don't see duplicate columns
+
+### Performance Consideration
+While the duplicates are handled later:
+1. The intermediate list with duplicates uses more memory than necessary
+2. The conversion to set happens regardless of whether duplicates exist
+3. For large ranges with significant overlap, this could create unnecessarily large intermediate lists
+
+### Conclusion
+The bug report is technically correct that `_range2cols` returns duplicate indices. However, these duplicates are removed later in the processing pipeline before affecting the final result. Users never actually get duplicate columns in their DataFrame.

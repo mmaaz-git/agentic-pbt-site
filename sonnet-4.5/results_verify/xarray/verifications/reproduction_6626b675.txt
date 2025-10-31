@@ -1,0 +1,32 @@
+## Reproduction Analysis
+
+I have successfully reproduced the reported bug with the provided test cases.
+
+### Test Results:
+
+1. **Basic Reproduction Test**:
+   - When calling `decorated(1, 2, 3)` on a function `func(x, *, y=0)`, a `ValueError` is raised with the message "zip() argument 2 is longer than argument 1"
+   - The undecorated function correctly raises `TypeError: func() takes 1 positional argument but 3 were given`
+
+2. **Hypothesis Test**:
+   - The property-based test fails with the same `ValueError` when too many positional arguments are passed
+   - The test correctly identifies that `ValueError` is being raised instead of the expected `TypeError`
+
+3. **Root Cause Verification**:
+   - Examined the source code at `/home/npc/miniconda/lib/python3.13/site-packages/xarray/util/deprecation_helpers.py`
+   - The issue occurs at lines 112-114 where `zip()` is called with `strict=True`
+   - When `n_extra_args > len(kwonly_args)`, the two arguments to `zip()` have different lengths:
+     - `kwonly_args[:n_extra_args]` can be at most `len(kwonly_args)` elements
+     - `args[-n_extra_args:]` will have `n_extra_args` elements
+     - When `n_extra_args > len(kwonly_args)`, these lists have different sizes
+
+### Specific Example:
+For `func(x, *, y=0)` called as `decorated(1, 2, 3)`:
+- `pos_or_kw_args = ['x']` (1 element)
+- `kwonly_args = ['y']` (1 element)
+- `n_extra_args = 3 - 1 = 2`
+- `kwonly_args[:2] = ['y']` (1 element)
+- `args[-2:] = (2, 3)` (2 elements)
+- `zip(['y'], (2, 3), strict=True)` fails with ValueError
+
+The bug is confirmed and reproducible. The decorator incorrectly handles cases where more positional arguments are provided than the function can accept, resulting in a `ValueError` instead of allowing Python to raise its standard `TypeError`.

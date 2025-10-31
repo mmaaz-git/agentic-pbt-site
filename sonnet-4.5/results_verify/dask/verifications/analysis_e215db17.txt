@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if the documentation was ambiguous or if there was an undocumented expectation that format='frame' should behave differently. Perhaps the intended behavior was to return flattened column names for some reason not documented.
+
+**Why it might not be INVALID:**
+The documentation is crystal clear: format='frame' should return "dataframe-like objects" where "the original partitions of df will not be transformed in any way." The current behavior (returning column names as strings) directly contradicts this documented behavior. There is no ambiguity - DataFrames should be preserved as-is, not converted to their column names.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be WONTFIX if format='frame' is a rarely-used option that nobody relies on, or if fixing it would break backward compatibility for users who might have worked around this bug. The impact might be considered too low to justify a fix if this feature is essentially deprecated or unused.
+
+**Why it might not be WONTFIX:**
+This is a fundamental functionality bug where the feature doesn't work at all as documented. format='frame' is one of only three format options, making it a core part of the API. The bug renders this option completely unusable for its intended purpose of preserving DataFrame partitions. A documented API feature that doesn't work is not a trivial issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the current behavior (returning column names) was actually the intended design, then the documentation should be updated to reflect this. Perhaps the maintainers meant something different by "dataframe-like objects" or there was a misunderstanding in what "not transformed" means.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation clearly states the partitions should not be transformed and should remain as dataframe-like objects. Column name strings are not "dataframe-like objects" by any reasonable interpretation. The implementation is clearly wrong, not the documentation, as evidenced by the fact that the code for format='frame' doesn't follow the same pattern as the working formats.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If format='frame' was never actually implemented (just partially stubbed out), then making it work as documented could be considered a new feature request rather than a bug fix. Perhaps this functionality was planned but never completed.
+
+**Why it might not be FEATURE_REQUEST:**
+The feature is already documented in the public API with specific behavior promised. The code exists and attempts to implement it, but does so incorrectly. This isn't asking for new functionality - it's asking for the existing, documented functionality to work correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation explicitly promises that format='frame' will return DataFrame partitions without transformation. The actual behavior returns column names instead. This is a clear mismatch between documented and actual behavior. The implementation has a logical error where it doesn't account for DataFrame iteration behavior in Python. All test cases fail consistently, showing this isn't an edge case but a fundamental implementation error.
+
+**Why it might not be BUG:**
+There are very few reasons this wouldn't be a bug. The only argument might be if this was intentionally broken for some technical reason and the team decided not to fix it, but there's no evidence of that in the code or documentation.
+
+## Overall Consideration
+
+This is unequivocally a BUG. The documentation makes an explicit promise about the behavior of format='frame': it should return "dataframe-like objects" where "the original partitions of df will not be transformed in any way." The actual implementation returns string column names instead of DataFrame objects, which is the complete opposite of the documented behavior.
+
+The bug occurs because the implementation directly uses the DataFrame's task graph without wrapping each partition, causing Python's iteration behavior over DataFrames (which yields column names) to take effect when Bag.compute() collects the results. This is a clear implementation oversight where the developer didn't account for how DataFrames behave when iterated.
+
+The fact that format='tuple' and format='dict' work correctly while format='frame' doesn't, combined with the clear documentation and consistent test failures across all scenarios, makes this a textbook example of a valid bug report. The proposed fix in the bug report is also technically sound - wrapping each DataFrame partition would prevent the unwanted iteration behavior. This deserves to be filed as a BUG.

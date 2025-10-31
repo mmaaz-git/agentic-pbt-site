@@ -1,0 +1,45 @@
+Bug Reproduction Analysis for TrustedHostMiddleware IPv6 Parsing
+================================================================
+
+## Reproduction Results
+
+### Property-Based Test
+The provided property-based test correctly demonstrates the issue. When run, it shows that the current string splitting logic fails for ALL IPv6 addresses with ports:
+
+- `[::1]:8000` → Extracts `[` instead of `::1`
+- `[2001:db8::1]:443` → Extracts `[2001` instead of `2001:db8::1`
+- `[fe80::1]:80` → Extracts `[fe80` instead of `fe80::1`
+- `[::ffff:192.0.2.1]:8080` → Extracts `[` instead of `::ffff:192.0.2.1`
+
+### Direct Reproduction
+The bug reproduction code provided in the report accurately demonstrates the problem:
+```
+Host header: [::1]:8000
+Extracted host: [
+Expected: ::1
+```
+
+The assertion fails as expected because the extracted host is `[` rather than `::1`.
+
+### Middleware Testing
+Testing the actual TrustedHostMiddleware confirms the bug has real-world impact:
+
+1. When configured with `allowed_hosts=["::1"]`, a request with Host header `[::1]:8000` is rejected with "Invalid host header" (400 status)
+2. The middleware extracts `[` from the Host header instead of `::1`
+3. Since `[` doesn't match `::1` in the allowed hosts, the request is incorrectly rejected
+
+### Non-IPv6 Behavior
+The current implementation works correctly for:
+- IPv4 addresses: `192.168.1.1:80` → `192.168.1.1` ✓
+- Hostnames: `example.com:443` → `example.com` ✓
+- Localhost: `localhost:8000` → `localhost` ✓
+
+### Proposed Fix Validation
+The proposed fix correctly handles both IPv6 and non-IPv6 cases:
+- IPv6 with port: `[::1]:8000` → `::1` ✓
+- IPv6 without port: `[::1]` → `::1` ✓
+- IPv4 with port: `192.168.1.1:80` → `192.168.1.1` ✓
+- Hostname with port: `example.com:443` → `example.com` ✓
+
+## Conclusion
+The bug is real and reproducible. The TrustedHostMiddleware fails to correctly parse standard-compliant IPv6 Host headers, causing it to reject valid requests from IPv6 clients even when those IPv6 addresses are explicitly allowed.

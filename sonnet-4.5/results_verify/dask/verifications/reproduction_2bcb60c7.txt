@@ -1,0 +1,69 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python version: 3.13
+- Dask version: Latest available in environment
+- Test executed in: /home/npc/pbt/agentic-pbt/worker_/56
+
+### Bug Report Claims vs Reality
+
+The bug report claims:
+1. Calling `read_orc()` with an index column not in the columns list causes a KeyError
+2. The error occurs at line 117 in io/utils.py where it tries to pop the index from a data dict
+
+**CONFIRMED**: Both claims are accurate.
+
+### Reproduction Results
+
+#### Test 1: Reading without index parameter
+- **Status**: SUCCESS
+- **Behavior**: Works as expected, returns DataFrame with columns ['b', 'c']
+
+#### Test 2: Reading with index='a' and columns=['a', 'b', 'c']
+- **Status**: SUCCESS
+- **Behavior**: Works correctly, 'a' becomes index, columns are ['b', 'c']
+
+#### Test 3: Reading with index='a' and columns=['b', 'c'] (the bug case)
+- **Status**: FAILED with KeyError
+- **Error**: KeyError: 'a' at dask/dataframe/io/utils.py:117
+- **Stack trace matches bug report**: The error occurs exactly where the bug report indicated
+
+#### Hypothesis Test Results
+- **Status**: FAILED
+- All generated test cases (5 examples) failed with the same KeyError
+- The bug is reproducible consistently across different data sizes and partition counts
+
+### Root Cause Analysis
+
+The bug report's technical analysis is correct:
+
+1. In `read_orc()` at core.py:97-98, the code only removes the index from columns if it's present:
+   ```python
+   if columns is not None and index in columns:
+       columns = [col for col in columns if col != index]
+   ```
+
+2. When index is NOT in columns, the columns list is passed unchanged to `engine.read_metadata()`
+
+3. In arrow.py:78, `_meta_from_dtypes` is called with columns that don't include the index
+
+4. In io/utils.py:117, the code attempts to pop the index from a data dict that was built only from the columns list:
+   ```python
+   data = {c: pd.Series([], dtype=file_dtypes.get(c, "int64")) for c in to_read_columns}
+   indexes = [data.pop(c) for c in index_cols or []]  # KeyError here
+   ```
+
+### Expected vs Actual Behavior
+
+**Expected behavior** (reasonable user expectation):
+- When specifying columns=['b', 'c'] and index='a', the function should:
+  1. Load columns a, b, and c from the ORC file
+  2. Set column 'a' as the index
+  3. Return a DataFrame with columns ['b', 'c'] and index named 'a'
+
+**Actual behavior**:
+- The function crashes with a KeyError because it doesn't load the index column when it's not in the columns list
+
+### Conclusion
+
+The bug is 100% reproducible and the technical details in the bug report are accurate. The error occurs because the code doesn't handle the case where a user wants to use a column as an index without including it in the data columns list.

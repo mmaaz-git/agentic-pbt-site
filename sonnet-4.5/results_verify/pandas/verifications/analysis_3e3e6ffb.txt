@@ -1,0 +1,45 @@
+## Bug Report Triage Analysis
+
+### Case for BUG:
+1. **Silent Data Loss**: The system allows writing data that cannot be read back, creating a data integrity issue
+2. **Reasonable Expectation**: Users reasonably expect that DataFrames containing valid Python integers should round-trip through JSON
+3. **Asymmetric Behavior**: to_json() accepts the data but read_json() rejects it - this asymmetry is problematic
+4. **Production Impact**: This can cause real data loss in systems that persist DataFrames via JSON
+5. **Documentation Suggests Compatibility**: The phrase "Compatible JSON strings can be produced by to_json()" implies round-trip should work
+
+### Case for DOCUMENTATION_FIX:
+1. **No Explicit Guarantee**: The documentation never explicitly guarantees round-trip compatibility
+2. **Known Limitations**: Multiple existing GitHub issues show round-trip problems are known and accepted
+3. **Implementation Detail**: The int64 limitation comes from ujson, an implementation choice for performance
+4. **Workaround Available**: Users can convert to strings or floats before serialization
+5. **Performance Trade-off**: Using ujson provides significant performance benefits despite limitations
+
+### Case for WONTFIX:
+1. **Edge Case**: Values outside int64 range are relatively rare in data analysis contexts
+2. **Performance Priority**: Changing from ujson would impact performance for all users
+3. **Python Integer Peculiarity**: Python's arbitrary precision integers are unusual among programming languages
+4. **JSON Spec Ambiguity**: JSON doesn't specify integer precision requirements
+
+### Case for INVALID:
+1. **No Formal Contract**: Without an explicit round-trip guarantee, this isn't technically a bug
+2. **Known Behavior**: This appears to be known and accepted behavior based on GitHub issues
+
+### Case for FEATURE_REQUEST:
+1. **Enhancement Opportunity**: Adding support for arbitrary precision integers would be a new feature
+2. **Optional Mode**: Could add a flag to use standard json library for full compatibility
+
+### Conclusion
+
+This should be classified as **BUG** for the following reasons:
+
+1. **Principle of Least Surprise**: Users can create valid DataFrames with large integers, serialize them successfully, but then cannot deserialize them. This violates basic expectations.
+
+2. **Data Integrity**: Silent data corruption/loss is among the most serious types of bugs. Users may lose data without warning.
+
+3. **Asymmetric API**: If read_json cannot handle certain data, to_json should fail fast rather than creating unreadable JSON.
+
+4. **Documentation Implications**: While not explicitly guaranteed, the documentation strongly implies compatibility with "Compatible JSON strings can be produced."
+
+5. **Fix is Straightforward**: As the bug report suggests, adding validation to to_json() to reject values outside int64 range would prevent the silent failure mode.
+
+The alternative classification as DOCUMENTATION_FIX is less appropriate because merely documenting this limitation doesn't address the fundamental asymmetry and data loss risk. Users need either full round-trip support or clear failure at serialization time.

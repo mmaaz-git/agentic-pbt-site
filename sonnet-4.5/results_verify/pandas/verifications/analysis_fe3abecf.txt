@@ -1,0 +1,88 @@
+## Bug Report Analysis and Categorization
+
+### Evaluation Against Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function crashes with a ValueError when `duplicates='drop'` is specified, even though this parameter is specifically designed to handle duplicate bin edges
+- The documentation clearly states that `duplicates='drop'` should "drop non-uniques" rather than raise an error
+- The crash occurs in a legitimate use case: highly skewed data with many duplicates
+- The error message is misleading ("missing values must be missing in the same location") when there are no actual missing/NaN values
+- The implementation has a clear logical flaw: deduplication happens before formatting, but formatting can reintroduce duplicates
+
+**Arguments AGAINST:**
+- Working with denormalized floats (2.2250738585072014e-308) is an edge case
+- The precision parameter's default of 3 is reasonable for most use cases
+
+#### 2. WONTFIX
+**Arguments FOR:**
+- Denormalized floats near machine epsilon (2.2250738585072014e-308) are extremely rare in practice
+- The specific combination of factors (19 zeros + one denormalized float) is highly contrived
+- Users working with such extreme values should handle them specially
+
+**Arguments AGAINST:**
+- The bug can occur with any small values that round to zero, not just denormalized floats
+- The `duplicates='drop'` parameter exists specifically to handle edge cases
+- The fix would be straightforward (validate bins after formatting)
+
+#### 3. INVALID
+**Arguments FOR:**
+- None - the bug clearly exists and violates documented behavior
+
+**Arguments AGAINST:**
+- The code demonstrably crashes when it shouldn't
+- The documentation promises `duplicates='drop'` will handle duplicate edges
+- The test case is valid Python/pandas code
+
+#### 4. FEATURE_REQUEST
+**Arguments FOR:**
+- Could argue that handling denormalized floats is a new feature
+- Better handling of extreme precision cases could be considered an enhancement
+
+**Arguments AGAINST:**
+- The `duplicates='drop'` parameter already exists and is documented
+- This is a failure of existing functionality, not a request for new functionality
+- The function should not crash with valid input
+
+#### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation could warn about precision interactions with `duplicates='drop'`
+- Could document that denormalized floats may cause issues
+
+**Arguments AGAINST:**
+- The documentation correctly describes the intended behavior
+- The issue is with the implementation not matching the documentation
+- Adding warnings about implementation bugs to documentation is backwards
+
+### Root Cause Analysis
+
+The bug occurs due to an oversight in the implementation:
+
+1. When `duplicates='drop'` is used, duplicate bin edges are removed using `algos.unique()`
+2. The deduplicated bins are then formatted using `_format_labels()` with a default precision of 3
+3. For very small values (like denormalized floats), formatting can round distinct values to the same number
+4. This creates degenerate intervals that violate IntervalArray validation rules
+
+### Severity Assessment
+
+- **Impact**: Medium - Causes complete failure of qcut operation
+- **Likelihood**: Low - Requires specific data patterns (highly skewed with tiny values)
+- **Workaround**: Users can manually handle binning or adjust precision parameter
+
+### Recommendation
+
+This is a **BUG** that should be fixed. The reasons are:
+
+1. **Clear violation of documented behavior**: `duplicates='drop'` should handle duplicate edges, not crash
+2. **Legitimate use case**: While denormalized floats are rare, highly skewed data with many duplicates is common in real-world datasets
+3. **Misleading error message**: The error about "missing values" is confusing when the real issue is degenerate intervals
+4. **Simple fix available**: The bug report even suggests a fix - validate bins after formatting to ensure they remain distinct
+
+The bug is not trivial because:
+- It affects a documented parameter's core functionality
+- It can occur with any small values, not just denormalized floats
+- The error prevents users from analyzing skewed data as intended
+
+### Final Decision
+
+**BUG** - This is a valid bug report that identifies a real implementation flaw where the `duplicates='drop'` parameter fails to work correctly due to an interaction between deduplication and formatting steps.

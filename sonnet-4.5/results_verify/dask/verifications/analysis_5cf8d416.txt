@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `_normalize_and_strip_protocol` is an internal/private function (underscore prefix) with no documentation specifying that it must be idempotent. There's no explicit contract or requirement stating that normalization functions must be idempotent. The function could be designed to strip one protocol layer at a time intentionally, allowing for progressive unwrapping of nested protocols. Without documentation stating otherwise, the current behavior might be the intended design.
+
+**Why it might not be INVALID:**
+The function name contains "normalize" which strongly implies idempotence - normalization operations in computer science are typically expected to be idempotent. The inconsistent behavior with multiple `::` separators creates unpredictable results depending on how many times the function is called. The fact that some inputs are idempotent (single protocols) while others aren't (chained protocols) suggests inconsistent behavior rather than intentional design.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function (underscore prefix) not part of the public API. The function is only called once in the codebase (as a cached property), so the non-idempotent behavior may never manifest in practice. The edge case of multiple `::` separators might be rare enough that fixing it isn't worth the risk of breaking existing code. The function eventually reaches a stable state, which might be sufficient for internal use.
+
+**Why it might not be WONTFIX:**
+Chained fsspec protocols are explicitly documented and supported features, not obscure edge cases. The `simplecache::s3::` pattern is a real-world use case mentioned in fsspec documentation. The inconsistency could lead to subtle bugs if the function is ever called multiple times in future code changes. The fix is straightforward and wouldn't break existing single-call usage.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function has no documentation at all, so adding documentation explaining its current behavior (strips one protocol layer per call) would clarify its intended use. If the progressive stripping is intentional, documenting this behavior would prevent confusion. The function might be working as designed for its specific use case in the codebase.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior appears to be a logic bug rather than a documentation issue - the `break` statement causes unintended behavior with chained protocols. The function name "normalize" implies it should be idempotent, which is a reasonable expectation even without explicit documentation. Adding documentation to explain buggy behavior doesn't fix the underlying issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Making the function idempotent could be seen as adding a new capability rather than fixing a bug, since idempotence was never explicitly promised. Support for properly handling multiple chained protocols could be considered a new feature. The current single-layer stripping might be the intended behavior, and full protocol stripping would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle both `://` and `::` separators, suggesting it was meant to handle protocols comprehensively. Idempotence for a normalization function is a reasonable baseline expectation, not a new feature. The issue is with incorrect implementation of existing functionality, not a request for new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function's name explicitly includes "normalize," and normalization functions are universally expected to be idempotent in computer science. The current behavior with the `break` statement causes inconsistent results - some inputs are idempotent while others aren't. The function fails to properly handle valid fsspec chained protocol syntax that's documented and supported. The inconsistency could cause real bugs if code paths normalize the same path multiple times.
+
+**Why it might not be BUG:**
+The function is internal/private (underscore prefix) with no documentation or specification defining its expected behavior. It's only called once in the codebase as a cached property, so the non-idempotent behavior may never actually cause problems. Without explicit documentation stating the function should be idempotent, the current behavior might be intentional for some unstated reason.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be a borderline case between INVALID and WONTFIX. The key factors are:
+
+First, this is an internal/private function with no documentation whatsoever. The underscore prefix indicates it's not part of the public API, and there's no specification defining what "normalize" means in this context. The function is only called once in the codebase (as a cached property), meaning the non-idempotent behavior likely never manifests in practice. The reporter is applying a property (idempotence) that, while reasonable for normalization functions in general, was never explicitly promised for this specific internal function.
+
+Second, the function does eventually reach a stable state (after 2-3 calls depending on input), which might be sufficient for its actual use case. The current implementation might be intentionally designed to strip one protocol layer at a time, allowing for controlled unwrapping of nested protocols. Without documentation or comments explaining the intended behavior, we cannot definitively say the current behavior is wrong.
+
+Third, while chained fsspec protocols are valid and documented, the specific pattern causing issues (`"cache::s3::bucket/path"` with multiple `::` separators) might be rare in practice. The more common pattern `"cache::s3://bucket/path"` (mixing `::` and `://`) already works idempotently. Given that this is an internal function with limited use, the edge case might not justify the risk of changing existing behavior that current code might depend on. The function should be considered INVALID because there's no specification that it must be idempotent, and applying unstated requirements to internal functions is not a valid basis for bug reports.

@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The DataFrame interchange protocol specification explicitly states that object dtypes are "out of scope" for the protocol. The error message "Non-string object dtypes are not supported yet" accurately reflects this limitation. The protocol was never designed to handle arbitrary Python objects, including large integers stored as object dtype. The user is expecting behavior that was never promised by the specification. The protocol documentation clearly states object dtypes are not supported, making this expected behavior, not a bug.
+
+**Why it might not be INVALID:**
+The error message says "not supported yet", implying future support is planned. String objects (which are also object dtype) do work, suggesting some object dtype support exists. The fact that __dataframe__() succeeds but from_dataframe() fails could be seen as inconsistent API behavior that violates user expectations.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving integers that exceed the int64 range, which is rare in practice. The interchange protocol has "severe implementation issues" according to pandas documentation and is being deprecated in favor of the Arrow C Data Interface. Fixing this would require significant changes to support arbitrary precision integers, which goes against the protocol's design goal of simplicity. The error message clearly indicates what's wrong, even if it happens late.
+
+**Why it might not be WONTFIX:**
+Large integers are legitimate data that users might have from databases or other sources. The failure mode is confusing - creating an interchange object that cannot be used. This affects data interoperability, which is the core purpose of the interchange protocol.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The pandas documentation for from_dataframe() doesn't mention that object dtypes (except strings) will fail. Users have no way to know from the pandas documentation that large integers will cause problems. The documentation should clarify what data types are supported and what happens with unsupported types. Adding a note about large integer handling would prevent user confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The interchange protocol specification (external to pandas) already states that object dtypes are out of scope. The error message is clear about what's not supported. The current behavior matches the protocol specification, even if the pandas-specific documentation doesn't repeat all the limitations.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for support of large integers that exceed int64 range, which is not currently supported. The error message says "not supported yet", suggesting this could be a future feature. Supporting arbitrary precision integers would be a new capability, not fixing broken existing functionality. This would extend the protocol beyond its current design scope.
+
+**Why it might not be FEATURE_REQUEST:**
+The user frames this as a bug (inconsistent behavior, poor error timing) rather than requesting new functionality. The interchange protocol specification has already decided object dtypes are out of scope, so this isn't just missing functionality but a deliberate design choice.
+
+## BUG Considerations
+**Why it might be BUG:**
+The error occurs at the wrong time - __dataframe__() should fail if the data isn't supported, not from_dataframe(). This violates the principle of failing fast. The API creates an unusable interchange object, which is poor design. String objects work but integer objects don't, despite both being object dtype, showing inconsistent behavior within the same dtype category.
+
+**Why it might not be BUG:**
+The protocol specification explicitly excludes object dtypes from scope. The implementation correctly rejects non-string object dtypes as designed. The behavior matches the specification, even if the timing of the error isn't ideal. The error message accurately describes the limitation. This is working as designed according to the protocol specification.
+
+## Overall Consideration
+
+Looking at all considerations, this bug report describes behavior that is technically correct according to the DataFrame interchange protocol specification. The specification explicitly states that object dtypes are "out of scope" and the implementation correctly rejects non-string object dtypes. While the timing of the error (in from_dataframe rather than __dataframe__) could be better, this doesn't constitute a bug in the traditional sense - it's the intended behavior based on the protocol's limitations.
+
+The most compelling argument is that the protocol specification, which is the authoritative source for expected behavior, explicitly excludes object dtypes from its scope. The fact that string objects work is likely a special case implementation detail to support basic string columns, not an indication that all object dtypes should work. The error message "not supported yet" might be slightly misleading, but it accurately conveys that this functionality doesn't exist.
+
+The user's complaint about "late error detection" and "poor user experience" are valid criticisms of the implementation approach, but these are design choices rather than bugs. The suggestion to fail earlier would be an improvement, but the current behavior isn't incorrect - it's just not optimal. Given that the interchange protocol is being deprecated in favor of better solutions (Arrow C Data Interface), investing effort in improving error timing for unsupported edge cases seems unwarranted.
+
+This should be classified as INVALID because the user is expecting behavior (support for large integers as object dtype) that was never part of the protocol specification. The behavior is working as designed, even if the design could be better.

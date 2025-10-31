@@ -1,0 +1,60 @@
+## Reproduction Analysis
+
+### Bug Report Claims Verification
+
+The bug report claims that `ensure_python_int` raises `OverflowError` instead of `TypeError` when called with infinity values. This claim has been verified as **100% accurate**.
+
+### Test Results
+
+1. **float('inf')**:
+   - Expected: TypeError
+   - Actual: OverflowError with message "cannot convert float infinity to integer"
+   - **BUG CONFIRMED**
+
+2. **float('-inf')**:
+   - Expected: TypeError
+   - Actual: OverflowError with message "cannot convert float infinity to integer"
+   - **BUG CONFIRMED**
+
+3. **float('nan')**:
+   - Expected: TypeError
+   - Actual: TypeError with message "Wrong type <class 'float'> for value nan"
+   - **WORKS CORRECTLY** (ValueError from int() is caught and re-raised as TypeError)
+
+4. **Valid float (5.0)**:
+   - Expected: Successful conversion to int(5)
+   - Actual: Returns int(5)
+   - **WORKS CORRECTLY**
+
+5. **Invalid float (5.5)**:
+   - Expected: TypeError
+   - Actual: TypeError with message "Wrong type <class 'float'> for value 5.5"
+   - **WORKS CORRECTLY** (AssertionError from value check is caught and re-raised as TypeError)
+
+### Root Cause Analysis
+
+The source code shows the exception handling block:
+
+```python
+try:
+    new_value = int(value)
+    assert new_value == value
+except (TypeError, ValueError, AssertionError) as err:
+    raise TypeError(f"Wrong type {type(value)} for value {value}") from err
+```
+
+The code catches:
+- `TypeError` - for truly incompatible types
+- `ValueError` - for NaN conversions
+- `AssertionError` - for floats that don't equal their int conversion
+
+But it does NOT catch:
+- `OverflowError` - raised by Python's int() for infinity values
+
+### Technical Correctness of Bug Report
+
+The bug report is technically correct in all aspects:
+1. The reproduction code runs and demonstrates the issue
+2. The root cause analysis is accurate
+3. The proposed fix (adding OverflowError to the except clause) would resolve the issue
+4. The docstring contract is clearly violated by the current behavior

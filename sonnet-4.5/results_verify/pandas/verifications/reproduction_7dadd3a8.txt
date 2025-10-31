@@ -1,0 +1,44 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the bug report. Here are my findings:
+
+### Code Examination
+
+I examined the source code at `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/compat/numpy/function.py` and confirmed:
+
+1. There are two argsort validators defined:
+   - `validate_argsort` using `ARGSORT_DEFAULTS` (lines 136-146)
+   - `validate_argsort_kind` using `ARGSORT_DEFAULTS_KIND` (lines 150-156)
+
+2. The comment on line 148-149 explicitly states: "two different signatures of argsort, this second validation for when the `kind` param is supported"
+
+3. ARGSORT_DEFAULTS (lines 136-141) includes:
+   - axis: -1
+   - kind: None (note: set twice on lines 138 and 140, with different values)
+   - order: None
+   - stable: None
+
+4. ARGSORT_DEFAULTS_KIND (lines 150-153) includes:
+   - axis: -1
+   - order: None
+   - stable: None
+   - **Missing: kind parameter**
+
+5. The function `validate_argsort_with_ascending` (lines 159-172) calls `validate_argsort_kind` on line 170.
+
+### Bug Reproduction
+
+When running the test code with `kwargs={"kind": None}`:
+- The function `validate_argsort_with_ascending` calls `validate_argsort_kind`
+- `validate_argsort_kind` uses `ARGSORT_DEFAULTS_KIND` which doesn't include 'kind'
+- The validation fails with: "argsort() got an unexpected keyword argument 'kind'"
+
+### Bug Impact
+
+This is a clear logic bug where:
+1. The validator's name (`validate_argsort_kind`) implies it should handle the 'kind' parameter
+2. The code comment explicitly states it's for "when the `kind` param is supported"
+3. Yet the defaults dictionary (`ARGSORT_DEFAULTS_KIND`) doesn't include the 'kind' parameter
+4. This causes a TypeError when users pass `kind=None`, even though that's the default value in `ARGSORT_DEFAULTS`
+
+The bug prevents valid usage of the `validate_argsort_with_ascending` function when users explicitly pass the 'kind' parameter, even with its default value of None.

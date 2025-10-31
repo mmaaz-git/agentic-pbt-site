@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The behavior could be argued as undefined since the documentation doesn't explicitly state that ALL possible string characters including null bytes must work as separators. Null bytes have special meaning in C-style strings and many systems treat them as string terminators. The function might only be intended for printable characters as separators.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that the separator is a "string" parameter with no restrictions. In Python, '\x00' is a valid string character. The function accepts it without error and produces a result - it just produces the wrong result. If null bytes were unsupported, the function should raise an error rather than silently drop them.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Using null bytes as separators is an extremely rare edge case that likely affects almost no real-world users. The null byte has special meaning in many contexts (C strings, file systems, etc.) and using it as a separator in data processing is unconventional. The issue appears to stem from numpy's behavior when summing mixed arrays with scalar strings, which would require a workaround rather than fixing numpy itself.
+
+**Why it might not be WONTFIX:**
+The bug causes silent data corruption - the separator is dropped without any warning or error. This violates the principle of least surprise. The fix is straightforward (convert separators to arrays) and wouldn't impact performance significantly. Other non-printable characters like '\x01' work fine, so this inconsistency is problematic.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to note that certain special characters, particularly null bytes, may not work as expected due to underlying numpy behavior. This would set proper expectations without requiring code changes. The documentation currently doesn't warn about any character limitations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is genuinely broken for null bytes - it's not just a documentation issue. Other separators including other non-printable characters work correctly. Documenting a bug doesn't fix the bug, and users who need null byte separators would still have corrupted data.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Support for null byte separators could be viewed as a new feature since it's never explicitly promised in the documentation and requires special handling. The current implementation works for all "normal" separators, and adding null byte support would be extending functionality to handle an edge case.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - concatenation with a separator is the existing feature. The function already accepts null bytes without error; it just produces incorrect output. The API contract is to concatenate with the given separator, which should work for any valid Python string.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function silently produces incorrect output when given a null byte separator. It accepts the input without error but fails to include the separator in the output, causing data corruption. The documentation states the separator will be inserted between elements with no mentioned exceptions. The fix is straightforward and the behavior is clearly incorrect - concatenating ['a'] and ['b'] with '\x00' should produce 'a\x00b', not 'ab'.
+
+**Why it might not be BUG:**
+The issue stems from numpy's behavior with mixed array/scalar operations, not pandas code itself. Null bytes are special characters that have unique handling in many contexts. The vast majority of users would never encounter this issue, and it could be considered an acceptable limitation.
+
+## Overall Consideration
+
+After thorough analysis, this appears to be a legitimate bug. The function's contract is clear: concatenate arrays with a separator between them. The null byte '\x00' is a valid Python string character, and the function accepts it without raising an error. However, it silently fails to include the separator in the output, producing 'ab' instead of 'a\x00b'. This is demonstrably incorrect behavior that causes data corruption.
+
+The root cause has been identified: when `cat_core` creates a list mixing numpy arrays and scalar string separators, then uses `np.sum()`, null bytes get dropped. Testing confirms that converting the separator to an array (as suggested in the bug report's fix) resolves the issue. The fact that all other separators work correctly, including other non-printable characters like '\x01', makes this inconsistency particularly problematic.
+
+While null byte separators are admittedly rare in practice, the principle of correctness matters. The function should either work correctly for all valid string inputs or explicitly reject inputs it cannot handle. Silent data corruption is the worst possible outcome. The proposed fix is simple, doesn't impact performance for common cases, and ensures the function honors its documented contract for all valid Python strings.

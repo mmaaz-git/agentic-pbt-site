@@ -1,0 +1,45 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the reported bug in pandas.io.json related to dtype preservation during JSON round-trips.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test Reproduction
+- Ran the provided property-based test using Hypothesis
+- The test failed on the exact example provided: `[{'a': 0, 'b': 0.0}]`
+- Error: Column 'b' dtype changed from float64 to int64
+- Falsifying example confirmed: When a float column contains only integer-like values (0.0), it gets converted to int64
+
+### 2. Manual Reproduction
+- Created a DataFrame with column 'b' containing value 0.0 (float)
+- Serialized to JSON using `to_json(orient='records')`
+- Deserialized using `read_json(orient='records')`
+- Result: dtype changed from float64 to int64
+
+### 3. Testing Different Orient Values
+Tested all available orient values:
+- ❌ orient='records': dtype changed from float64 to int64
+- ❌ orient='split': dtype changed from float64 to int64
+- ❌ orient='columns': dtype changed from float64 to int64
+- ❌ orient='index': dtype changed from float64 to int64
+- ✅ orient='table': dtype preserved correctly (float64 stays float64)
+
+## Key Observations
+
+1. The bug is real and reproducible
+2. It affects all orient values EXCEPT 'table'
+3. The 'table' orient works because it includes schema information with explicit type definitions
+4. The issue occurs when float values are "integer-like" (e.g., 0.0, 1.0, 2.0)
+5. JSON itself doesn't distinguish between 0 and 0.0 - both are valid number representations
+6. During deserialization, pandas' type inference logic converts integer-like floats to integers
+
+## Technical Details
+
+The JSON representation `[{"b": 0.0}]` is valid JSON, but when pandas reads it back without schema information, it sees the value 0.0 and infers it should be an integer since it has no decimal component. This is a type inference heuristic that optimizes for storage but breaks round-trip consistency.
+
+The orient='table' format includes explicit schema metadata:
+```json
+{"schema": {"fields": [{"name": "b", "type": "number"}]}, "data": [...]}
+```
+This preserves the float64 type correctly.

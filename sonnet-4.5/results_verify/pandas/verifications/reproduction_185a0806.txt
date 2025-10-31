@@ -1,0 +1,56 @@
+## Bug Reproduction Report
+
+I successfully reproduced the bug reported for pandas.api.extensions.take function. The bug manifests in multiple ways:
+
+### 1. Hypothesis Test Failure
+The property-based test fails immediately with:
+```
+TypeError: take() got an unexpected keyword argument 'allow_fill'
+```
+This confirms that when passing a Series with allow_fill=True to pandas.api.extensions.take, it eventually calls Series.take() which does not accept the allow_fill parameter.
+
+### 2. Manual Reproduction Results
+
+**With numpy array (WORKS CORRECTLY):**
+- Input: take(np.array([10.0, 20.0, 30.0]), [0, -1], allow_fill=True)
+- Output: [10. nan]
+- This is the expected behavior - index -1 is treated as a fill position and gets NaN
+
+**With Series (CRASHES):**
+- Input: take(pd.Series([10.0, 20.0, 30.0]), [0, -1], allow_fill=True)
+- Output: TypeError: take() got an unexpected keyword argument 'fill_value'
+- The error is slightly different from the Hypothesis test (mentions 'fill_value' instead of 'allow_fill')
+- This confirms Series.take() doesn't accept these parameters
+
+**With Index (INCONSISTENT BEHAVIOR):**
+- Integer Index with fill_value=None: SILENTLY IGNORES allow_fill
+  - Input: take(pd.Index([10, 20, 30]), [0, -1], allow_fill=True, fill_value=None)
+  - Output: Index([10, 30])
+  - Expected: Index([10, NaN])
+  - The -1 is treated as a regular negative index instead of a fill position
+
+- Integer Index with fill_value=-999: RAISES ERROR
+  - Output: ValueError: Unable to fill values because Index cannot contain NA
+
+- Float Index with fill_value=None: SILENTLY IGNORES allow_fill (same as integer)
+  - Output: Index([10.0, 30.0]) instead of Index([10.0, NaN])
+
+- Float Index with fill_value=np.nan: WORKS CORRECTLY
+  - Output: Index([10.0, nan])
+
+### 3. Root Cause Analysis
+
+The bug occurs in `pandas/core/array_algos/take.py:take_nd()` function:
+1. When arr is a Series, the code at line 104 checks `if not isinstance(arr, np.ndarray)`
+2. Since Series is not np.ndarray, it enters the branch
+3. The code then calls `arr.take(indexer, fill_value=fill_value, allow_fill=allow_fill)`
+4. But Series.take() only accepts `(indices, axis, **kwargs)` - it doesn't have allow_fill or fill_value parameters
+5. The **kwargs in Series.take() are described as "for compatibility with numpy.take" but don't actually handle these parameters
+
+For Index, Index.take() does accept allow_fill and fill_value, but:
+- When fill_value=None, it silently ignores allow_fill and treats -1 as a regular negative index
+- When fill_value is a non-None value for integer Index, it raises an error about not being able to contain NA
+
+### Conclusion
+
+The bug is confirmed. The pandas.api.extensions.take function claims to accept Series and Index objects (as documented), but fails to handle them properly when allow_fill=True. The function needs to extract the underlying array from Series/Index objects before processing, as suggested in the bug report's fix.

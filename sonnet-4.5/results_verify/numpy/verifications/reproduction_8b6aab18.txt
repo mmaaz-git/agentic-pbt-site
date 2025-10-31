@@ -1,0 +1,41 @@
+## Reproduction Analysis
+
+I have successfully reproduced the reported bug. Here are my findings:
+
+### Hypothesis Test
+The property-based test fails as reported with the input `coefs=[0.0], size=2`:
+- Expected behavior: `truncate(2)` should return a polynomial with 2 coefficients
+- Actual behavior: Returns a polynomial with 1 coefficient (the original unchanged)
+
+### Manual Reproduction
+I ran the provided reproduction code and confirmed the exact outputs:
+
+Test 1: `Polynomial([1]).truncate(3)`
+- Expected length: 3
+- Actual length: 1
+- Result: The polynomial remains unchanged when size > len(coef)
+
+Test 2: `Polynomial([0.0]).truncate(2)`
+- Expected length: 2
+- Actual length: 1
+- Result: Same behavior, polynomial unchanged
+
+Test 3: `Polynomial([1, 2, 3, 4, 5]).truncate(3)`
+- Expected length: 3
+- Actual length: 3
+- Result: Works correctly when size <= len(coef), truncating to exactly 3 coefficients
+
+### Source Code Analysis
+Examining the implementation in `/home/npc/miniconda/lib/python3.13/site-packages/numpy/polynomial/_polybase.py` at lines 773-776:
+
+```python
+if isize >= len(self.coef):
+    coef = self.coef
+else:
+    coef = self.coef[:isize]
+```
+
+This confirms the behavior: when `size >= len(self.coef)`, the method returns the original coefficients unchanged rather than extending to the requested size.
+
+### Effect
+The method's behavior directly contradicts its documentation which states "Truncate series to length `size`" and "The series is reduced to length `size`". When size is larger than the current length, users expect the result to have exactly `size` coefficients (possibly padded with zeros), but instead get a polynomial with fewer coefficients than requested.

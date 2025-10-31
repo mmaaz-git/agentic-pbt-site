@@ -1,0 +1,48 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the reported bug in dask.bag.Bag.var. The bug occurs when the number of elements equals the degrees of freedom parameter (n == ddof), resulting in a ZeroDivisionError.
+
+## Reproduction Results
+
+### 1. Hypothesis Test
+The property-based test using Hypothesis confirmed the bug. When running test_variance_division_by_zero with various values of n, the function consistently raises ZeroDivisionError when calling b.var(ddof=n).compute() for any bag with n elements.
+
+Test results showed ZeroDivisionError for all tested cases where n == ddof:
+- n=1, ddof=1: ZeroDivisionError
+- n=2, ddof=2: ZeroDivisionError
+- n=3, ddof=3: ZeroDivisionError
+... and so on.
+
+### 2. Simple Reproduction Case
+The simple test case from the bug report also reproduces the issue:
+
+```python
+data = [5.0]
+b = db.from_sequence(data, npartitions=1)
+result = b.var(ddof=1).compute()
+```
+
+Result: `ZeroDivisionError: float division by zero`
+
+The error occurs at line 36 in `/home/npc/miniconda/lib/python3.13/site-packages/dask/bag/chunk.py`:
+```python
+return result * n / (n - ddof)  # When n == ddof, this is division by zero
+```
+
+### 3. Comparison with NumPy and pandas
+
+For comparison, I tested the same edge cases with NumPy and pandas:
+
+**NumPy behavior:**
+- np.var([5.0], ddof=1): Returns `nan` with a RuntimeWarning about "Degrees of freedom <= 0"
+- np.var([1.0, 2.0], ddof=2): Returns `inf` with RuntimeWarning about "divide by zero"
+
+**pandas behavior:**
+- Series([5.0]).var(ddof=1): Returns `nan` (no warning)
+- Series([1.0, 2.0]).var(ddof=2): Returns `nan` (no warning)
+
+Both NumPy and pandas handle this edge case more gracefully by returning special values (nan or inf) with warnings, rather than crashing with an exception.
+
+## Conclusion
+The bug is confirmed. The dask.bag.Bag.var method crashes with a ZeroDivisionError when n == ddof, while comparable libraries (NumPy, pandas) handle this case more gracefully by returning nan/inf with optional warnings. This is a legitimate issue that impacts usability when working with small datasets or high ddof values.

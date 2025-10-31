@@ -1,0 +1,51 @@
+## Bug Reproduction Results
+
+### Test Execution Summary
+I successfully reproduced the bug described in the report. Here are the key findings:
+
+### 1. Uppercase Special Fields Test
+When testing uppercase versions of Django's special field names:
+- `"WEEK_DAY"` → Generated SQL: `EXTRACT(WEEK_DAY FROM date_column)` ❌
+- `"ISO_WEEK_DAY"` → Generated SQL: `EXTRACT(ISO_WEEK_DAY FROM date_column)` ❌
+- `"ISO_YEAR"` → Generated SQL: `EXTRACT(ISO_YEAR FROM date_column)` ❌
+- `"INVALID_FIELD"` → Generated SQL: `EXTRACT(INVALID_FIELD FROM date_column)` ❌
+
+All these generated SQL statements would FAIL when executed against PostgreSQL because:
+- PostgreSQL doesn't recognize "WEEK_DAY" (it uses "DOW")
+- PostgreSQL doesn't recognize "ISO_WEEK_DAY" (it uses "ISODOW")
+- PostgreSQL doesn't recognize "ISO_YEAR" (it uses "ISOYEAR")
+- PostgreSQL doesn't recognize "INVALID_FIELD" at all
+
+### 2. Lowercase Special Fields Test (Working Correctly)
+When testing lowercase versions:
+- `"week_day"` → Generated SQL: `EXTRACT(DOW FROM date_column) + 1` ✓
+- `"iso_week_day"` → Generated SQL: `EXTRACT(ISODOW FROM date_column)` ✓
+- `"iso_year"` → Generated SQL: `EXTRACT(ISOYEAR FROM date_column)` ✓
+
+These work correctly because the function has special case handling for lowercase versions.
+
+### 3. Valid PostgreSQL Fields Test
+Valid uppercase PostgreSQL field names work correctly:
+- `"YEAR"` → `EXTRACT(YEAR FROM date_column)` ✓
+- `"DOW"` → `EXTRACT(DOW FROM date_column)` ✓
+- `"ISODOW"` → `EXTRACT(ISODOW FROM date_column)` ✓
+- `"ISOYEAR"` → `EXTRACT(ISOYEAR FROM date_column)` ✓
+
+### 4. Invalid Field Patterns Test
+The regex `[A-Z_]+` accepts ANY uppercase string with underscores:
+- `"SOME_RANDOM_FIELD"` → Generates invalid SQL
+- `"A_B_C_D"` → Generates invalid SQL
+- `"TEST_EXTRACT_FIELD"` → Generates invalid SQL
+
+### Verification
+The bug report is TECHNICALLY CORRECT about the behavior:
+1. The function does accept invalid PostgreSQL field names
+2. It does generate SQL that would fail at runtime
+3. There is an inconsistency between lowercase and uppercase handling
+4. The regex validation is indeed too permissive
+
+### Impact Assessment
+The actual impact depends on how Django uses this function:
+- If Django only internally calls this with known-valid fields, the bug may not manifest
+- If user code can directly or indirectly pass field names to this function, it could cause runtime failures
+- The inconsistency between lowercase and uppercase special field handling is confusing

@@ -1,0 +1,44 @@
+TRIAGE ANALYSIS
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly states that compress_rows and compress_cols must preserve dimensionality. The functions are documented to "suppress rows/columns" and return an "ndarray", without specifying the exact shape behavior for edge cases. The bug report assumes a contract ("should always preserve the dimensionality") that is not documented. Since the documentation doesn't promise 2D preservation, the current behavior of returning a 1D empty array could be considered valid, making this report invalid based on undocumented expectations.
+
+**Why it might not be INVALID:**
+The functions demonstrate clear inconsistent behavior - they preserve 2D structure in all cases EXCEPT when fully masked. When some rows are removed (e.g., going from (3,3) to (1,3)), the result is 2D, but when all rows are removed, it suddenly becomes 1D. This inconsistency is problematic regardless of documentation, as it violates the principle of least surprise and creates a special case that downstream code must handle differently.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Fully masked arrays returning empty 1D arrays is an extreme edge case that rarely occurs in practice. Most real-world usage involves partial masking, where the current behavior works correctly. The workaround is simple - users can check for fully masked arrays before calling these functions or reshape the result if needed. Changing this behavior might break existing code that relies on the current implementation, making it not worth fixing for such a rare scenario.
+
+**Why it might not be WONTFIX:**
+This is not just a cosmetic issue - it causes actual failures in downstream code that expects consistent dimensionality. Code that accesses result.shape[1] will crash with IndexError on fully masked inputs. The inconsistency makes these functions unreliable for generic programming where the mask pattern isn't known in advance. The fix is straightforward and would make the API more predictable.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation lacks any mention of what happens with fully masked arrays or empty results. It doesn't specify whether dimensionality should be preserved or what shape to expect when all rows/columns are suppressed. Adding documentation about this edge case behavior would at least warn users about the shape change, allowing them to handle it appropriately. The current behavior might be intentional but undocumented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just missing documentation - it's genuinely inconsistent behavior in the code. Documenting that "the function returns 2D arrays except when fully masked, then returns 1D" would be documenting a bug rather than intended behavior. The fix should be in the code to make it consistent, not in documenting an inconsistency.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The bug report is essentially asking for new behavior - maintaining 2D structure even for fully masked arrays. This could be viewed as a feature enhancement to make the functions more robust for edge cases. The current implementation works for the common use cases, and adding consistent shape preservation could be seen as extending functionality rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for consistent behavior of existing functions. The functions already preserve 2D structure in most cases - the request is to fix the inconsistency, not add a new feature. The shape preservation logic already exists and works for partial masking; it just fails for the fully masked case due to a specific code path.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior is demonstrably inconsistent - the same function returns different dimensional arrays based solely on whether all vs some elements are masked. This violates the principle of consistent return types and makes the functions unpredictable. The implementation contains special case code (`if m.all(): return nxarray([])`) that explicitly creates this inconsistency. Functions that suppress rows should return arrays with the same number of dimensions as the input, just with fewer rows.
+
+**Why it might not be BUG:**
+The documentation doesn't promise dimensional preservation, and returning an empty 1D array for fully masked data could be intentional design. Many NumPy functions change dimensions based on input (like squeeze, ravel, etc.). Without explicit documentation stating the expected behavior, this could be working as designed, even if the design is surprising.
+
+## Overall consideration
+
+After thorough analysis, this appears to be a genuine inconsistency in the implementation rather than a documentation issue or invalid expectation. The functions exhibit split behavior: they preserve 2D structure when removing some rows/columns but not when removing all rows/columns. This inconsistency stems from the special case handling in compress_nd where `if m.all(): return nxarray([])` unconditionally returns a 1D array regardless of the input dimensions or axis parameter.
+
+The bug report correctly identifies a real problem that can cause downstream failures. While the documentation doesn't explicitly promise dimensional preservation, the inconsistent behavior within the same function for similar operations (removing some vs all rows) suggests this is unintended. The fact that empty input arrays (0,3) correctly maintain their 2D structure when passed through compress_rows, but fully masked arrays don't, further reinforces that this is likely a bug rather than intentional design.
+
+However, given that this is an edge case (fully masked arrays), the lack of explicit documentation about expected behavior, and the potential for breaking existing code that might depend on this behavior, this could reasonably be classified as either a DOCUMENTATION_FIX (to document the current quirky behavior) or WONTFIX (as an edge case not worth the risk of changing). The strongest argument is for DOCUMENTATION_FIX - the behavior should be documented so users are aware of this edge case, even if the code isn't changed.

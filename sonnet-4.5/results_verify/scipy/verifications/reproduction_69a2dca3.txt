@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug described in the report. The issue is confirmed.
+
+Test Setup:
+-----------
+I created test scripts that call scipy.datasets.clear_cache() with invalid inputs under two conditions:
+1. When the cache directory doesn't exist
+2. When the cache directory exists
+
+Test Results:
+-------------
+
+When cache directory DOES NOT exist:
+- Passing non-callable string "not_callable": Function returns silently with message "Cache Directory ... doesn't exist. Nothing to clear."
+- Passing invalid callable: Function returns silently with same message
+- NO EXCEPTIONS RAISED - This confirms the bug
+
+When cache directory EXISTS:
+- Passing non-callable string "not_callable": Raises AssertionError as expected
+- Passing invalid callable: Raises ValueError with message "Dataset method invalid_dataset doesn't exist..." as expected
+- PROPER EXCEPTIONS RAISED - This is the correct behavior
+
+Code Analysis:
+--------------
+The problem is in _utils.py lines 24-26:
+```python
+if not os.path.exists(cache_dir):
+    print(f"Cache Directory {cache_dir} doesn't exist. Nothing to clear.")
+    return
+```
+
+This early return happens BEFORE the input validation code (lines 36-42) which contains:
+- assert callable(dataset) on line 36
+- ValueError check for invalid dataset names on lines 38-42
+
+Impact:
+-------
+The bug allows invalid inputs to be silently accepted when the cache directory doesn't exist, which violates the principle of input validation and the function's documented contract. The function should validate inputs regardless of the system state (whether cache exists or not).

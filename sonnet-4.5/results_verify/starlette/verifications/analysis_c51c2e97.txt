@@ -1,0 +1,54 @@
+Bug Triage Analysis
+====================
+
+## INVALID Considerations
+
+**Why it might be INVALID:**
+According to RFC 7230, HTTP header field names should not contain whitespace. A user providing header names with leading or trailing whitespace could be considered invalid input. The middleware could argue that it's not designed to handle malformed header names, and the fact that it rejects them (even if inconsistently) is acceptable behavior. Users should not be passing header names with whitespace in the first place.
+
+**Why it might not be INVALID:**
+The bug is not about whether headers with whitespace should be allowed, but about the inconsistency in how they are handled. The middleware accepts headers with whitespace during configuration without any error or warning, but then silently fails to match them during validation. This inconsistency is a real issue regardless of whether such headers should be used.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+This is an edge case involving invalid HTTP header names (with whitespace) that should never occur in properly configured systems. The impact is minimal since developers shouldn't be using header names with whitespace anyway. The fix would add unnecessary normalization code for a scenario that violates HTTP specifications. The current behavior, while inconsistent, effectively rejects invalid headers.
+
+**Why it might not be WONTFIX:**
+The inconsistency creates a confusing developer experience where configuration appears to work but silently fails at runtime. If the middleware wants to reject headers with whitespace, it should do so consistently at configuration time with a clear error message, not accept them and then fail mysteriously during validation.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify how the middleware handles header names with whitespace. Adding documentation to clarify that header names are normalized (lowercased) but whitespace is preserved during configuration, and that header names with whitespace will not match during validation, would help developers understand the current behavior. This would be sufficient if the current behavior is considered intentional.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue is not that the documentation is wrong or unclear about intended behavior, but that the code itself has an inconsistent implementation. Simply documenting the inconsistency doesn't fix the underlying problem that headers are processed differently in different parts of the code.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Supporting proper normalization of header names (including trimming whitespace) could be seen as a new feature to make the middleware more robust and forgiving of configuration variations. The request is essentially asking for the middleware to handle edge cases more gracefully by normalizing headers consistently throughout.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out that existing functionality is broken due to inconsistent processing. The middleware already attempts to normalize headers (by lowercasing), it just does so inconsistently. Fixing an inconsistency is a bug fix, not a new feature.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The code has a clear inconsistency: it lowercases but doesn't strip headers during storage (line 67), then lowercases and strips headers during comparison (line 129). This inconsistency means that any header configured with whitespace will never successfully validate, even when the exact same header is requested. The middleware accepts the configuration without error but then fails to work as configured. This is objectively incorrect behavior.
+
+**Why it might not be BUG:**
+Header names with whitespace are technically invalid according to HTTP specifications. The middleware's rejection of such headers, even if done inconsistently, could be considered correct behavior. The bug might be that it accepts them at all during configuration, not that it fails to match them during validation.
+
+## Overall Consideration
+
+The core issue here is an implementation inconsistency, not a debate about whether headers with whitespace should be supported. The middleware processes headers differently during configuration versus validation, leading to a situation where configured headers silently fail to work. While it's true that HTTP header names shouldn't contain whitespace according to RFC 7230, the middleware's behavior is still problematic for three reasons:
+
+First, the middleware accepts headers with whitespace during configuration without any error or warning, implying they are valid input. If such headers are invalid, they should be rejected at configuration time with a clear error message, not accepted and then mysteriously fail during runtime validation.
+
+Second, the inconsistency suggests this was not an intentional design decision but an oversight. The code attempts to normalize headers by lowercasing them but inconsistently applies trimming. If the intention was to reject headers with whitespace, this would be done explicitly and consistently, not through an accidental mismatch in processing.
+
+Third, while the practical impact may be limited since well-behaved applications shouldn't use headers with whitespace, the fix is straightforward and would make the middleware more robust. The proposed fix (adding `.strip()` to line 67) would ensure consistent processing throughout the middleware, either accepting or rejecting such headers consistently.
+
+Given these considerations, this appears to be a genuine bug worth fixing. The inconsistency in processing is objectively incorrect, regardless of whether headers with whitespace should be supported. The proper fix would be to either consistently strip whitespace (making the middleware more forgiving) or consistently reject headers with whitespace at configuration time (making the middleware more strict). The current state of accepting them but then failing to match them is the worst of both worlds.

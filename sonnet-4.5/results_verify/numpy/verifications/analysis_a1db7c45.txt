@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The NumPy documentation doesn't explicitly state that the function must return -1 when a substring is not found. One could argue that since the exact return value for "not found" cases isn't documented, the current behavior might be considered undefined or implementation-specific. Additionally, null characters have special meaning in C-style strings, and NumPy might intentionally handle them differently.
+
+**Why it might not be INVALID:**
+The NumPy documentation explicitly states that numpy.strings.find "mimics Python's standard str.find() method." Python's str.find() has well-documented behavior of returning -1 when a substring is not found. Users reasonably expect NumPy to follow the same semantics. The bug is reproducible and clearly violates the expected behavior based on the stated intent to mimic Python's method.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Null characters are edge cases that rarely appear in typical string processing. The maintainers might consider this an obscure corner case that affects very few users. Fixing it might require changes to low-level string handling code that could introduce risks or performance impacts for a minimal benefit.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it completely breaks the ability to search for null characters in strings, returning incorrect results 100% of the time. The bug affects a core string operation that should work consistently for all valid characters. Binary data processing and protocols that embed nulls in strings are legitimate use cases that need correct behavior.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The NumPy documentation could be updated to explicitly note that null character searches have special behavior and always return 0 (or the start position). This would at least warn users about the limitation and document the actual behavior rather than leaving it ambiguous.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function claims to mimic Python's str.find(), which handles null characters correctly. Documenting incorrect behavior as a "feature" would be misleading when the actual intent is clear. The issue is not that the documentation is wrong or incomplete - the implementation is genuinely broken for this case.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper null character handling was never implemented and this is a request to add new functionality. The current implementation might have been designed without considering null characters, making this an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality - the function already claims to search for substrings and mimic Python's behavior. Searching for null characters is not a new feature but a basic requirement for any substring search function. The function accepts null characters as input but returns wrong results, which is a bug, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function returns objectively incorrect results when searching for null characters. It violates the documented intent to mimic Python's str.find() method. The bug is 100% reproducible and affects all cases involving null character searches. Even when the null character IS present in the string (like 'a\x00b'), it returns the wrong position (0 instead of 1). This is unambiguously broken behavior that prevents the function from working correctly for valid inputs.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if NumPy intentionally designed special handling for null characters, but there's no documentation suggesting this is intentional. The inconsistency with Python's behavior and the fact that it returns incorrect positions even when nulls are present strongly indicates this is unintended behavior.
+
+## Overall Consideration
+After thorough analysis, this is clearly a BUG. The numpy.strings.find function is documented to mimic Python's str.find() method, which has well-established semantics for returning -1 when a substring is not found. The current implementation not only violates this contract for null character searches but also returns incorrect positions when null characters ARE present in the string. The bug is severe because it makes it impossible to correctly search for null characters - the function always returns 0 regardless of whether the null is present or where it's located.
+
+The reproduction clearly shows that when searching for '\x00' in 'abc', Python correctly returns -1 (not found) while NumPy incorrectly returns 0. Even worse, when searching for '\x00' in 'a\x00b', Python correctly returns 1 (the actual position) while NumPy still returns 0. This is not an edge case or undefined behavior - it's a fundamental failure of the search algorithm for a specific character.
+
+This bug has real-world implications for any code that processes binary data, network protocols, or file formats that may contain embedded null characters. The severity is high because the function silently returns wrong results rather than raising an error, potentially causing data corruption or security issues in applications that rely on correct substring searching. The bug report is well-documented, includes reproducible test cases, and correctly identifies a serious implementation flaw that should be fixed.

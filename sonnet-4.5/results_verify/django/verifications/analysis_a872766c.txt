@@ -1,0 +1,70 @@
+## Bug Triage Analysis
+
+### Considering INVALID
+**Arguments against INVALID:**
+- The documentation explicitly states the method should "return the number of email messages sent"
+- The base class documentation is unambiguous about returning an integer count
+- Other backends (SMTP, dummy, locmem) all return 0 for empty lists
+- This is not about exception types or overly general behavior
+
+**Could be INVALID if:**
+- The documentation allowed None as a valid return value (it doesn't)
+- This was undefined behavior (it's explicitly defined)
+
+**Verdict: NOT INVALID** - The bug violates clearly documented behavior.
+
+### Considering WONTFIX
+**Arguments for WONTFIX:**
+- Empty message lists might be considered an edge case
+- Code that never sends empty lists wouldn't encounter this
+
+**Arguments against WONTFIX:**
+- This breaks the API contract that other code may rely on
+- Causes TypeError when code expects an integer (e.g., `total += backend.send_messages(msgs)`)
+- Inconsistent with 3 other backends that handle this correctly
+- Not an obscure denorm/NaN issue - it's a basic API contract violation
+- The fix is trivial (return 0 instead of return)
+
+**Verdict: NOT WONTFIX** - This is a clear API contract violation with real impact.
+
+### Considering DOCUMENTATION_FIX
+**Arguments for DOCUMENTATION_FIX:**
+- Could update docs to say "returns number of messages sent or None for empty list"
+
+**Arguments against DOCUMENTATION_FIX:**
+- The documentation is already correct and clear
+- Other backends follow the documented behavior
+- Changing docs would break backward compatibility for correct implementations
+- The code is wrong, not the documentation
+
+**Verdict: NOT DOCUMENTATION_FIX** - The documentation is correct; the code is wrong.
+
+### Considering FEATURE_REQUEST
+**Arguments for FEATURE_REQUEST:**
+- Could be seen as requesting better handling of empty lists
+
+**Arguments against FEATURE_REQUEST:**
+- This isn't requesting new functionality
+- The expected behavior is already documented
+- Other backends already implement this correctly
+- This is fixing broken behavior, not adding new features
+
+**Verdict: NOT FEATURE_REQUEST** - This is fixing a bug, not adding a feature.
+
+### Considering BUG
+**Arguments for BUG:**
+- Violates explicit API documentation ("return the number of email messages sent")
+- Inconsistent with other backend implementations (3 of 5 return 0 correctly)
+- Returns wrong type (None instead of int)
+- Can cause TypeErrors in calling code expecting integers
+- Easy to fix (change line 31 in console.py from `return` to `return 0`)
+- Both Console and FileBased backends affected via inheritance
+- Property-based test correctly identifies the contract violation
+
+**Arguments against BUG:**
+- None (this is clearly a bug)
+
+**Verdict: BUG** - Clear violation of documented API contract.
+
+## Final Assessment
+This is a valid BUG. The Console backend (and by inheritance, FileBased backend) violates the documented API contract by returning None instead of 0 when send_messages() is called with an empty list. The fix is simple and aligns the implementation with both the documentation and other backend implementations.

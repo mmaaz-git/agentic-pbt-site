@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+### Bug Summary
+The bug report claims that `is_broken_pipe_error()` in Django's basehttp module crashes with a `TypeError` when called without an active exception context.
+
+### Reproduction Steps Performed
+
+1. **Located the source code**: Found the function in `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/core/servers/basehttp.py` at lines 56-65.
+
+2. **Examined the function implementation**:
+```python
+def is_broken_pipe_error():
+    exc_type, _, _ = sys.exc_info()
+    return issubclass(
+        exc_type,
+        (
+            BrokenPipeError,
+            ConnectionAbortedError,
+            ConnectionResetError,
+        ),
+    )
+```
+
+3. **Reproduced the bug**: Called the function without an active exception:
+   - Result: `TypeError: issubclass() arg 1 must be a class`
+   - This confirms the reported behavior - when no exception is active, `sys.exc_info()` returns `(None, None, None)`, making `exc_type` equal to `None`, which causes `issubclass(None, ...)` to raise a TypeError.
+
+4. **Ran the provided Hypothesis test**: The test failed with the same TypeError, confirming the bug.
+
+### Current Usage Context
+The function is only called once in the codebase, inside `WSGIServer.handle_error()` method (line 80):
+```python
+def handle_error(self, request, client_address):
+    if is_broken_pipe_error():
+        logger.info("- Broken pipe from %s", client_address)
+    else:
+        super().handle_error(request, client_address)
+```
+
+The `handle_error` method is typically called by the socketserver framework when an exception occurs during request handling, which means there SHOULD always be an active exception when `is_broken_pipe_error()` is called in the current codebase.
+
+### Reproduction Confirmed
+The bug is reproducible exactly as described in the report. The function crashes with a TypeError when called without an active exception context.

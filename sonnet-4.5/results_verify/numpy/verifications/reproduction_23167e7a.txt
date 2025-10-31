@@ -1,0 +1,36 @@
+# Reproduction Analysis
+
+## Bug Report Summary
+The bug report claims that numpy.polynomial.Polynomial.roots() returns invalid roots when the polynomial has tiny leading coefficients (e.g., 1e-66 or 1e-273). The fundamental issue is that the returned "roots" don't satisfy the basic mathematical property that p(root) ≈ 0.
+
+## Reproduction Results
+
+### 1. Hypothesis Test Reproduction
+I ran the provided Hypothesis test and confirmed it finds multiple failures:
+- The test found failing examples like coef=[1.0, 1.0, 6.601634748269308e-100]
+- For such inputs, roots() returns values like -1.5147763215196978e+99 where p(root) = 1.0 instead of ≈ 0
+- The test also found cases where roots() crashes with LinAlgError due to infs/NaNs in the companion matrix
+
+### 2. Specific Example Reproduction
+I tested the specific examples from the bug report:
+
+#### Example 1: coef=[0.0, 1.0, 3.254353641323301e-273]
+- Expected: A root near x = 0 (since the polynomial is essentially just x)
+- Actual: roots = [-3.0728068e+272, 0.0]
+- p(-3.0728068e+272) = -3.4115008600408656e+256 (NOT close to 0)
+- p(0.0) = 0.0 (correct)
+
+#### Example 2: coef=[1.0, 1.0, 3.9968426114653685e-66]
+- Expected: A root near x = -1.0 (the polynomial is essentially 1 + x)
+- Actual: roots = [-2.50197493e+65, 0.0]
+- p(-2.50197493e+65) = 1.0 (NOT close to 0)
+- p(0.0) = 1.0 (NOT close to 0)
+- Verified: p(-1.0) = 0.0 (the actual root)
+
+## Key Observations
+
+1. The bug is reproducible - the roots() method indeed returns values that don't satisfy p(root) ≈ 0
+2. The issue occurs with tiny coefficients (< 1e-65) on the highest-degree term
+3. The actual polynomial behavior (e.g., p(-1) = 0 for the second example) is correct
+4. The problem appears to be numerical instability in the root-finding algorithm when dealing with coefficients spanning many orders of magnitude
+5. The companion matrix method used internally suffers from overflow/underflow with such extreme coefficient ranges

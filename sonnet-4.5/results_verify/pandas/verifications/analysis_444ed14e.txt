@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not specify what happens when indices contain values beyond the C long range. The function's behavior with extremely large integers is unspecified, and raising OverflowError for values that cannot be represented as C longs is a reasonable implementation detail. The documentation only guarantees ValueError for representable negative values other than -1, not for all possible negative Python integers.
+
+**Why it might not be INVALID:**
+The documentation explicitly states that "any other negative values raise a ValueError" when allow_fill=True. It doesn't say "any other representable negative values" or include any caveat about C long limitations. From a user perspective, -9,223,372,036,854,775,809 is clearly a "negative value other than -1" and should therefore raise ValueError according to the documentation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case involving negative values beyond the C long range (-2^63). In practical usage, indices are typically small positive or negative integers within reasonable bounds. The effort to fix this corner case may not be justified given that it would only affect users trying to use astronomical negative index values that make no practical sense for array indexing.
+
+**Why it might not be WONTFIX:**
+The bug violates the documented contract of the function. The documentation promises ValueError for specific conditions, and users writing defensive code may catch ValueError but not OverflowError. This could lead to unexpected crashes in production code. The fix is also relatively simple - just catch OverflowError and re-raise as ValueError.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior is reasonable - raising OverflowError when values cannot be converted to the platform's integer type. The documentation could be updated to mention that indices must be within the platform integer range, and OverflowError may be raised for values outside this range. This would accurately describe the current behavior without requiring code changes.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function's purpose is to handle array indexing with clear rules about negative values when allow_fill=True. The documentation's promise of ValueError for invalid negative indices is a key part of the API contract. Changing the documentation to allow OverflowError would be breaking the expected behavior and forcing users to handle multiple exception types.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting arbitrarily large negative integers could be seen as a new feature rather than fixing a bug. The current implementation works correctly for all reasonable index values, and adding support for extreme values would be an enhancement to handle a broader range of inputs beyond the original design scope.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality - the function already handles negative values and documents what exception should be raised. The issue is that the current implementation doesn't match the documented behavior. This is about fixing existing functionality to match its specification, not adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation unambiguously states that when allow_fill=True, "any other negative values raise a ValueError." The function violates this documented contract by raising OverflowError instead. The documentation makes no mention of OverflowError as a possible exception, nor any limitation on the range of index values. Users following the documentation would only catch ValueError, causing their code to crash unexpectedly with OverflowError.
+
+**Why it might not be BUG:**
+The behavior only occurs with absolutely massive negative numbers that are beyond the range of C long integers. These values are so extreme that they would never occur in real-world usage. The function works correctly for all practical index values, and the OverflowError could be considered an implementation detail for unreasonable inputs rather than a bug in the core functionality.
+
+## Overall Consideration
+
+This case presents a clear violation of the documented API contract. The documentation explicitly states that "any other negative values raise a ValueError" when allow_fill=True, with no mentioned exceptions or caveats about value ranges. The function instead raises OverflowError for negative values beyond the C long range, which directly contradicts the documented behavior.
+
+However, the practical impact is minimal. The bug only manifests with astronomically large negative numbers (-9,223,372,036,854,775,809) that would never appear in real-world array indexing scenarios. No reasonable use case would involve indices of this magnitude. The issue is more about technical correctness than actual functionality problems.
+
+The most appropriate categorization depends on how strictly we interpret API contracts. If we hold that documented behavior must be honored regardless of how extreme the inputs, this is a BUG. If we consider that implicit reasonable bounds exist for all functions and extreme inputs can have undefined behavior, this might be WONTFIX or DOCUMENTATION_FIX. Given that the fix is simple (catch and re-raise) and the documentation makes an unqualified promise about ValueError, the technical merit leans toward treating this as a documentation inconsistency that should be clarified rather than a critical bug requiring immediate code changes.

@@ -1,0 +1,39 @@
+=== BUG REPRODUCTION REPORT ===
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to exist in numpy.strings.replace.
+
+## Test Results
+
+### Simple Reproduction Case
+Input: '00'
+Expected (Python's str.replace): 'XXXXXX0'
+Actual (NumPy's result): 'XX0'
+
+The bug occurs exactly as described - when replacing '0' with 'XXXXXX' in the string '00' with count=1, NumPy returns 'XX0' instead of the expected 'XXXXXX0'.
+
+### Property-Based Test
+The Hypothesis test failed immediately with the exact same case mentioned in the bug report:
+- s='00', old='0', new='XXXXXX'
+- NumPy result: 'XX0'
+- Python result: 'XXXXXX0'
+
+### Root Cause Analysis
+Through detailed testing, I confirmed the root cause:
+
+1. Input array np.array(['00']) has dtype '<U2' (2-character Unicode string)
+2. The replacement string 'XXXXXX' is cast to dtype '<U2' BEFORE buffer size calculation
+3. This truncates 'XXXXXX' to 'XX' (only 2 characters)
+4. Buffer size is calculated using truncated 'XX' instead of original 'XXXXXX':
+   - Calculated: 2 + 1 * (2 - 1) = 3 characters
+   - Should be: 2 + 1 * (6 - 1) = 7 characters
+5. Output array is created with dtype '<U3' (only 3 characters)
+6. The actual replacement would produce 'XXXXXX0' (7 characters)
+7. This gets truncated to 'XX0' to fit in the '<U3' dtype
+
+### Additional Test Case
+Testing with '00000' replacing first 2 occurrences of '0' with 'XXXXXX':
+- NumPy result: 'XXXXXXXXXX000' (dtype '<U13')
+- Python result: 'XXXXXXXXXXXX000' (15 characters)
+- Again showing truncation where NumPy only uses 'XXXXX' (5 chars from <U5 dtype) instead of 'XXXXXX' (6 chars)
+
+The bug is 100% reproducible and occurs exactly as described in the report.

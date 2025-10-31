@@ -1,0 +1,57 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+
+I successfully reproduced the bug exactly as described in the report:
+
+1. **NumPy baseline**: `np.eye(2, M=3)` works correctly, producing a 2x3 matrix with ones on the diagonal.
+
+2. **Failing case**: `da.eye(2, chunks=3, M=3, k=0)` crashes with:
+   - Error: "ValueError: Missing dependency ('eye-...', 0, 1) for dependents"
+   - This occurs when N != M (non-square) and chunks >= M
+
+3. **Working cases**:
+   - `da.eye(2, chunks=2, M=3)` works (chunks < M)
+   - `da.eye(3, chunks=3, M=3)` works (square matrix)
+   - `da.eye(4, chunks=3, M=2)` works (different dimension ratio)
+
+### Root Cause Analysis
+
+The bug is in line 624 of `/dask/array/creation.py`:
+
+```python
+return Array(dsk, name_eye, shape=(N, M), chunks=(chunks, chunks), dtype=dtype)
+```
+
+The problem:
+1. `normalize_chunks` correctly computes `vchunks` and `hchunks` based on the shape (N, M)
+2. The code then extracts `chunks = vchunks[0]` (first element of vertical chunks)
+3. The Array constructor is called with `chunks=(chunks, chunks)`, using the same value for both dimensions
+4. This is incorrect when vchunks and hchunks differ (non-square matrices with certain chunk sizes)
+
+Example with N=2, M=3, chunks=3:
+- `normalize_chunks` returns: vchunks=(2,), hchunks=(3,)
+- Code uses: chunks=2 (from vchunks[0])
+- Array expects chunks=(2, 2) but tasks were created for chunks=(2, 3)
+- This mismatch causes the "Missing dependency" error
+
+### Fix Verification
+
+The proposed fix changes line 624 to:
+```python
+return Array(dsk, name_eye, shape=(N, M), chunks=(vchunks, hchunks), dtype=dtype)
+```
+
+I tested this fix and confirmed:
+- The failing case (N=2, M=3, chunks=3) now works correctly
+- All other test cases continue to work
+- The output matches NumPy's eye function exactly
+
+### Technical Details
+
+The bug only manifests when:
+1. Creating non-square matrices (N != M)
+2. The chunk size causes different chunking patterns for rows vs columns
+3. Specifically when normalize_chunks produces different vchunks and hchunks
+
+The fix is correct because it properly passes the actual computed chunks for both dimensions rather than incorrectly using the same value twice.

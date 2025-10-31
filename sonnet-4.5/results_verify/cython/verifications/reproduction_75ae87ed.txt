@@ -1,0 +1,34 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is valid and reproducible. The `is_valid_tag` function in Cython.Debugger.DebugWriter fails to properly validate XML tag names, allowing invalid tags to pass through that subsequently crash when serialized to XML.
+
+### Reproduction Steps and Results
+
+1. **Hypothesis Test Execution**
+   - Ran the provided property-based test with hypothesis
+   - The test discovered two distinct failures:
+     - Control character '\x1f' causes: "ValueError: All strings must be XML compatible: Unicode or ASCII, no NULL bytes or control characters"
+     - Digit '0' as tag name causes: "ValueError: Invalid tag name '0'"
+   - Both failures match what was described in the bug report
+
+2. **Direct Test Cases**
+
+   a. Control Character Test ('\x08'):
+      - `is_valid_tag('\x08')` returns `True` (incorrectly)
+      - When passed to `writer.start('\x08')`, it crashes with: "All strings must be XML compatible: Unicode or ASCII, no NULL bytes or control characters"
+
+   b. Digit Test ('0'):
+      - `is_valid_tag('0')` returns `True` (incorrectly)
+      - When passed to `writer.start('0')`, it crashes with: "Invalid tag name '0'"
+
+### Bug Mechanism
+The `is_valid_tag` function is used as a guard in three methods:
+- `start(name, attrs=None)` - only calls `self.tb.start()` if `is_valid_tag(name)` returns True
+- `end(name)` - only calls `self.tb.end()` if `is_valid_tag(name)` returns True
+- `add_entry(name, **attrs)` - only adds entry if `is_valid_tag(name)` returns True
+
+The function is meant to filter out invalid XML tag names before they reach the underlying XML library (lxml or ElementTree). However, it only checks for one specific pattern (EncodedStrings starting with "." followed by decimals) and returns `True` for all other inputs, including invalid XML tag names.
+
+### Conclusion
+The bug is confirmed and reproducible. The `is_valid_tag` function does not properly validate XML tag names according to XML specifications, leading to crashes when invalid tag names are passed to the XML serialization layer.

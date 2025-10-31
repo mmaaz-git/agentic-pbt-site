@@ -1,0 +1,29 @@
+## Bug Reproduction Analysis
+
+### Successfully Reproduced
+I have successfully reproduced the bug described in the report. The issue occurs when requesting more chunks than there are rows in the DataFrame.
+
+### Test Results
+
+#### Test Case 1: 1 row, 2 chunks requested
+- Chunk 0: 1 rows
+- Chunk 1: 0 rows (EMPTY)
+
+#### Test Case 2: 5 rows, 10 chunks requested
+- Chunks 0-4: 1 row each
+- Chunks 5-9: 0 rows each (5 EMPTY chunks)
+
+### Root Cause Confirmed
+The bug is in the `get_chunks` method at line 107 of dataframe.py:
+```python
+for start in range(0, step * n_chunks, step):
+```
+
+When `n_chunks > num_rows`, the calculation `step * n_chunks` exceeds the actual DataFrame size, causing the iteration to create empty DataFrames through `self._df.iloc[start : start + step, :]` where `start` is beyond the DataFrame's bounds.
+
+### Impact
+The function always returns exactly `n_chunks` chunks, even when this results in empty chunks. For example:
+- With 1 row and 2 chunks requested: returns 2 chunks (1 with data, 1 empty)
+- With 5 rows and 10 chunks requested: returns 10 chunks (5 with data, 5 empty)
+
+This wastes computational resources and may cause unexpected behavior in downstream code that doesn't handle empty chunks properly.

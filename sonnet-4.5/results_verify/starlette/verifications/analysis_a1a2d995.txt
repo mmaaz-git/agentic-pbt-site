@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The HTTP specification clearly states that headers must be latin-1 encodable, and developers should know this fundamental HTTP requirement. The user is trying to use Unicode characters that are inherently incompatible with the HTTP protocol itself, not just with Starlette. One could argue that passing non-latin-1 characters to a header parameter is user error since headers by definition cannot contain such characters.
+
+**Why it might not be INVALID:**
+The Starlette documentation does not mention this encoding requirement at all. The parameter is documented as accepting "A list of HTTP request headers" without any encoding constraints. The code accepts the invalid input during initialization without any warning or error, leading users to believe it's valid. The crash only occurs later when sending the response, making it a surprising runtime failure rather than an obvious configuration error.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case where users are trying to use characters that are fundamentally incompatible with HTTP headers. In practice, HTTP header names are almost always ASCII characters like "X-Custom-Header" or "Authorization". The number of users who would actually encounter this issue is likely very small, and they're doing something that doesn't make sense in the HTTP protocol context anyway.
+
+**Why it might not be WONTFIX:**
+This causes a complete crash of the application with an unhandled exception. Even if it's an edge case, crashing is a severe failure mode. The fix is simple (validate the input) and would prevent production services from failing unexpectedly. The severity of the failure (crash) outweighs the rarity of the occurrence.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The code is actually working correctly by enforcing the HTTP specification's requirement that headers be latin-1 encodable. The real issue is that the documentation doesn't warn users about this requirement. Adding documentation about the encoding requirements would help users understand what inputs are valid and avoid the error entirely.
+
+**Why it might not be DOCUMENTATION_FIX:**
+While documentation would help, the code still crashes ungracefully when given invalid input. Good API design includes validating inputs and providing helpful error messages, not just documenting restrictions. The code should validate the input at initialization time and raise a clear ValueError explaining the encoding requirement, not crash later with a cryptic UnicodeEncodeError.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user might be requesting that Starlette handle non-latin-1 headers gracefully, perhaps by automatically transliterating or encoding them in a way that's HTTP-compatible. This would be a new feature to make the middleware more robust and user-friendly. The request could be seen as asking for automatic handling of Unicode headers through some encoding scheme.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality to support Unicode headers; they're reporting that the current code crashes with invalid input. The HTTP protocol doesn't support non-latin-1 headers, so there's no valid way to "support" this feature. The issue is about input validation and error handling, not about adding new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code accepts invalid input during initialization without any validation, then crashes with an unhandled exception when trying to use that input. This is classic inadequate input validation. The middleware should either validate the headers during __init__ and raise a clear error, or handle the encoding error gracefully. Accepting invalid input and crashing later is poor API design and constitutes a bug in error handling.
+
+**Why it might not be BUG:**
+The code is correctly enforcing the HTTP specification's requirements. The crash happens exactly where it should - when trying to create HTTP headers with invalid characters. The user is passing invalid input that violates the HTTP protocol, and the code is failing as expected. This could be seen as the user's error for not understanding HTTP header requirements.
+
+## Overall consideration
+
+After careful analysis, this appears to be a legitimate bug in input validation and error handling. While it's true that HTTP headers must be latin-1 encodable according to the specification, the Starlette middleware fails to validate this constraint at the appropriate time. The code accepts the invalid input during initialization, giving the false impression that the configuration is valid, only to crash later with an obscure encoding error when trying to send a response.
+
+Good API design principles dictate that input validation should happen as early as possible, ideally at the point where the input is provided. The CORSMiddleware.__init__ method should validate that all provided headers can be encoded as latin-1, and if not, raise a clear ValueError with an informative message like "Header 'Ā' contains non-latin-1 characters which are not valid in HTTP headers". This would immediately alert developers to the configuration error rather than causing a runtime crash.
+
+The fact that the documentation doesn't mention this encoding requirement compounds the issue, but even with perfect documentation, accepting invalid input and crashing later is still poor design. The proposed fix in the bug report is reasonable and would prevent production services from experiencing unexpected crashes due to configuration errors. This makes it a valid bug that should be addressed through proper input validation.

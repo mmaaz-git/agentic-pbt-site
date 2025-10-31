@@ -1,0 +1,24 @@
+## Documentation Analysis for CapacityLimiter
+
+### Official Documentation:
+1. The anyio documentation at https://anyio.readthedocs.io does not explicitly specify what values are allowed for `total_tokens`.
+2. The API documentation shows that `total_tokens` is a float property but does not document constraints.
+3. The docstring in the source code for `total_tokens` property only says: "The total number of tokens available for borrowing."
+
+### Type Annotations:
+- All constructors and setters accept `total_tokens: float`
+- The type system indicates float values are expected, which would include any form of infinity
+
+### Error Message Analysis:
+- The error message states: "total_tokens must be an int or math.inf"
+- This explicitly mentions `math.inf` as an allowed value, suggesting infinity is intended to be supported
+- However, it does NOT say "must be the exact math.inf object" - a reasonable interpretation would be that any infinity value should work
+
+### Backend Implementation Inconsistency:
+Critical finding: There is an inconsistency between backends:
+- **asyncio backend** (line 1963): Uses `math.isinf(value)` which accepts ANY infinity representation
+- **CapacityLimiterAdapter** (line 645): Uses `value is not math.inf` which only accepts the specific object
+- **trio backend**: Delegates to the trio library without validation
+
+### Conclusion:
+The documentation does not explicitly state that only the exact `math.inf` object should be accepted. The error message says "must be an int or math.inf" which could reasonably be interpreted as accepting any infinity value. Most importantly, there's an inconsistency where the asyncio backend already accepts any infinity representation using `math.isinf()`, while the adapter uses identity comparison. This inconsistency suggests the restrictive identity check is likely a bug rather than intentional design.

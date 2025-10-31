@@ -1,0 +1,24 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug described in the report. The parse_list function in Cython.Build.Dependencies crashes with a KeyError when parsing strings containing unclosed quote characters.
+
+Test Results:
+-------------
+1. Input: "'" (single quote) → KeyError: '__Pyx_L1'
+2. Input: '"' (double quote) → KeyError: '__Pyx_L1'
+3. Input: "[']" (quote in brackets) → KeyError: '__Pyx_L1'
+4. Input: "0'" → Result: ["0'__Pyx_L1_"] (does NOT crash, but returns malformed output)
+5. Input: "#" → Result: ['#__Pyx_L1_'] (does NOT crash, but returns malformed output)
+
+The bug occurs exactly as described in the report. The root cause appears to be in the interaction between:
+1. The strip_string_literals() function that normalizes strings to '__Pyx_L{n}_' format
+2. The unquote() helper function that tries to look up these normalized labels
+
+When strip_string_literals processes an unclosed quote like "'", it produces:
+- normalized string: "'__Pyx_L1_"
+- literals dictionary: {"__Pyx_L1_": ""}
+
+The unquote() function then slices this as literal[1:-1], getting "__Pyx_L1" (without trailing underscore), but the dictionary key has the underscore, causing the KeyError.
+
+The bug is reproducible and matches the report's description exactly.

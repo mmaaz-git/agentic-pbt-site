@@ -1,0 +1,67 @@
+## Bug Report Analysis
+
+### Considerations for BUG
+
+**Strong evidence this is a valid bug:**
+1. The documentation explicitly promises "lossless serialization" (line 5 of tag.py)
+2. The roundtrip property `serialize(deserialize(x)) == x` fails for naive datetimes
+3. The implementation changes the fundamental type (naive → timezone-aware)
+4. This violates the core contract of the serializer
+5. Real-world impact: Session data with naive datetimes gets corrupted
+6. The behavior is surprising and undocumented
+
+**Why this is likely the correct categorization:**
+- Clear violation of documented behavior ("lossless")
+- Breaks a fundamental property (roundtrip equality)
+- Changes data semantics (naive vs aware datetimes have different meanings)
+- Not an edge case - affects all naive datetime serialization
+
+### Considerations for INVALID
+
+**Arguments against (weak):**
+1. Werkzeug's parse_date was changed to always return timezone-aware datetimes
+2. Could argue that HTTP dates are always UTC by specification
+
+**Why INVALID is unlikely:**
+- Flask's documentation still claims "lossless" serialization
+- The change in Werkzeug doesn't excuse Flask from maintaining its contract
+- Users reasonably expect roundtrip to work
+
+### Considerations for WONTFIX
+
+**Potential arguments:**
+1. This behavior has existed since Werkzeug 2.0
+2. Fixing it might break existing code that depends on getting UTC datetimes
+3. Workaround exists (custom tag registration)
+
+**Why WONTFIX is unlikely:**
+- The bug violates explicitly documented behavior
+- It's not an obscure edge case but affects common use (naive datetimes)
+- The impact is data corruption, not just inconvenience
+
+### Considerations for FEATURE_REQUEST
+
+**Potential arguments:**
+1. Supporting naive datetime roundtrip could be seen as a new feature
+2. The original implementation might not have intended to support naive datetimes
+
+**Why FEATURE_REQUEST is incorrect:**
+- The documentation promises "lossless serialization" without exceptions
+- Datetimes (including naive ones) are explicitly listed as supported
+- This is restoring broken functionality, not adding new capabilities
+
+### Considerations for DOCUMENTATION_FIX
+
+**Arguments for documentation fix:**
+1. The code behavior is consistent and predictable (always returns UTC aware)
+2. Could update docs to clarify that datetimes are normalized to UTC
+3. The implementation works correctly for aware datetimes
+
+**Why pure DOCUMENTATION_FIX is insufficient:**
+- The "lossless" claim is fundamental to the serializer's purpose
+- Changing docs to say "lossy for naive datetimes" undermines the core value
+- Users rely on the lossless property for session storage
+
+### Conclusion
+
+This is clearly a **BUG**. The implementation violates its documented contract of "lossless serialization" by modifying naive datetime objects during roundtrip. The fact that Werkzeug changed its behavior doesn't excuse Flask from maintaining its documented guarantees. This is not an edge case or obscure issue - it affects a common data type in a way that corrupts data semantics.

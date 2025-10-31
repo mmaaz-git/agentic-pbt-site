@@ -1,0 +1,39 @@
+BUG REPRODUCTION ANALYSIS
+
+I successfully reproduced the reported bug:
+
+1. EMPTY STRING TEST:
+   - Input: parse_timedelta('')
+   - Expected (per bug report): ValueError
+   - Actual result: IndexError: string index out of range
+   - CONFIRMED: The bug exists as reported
+
+2. SPACE-ONLY STRING TEST:
+   - Input: parse_timedelta(' ')
+   - Expected (per bug report): ValueError
+   - Actual result: IndexError: string index out of range
+   - CONFIRMED: The bug exists as reported
+
+3. OTHER WHITESPACE TESTS:
+   - '\r', '\n', '\t': Return 1 (not IndexError, but questionable behavior)
+   - '   ' (multiple spaces): IndexError: string index out of range
+   - '\r\n': Returns 1
+
+4. ROOT CAUSE ANALYSIS:
+   The bug occurs exactly where the reporter indicated:
+   - Line 1868: s = s.replace(" ", "") removes spaces
+   - Line 1869: if not s[0].isdigit() accesses s[0] without checking if s is empty
+   - When s becomes empty after space removal, accessing s[0] causes IndexError
+
+5. COMPARISON WITH parse_bytes:
+   - parse_bytes has similar logic but uses: if not any(char.isdigit() for char in s):
+   - This avoids the IndexError because any() on empty string returns False
+   - parse_bytes then adds "1" prefix and continues, returning 1 for empty input
+   - parse_timedelta crashes because it directly accesses s[0]
+
+6. ADDITIONAL ISSUES:
+   - Whitespace-only strings like '\r', '\n', '\t' return 1 seconds (default unit)
+   - This is because after removing spaces, they're non-empty, fail isdigit() check, get "1" prepended
+   - This behavior is undocumented and likely unintended
+
+VERIFICATION: The bug is real and occurs exactly as described in the report.

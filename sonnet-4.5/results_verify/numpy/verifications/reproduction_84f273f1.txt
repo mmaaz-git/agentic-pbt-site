@@ -1,0 +1,38 @@
+## Reproduction of numpy.matrixlib.bmat Bug
+
+### Bug Summary
+The bug report claims that `bmat` crashes with `TypeError: 'NoneType' object is not subscriptable` when `gdict` is provided without `ldict`, even though `ldict` has a default value of `None` in the function signature.
+
+### Reproduction Results
+
+1. **Hypothesis Test Reproduction**: CONFIRMED
+   - Running the provided Hypothesis test immediately found a falsifying example
+   - Error: `TypeError: 'NoneType' object is not subscriptable`
+   - Occurs with any variable name and matrix value when calling `bmat(varname, gdict={varname: matrix})`
+
+2. **Minimal Example Reproduction**: CONFIRMED
+   - The exact example from the bug report crashes as described:
+     ```python
+     X = matrix([[1, 2]])
+     result = bmat('X', gdict={'X': X})  # Crashes with TypeError
+     ```
+   - Error location: line 1030 in `_from_string`: `thismat = ldict[col]`
+
+3. **Workaround Verification**: CONFIRMED
+   - Adding an empty `ldict={}` parameter makes the function work correctly:
+     ```python
+     result = bmat('X', ldict={}, gdict={'X': X})  # Works fine
+     ```
+
+### Root Cause Analysis
+The bug occurs in the implementation at lines 1103-1105 of defmatrix.py:
+```python
+else:  # when gdict is not None
+    glob_dict = gdict
+    loc_dict = ldict  # Bug: ldict can be None here
+```
+
+When `gdict` is provided but `ldict` is not, `loc_dict` gets set to `None`. Later, in `_from_string` at line 1030, the code tries to access `ldict[col]` which causes the TypeError since None is not subscriptable.
+
+### Impact
+Any call to `bmat` with a string input and `gdict` parameter but no `ldict` parameter will crash, making the optional `ldict` parameter effectively required when using `gdict`.

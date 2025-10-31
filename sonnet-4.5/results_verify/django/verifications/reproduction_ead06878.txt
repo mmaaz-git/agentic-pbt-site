@@ -1,0 +1,44 @@
+## Bug Reproduction Results
+
+### Test 1: Hypothesis Test Case
+**Result: CONFIRMED - Function crashes with UnicodeDecodeError**
+
+The hypothesis test case with `parts=[b'', b'\x80'], path_info=b''` causes a UnicodeDecodeError:
+- Input creates SCRIPT_URL of '//\x80' (after latin-1 decode)
+- When Django re-encodes to bytes and tries to decode as UTF-8, it crashes
+- Error: 'utf-8' codec can't decode byte 0x80 in position 1: invalid start byte
+
+### Test 2: Direct Reproduction
+**Result: CONFIRMED - Function crashes with UnicodeDecodeError**
+
+The direct test case with `environ['SCRIPT_URL'] = '\x80'` also crashes:
+- Error: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+- Stack trace confirms crash at line 184: `return script_name.decode()`
+
+### Test 3: Comparison with Similar Functions
+**Result: CONFIRMED - Inconsistent behavior**
+
+When given the same invalid UTF-8 input ('\x80'):
+1. `get_path_info()` - SUCCESS: Returns '%80' (uses repercent_broken_unicode)
+2. `get_str_from_wsgi()` - SUCCESS: Returns '�' (uses decode(errors='replace'))
+3. `get_script_name()` - FAILURE: Crashes with UnicodeDecodeError (uses bare decode())
+
+### Technical Analysis
+The bug occurs because:
+1. WSGI servers must decode environ values using ISO-8859-1 (per PEP 3333)
+2. ISO-8859-1 can represent any byte value (0x00-0xFF)
+3. When Django re-encodes these strings back to bytes using ISO-8859-1, it recovers the original bytes
+4. If those original bytes are not valid UTF-8, `script_name.decode()` crashes
+5. The byte 0x80 is valid ISO-8859-1 but invalid UTF-8 (it's a continuation byte without a start byte)
+
+### Real-World Impact
+This is a genuine crash that can occur when:
+- A client sends a URL with invalid UTF-8 sequences
+- A malicious actor deliberately sends crafted URLs
+- URL rewriting or proxying introduces encoding issues
+- Legacy systems send non-UTF-8 encoded paths
+
+The crash is particularly concerning because:
+- It's triggered by user input (the URL)
+- Other similar functions in the same module handle this gracefully
+- The inconsistency suggests this is an oversight, not intentional behavior

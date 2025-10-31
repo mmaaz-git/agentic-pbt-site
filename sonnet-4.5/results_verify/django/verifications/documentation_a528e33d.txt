@@ -1,0 +1,55 @@
+# Documentation Analysis
+
+## Django Choices Documentation
+According to Django documentation, choices should be a sequence of 2-tuples where:
+- The first element is the actual value to be set on the model
+- The second element is the human-readable name
+- Format: [(value1, label1), (value2, label2), ...]
+
+## BlankChoiceIterator Documentation
+The BlankChoiceIterator class docstring states: "Iterator to lazily inject a blank choice."
+
+## Implementation Details
+
+### get_choices() Method Signature
+```python
+def get_choices(
+    self,
+    include_blank=True,
+    blank_choice=BLANK_CHOICE_DASH,  # [("", "---------")]
+    limit_choices_to=None,
+    ordering=(),
+):
+```
+
+### Key Observations
+
+1. **Default blank_choice Format**:
+   - BLANK_CHOICE_DASH is defined as `[("", "---------")]` - a LIST containing one tuple
+   - This is the standard format used throughout Django
+
+2. **Other Django Usage**:
+   - In contrib/admin/options.py: `blank_choice=[("", _("None"))]` - also a list
+   - All internal Django usage passes blank_choice as a list of tuples
+
+3. **Expected Behavior**:
+   - The blank_choice should be injected at the beginning of the choices
+   - Each choice (including the blank choice) should be a 2-tuple
+   - The iterator should maintain the uniform structure of choices
+
+4. **Current Implementation Issue**:
+   - Line 49 in BlankChoiceIterator: `yield from self.blank_choice`
+   - When blank_choice is a list (as intended): Works correctly, yields the tuple
+   - When blank_choice is a single tuple: Bug occurs, unpacks the tuple elements
+
+## Documentation Gap
+The documentation doesn't explicitly specify whether `blank_choice` parameter should be:
+- A single tuple: `("", "Label")`, or
+- A list containing a tuple: `[("", "Label")]`
+
+However, all Django internal usage consistently uses a list format, suggesting this is the intended API.
+
+## Bug Analysis
+The bug report assumes blank_choice should be a single tuple, but the actual Django implementation expects it to be a list. The bug manifests when users pass a tuple directly instead of wrapping it in a list.
+
+The real issue is that the API is ambiguous and the code doesn't handle both cases robustly. The fix suggested in the bug report would actually break the existing Django code that passes lists.

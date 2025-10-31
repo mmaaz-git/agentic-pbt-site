@@ -1,0 +1,43 @@
+BUG REPRODUCTION RESULTS
+========================
+
+## Test 1: Simple Reproduction Case
+The bug report's simple reproduction case is CORRECT:
+- Input: 'my-plugin, another-plugin'
+- After split(','), the result is: ['my-plugin', ' another-plugin']
+- The string 'another-plugin' is NOT found in the list because the list contains ' another-plugin' (with leading space)
+- The assertion fails as described in the bug report
+
+## Test 2: Property-Based Test
+The hypothesis test case is CORRECT:
+- With plugin_names=['0', '00'] and add_spaces=True
+- The disable string becomes: '0, 00'
+- After split(','), the result is: ['0', ' 00']
+- Plugin '0' is found successfully
+- Plugin '00' is NOT found because the list contains ' 00' (with leading space)
+- This confirms the bug exists as described
+
+## Test 3: Pydantic Behavior Simulation
+I simulated the exact behavior of pydantic's code at line 45:
+```python
+if disabled_plugins is not None and entry_point.name in disabled_plugins.split(','):
+```
+
+Results show:
+1. 'plugin1,plugin2' (no spaces) - Both plugins correctly identified as disabled ✓
+2. 'plugin1, plugin2' (space after comma) - Only 'plugin1' is disabled, 'plugin2' is NOT disabled ✗
+3. 'plugin1 , plugin2' (spaces around comma) - NEITHER plugin is disabled ✗
+
+## Technical Analysis of the Bug
+The bug is REAL and occurs because:
+1. Python's `str.split(',')` does NOT strip whitespace from the resulting strings
+2. When comparing 'plugin2' against [' plugin2'], the comparison fails due to the leading space
+3. This means any plugin name with preceding whitespace in the environment variable will NOT be disabled
+
+## User Impact
+Users who naturally format comma-separated lists with spaces (a common practice) will experience:
+- Silent failure where plugins they intended to disable remain active
+- No error message or warning about the formatting issue
+- Potentially confusing behavior that differs from many other comma-separated configuration values
+
+The bug report accurately describes a real issue in the code.

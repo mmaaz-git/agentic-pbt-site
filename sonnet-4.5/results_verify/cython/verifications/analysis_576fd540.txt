@@ -1,0 +1,43 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function could be considered to be working as designed since infinity is fundamentally not convertible to an integer, and OverflowError is Python's standard exception for this case. One could argue that the docstring is simply incomplete rather than the code being wrong, and that OverflowError is a reasonable exception type for this specific edge case since it accurately describes the problem (overflow when converting infinity to integer).
+
+**Why it might not be INVALID:**
+The docstring explicitly and unambiguously states that the function "Raises TypeError: if the value isn't an int or can't be converted to one." This is a clear contract that the function only raises TypeError. The fact that the function raises OverflowError violates this documented contract. The bug report correctly identifies a discrepancy between documented and actual behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal pandas function (in pandas.core.dtypes.common) that is not part of the public API. The function is not documented in the public pandas documentation. Additionally, the practical impact is minimal - users shouldn't be passing infinity to a function called ensure_python_int in the first place. The error message from OverflowError ("cannot convert float infinity to integer") is actually more descriptive and helpful than the generic TypeError message would be.
+
+**Why it might not be WONTFIX:**
+Even internal functions should behave according to their documented contracts, especially since other internal pandas code might depend on this contract. If code elsewhere in pandas catches TypeError expecting to handle all conversion failures from ensure_python_int, it would miss OverflowError cases. The fix is trivial (just add OverflowError to the caught exceptions) and would make the function behavior consistent.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The actual behavior (raising OverflowError for infinity) is arguably more correct and informative than raising TypeError. The OverflowError precisely describes what went wrong (infinity causes overflow when converting to int), while TypeError would be less specific. The fix could be to update the docstring to say "Raises TypeError or OverflowError" to match the actual behavior, which preserves the more informative error.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function name and purpose is to ensure a python int, and having a consistent exception type (TypeError) for all failure cases makes the function easier to use. The docstring was likely written intentionally to promise only TypeError, and the code should match that promise. Changing the documentation to allow multiple exception types makes the function's interface more complex.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that properly handling infinity values is a new feature that wasn't originally considered. The function currently handles regular floats, NaN, and integer types, but infinity is a special case that could be seen as an enhancement request to support a wider range of inputs with consistent error handling.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality - it's asking for the existing documented behavior to work correctly. The function already attempts to handle all float values (including special values), and the docstring already promises specific exception behavior. This is about fixing inconsistent exception handling, not adding new features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function's docstring makes an explicit contract that it only raises TypeError. The implementation violates this contract by allowing OverflowError to propagate for infinity values. This is a clear case where documented behavior doesn't match actual behavior. The fix is straightforward (add OverflowError to the exception tuple), and the bug could cause issues for code that expects only TypeError per the documentation.
+
+**Why it might not be BUG:**
+This is an internal, undocumented function in pandas' private namespace. Users shouldn't be using this function directly, and the edge case of passing infinity to an integer conversion function is unlikely to occur in practice. The OverflowError is actually more informative than TypeError would be, so the current behavior might be considered better even if it doesn't match the docstring.
+
+**Overall consideration**
+This bug report identifies a genuine inconsistency between the function's documented behavior and its actual implementation. The docstring explicitly states that the function only raises TypeError, but it actually raises OverflowError for infinity values. However, several factors suggest this should not be treated as a high-priority bug:
+
+First, this is an internal pandas function in the pandas.core.dtypes.common module, which is not part of the public API. The function is not documented in pandas' public documentation, indicating it's meant for internal use only. Users should not be calling this function directly, and any issues would only affect internal pandas code or users who are using undocumented internals at their own risk.
+
+Second, the practical impact is minimal. Passing infinity to a function called ensure_python_int is an edge case that shouldn't occur in normal usage. The function's primary purpose is to ensure integer values, and infinity is fundamentally not representable as an integer. The OverflowError that currently gets raised is actually more descriptive and helpful than a generic TypeError would be - it clearly indicates that infinity cannot be converted to integer due to overflow.
+
+Third, while the fix is technically simple (adding OverflowError to the caught exceptions), changing the behavior of internal functions carries risk. Other internal pandas code might already be handling the OverflowError correctly, and changing it to TypeError could break existing internal error handling. Given that this is an internal function dealing with an edge case, the risk of unintended consequences outweighs the benefit of strict docstring compliance.

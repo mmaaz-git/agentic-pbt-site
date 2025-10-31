@@ -1,0 +1,53 @@
+DOCUMENTATION FINDINGS FOR check_csrf_failure_view
+===================================================
+
+1. Function Purpose and Location:
+---------------------------------
+The `check_csrf_failure_view` function is located in django/core/checks/security/csrf.py and is part of Django's security check system. It's a registered check that validates the CSRF_FAILURE_VIEW setting.
+
+2. Expected Behavior from Code:
+-------------------------------
+Looking at the source code (lines 45-67 of csrf.py), the function is designed to:
+- Import the view specified by settings.CSRF_FAILURE_VIEW using _get_failure_view()
+- Check that the imported view has the correct signature (accepts 'reason' parameter)
+- Return a list of Error objects if there are problems
+
+The function explicitly catches ImportError at line 52 and returns an Error with ID "security.E102" saying "The CSRF failure view '%s' could not be imported."
+
+3. _get_failure_view Implementation:
+------------------------------------
+The _get_failure_view function (in django/middleware/csrf.py) simply calls:
+```python
+return get_callable(settings.CSRF_FAILURE_VIEW)
+```
+
+4. get_callable Behavior:
+-------------------------
+The get_callable function (in django/urls/utils.py) can raise TWO types of exceptions for import problems:
+- ImportError: When the module itself cannot be imported (line 27, 41)
+- ViewDoesNotExist: When:
+  a) The module exists but the attribute doesn't exist (line 46-48)
+  b) The attribute exists but is not callable (line 52-55)
+  c) The parent module doesn't exist for nested imports (line 36-38)
+  d) The value is not a string or not callable (line 21-23)
+
+5. Documentation Implications:
+------------------------------
+The check_csrf_failure_view function only catches ImportError but NOT ViewDoesNotExist. This is a clear oversight because:
+
+a) Both exceptions indicate the same type of configuration error - the specified view cannot be imported/used
+b) The error message at line 54-55 says "could not be imported" which is appropriate for BOTH cases
+c) The Django check system is designed to catch configuration errors and report them gracefully, not crash
+
+6. Django Check System Design Principles:
+-----------------------------------------
+Django's check framework (as described in Django documentation) is meant to validate configuration and report problems without crashing. Security checks in particular should:
+- Run during deployment checks
+- Return lists of Error/Warning objects
+- Never raise unhandled exceptions for configuration problems
+
+The fact that check_csrf_failure_view can raise an unhandled ViewDoesNotExist exception violates these design principles. The check system should catch all import-related exceptions and convert them to Error objects for proper reporting.
+
+7. Conclusion:
+-------------
+The documentation and code structure clearly indicate that check_csrf_failure_view should handle ALL exceptions that can be raised by get_callable() when attempting to import the CSRF failure view, not just ImportError. The current behavior where ViewDoesNotExist crashes the check is inconsistent with the Django check framework's design and purpose.

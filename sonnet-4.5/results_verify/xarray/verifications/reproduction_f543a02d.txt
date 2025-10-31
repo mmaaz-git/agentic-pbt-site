@@ -1,0 +1,55 @@
+# Reproduction of Bug Report
+
+## Bug Summary
+The bug report claims that `CombinedLock.locked()` always returns `True` when there are constituent locks, even when none are actually locked. The issue is that the code checks `lock.locked` (the method reference) instead of calling `lock.locked()`.
+
+## Reproduction Steps and Results
+
+### 1. Simple Reproduction Test
+I ran the code from the bug report:
+```python
+lock = threading.Lock()
+combined = CombinedLock([lock])
+print(f"lock.locked() = {lock.locked()}")
+print(f"combined.locked() = {combined.locked()}")
+```
+
+**Result:**
+- `lock.locked() = False` (correct - the lock is not acquired)
+- `combined.locked() = True` (INCORRECT - should be False)
+
+This confirms the bug. The CombinedLock reports being locked even though its only constituent lock is not locked.
+
+### 2. Hypothesis Test
+I ran the property-based test provided in the bug report with `lock_states=[False]`:
+- **Expected:** `combined.locked()` should return `False`
+- **Actual:** `combined.locked()` returned `True`
+- **Result:** AssertionError as predicted
+
+### 3. Extended Testing
+I tested multiple scenarios:
+- **All locks unlocked:** `combined.locked()` returned `True` (should be `False`)
+- **One lock locked:** `combined.locked()` returned `True` (correct)
+- **All locks locked:** `combined.locked()` returned `True` (correct)
+- **No locks (empty list):** `combined.locked()` returned `False` (correct)
+
+### 4. Root Cause Verification
+I examined line 236 in `/home/npc/pbt/agentic-pbt/envs/xarray_env/lib/python3.13/site-packages/xarray/backends/locks.py`:
+```python
+return any(lock.locked for lock in self.locks)
+```
+
+This code checks if the bound method `lock.locked` exists (which is always truthy for non-empty lists), rather than calling `lock.locked()` to check the actual lock state.
+
+### 5. Fix Verification
+I tested the proposed fix:
+```python
+return any(lock.locked() for lock in self.locks)
+```
+
+With this fix:
+- Unlocked locks correctly return `False`
+- Locked locks correctly return `True`
+
+## Conclusion
+The bug is confirmed and reproducible. The `CombinedLock.locked()` method has a clear programming error where it checks the existence of the method instead of calling it. This violates the documented behavior that "a CombinedLock is locked if any of its constituent locks are locked."

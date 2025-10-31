@@ -1,0 +1,45 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I successfully reproduced the bug reported in Cython.Plex.Regexps.chars_to_ranges.
+
+## Bug Confirmation
+
+The bug is CONFIRMED and reproducible. The function chars_to_ranges incorrectly handles duplicate characters in the input string.
+
+## Reproduction Results
+
+1. **Property-based test**: The test fails with input 'aa'
+   - Expected: chars_to_ranges('aa') should produce ranges covering only {'a'}
+   - Actual: chars_to_ranges('aa') produces [97, 99] which covers {'a', 'b'}
+
+2. **Manual reproduction**: Successfully reproduced the exact output shown in the bug report:
+   - chars_to_ranges('aa') = [97, 99]
+   - This incorrectly includes character 'b' (code 98) in the range
+   - Using plex.Any('aa') incorrectly matches 'b' in addition to 'a'
+
+3. **Additional test cases confirm the pattern**:
+   - 'aaa' produces [97, 100] covering {'a', 'b', 'c'} instead of just {'a'}
+   - 'aba' produces [97, 100] covering {'a', 'b', 'c'} instead of {'a', 'b'}
+   - 'abcabc' produces [97, 103] covering {'a','b','c','d','e','f'} instead of {'a','b','c'}
+
+## Root Cause Analysis
+
+The bug is in the inner while loop condition at line 43 of Regexps.py:
+```python
+while i < n and code2 >= ord(char_list[i]):
+```
+
+When processing duplicate characters:
+1. The algorithm starts with the first 'a' (code 97) and sets code2 to 98
+2. It then encounters the duplicate 'a' (code 97)
+3. Since code2 (98) >= ord('a') (97), it incorrectly increments code2 to 99
+4. This extends the range to include 'b' which was never in the input
+
+## Proposed Fix Evaluation
+
+The bug report suggests changing >= to > in the condition. However, my testing shows this fix is INCORRECT:
+- With the proposed fix, 'aa' still produces [97, 99] covering {'a', 'b'}
+- The fix doesn't properly handle duplicate characters
+
+The real issue is that duplicate characters should be skipped without extending the range at all.

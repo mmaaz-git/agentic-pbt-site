@@ -1,0 +1,61 @@
+DOCUMENTATION ANALYSIS
+======================
+
+RFC 7232 SPECIFICATION:
+-----------------------
+
+According to RFC 7232 Section 2.3, which defines ETag format and comparison:
+
+1. ETag Format Requirements:
+   - ETags MUST be quoted strings (opaque-tag = DQUOTE *etagc DQUOTE)
+   - Weak ETags have format: W/"opaque-tag"
+   - The "W/" prefix is case-sensitive
+   - Example valid ETags: "xyzzy", W/"xyzzy", "r2d2xxxx", W/"r2d2xxxx"
+
+2. ETag Comparison Rules:
+   - Weak comparison: ETags match if opaque-tags match character-by-character
+   - Strong comparison: ETags match only if both are strong and match exactly
+   - For conditional requests (If-None-Match), weak comparison is typically used
+
+3. If-None-Match Header:
+   - Can contain multiple ETags separated by commas
+   - Each ETag may have optional whitespace around it
+   - Matching uses weak comparison for GET/HEAD requests
+
+STARLETTE IMPLEMENTATION:
+-------------------------
+
+The is_not_modified method in StaticFiles (line 199-220):
+- Extracts If-None-Match header from request
+- Extracts ETag from response
+- Splits If-None-Match by commas to handle multiple ETags
+- Uses strip(" W/") to normalize ETags for comparison
+- Returns True if any tag matches
+
+CORRECTNESS OF IMPLEMENTATION:
+------------------------------
+
+The implementation appears to follow a simplified approach for weak comparison:
+1. It strips "W/" prefix from tags to get the opaque-tag portion
+2. It compares the opaque-tags directly
+
+This is functionally correct for the common case because:
+- ETags are always quoted per RFC 7232
+- The quotes protect the inner content from being incorrectly stripped
+- Both weak and strong ETags are compared by their opaque-tag values
+
+POTENTIAL ISSUES WITH CURRENT IMPLEMENTATION:
+---------------------------------------------
+
+While the bug report is incorrect about the specific issue, the implementation does have some limitations:
+
+1. It doesn't distinguish between weak and strong comparison contexts
+2. The use of strip(" W/") is somewhat fragile - it works because ETags are quoted, but could fail if someone provided malformed ETags without quotes
+3. It treats both weak-to-weak and weak-to-strong comparisons the same way
+
+However, for the typical use case in static file serving (determining if content hasn't changed), this simplified approach is adequate and follows the spirit of RFC 7232.
+
+CONCLUSION:
+-----------
+
+The documentation (RFC 7232) clearly states that ETags must be quoted. The implementation correctly handles this quoted format. The bug report's claim is based on a misunderstanding of how Python's strip() interacts with quoted strings.

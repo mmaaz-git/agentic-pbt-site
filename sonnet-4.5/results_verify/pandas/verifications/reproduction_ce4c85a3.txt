@@ -1,0 +1,67 @@
+## Bug Reproduction Results
+
+### Test 1: Basic Empty DataFrame Round-trip
+
+Tested the exact code from the bug report:
+
+```python
+df = pd.DataFrame({"col_0": []})
+json_str = df.to_json(orient='records')
+df_roundtrip = pd.read_json(StringIO(json_str), orient='records')
+```
+
+**Result**: CONFIRMED
+- Original shape: (0, 1), columns: ['col_0']
+- JSON output: []
+- Roundtrip shape: (0, 0), columns: []
+- Column information IS lost
+
+### Test 2: orient='values' Behavior
+
+```python
+df = pd.DataFrame({"col_0": []})
+json_str = df.to_json(orient='values')
+df_roundtrip = pd.read_json(StringIO(json_str), orient='values')
+```
+
+**Result**: CONFIRMED
+- Original shape: (0, 1)
+- JSON output: []
+- Roundtrip shape: (0, 0)
+- Column information IS lost
+
+### Test 3: All Orient Types Comparison
+
+Tested empty DataFrame with 2 columns across all orient types:
+
+| Orient    | JSON Output                                        | Columns Preserved |
+|-----------|---------------------------------------------------|-------------------|
+| split     | {"columns":["col_0","col_1"],"index":[],"data":[]} | YES              |
+| records   | []                                                | NO               |
+| index     | {}                                                | NO               |
+| columns   | {"col_0":{},"col_1":{}}                          | YES              |
+| values    | []                                                | NO               |
+| table     | (full schema included)                            | YES              |
+
+### Test 4: Property-Based Testing
+
+Running the Hypothesis test revealed TWO issues:
+1. Empty DataFrames lose columns (as reported)
+2. Very large negative integers (-9223372036854775809) cause ValueError: "Value is too small"
+
+### Key Observations:
+
+1. The behavior is CONSISTENT across 'records', 'values', and 'index' orients
+2. The behavior is DIFFERENT for 'split', 'columns', and 'table' orients which DO preserve columns
+3. The JSON output for 'records' and 'values' is literally just [] for empty DataFrames
+4. Reading [] with orient='records' or 'values' has no way to infer column names
+
+### Technical Analysis:
+
+The root cause is clear:
+- 'records' orient outputs a list of dictionaries, one per row
+- 'values' orient outputs a list of value arrays
+- For empty DataFrames, both produce [] which contains no schema information
+- When read_json encounters [], it creates a (0, 0) DataFrame since there's no column information
+
+This is fundamentally a limitation of the JSON format chosen for these orient types, not necessarily a code bug.

@@ -1,0 +1,49 @@
+# Bug Report Triage Analysis
+
+## Considerations for Each Category
+
+### BUG (Valid bug that should be filed)
+**Why it could be a BUG:**
+- **Clear violation of Python's hash contract:** Python's documentation explicitly states that hash values must remain constant during an object's lifetime
+- **Reproducible with real impact:** The bug is easily reproducible and causes actual runtime failures (objects get lost in dictionaries)
+- **Violates fundamental Python behavior:** This isn't an edge case - it breaks basic dictionary/set operations
+- **No documentation suggests this is intentional:** Nothing in xarray's documentation indicates this changing hash behavior is expected
+- **The fix is straightforward:** The proposed fix (hashing immutable attributes instead of mutable _value) is correct and simple
+- **Security/reliability concern:** Code relying on these objects as dictionary keys could fail unpredictably in production
+
+### INVALID (Incorrect report, code works as intended)
+**Why it could be INVALID:**
+- Could argue the class was never intended to be used as a dictionary key (but nothing documents this restriction)
+- The class name suggests it's for internal use in deprecation handling (but it's exposed in public API)
+- **Verdict: UNLIKELY** - There's no evidence this behavior is intentional
+
+### WONTFIX (Trivial or unimportant issue)
+**Why it could be WONTFIX:**
+- These objects might rarely be used as dictionary keys in practice
+- It's an internal deprecation helper, not a core feature
+- **Verdict: UNLIKELY** - This violates a fundamental Python contract, not a minor issue
+
+### DOCUMENTATION_FIX (Documentation needs updating)
+**Why it could be DOCUMENTATION_FIX:**
+- Could document that these objects shouldn't be used as dictionary keys
+- Could add warnings about the changing hash behavior
+- **Verdict: POSSIBLE BUT INSUFFICIENT** - While documentation could help, the underlying code violates Python's data model
+
+### FEATURE_REQUEST (New functionality requested)
+**Why it could be FEATURE_REQUEST:**
+- Supporting stable hashing could be seen as a new feature
+- **Verdict: UNLIKELY** - This is fixing broken behavior, not adding new functionality
+
+## Analysis Summary
+
+This is a **clear violation of Python's documented hash contract**. The bug:
+1. Is easily reproducible
+2. Has real-world impact (objects disappear from dictionaries)
+3. Violates fundamental Python behavior that all Python developers expect
+4. Has a simple, correct fix proposed
+5. Is not documented as intentional behavior
+
+The fact that `CombineKwargDefault` implements both `__eq__` (based on mutable state) and `__hash__` (also based on that same mutable state) is fundamentally incorrect according to Python's data model.
+
+## Recommendation
+This should be categorized as **BUG**. It's a legitimate violation of Python's hash contract that can cause runtime failures. The proposed fix (hashing the immutable constructor parameters instead of the mutable _value) is correct and should be implemented.

@@ -1,0 +1,50 @@
+BUG REPORT ANALYSIS
+===================
+
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The functions get_swagger_ui_html and get_redoc_html are primarily intended for internal use by FastAPI to serve documentation at hardcoded endpoints like /docs and /redoc. In typical usage, the parameters (title, openapi_url, oauth2_redirect_url) come from the developer's configuration, not from untrusted user input. The documentation doesn't explicitly promise that these functions will sanitize input, and it could be argued that developers should know not to pass untrusted data directly into HTML generation functions. Additionally, these are documentation generation functions, not general-purpose HTML templating functions, so XSS protection might be considered outside their scope.
+
+**Why it might not be INVALID:**
+XSS vulnerabilities are universally recognized as security bugs, regardless of the intended use case. These are public API functions that can be called directly, and nothing in their documentation warns against using them with dynamic input. The principle of secure-by-default suggests that functions generating HTML should escape user input automatically. The fact that the functions accept parameters at all (rather than being hardcoded) implies they're meant to be customizable, potentially with dynamic values.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+The functions are typically used in controlled environments where all parameters are hardcoded by developers. The real-world impact might be minimal since most FastAPI applications use the default documentation endpoints with trusted configuration. Adding HTML escaping might break existing applications that intentionally pass HTML in titles for formatting purposes. The maintainers might consider this an edge case that doesn't warrant changing the existing behavior, especially if it could affect backward compatibility.
+
+**Why it might not be WONTFIX:**
+XSS vulnerabilities are serious security issues that should always be fixed, regardless of how common the vulnerable usage pattern might be. Security best practices dictate that all user input should be escaped when rendered in HTML contexts. The fix is straightforward (using html.escape() and json.dumps()) and unlikely to break legitimate use cases. Modern web frameworks should protect developers from XSS by default, not require them to remember to escape every input manually.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior could be considered "working as designed" if the functions were never intended to handle untrusted input. The documentation could be updated to explicitly warn developers that these functions do not escape HTML and should only be used with trusted input. Adding a security warning to the documentation would alert developers to the risk without changing the existing behavior. This approach maintains backward compatibility while addressing the security concern through documentation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting a security vulnerability doesn't fix it. Developers often don't read all documentation thoroughly, and security should be built into the code, not just mentioned in docs. XSS vulnerabilities are too serious to address with documentation alone. The proper fix is to escape the input in the code, not to tell developers to be careful. Leaving exploitable code in place with just a documentation warning is insufficient for a modern web framework.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+Adding HTML escaping could be viewed as a new feature - "support for untrusted input in documentation functions." The current functions might be considered as working correctly for their intended use case (trusted input), and supporting untrusted input would be an enhancement. A new set of "safe" functions could be created (get_safe_swagger_ui_html, etc.) that include escaping, treating this as an additional feature rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+Security is not a feature; it's a fundamental requirement. XSS protection is not an enhancement but a basic security measure that should be present by default. The issue isn't about adding new functionality but fixing a security vulnerability in existing functionality. Creating separate "safe" versions would be admitting the current versions are unsafe, which clearly indicates a bug, not a missing feature.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+This is a textbook XSS vulnerability where user-controlled input is rendered in HTML without proper escaping. The vulnerabilities are demonstrable and exploitable, allowing arbitrary JavaScript execution in the browser. XSS is listed in the OWASP Top 10 and is universally considered a serious security bug. The functions generate HTML responses that could contain malicious scripts if given untrusted input. Major web frameworks like Django, Rails, and others escape HTML by default to prevent exactly this issue. The fix is straightforward and follows established security best practices. FastAPI is a modern framework that should protect developers from common security pitfalls.
+
+**Why it might not be BUG:**
+The functions might be working as originally designed, with the expectation that only trusted developer-controlled input would be used. The documentation doesn't promise HTML escaping or XSS protection. These are specialized documentation generation functions, not general-purpose templating functions. The typical use case (hardcoded parameters at /docs and /redoc) is not vulnerable. It could be argued that developers using these functions directly should understand the security implications of HTML generation.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a valid security bug that should be addressed. While the functions are primarily used with trusted input in typical FastAPI applications, they are public API functions that can accept arbitrary parameters. The presence of XSS vulnerabilities, even in specialized functions, represents a security risk that violates the principle of secure-by-default design.
+
+The fact that the documentation doesn't explicitly warn about XSS risks makes this more serious, as developers might unknowingly create vulnerable applications. Modern web frameworks are expected to provide XSS protection by default, and FastAPI, being a contemporary framework, should meet this standard. The vulnerabilities are real, demonstrable, and could lead to serious security breaches if exploited.
+
+The proposed fix using html.escape() for HTML contexts and json.dumps() for JavaScript contexts is a standard, well-established approach that would eliminate the vulnerabilities without significantly impacting legitimate use cases. While breaking changes are always a concern, security fixes typically warrant such changes, and the risk of breaking existing applications is likely minimal since most uses involve static, trusted input. This is a clear case where security should take precedence, making this a valid bug report that should be addressed rather than dismissed or downgraded to a documentation issue.

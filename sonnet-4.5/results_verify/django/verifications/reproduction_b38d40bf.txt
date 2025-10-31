@@ -1,0 +1,58 @@
+Bug Reproduction Analysis for django.views.i18n.JavaScriptCatalog.get_plural
+===========================================================================
+
+## Reproduction Status: CONFIRMED
+
+The bug report has been successfully reproduced. The issue is that the `get_plural()` method in `JavaScriptCatalog` raises an `IndexError` when the Plural-Forms header in a translation catalog is malformed or missing the `plural=` part.
+
+## Steps Taken to Reproduce
+
+1. Created test script to reproduce the exact scenarios described in the bug report
+2. Tested with the provided failing inputs:
+   - `"Plural-Forms: nplurals=2;"` (missing plural= part)
+   - `"Plural-Forms: 0"` (just a value without plural=)
+3. Confirmed the IndexError occurs with message "list index out of range"
+
+## Test Results
+
+Test Case 1 - Missing plural= part:
+- Input: `"Plural-Forms: nplurals=2;"`
+- Result: IndexError: list index out of range ✓ CONFIRMED
+
+Test Case 2 - Just a value:
+- Input: `"Plural-Forms: 0"`
+- Result: IndexError: list index out of range ✓ CONFIRMED
+
+Test Case 3 - Valid plural forms (control):
+- Input: `"Plural-Forms: nplurals=2; plural=(n != 1);"`
+- Result: Returns "(n != 1)" ✓ WORKS AS EXPECTED
+
+## Property-Based Testing Verification
+
+Ran the hypothesis-based property test provided in the bug report. The test correctly identifies numerous failing inputs where the Plural-Forms header lacks a "plural=" part, all resulting in IndexError.
+
+## Code Analysis
+
+The issue occurs at line 171-175 in `/home/npc/miniconda/lib/python3.13/site-packages/django/views/i18n.py`:
+
+```python
+plural = [
+    el.strip()
+    for el in plural.split(";")
+    if el.strip().startswith("plural=")
+][0].split("=", 1)[1]
+```
+
+The list comprehension filters for elements starting with "plural=". When no such element exists, the list is empty, and accessing `[0]` raises an IndexError.
+
+## Comparison with _num_plurals Property
+
+The bug report correctly notes that the `_num_plurals` property (lines 145-151) gracefully handles malformed input by:
+1. Using regex to search for "nplurals=" pattern
+2. Returning a default value of 2 if no match is found
+
+This demonstrates an inconsistency in error handling between these two related methods.
+
+## Conclusion
+
+The bug is REAL and REPRODUCIBLE. The `get_plural()` method crashes with IndexError on malformed Plural-Forms headers that lack the "plural=" part, while the related `_num_plurals` property handles such cases gracefully.

@@ -1,0 +1,41 @@
+# Reproduction of Bug Report: scipy.signal.windows.tukey NaN Values with Tiny Alpha
+
+## Reproduction Results
+
+I have successfully reproduced the bug as described in the report. The issue manifests exactly as reported.
+
+### Hypothesis Test Results
+The hypothesis test failed with the exact error reported:
+- Input: `M=2, alpha=1e-320`
+- Output: `[0. nan]`
+- The test correctly identified that the tukey function returns NaN values when alpha is extremely small.
+
+### Manual Reproduction Results
+The manual reproduction code confirms the behavior:
+1. `tukey(2, alpha=1e-309)` returns `[0. nan]` with NaN in the second element
+2. `tukey(10, alpha=1e-309)` returns `[0. 1. 1. 1. 1. 1. 1. 1. 1. nan]` with NaN in the last element
+
+### Additional Testing
+I performed additional testing to understand the boundary of the issue:
+- Alpha values from 1e-50 to 1e-300: Function works correctly, returns finite values
+- Alpha value of 1e-309: Function returns NaN values
+- The transition occurs somewhere between 1e-300 and 1e-309
+
+### Runtime Warnings
+The function generates runtime warnings indicating the root cause:
+1. "RuntimeWarning: overflow encountered in divide" at line 946 in _windows.py
+2. "RuntimeWarning: invalid value encountered in add" at the same location
+
+### Analysis of the Failure
+The bug report correctly identifies the root cause in line 946 of _windows.py:
+```python
+w3 = 0.5 * (1 + xp.cos(xp.pi * (-2.0/alpha + 1 + 2.0*n3/alpha/(M-1))))
+```
+
+When alpha is extremely small (e.g., 1e-309):
+- The term `-2.0/alpha` causes overflow to -infinity
+- This causes `cos(-infinity)` to return NaN
+- The NaN propagates through the calculation
+
+## Conclusion
+The bug is reproducible and behaves exactly as described in the bug report. The function returns NaN values instead of valid window arrays when given very small but technically valid alpha values within the range [0, 1].

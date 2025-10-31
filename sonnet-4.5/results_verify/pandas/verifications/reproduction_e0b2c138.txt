@@ -1,0 +1,31 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug reported for `pandas.core.indexers.length_of_indexer`. The function does indeed return negative values for certain slice inputs.
+
+### Reproduction Steps
+
+1. **Property-based test**: The hypothesis test fails immediately with the reported example:
+   - Input: `target_len=5, start=1, stop=0`
+   - Expected: 0 (length of empty slice)
+   - Actual: -1 (negative value returned by length_of_indexer)
+
+2. **Specific test cases confirmed**:
+   - `slice(1, 0, 1)` on array of len 5: Returns -1 instead of 0
+   - `slice(None, None, -1)` on array of len 10: Returns -10 instead of 10
+   - `slice(10, -11, 1)` on array of len 10: Returns -11 instead of 0
+   - `slice(5, 101, 1)` on array of len 1: Returns -4 instead of 0
+
+### Key Issue
+The function is documented to return "the expected length of target[indexer]", and in Python, the `len()` function always returns non-negative integers. When I compute `len(target[indexer])` for these test cases, Python correctly returns 0 or positive values, but `length_of_indexer` returns negative values.
+
+### Mathematical Invariant Violation
+A fundamental invariant in Python is that for any valid sequence `s`, `len(s) >= 0`. The function `length_of_indexer` violates this invariant by returning negative values, which contradicts its stated purpose of returning "the expected length of target[indexer]".
+
+### Code Analysis
+The bug occurs in the slice handling logic (lines 298-316 of utils.py). The function uses the formula `(stop - start + step - 1) // step` which can produce negative results when:
+1. `stop < start` with positive step
+2. Negative indices resolve to positions where stop < start
+3. The transformation for negative steps doesn't properly handle edge cases
+
+The function doesn't validate that the result should be non-negative before returning it.

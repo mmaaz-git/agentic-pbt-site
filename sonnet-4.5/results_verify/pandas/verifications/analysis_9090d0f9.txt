@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report assumes that the interchange protocol should preserve the Int64 nullable dtype through round-trip conversion, but the documentation makes no such guarantee. The interchange protocol is designed as a general interchange mechanism between different dataframe libraries, not as a perfect round-trip preservation mechanism for pandas-specific experimental dtypes. The Int64 dtype is explicitly documented as experimental with API subject to change. The interchange protocol documentation does not specify that nullable integer types must be preserved, only that null values must be representable.
+
+**Why it might not be INVALID:**
+The behavior is counterintuitive and loses type information. When a user explicitly uses Int64 (nullable integer), they likely have a reason - perhaps they need to distinguish between missing values and actual values while maintaining integer semantics. The conversion to float64 changes the data representation fundamentally (integers become floats), which could break downstream code expecting integer types.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The Int64 dtype is experimental and explicitly documented as subject to change. The interchange protocol is being deprecated in favor of the Arrow C Data Interface. The pandas documentation itself recommends against using the interchange protocol due to "severe implementation issues." This is an edge case involving an experimental feature in a deprecated protocol. The effort to fix this in a deprecated system may not be worthwhile, especially when the recommended alternative (Arrow) likely handles this better.
+
+**Why it might not be WONTFIX:**
+Even if the feature is experimental, users are actively using it and experiencing data loss/transformation issues. The bug causes actual problems for users trying to use nullable integers, which is a legitimate use case. Just because something is experimental doesn't mean bugs shouldn't be fixed, especially when they cause data type changes that could affect calculations.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation never claims that pandas-specific nullable dtypes will be preserved through the interchange protocol. Adding a note that Int64 and other nullable dtypes may be converted to their nearest equivalent (float64 for integers with NA, regular int64 for integers without NA) would set proper expectations. This is working as designed - the interchange protocol provides a lowest common denominator representation, not perfect fidelity.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The user isn't misunderstanding the documentation - the behavior genuinely seems problematic. The issue isn't that the documentation is unclear, but that the implementation doesn't preserve type information that users reasonably expect to be preserved. Documenting a limitation doesn't make it not a bug if the behavior is fundamentally problematic.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The interchange protocol currently doesn't support preserving pandas-specific nullable integer types, but this could be added as a new feature. The request is essentially asking for enhanced type fidelity in the interchange protocol to support nullable integers, which is a reasonable enhancement request. Since the protocol doesn't currently promise this behavior, asking for it would be a new feature rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+The user presents this as a bug (violation of expected round-trip behavior), not as a request for new functionality. The expectation that data types should be preserved through a round-trip conversion is reasonable and fundamental. This isn't asking for something new but pointing out that existing functionality doesn't work as one would reasonably expect.
+
+## BUG Considerations
+**Why it might be BUG:**
+The behavior violates the principle of least surprise - a round-trip conversion changes the data type and representation. Converting integers to floats can cause precision issues for large integers (as the report notes). The fact that Int64 without NA becomes int64 (losing nullable capability) and Int64 with NA becomes float64 (changing numeric type) shows inconsistent behavior that could break user code. Users explicitly choosing Int64 have their type choice overridden.
+
+**Why it might not be BUG:**
+The documentation makes no promises about preserving nullable dtypes through the interchange protocol. The Int64 dtype is experimental and explicitly subject to change. The interchange protocol is designed for cross-library compatibility, not perfect pandas-to-pandas fidelity. The protocol is doing exactly what it's designed to do - provide a common representation that can be understood by multiple libraries, even if that means losing library-specific type information.
+
+**Overall consideration**
+This bug report raises a legitimate concern about type preservation in the interchange protocol, but multiple factors suggest it should not be classified as a BUG. First, the Int64 dtype is explicitly documented as experimental with APIs subject to change without warning. Second, the interchange protocol documentation makes no guarantees about preserving library-specific nullable types - it's designed as a lowest common denominator for cross-library data exchange. Third, the pandas documentation itself warns about "severe implementation issues" with the interchange protocol and recommends using the Arrow C Data Interface instead, suggesting this protocol is essentially deprecated.
+
+The behavior is working as designed, even if that design is suboptimal. The interchange protocol converts to standard representations that can be understood across libraries: nullable integers with missing values become float64 (the traditional pandas/numpy way to represent missing numeric data), and nullable integers without missing values become regular int64. This is a reasonable fallback behavior for cross-library compatibility, even if it's not ideal for pandas-to-pandas round trips.
+
+Given that this involves an experimental feature (Int64) in a deprecated protocol (interchange) with a recommended alternative available (Arrow), and the behavior aligns with the documented scope of the interchange protocol (cross-library compatibility, not perfect type preservation), this should be classified as INVALID. The user's expectation of perfect round-trip fidelity is reasonable but not supported by the documentation or design goals of the interchange protocol.

@@ -1,0 +1,37 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `kleene_xor` function in pandas.core.ops indeed exhibits non-commutative behavior when handling NA values, contradicting the explicit code comment claiming commutativity.
+
+### Hypothesis Test Results
+The Hypothesis test failed as reported:
+- Test input: `left_val=True`
+- Assertion failure on: `result_value_na[0] == result_na_value[0]`
+- The test correctly identifies that the result values differ when the operation order is swapped
+
+### Manual Reproduction Results
+The manual test confirms the exact behavior described in the bug report:
+- `True ^ NA` returns: `result=False, mask=True`
+- `NA ^ True` returns: `result=True, mask=True`
+
+Both operations correctly mark the result as NA (via `mask=True`), but the underlying result values differ (False vs True), violating commutativity.
+
+### Code Analysis
+Looking at the implementation in `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/ops/mask_ops.py`:
+
+1. Line 105 contains the explicit comment: `# A ^ B == B ^ A`
+2. Line 106-107 swap arguments when `left_mask is None`, intending to ensure commutativity
+3. Line 114: When `right is libmissing.NA`, the result is set to `np.zeros_like(left)`
+4. However, when arguments are swapped and NA is on the left side:
+   - The `left` array contains the NA placeholder (typically False)
+   - The `right` contains the actual boolean value (True in our test)
+   - Line 116 computes `left ^ right` which gives `False ^ True = True`
+
+The bug occurs because:
+- When computing `True ^ NA`: result is forced to zeros (False)
+- When computing `NA ^ True`: after swapping, it becomes `True ^ NA` but the left array now contains False (the NA placeholder), so `False ^ True = True`
+
+This inconsistency violates the documented commutativity property and could cause issues if any code inspects result values even when masked.
+
+### Conclusion
+The bug is confirmed and reproducible. The function violates its own documented commutativity property when handling NA values.

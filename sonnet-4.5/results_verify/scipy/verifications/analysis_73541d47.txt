@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation never explicitly guarantees that as_rotvec(from_rotvec(v)).as_rotvec() == v. This round-trip property is assumed by the user but not promised by the library. The behavior at π is mathematically correct - both the positive and negative rotation vectors represent the same rotation. The library correctly preserves the rotation itself (the matrices are identical), just not the specific vector representation. Since the documentation doesn't specify this behavior should work, and the rotations are mathematically equivalent, this could be considered working as designed.
+
+**Why it might not be INVALID:**
+Users have reasonable expectations based on the documentation examples that show conversions working smoothly. The library provides conversion methods to and from rotation vectors, implying they should be stable and reversible. The documentation fails to mention this important edge case that affects approximately 3% of π-magnitude rotations. Most users would expect serialization/deserialization to be stable, and this violates that principle.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely rare edge case that only occurs at exactly π radians (±floating point epsilon), affecting roughly 3% of such rotations. The mathematical singularity at π makes it impossible to guarantee consistent round-trips without additional conventions. The actual rotations are preserved correctly (matrices are identical), so no geometric information is lost. Fixing this would require arbitrary choices about canonical forms that might break existing code. The issue only affects representation, not functionality.
+
+**Why it might not be WONTFIX:**
+The issue affects real use cases mentioned in the report: serialization, numerical algorithms, and debugging. Even if rare, non-deterministic behavior based on floating-point precision is problematic for reproducibility. The library already makes choices about constraining magnitudes to [0, π], so it could make choices about canonical forms. Other rotation libraries handle this case more consistently.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The behavior is mathematically correct but surprising to users. The documentation should warn about the singularity at π and explain why round-trips can fail there. Adding a note about this edge case would help users understand and work around it. The library is functioning correctly from a mathematical perspective; it's the documentation that fails to set proper expectations. A simple warning in as_rotvec() and from_rotvec() docs would prevent confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+If the library's intended behavior is to provide stable round-trips for serialization (as implied by examples), then this is a code bug, not a documentation issue. Simply documenting broken behavior doesn't make it acceptable if it violates reasonable user expectations. The examples in the documentation suggest round-trips should work, so the code should match those examples.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially asking for a new guarantee that doesn't currently exist: stable round-trip conversion for rotation vectors. This would require new functionality to handle the π singularity consistently, perhaps with a canonical form option. Adding a 'canonical=True' parameter to as_rotvec() would be a new feature. The current behavior is mathematically valid; the request is for additional constraints for practical use cases.
+
+**Why it might not be FEATURE_REQUEST:**
+The user isn't asking for new functionality but expecting existing conversion methods to work consistently. Round-trip stability is a basic expectation for conversion functions, not an advanced feature. The bug report describes a failure of existing functionality, not a request for something new. Users reasonably expect that from_X(as_X(r)) preserves representations.
+
+## BUG Considerations
+**Why it might be BUG:**
+The library violates reasonable user expectations for round-trip conversions. The behavior is non-deterministic based on floating-point rounding, which is problematic for reproducibility. The documentation examples imply round-trips work but don't mention this failure case. This breaks real-world use cases like serialization and testing. The inconsistent behavior (3% failure rate at π) suggests an implementation issue rather than deliberate design.
+
+**Why it might not be BUG:**
+The behavior is mathematically correct - both representations describe the same rotation. The documentation never promises round-trip stability for representations, only for the underlying rotations. The issue only occurs at a mathematical singularity where perfect round-trips are impossible. The library correctly preserves all geometric information (rotation matrices are identical). This is a fundamental limitation of rotation vectors at π, not a bug in the implementation.
+
+## Overall Consideration
+
+This case presents a challenging triage decision. The reported behavior is technically correct from a mathematical perspective but violates reasonable user expectations. The core issue is a mathematical singularity at π radians where quaternions have w=0, creating inherent sign ambiguity. When converting rotvec → quaternion → rotvec, this ambiguity can cause sign flips.
+
+The strongest argument for DOCUMENTATION_FIX is that the behavior is mathematically sound but poorly documented. The library makes no explicit promises about round-trip stability for representations, only for the actual rotations (which are preserved correctly). Adding documentation about this edge case would help users understand why their tests fail and how to handle π rotations. The magnitude() method already shows that scipy constrains rotations to [0, π], indicating awareness of these boundary issues.
+
+However, the non-deterministic nature of the failures (based on floating-point precision) and the impact on real use cases like serialization argue against dismissing this as purely a documentation issue. The fact that only ~3% of π rotations fail, depending on numerical precision, makes this particularly insidious for users trying to debug issues. While fixing this completely may be impossible due to the mathematical singularity, the library could potentially implement a consistent canonicalization to make the behavior deterministic, even if not perfectly round-tripping.
+
+**Final Assessment:** This is most appropriately categorized as DOCUMENTATION_FIX. The library's behavior is mathematically correct, and the singularity at π makes perfect round-trips impossible without arbitrary conventions. The documentation should explicitly warn users about this limitation and explain that while rotations are preserved, their vector representations may differ by sign at exactly π radians.

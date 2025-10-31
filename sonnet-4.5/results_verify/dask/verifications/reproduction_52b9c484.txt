@@ -1,0 +1,59 @@
+REPRODUCTION RESULTS FOR _aggregate_columns BUG
+================================================
+
+Bug Claim: The function enters an infinite loop when called with an empty list as input.
+
+Reproduction Method:
+1. Direct test with empty list input
+2. Hypothesis property-based test
+3. Manual trace through the code logic
+
+TEST 1: Direct Test with Empty List
+------------------------------------
+Result: CONFIRMED - Function enters infinite loop
+- Called _aggregate_columns([], {})
+- Function hung indefinitely (terminated after 2-second timeout)
+- The while True loop never terminates because:
+  * The for loop over empty cols executes 0 iterations
+  * No IndexError is raised (the loop body never runs)
+  * The loop continues forever, incrementing i and adding empty lists to combine
+
+TEST 2: Hypothesis Property Test
+---------------------------------
+Result: CONFIRMED - Hypothesis test finds the bug immediately
+- The test generates various inputs including empty lists
+- When cols=[], the function times out
+- This confirms the bug is reproducible through property-based testing
+
+TEST 3: Manual Code Trace
+-------------------------
+Result: CONFIRMED - Logic analysis shows infinite loop
+When cols is empty:
+- Iteration 1: i=0, creates empty inner list, for loop runs 0 times, no IndexError, i++
+- Iteration 2: i=1, creates empty inner list, for loop runs 0 times, no IndexError, i++
+- Iteration 3: i=2, creates empty inner list, for loop runs 0 times, no IndexError, i++
+- ... continues forever
+
+When cols is non-empty (e.g., [[1,2], [3,4]]):
+- Iteration 1: i=0, processes col[0][0]=1 and col[1][0]=3, no error, i++
+- Iteration 2: i=1, processes col[0][1]=2 and col[1][1]=4, no error, i++
+- Iteration 3: i=2, tries col[0][2], raises IndexError, breaks correctly
+
+Technical Analysis:
+The bug is a logic error in the termination condition. The code assumes that:
+1. The for loop will execute at least once
+2. Eventually col[i] will be out of bounds and raise IndexError
+3. This IndexError will be caught and break the while loop
+
+However, when cols is empty:
+- The for loop body never executes (0 iterations)
+- No array access col[i] ever happens
+- No IndexError can be raised
+- The while True loop continues forever
+
+Severity Assessment:
+- The bug is REAL and REPRODUCIBLE
+- It causes an infinite loop (program hang) with empty list input
+- This is an internal/private function (starts with _)
+- The function is only called internally within parquet statistics aggregation
+- Unlikely to be triggered in normal usage (statistics aggregation typically has data)

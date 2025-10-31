@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly state that cumsum() must work with non-null fill values. One could argue that sparse arrays with non-null fill values are an edge case, and the documentation's statement that "fill value will be np.nan regardless" could be interpreted as a requirement that the input should have null fill values. The phrase "cumulative sum of non-NA/null values" is ambiguous and could mean the method is only designed for arrays where the fill value is NA/null.
+
+**Why it might not be INVALID:**
+The method signature accepts any SparseArray without restrictions on fill_value. The documentation explicitly says the result will have fill_value=np.nan "regardless" of the input, strongly implying it should handle any input fill_value. The code has an explicit branch for handling non-null fill values (line 1549), showing intent to support them. A RecursionError is clearly a crash bug, not intended behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered an obscure edge case that rarely occurs in practice. Most users of sparse arrays likely use np.nan as the fill value (the default for floating-point arrays). The workaround is simple: convert to dense array first or use np.nan as fill_value. Fixing this might require significant refactoring for minimal benefit.
+
+**Why it might not be WONTFIX:**
+Infinite recursion causing a complete crash is a severe bug that should never occur in production code. The fix is trivial (one line change) as shown in the report. Sparse arrays with integer dtypes default to fill_value=0, making this a common scenario. The code already attempts to handle this case but has a clear implementation error.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that cumsum() only works with null fill values, warning users about the limitation. The current documentation is ambiguous about what "non-NA/null values" means and doesn't clearly specify supported fill values.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly intends to handle non-null fill values (there's explicit logic for it). The issue is not a documentation problem but an implementation bug - infinite recursion is never acceptable behavior. The documentation already implies all fill values should work by stating the output will have np.nan "regardless."
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting non-null fill values is a new feature that was never properly implemented. The current code path for non-null fill values appears to be a placeholder that doesn't work. This could be framed as requesting proper support for cumsum on integer sparse arrays.
+
+**Why it might not be FEATURE_REQUEST:**
+The code already has logic attempting to handle non-null fill values - it's just broken. This is not asking for new functionality but fixing existing code that crashes. The method accepts these inputs without error checking, indicating they should be supported.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case of infinite recursion caused by a simple logic error. The code attempts to handle non-null fill values but creates an infinite loop. The fix is trivial and obvious: call cumsum() on the numpy array instead of the SparseArray wrapper. The documentation implies this should work, and the code tries to make it work but fails due to a programming error. Crashes with RecursionError are always bugs.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the documentation explicitly stated that non-null fill values are unsupported, which it doesn't. Even then, the code should raise a clear error message rather than crashing with recursion.
+
+**Overall consideration**
+This is unequivocally a BUG. The evidence is overwhelming: the code has explicit logic to handle non-null fill values (line 1549-1550), but this logic contains a clear programming error causing infinite recursion. When `self._null_fill_value` is False, it calls `SparseArray(self.to_dense()).cumsum()`, which creates a new SparseArray with the same non-null fill value and calls cumsum() again, repeating infinitely. 
+
+The documentation states the output fill value will be np.nan "regardless" of input, clearly indicating all fill values should be supported. Sparse integer arrays default to fill_value=0, making this a common use case, not an edge case. The crash is severe (complete failure with RecursionError) and the fix is trivial (call cumsum on the numpy array).
+
+Most importantly, this cannot be dismissed as undefined behavior or a feature request - the code explicitly tries to handle this case but fails due to a simple implementation error. Any method that accepts certain inputs without validation but then crashes with infinite recursion when processing those inputs is exhibiting a bug, not missing functionality or documentation issues.

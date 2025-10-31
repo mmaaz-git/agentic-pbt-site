@@ -1,0 +1,43 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### 1. Hypothesis Test Execution
+The property-based test using Hypothesis framework successfully finds failures. When running the test with pytest, it immediately found a counterexample:
+- original_signal=[113.5, 0.0, 0.0, 0.0, 1.0]
+- divisor=[0.3125, 381202.0]
+
+This confirms that the issue is not limited to the specific example in the bug report but represents a broader class of failures.
+
+### 2. Manual Reproduction
+Running the specific test case from the bug report:
+- original_signal=[451211.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+- divisor=[1.25, 79299.0]
+
+Results exactly match the bug report:
+- Recorded array: [5.64013750e+05 3.57805811e+10 0.00000000e+00 0.00000000e+00 0.00000000e+00 1.25000000e+00 7.92990000e+04]
+- Reconstructed array: [5.64013750e+05 3.57805811e+10 0.00000000e+00 0.00000000e+00 0.00000000e+00 1.25000000e+00 7.88480000e+04]
+- Maximum difference: 451.0
+
+The last element differs: 79299.0 in the original vs 78848.0 in the reconstructed, a difference of 451.0.
+
+### 3. The Mathematical Property Being Violated
+The bug report correctly identifies that the following mathematical property is being violated:
+`signal = convolve(divisor, quotient) + remainder`
+
+This is supposed to be an exact identity (up to numerical precision), where:
+1. `signal` is the input to deconvolve
+2. `divisor` is the second input to deconvolve
+3. `quotient` and `remainder` are the outputs from deconvolve
+
+The test checks this property with tight tolerances (rtol=1e-8, atol=1e-10), and the actual error (451.0) is many orders of magnitude larger than these tolerances.
+
+### 4. Pattern of Failure
+The failures appear to occur when:
+- The divisor has large coefficient ratios (e.g., [1.25, 79299.0] has a ratio of ~63,000)
+- The divisor coefficients have very different magnitudes
+
+This aligns with the bug report's diagnosis that the issue stems from numerical instability in the underlying `lfilter` implementation when dealing with such extreme coefficient ratios.
+
+### Conclusion
+The bug is reproducible exactly as described in the report. The mathematical property that should hold for deconvolve operations is indeed being violated by significant amounts (errors of hundreds rather than machine epsilon level differences).

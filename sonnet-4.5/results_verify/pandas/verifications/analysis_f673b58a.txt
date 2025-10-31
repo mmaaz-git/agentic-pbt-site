@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The user might be misusing the parameters. One could argue that using the same character for both field delimiter and thousands separator is inherently nonsensical - how would any parser distinguish between "1,000" meaning two fields ("1" and "000") versus one field with value 1000? The current behavior follows a logical parsing order: split by delimiter first, then process thousands separators. This is technically a consistent, deterministic behavior.
+
+**Why it might not be INVALID:**
+The bug report correctly identifies that the function produces incorrect, corrupted data without any warning. When a user specifies `thousands=","`, they clearly intend for "1,000" to be parsed as the number 1000, not as two separate fields. The current behavior violates the principle of least surprise and silently corrupts data, which is a serious issue.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This might be considered an edge case that would rarely occur in practice. Most CSV files that use comma as a thousands separator would use a different delimiter (semicolon, tab, pipe) to avoid this exact conflict. The fix might require significant changes to the parsing logic, potentially affecting performance or breaking other edge cases. Maintainers might argue that users should simply use different characters for these parameters.
+
+**Why it might not be WONTFIX:**
+Silent data corruption is never a minor issue. Even if this is an edge case, the consequences are severe - users get completely wrong data without any indication that something went wrong. The fix is relatively simple (add a validation check) and wouldn't impact normal usage. This is not just a cosmetic or performance issue but a fundamental correctness problem.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation nowhere states that `sep` and `thousands` must be different characters. This is a significant omission that leaves users to discover this limitation through painful debugging. Adding a clear warning to the documentation about this constraint would help users avoid the problem. The current behavior could be considered "working as designed" if the design intent was that these parameters must be different.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting this limitation doesn't fix the underlying problem of silent data corruption. Users who don't read the documentation carefully (most users) will still encounter corrupted data. The function should either work correctly or fail loudly, not silently produce wrong results. Documentation alone is insufficient when the failure mode is this severe.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting the same character for both `sep` and `thousands` is a new feature that was never intended to work. The feature request would be to add logic to handle this case correctly, perhaps by using context-aware parsing or requiring quotes around numbers with thousands separators. This would be an enhancement to make the parser more robust.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality but for the existing `thousands` parameter to work correctly in all cases. When you specify `thousands=","`, the reasonable expectation is that it will parse thousands-separated numbers correctly, regardless of other parameters. The current behavior is broken, not merely limited in scope.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case of silent data corruption. The function accepts the parameter combination without error, processes the data, and returns completely incorrect results. Users have no indication that their data has been mangled. The behavior violates the documented purpose of the `thousands` parameter, which is to parse thousands-separated numbers. The fix is straightforward (validate parameters) and the impact is severe (data corruption). This meets all criteria for a serious bug.
+
+**Why it might not be BUG:**
+The parser is technically working as implemented - it splits by delimiter first, then processes remaining fields. One could argue this is logical behavior and users should know not to use the same character for both purposes. The documentation doesn't explicitly promise that these parameters can be the same, so there's no violation of a documented contract.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a case where the code exhibits technically explainable but highly problematic behavior. The parser follows a logical sequence (split then parse), but this leads to silent data corruption when users make what seems like a reasonable parameter choice.
+
+The key factors to consider are: (1) Silent data corruption is occurring - users get wrong data with no warning, (2) The documentation provides no guidance about this limitation, and (3) The user's expectation (that `thousands=","` should parse "1,000" as 1000) is entirely reasonable given the parameter's documented purpose.
+
+While one could argue this is a documentation issue or an invalid use case, the severity of silent data corruption elevates this beyond a simple documentation gap. The principle of "fail loudly rather than silently corrupt data" suggests that at minimum, the function should raise an error when given this parameter combination. The fact that it instead silently produces incorrect results makes this a significant issue that should be addressed in code, not just documentation.

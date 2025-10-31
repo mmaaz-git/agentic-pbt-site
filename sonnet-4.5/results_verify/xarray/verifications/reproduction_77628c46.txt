@@ -1,0 +1,39 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug in xarray.backends.locks.CombinedLock.locked() method.
+
+### Bug Confirmation
+
+The bug report is accurate. The CombinedLock.locked() method on line 236 of xarray/backends/locks.py incorrectly uses `lock.locked` (property access) instead of `lock.locked()` (method call).
+
+### Reproduction Results
+
+1. **Hypothesis Test**: The provided test doesn't actually catch the bug because it only checks if the result is a boolean. The bug returns True (a boolean) in all cases because method objects are truthy.
+
+2. **Manual Reproduction**: Created comprehensive tests that clearly demonstrate the issue:
+   - When no locks are acquired, `combined.locked()` incorrectly returns `True` (should be `False`)
+   - This happens because `lock.locked` returns a method object, not the boolean result
+   - Method objects are always truthy when evaluated by `any()`
+
+### Technical Details
+
+The bug occurs because:
+- `threading.Lock.locked` is a method, not a property
+- Accessing `lock.locked` without parentheses returns `<built-in method locked of _thread.lock object>`
+- This method object is truthy, so `any(lock.locked for lock in self.locks)` always returns `True`
+- The correct implementation should be `any(lock.locked() for lock in self.locks)`
+
+### Impact
+
+This is a serious bug that causes `CombinedLock.locked()` to:
+1. Always return `True` when any lock object is present (regardless of lock state)
+2. Never correctly report whether locks are actually acquired
+3. Break any code that relies on checking if a CombinedLock is locked
+
+### Comparison with SerializableLock
+
+The bug report correctly notes that SerializableLock.locked() on line 70 of the same file uses the correct syntax: `return self.lock.locked()` with parentheses.
+
+### Conclusion
+
+The bug is real, reproducible, and the proposed fix (adding parentheses to make it a method call) is correct.

@@ -1,0 +1,42 @@
+BUG REPRODUCTION RESULTS
+
+HYPOTHESIS TEST RESULTS:
+The hypothesis test from the bug report FAILED with 8 distinct failures. The test correctly identifies that when re.compile() raises re.error for invalid regex patterns, is_re_compilable() should return False but instead raises an exception.
+
+SPECIFIC TEST CASES:
+
+1. is_re_compilable(")")
+   Expected: False (since ")" is not a valid regex)
+   Actual: Raises PatternError: unbalanced parenthesis at position 0
+
+2. is_re_compilable("?")
+   Expected: False (since "?" alone is not a valid regex)
+   Actual: Raises PatternError: nothing to repeat at position 0
+
+3. is_re_compilable(".*")
+   Expected: True
+   Actual: True (CORRECT)
+
+4. is_re_compilable(1)
+   Expected: False
+   Actual: False (CORRECT - TypeError is caught)
+
+5. is_re_compilable(None)
+   Expected: False
+   Actual: False (CORRECT - TypeError is caught)
+
+DIRECT re.compile() BEHAVIOR:
+- re.compile(")") raises PatternError (a subclass of re.error)
+- re.compile("?") raises PatternError (a subclass of re.error)
+- re.compile(1) raises TypeError
+- re.compile(".*") succeeds
+
+KEY FINDING:
+The bug report is ACCURATE. The function raises PatternError (which is re.error in older Python versions) for invalid regex syntax instead of returning False. The current implementation only catches TypeError (for non-string types) but not re.error/PatternError (for invalid regex syntax).
+
+The bug manifests because:
+1. re.compile() can raise two types of exceptions:
+   - TypeError: when the input is not a string or compiled pattern
+   - re.error/PatternError: when the string has invalid regex syntax
+2. is_re_compilable() only catches TypeError
+3. Therefore, re.error/PatternError propagates up, violating the documented contract of returning a boolean

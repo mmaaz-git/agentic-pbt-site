@@ -1,0 +1,85 @@
+# Bug Report Analysis
+
+## Evaluation Against Each Category
+
+### 1. BUG (Valid Bug)
+**Arguments FOR:**
+- The round-trip failure is demonstrable and reproducible
+- The behavior violates the implicit contract of URL routing (path parameters should be reconstructible)
+- The regex accepts values that `to_string()` cannot properly reconstruct
+- Data loss occurs (1e-21 becomes 0) which could break application logic
+- Other convertors (Integer, UUID, String) maintain round-trip properties
+- The routing system uses `to_string()` for URL generation, so this affects real functionality
+
+**Arguments AGAINST:**
+- Documentation doesn't explicitly guarantee round-trip behavior
+- Values like 1e-21 in URLs are extremely rare edge cases
+- Float precision issues are generally expected in computing
+
+### 2. INVALID
+**Arguments FOR:**
+- Documentation never explicitly promises round-trip capability
+- Floating point precision limitations are well-known in computing
+- The code works correctly for "reasonable" float values
+
+**Arguments AGAINST:**
+- The design pattern (convert/to_string pair) clearly implies bidirectional conversion
+- The bug causes actual data loss (1e-21 → 0), not just precision loss
+- The regex accepts these values, so the system claims to support them
+
+### 3. WONTFIX
+**Arguments FOR:**
+- Values like 1e-21 in URL paths are extremely rare in practice
+- Most applications would never encounter this issue
+- The fix might introduce other complications
+
+**Arguments AGAINST:**
+- The fix is simple and doesn't break existing functionality
+- Data corruption (value becoming 0) is serious even if rare
+- The inconsistency between regex and to_string is a design flaw
+
+### 4. FEATURE_REQUEST
+**Arguments FOR:**
+- Could be viewed as requesting support for extreme precision floats
+- Documentation doesn't promise this capability
+
+**Arguments AGAINST:**
+- This isn't adding new functionality, it's fixing broken existing functionality
+- The regex already accepts these values, so support is implied
+- The issue is about consistency, not new features
+
+### 5. DOCUMENTATION_FIX
+**Arguments FOR:**
+- The documentation could simply state the limitation
+- Could document that floats smaller than 1e-20 aren't supported
+- Users could be warned about precision limitations
+
+**Arguments AGAINST:**
+- The code behavior is incorrect, not just poorly documented
+- Documenting a bug doesn't fix the underlying issue
+- The mismatch between regex and to_string is a code bug, not a documentation issue
+
+## Detailed Analysis
+
+The core issue is a **design inconsistency**:
+- The regex pattern accepts unlimited decimal places
+- The convert() method handles any valid float string
+- The to_string() method is limited to 20 decimal places
+
+This creates a situation where valid inputs accepted by the system cannot be properly round-tripped. The value 1e-21 being converted to "0" is **data corruption**, not just precision loss.
+
+## Severity Assessment
+
+While the bug affects edge cases (very small floats), the consequences are severe:
+1. **Data Loss**: Values become 0, not just slightly imprecise
+2. **Routing Failures**: URLs generated with these values will be incorrect
+3. **Silent Failure**: No error is raised; incorrect values are silently produced
+
+## Recommendation
+
+This should be classified as **BUG** because:
+1. It's a clear inconsistency in the implementation
+2. It causes data loss/corruption, not just imprecision
+3. The fix is straightforward and doesn't break compatibility
+4. The design pattern implies round-trip capability
+5. The routing system depends on correct URL generation

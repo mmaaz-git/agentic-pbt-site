@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The classes are named `AlwaysGreaterThan` and `AlwaysLessThan`, which could be interpreted literally to mean they are ALWAYS greater/less than ANYTHING, including themselves. The implementation strictly follows this literal interpretation by unconditionally returning `True` from `__gt__` and `__lt__`. There's no explicit documentation stating these must follow mathematical ordering axioms or behave identically to `np.inf`. The comment only says "Equivalence to np.inf" which could mean functional equivalence in their role as sentinel values, not behavioral equivalence in all operations.
+
+**Why it might not be INVALID:**
+The code comment explicitly states these are "Equivalence to np.inf (-np.inf) for object-type", and `np.inf` does follow mathematical ordering axioms. The use of `@functools.total_ordering` decorator implies the intention to create a proper total ordering, which requires satisfying mathematical properties like irreflexivity and trichotomy. The fact that these are used as return values from `get_pos_infinity()` and `get_neg_infinity()` functions strongly suggests they should behave like mathematical infinities.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+These classes appear to work adequately as sentinel values for their intended use case - being greater/less than regular values in comparisons. The sorting functionality still works, max/min operations behave correctly, and the violation only occurs in the edge case of self-comparison. Since these are internal implementation details used primarily as sentinel values in dtype operations, the self-comparison scenario might be considered rare enough to not warrant fixing.
+
+**Why it might not be WONTFIX:**
+The violation of fundamental mathematical properties could lead to subtle bugs in any algorithm that assumes standard comparison semantics. The use of `@functools.total_ordering` creates an implicit contract that the class implements a valid total ordering. The issue could affect binary search algorithms, sorting stability, or any code that relies on the trichotomy property. Additionally, the fix is trivial (adding a type check) and wouldn't break any existing functionality.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior might be intentional, with the classes meant to be "always" greater/less in the most literal sense. If this is the design intent, then the documentation should be updated to clarify that these classes do not follow standard mathematical ordering properties and should not be used in contexts where such properties are assumed. The comment about "equivalence to np.inf" would need clarification that this refers to their role, not their behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The comment explicitly compares these to `np.inf`, which does follow proper ordering axioms. The use of `@functools.total_ordering` strongly implies the intent to create mathematically valid orderings. Changing documentation to say "these don't follow mathematical ordering" would be admitting a design flaw rather than clarifying intended behavior. The functions returning these values are named `get_pos_infinity` and `get_neg_infinity`, clearly indicating they should behave as mathematical infinities.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If the current implementation is considered correct for the original use case, but users want versions that follow mathematical ordering axioms, this could be treated as a request for new functionality. The request would be for "mathematically correct" infinity sentinel values in addition to the existing "always greater/less" sentinels.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out that existing functionality violates mathematical properties that are implied by the decorator and the infinity analogy. The classes are already supposed to represent infinity values, as evidenced by the variable names `INF` and `NINF` and their use in infinity-related functions. Fixing incorrect behavior is a bug fix, not a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The classes use `@functools.total_ordering` which promises to implement a valid total ordering, but the implementation violates fundamental requirements of such orderings (irreflexivity and trichotomy). The code comments explicitly state these are "Equivalence to np.inf" but they behave differently from `np.inf` in self-comparison. The violation could cause subtle issues in any code that assumes standard comparison semantics. The classes are returned by functions named `get_pos_infinity` and `get_neg_infinity`, clearly indicating they should behave as mathematical infinities, which follow proper ordering axioms.
+
+**Why it might not be BUG:**
+The classes are named `AlwaysGreaterThan` and `AlwaysLessThan`, which could be interpreted as a literal specification of behavior rather than a bug. There's no formal documentation explicitly stating these must follow mathematical ordering axioms. The primary use case (comparing with regular values) works correctly, and the issue only manifests in edge cases of self-comparison that might not occur in practice.
+
+## Overall Consideration
+
+Looking at all considerations, this appears to be a borderline case between WONTFIX and BUG. However, several factors lean toward this being a valid BUG:
+
+First, the use of `@functools.total_ordering` creates an explicit contract that the class implements a mathematically valid total ordering. The Python documentation for this decorator assumes the underlying comparison methods follow standard mathematical properties. By violating irreflexivity and trichotomy, the implementation breaks this contract in a way that could cause subtle bugs in algorithms that rely on these properties.
+
+Second, the code comments and usage context strongly suggest these classes are meant to behave like `np.inf` and `-np.inf`. They are stored in variables named `INF` and `NINF`, returned by functions named `get_pos_infinity` and `get_neg_infinity`, and the comment explicitly states "Equivalence to np.inf (-np.inf)". Since `np.inf` correctly follows mathematical ordering axioms, the equivalence claim implies these classes should too.
+
+Third, while the practical impact may be limited, the violation could cause real issues. For example, algorithms that rely on the property that if `a == b` then `not (a > b)` would fail. The fact that sorting still "works" doesn't mean it works correctly in all cases - having an element that is both equal to and greater than itself violates the assumptions of many algorithms. The fix is also trivial and wouldn't break any existing valid use cases, making this a low-risk correction of incorrect behavior rather than a breaking change.

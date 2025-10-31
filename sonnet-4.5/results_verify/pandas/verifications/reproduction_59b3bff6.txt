@@ -1,0 +1,45 @@
+## Bug Reproduction Analysis
+
+### Summary
+I have successfully reproduced the bug reported for pandas.core.methods.selectn.SelectNSeries.compute. The bug concerns the behavior of `nlargest(0)` and `nsmallest(0)` when called on Series with object dtype.
+
+### Reproduction Steps
+
+1. **Basic reproduction**: Created a Series with object dtype (strings) and called `nlargest(0)`:
+   ```python
+   s = pd.Series(['a', 'b', 'c'])
+   result = s.nlargest(0)  # Raises TypeError: Cannot use method 'nlargest' with dtype object
+   ```
+
+2. **Hypothesis test**: The provided hypothesis test fails as expected:
+   - The test creates Series with text data (object dtype)
+   - Calls `nlargest(0)` expecting an empty result
+   - Instead receives TypeError
+   - Specific failing input confirmed: `data=['0']`
+
+3. **Cross-dtype testing**: Verified behavior across different dtypes:
+   - int64: `nlargest(0)` returns empty Series successfully
+   - float64: `nlargest(0)` returns empty Series successfully
+   - bool: `nlargest(0)` returns empty Series successfully
+   - object: `nlargest(0)` raises TypeError
+
+### Code Analysis
+
+Examined the source code at `/home/npc/pbt/agentic-pbt/envs/pandas_env/lib/python3.13/site-packages/pandas/core/methods/selectn.py`:
+
+Lines 90-99 show the issue clearly:
+```python
+def compute(self, method: str) -> Series:
+    n = self.n
+    dtype = self.obj.dtype
+    if not self.is_valid_dtype_n_method(dtype):  # Line 95-96 - dtype check happens first
+        raise TypeError(f"Cannot use method '{method}' with dtype {dtype}")
+
+    if n <= 0:  # Line 98-99 - early return for n<=0 comes after dtype check
+        return self.obj[[]]
+```
+
+The dtype validation at line 95-96 prevents the code from reaching the `n <= 0` check at line 98-99. Since `n <= 0` returns an empty Series without performing any comparisons, the dtype check is unnecessary in this case.
+
+### Effect
+When requesting 0 largest/smallest elements from a Series with object dtype, users receive a TypeError instead of the expected empty Series. This is inconsistent with the behavior for numeric dtypes and logically incorrect since no comparison operations are needed when n=0.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify that `path='/'` must round-trip perfectly or that the build method must preserve the exact input path. One could argue that since the documentation doesn't make guarantees about round-trip behavior, this is working as designed. Additionally, the resulting URL still functions (http://example.com// technically works in most clients).
+
+**Why it might not be INVALID:**
+The behavior clearly violates RFC 3986, which states that paths cannot begin with '//' when an authority is present. The RFC is the authoritative standard for URL structure. Additionally, the path property is documented as "The path part of the URL", and '//' is objectively not the same as '/'. The behavior is inconsistent with URL parsing (parsing "http://example.com/" gives path='/', while building with path='/' gives path='//').
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The issue could be considered low priority since URLs with double slashes after the authority often still work in practice. Most web servers and browsers handle http://example.com// the same as http://example.com/. The workaround is simple - don't pass path='/' explicitly, just omit it or use None. This might be seen as an edge case that doesn't warrant fixing.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - the root path '/' is one of the most common URL paths. The bug violates a fundamental property (round-tripping) and an RFC standard. It affects not just '/' but ALL paths starting with '/', making it a systematic issue rather than an edge case. The accumulating nature of the bug (each round-trip adds another slash) makes it progressively worse and could cause real issues in applications that reconstruct URLs.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the build method is intentionally designed to always prepend a '/' to provided paths, then the documentation should clarify this behavior. The documentation could be updated to state "Note: paths provided to build() will have a '/' prepended, so path='/' will result in path='//'". This would at least make the behavior explicit.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior violates RFC 3986, which is the standard URLs must follow. Documenting non-compliant behavior doesn't make it correct. The issue isn't that the documentation is unclear - it's that the implementation is wrong. The documentation correctly describes what a path should be; the code just doesn't implement it correctly.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that proper round-trip support is a new feature that wasn't originally designed into the build method. Adding code to normalize paths and ensure round-trip consistency could be seen as an enhancement rather than a bug fix. The request for the build method to handle path='/' specially could be viewed as asking for new functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for correct URL construction according to established standards. The build method already exists and is supposed to construct valid URLs from components. Constructing RFC-compliant URLs isn't a feature, it's the basic requirement. Round-trip consistency is a fundamental property that users reasonably expect from a build/parse API pair.
+
+## BUG Considerations
+**Why it might be BUG:**
+The implementation clearly violates RFC 3986 by producing paths that begin with '//' after an authority component. The behavior is objectively incorrect according to URL standards. The round-trip property is violated - you cannot reconstruct the same URL from its components. The bug is systematic (affects all paths starting with '/'), reproducible, and causes accumulating errors with repeated use. Different construction methods (parsing vs building) produce different results for the same logical URL, indicating an implementation inconsistency.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if pydantic explicitly documented that the build method doesn't follow RFC standards or that paths are handled specially. However, no such documentation exists. Given that URLs must follow RFC 3986 to be valid, and pydantic is a validation library that should produce valid outputs, there's no reasonable argument that this isn't a bug.
+
+## Overall Consideration
+
+This is unequivocally a valid bug that should be filed. The `AnyUrl.build()` method produces URLs that violate RFC 3986, the authoritative standard for URL structure. When provided with `path='/'`, it incorrectly produces `path='//'`, which RFC 3986 explicitly prohibits after an authority component.
+
+The bug is not a documentation issue or missing feature - it's a clear implementation error. The build method is concatenating paths incorrectly, likely by always adding a '/' before the provided path without checking if the path already starts with '/'. This results in systematic errors for all paths starting with '/', not just the root path. The accumulating nature of the bug (where each round-trip adds another slash) makes it particularly problematic for any application that needs to decompose and reconstruct URLs.
+
+Most importantly, this violates the fundamental principle of round-trip consistency that users reasonably expect from a build/parse API pair. When you build a URL with specific components, you should be able to extract those same components back. The fact that `AnyUrl.build(path='/')` produces a URL where `.path='//'` is objectively wrong and makes the build method unreliable for URL construction. This is exactly the kind of bug that should be reported and fixed.

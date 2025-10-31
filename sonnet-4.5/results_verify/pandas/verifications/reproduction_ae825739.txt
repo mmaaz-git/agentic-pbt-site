@@ -1,0 +1,31 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug reported in pandas.api.types.is_re_compilable.
+
+1. Property-Based Test Results:
+The hypothesis test correctly identifies the bug. When run, it finds multiple failing examples:
+- Pattern '\\' raises re.PatternError: bad escape (end of pattern) at position 0
+- Pattern '[' raises re.PatternError: unterminated character set at position 0
+The test expects is_re_compilable to return False for these invalid patterns, but instead the function raises exceptions.
+
+2. Minimal Example Reproduction:
+Running the provided minimal examples confirms the bug:
+- is_re_compilable("[") raises PatternError: unterminated character set at position 0
+  (Expected: False)
+- is_re_compilable(")") raises PatternError: unbalanced parenthesis at position 0
+  (Expected: False)
+- is_re_compilable("?") raises PatternError: nothing to repeat at position 0
+  (Expected: False)
+- is_re_compilable("\\") raises PatternError: bad escape (end of pattern) at position 0
+  (Expected: False)
+
+3. Valid cases work correctly:
+- is_re_compilable(".*") returns True (correct)
+- is_re_compilable(123) returns False (correct - non-string handled properly)
+
+4. Root Cause Analysis:
+The function's implementation only catches TypeError exceptions (line 189), which handles non-string inputs.
+However, re.compile() also raises re.error (which is aliased as re.PatternError) for invalid regex patterns.
+These exceptions are not caught, causing them to propagate to the caller instead of returning False.
+
+The bug is exactly as described in the report: the function fails to catch re.error exceptions for invalid regex patterns, violating its documented contract to return a bool indicating whether the object can be compiled as a regex pattern.

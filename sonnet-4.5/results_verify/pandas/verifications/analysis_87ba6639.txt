@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function has no documentation specifying its exact contract. Without documentation, one could argue that the current behavior is the intended behavior - perhaps the function is meant to preserve readability by including a hash prefix and suffix, even if it exceeds max_len. The function is internal to the Cython compiler and not a public API, so there's no formal specification to violate.
+
+**Why it might not be INVALID:**
+The function name "cap_length" and parameter name "max_len" create a very strong expectation that the output will not exceed max_len characters. This is a fundamental expectation that any reasonable developer would have. The current behavior directly contradicts what these names imply, making it a valid bug regardless of documentation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal compiler function that generates type identifiers for C code generation. The actual length might not matter much in practice since: 1) C compilers can handle very long identifiers, 2) The default max_len of 63 works correctly, 3) Nobody would realistically call this with max_len=1 or max_len=10 in production code. The bug only manifests with unreasonably small max_len values that would never be used in practice.
+
+**Why it might not be WONTFIX:**
+If a function has a parameter called max_len, it should honor that parameter regardless of whether the values are "reasonable" or not. The bug occurs with any max_len < 17, which could potentially happen if someone needed very short identifiers for some specific use case. Additionally, the bug can produce extremely long outputs (106 chars when max_len=10), which defeats the purpose of having a length cap.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+Since there's no documentation for this function, one could argue that the solution is to document the actual behavior: "When the input exceeds max_len, the function creates a hashed identifier with format {hash}__{truncated}__etc which may exceed max_len for small values of max_len." This would clarify that max_len is more of a guideline than a hard limit.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function and parameter names are self-documenting - "cap_length" with "max_len" parameter clearly indicates a maximum length constraint. Documenting that it doesn't actually cap the length would be acknowledging broken behavior rather than fixing it. The code should be fixed to match the obvious intent, not the documentation changed to match broken code.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that properly handling very small max_len values (< 13) is a new feature, since the current implementation assumes a minimum viable length for maintaining some readability with the hash prefix. Adding support for extremely short identifiers could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality - the function already has a max_len parameter that implies it should work with any positive integer value. Making the function actually respect its max_len parameter is fixing existing functionality, not adding new features. The parameter already exists; it just doesn't work correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function name "cap_length" unambiguously indicates it should cap/limit the length of the output. The parameter "max_len" reinforces this - it's not "preferred_len" or "target_len" but "max_len", indicating a maximum. The function violates this obvious contract by returning strings up to 10x longer than max_len (106 chars when max_len=10). This is clearly incorrect behavior that should be fixed.
+
+**Why it might not be BUG:**
+This is an internal compiler function not meant for public use. The bug only manifests with unrealistic values of max_len that would never occur in real Cython compilation. The function works correctly with reasonable values (the default 63 works fine). Since this is internal code with no documentation, the current behavior might be intentional for some compiler-specific reason we don't understand.
+
+**Overall consideration**
+After careful analysis, this appears to be a genuine BUG. The function and parameter names create an unmistakable contract: cap_length with max_len should limit the output to at most max_len characters. The current implementation blatantly violates this contract, returning strings over 10x longer than the specified maximum in some cases. The root cause is a clear programming error - using s[:max_len-17] without considering that negative indices in Python have different semantics. This is a classic mistake that leads to unintended behavior.
+
+While it's true that this is an internal function and the bug may not affect real-world usage (since the default max_len=63 works correctly), this doesn't change the fact that the function is objectively broken. A function that claims to cap length but doesn't is buggy, period. The fact that it's internal makes it lower priority, not invalid. The bug is technically correct, well-documented, and reproducible.
+
+However, given that this is an internal compiler function that likely works fine in all real-world scenarios (with the default or reasonable max_len values), and considering that about 90% of bug reports from this user should be rejected, there's a strong argument for WONTFIX. The maintainers would likely close this as "won't fix - internal function working as intended for all practical use cases." But from a purely technical standpoint, the bug report is correct - the function does violate its implied contract.

@@ -1,0 +1,35 @@
+## Reproduction Analysis
+
+### Bug Report Claims:
+The bug report claims that `get_version` crashes with an `IndexError` when called on a module named "psycopg2" that has a whitespace-only `__version__` string.
+
+### Reproduction Results:
+
+1. **The bug is REPRODUCIBLE**: When testing with whitespace-only version strings for psycopg2:
+   - `"\r"` → IndexError: list index out of range ✓
+   - `" "` → IndexError: list index out of range ✓
+   - `"\n"` → IndexError: list index out of range ✓
+   - `"\t"` → IndexError: list index out of range ✓
+   - `""` (empty) → IndexError: list index out of range ✓
+
+2. **The IndexError occurs exactly as described**: The error happens at line 81 in `get_version`:
+   ```python
+   version = version.split()[0]  # IndexError when split() returns empty list
+   ```
+
+3. **Normal psycopg2 versions work correctly**:
+   - `"2.9.6"` → Returns `"2.9.6"`
+   - `"2.9.6 (dt dec pq3 ext lo64)"` → Returns `"2.9.6"`
+
+4. **Non-psycopg2 modules with whitespace versions don't crash**:
+   - A module named "someother" with version `"\r"` returns `"\r"` without error
+
+5. **The proposed fix works**: When implementing the fix that checks if `parts` is empty before accessing `[0]`, the function properly raises an `ImportError` instead of crashing with `IndexError`.
+
+### Key Observations:
+
+1. The bug only affects modules named exactly "psycopg2" due to the special-case code
+2. The crash occurs because `str.split()` on whitespace-only strings returns an empty list `[]`
+3. Accessing `[0]` on an empty list raises `IndexError`
+4. The current code already has a pattern of raising `ImportError` when version cannot be determined (e.g., when `__version__` is None)
+5. The proposed fix follows the existing error-handling pattern by raising `ImportError` with the same message format

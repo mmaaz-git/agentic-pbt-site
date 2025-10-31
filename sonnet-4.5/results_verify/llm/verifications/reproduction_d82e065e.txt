@@ -1,0 +1,36 @@
+Bug Reproduction Analysis
+========================
+
+I have successfully reproduced the reported bug in llm.default_plugins.openai_models.combine_chunks.
+
+## Reproduction Steps
+
+1. Created test scripts to reproduce the bug as described in the report
+2. Ran the exact reproduction code from the bug report
+3. Verified the Hypothesis property-based test
+
+## Results
+
+### Direct Reproduction Test:
+- Input: Two chunks, first with role="assistant", second with role=None
+- Expected output: Combined result with role="assistant"
+- Actual output: Combined result with role=None
+- **Bug confirmed**: The role field is incorrectly overwritten
+
+### Hypothesis Test:
+- The property test fails with even simple inputs like ['', '']
+- When multiple chunks are combined, the role from the first chunk is lost
+- The test confirms that any list with more than one element causes the failure
+
+## Code Analysis
+
+Looking at the implementation in openai_models.py:943:
+```python
+role = choice.delta.role
+```
+
+This line unconditionally overwrites the `role` variable for every chunk processed, regardless of whether `choice.delta.role` is None or not. Since OpenAI's streaming API typically sets the role only in the first chunk (to "assistant") and leaves it as None in subsequent chunks, this causes the final result to have role=None instead of the expected role="assistant".
+
+## Impact
+
+The bug causes the combined streaming response to lose critical role information. This could break downstream code that depends on the role field to identify the source of the message (assistant vs user vs system). The bug affects any code that processes OpenAI streaming responses with multiple chunks.

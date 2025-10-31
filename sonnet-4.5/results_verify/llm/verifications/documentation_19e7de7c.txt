@@ -1,0 +1,42 @@
+## Documentation Analysis for monotonic_ulid
+
+The function `monotonic_ulid()` in `llm/utils.py` has the following docstring:
+
+```
+Return a ULID instance that is guaranteed to be *strictly larger* than every
+other ULID returned by this function inside the same process.
+
+It works the same way the reference JavaScript `monotonicFactory` does:
+* If the current call happens in the same millisecond as the previous
+    one, the 80-bit randomness part is incremented by exactly one.
+* As soon as the system clock moves forward, a brand-new ULID with
+    cryptographically secure randomness is generated.
+* If more than 2**80 ULIDs are requested within a single millisecond
+    an `OverflowError` is raised (practically impossible).
+```
+
+Key guarantees from the documentation:
+1. **Strict monotonicity**: Each ULID must be "strictly larger" than every previous ULID from the same process
+2. **Same millisecond behavior**: When multiple ULIDs are generated in the same millisecond, the randomness is incremented
+3. **Clock forward behavior**: When the clock moves forward, a fresh ULID with new randomness is generated
+4. **Overflow handling**: If more than 2^80 ULIDs are requested in one millisecond, an OverflowError is raised
+
+The documentation does NOT explicitly address:
+- What happens when the system clock goes backwards (clock skew)
+- Whether monotonicity is guaranteed across clock adjustments
+- How NTP synchronization or manual time changes should be handled
+
+The ULID class itself (from the ulid library) is described as:
+- A 128-bit identifier consisting of:
+  - 48-bit timestamp part (millisecond precision)
+  - 80-bit randomness part
+- ULIDs are lexicographically sortable
+- The timestamp encodes the Unix time in milliseconds
+
+The bug report claims that the function violates its "strictly larger" guarantee when the clock goes backwards. The documentation explicitly promises strict monotonicity but does not specify the behavior for clock skew scenarios. This is a critical ambiguity because:
+
+1. The docstring says ULIDs must be "strictly larger" than ALL previous ULIDs from the process
+2. The implementation details only describe behavior for same millisecond and forward clock movement
+3. There's no mention of backward clock movement handling
+
+Based on the documentation alone, the strict monotonicity guarantee appears to be absolute - it doesn't have exceptions for clock skew. This suggests that if the implementation doesn't handle backward clock movement, it would indeed violate the documented guarantee.

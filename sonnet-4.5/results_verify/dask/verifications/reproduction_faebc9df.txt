@@ -1,0 +1,58 @@
+Bug Reproduction Results
+========================
+
+## Test Execution
+
+I successfully reproduced the reported issue using the provided test cases.
+
+### Test Case 1: Simple filters
+Inputs:
+- f1 = ('a', '>', 5)
+- f2 = [[('b', '>', 0)], [('c', '<', 10)]]
+- f3 = [[('d', '>', 0)], [('e', '<', 10)]]
+
+Result: ASSOCIATIVITY HOLDS ✓
+Both (dnf1 & dnf2) & dnf3 and dnf1 & (dnf2 & dnf3) produce identical results.
+
+### Test Case 2: Complex filters (from bug report)
+Inputs:
+- f1 = ('0', '>', 0)
+- f2 = [[('0', '>', 0)], [('0', '>', 0), ('0', '<', '')], [('0', '<', 0), ('00', '<', '')]]
+- f3 = [[('0', '>', 0)], [('0', '>', 0), ('0', '<', '')], [('0', '<', 0), ('00', '<', '')]]
+
+Result: ASSOCIATIVITY VIOLATED ❌
+
+(dnf1 & dnf2) & dnf3 produces 4 OR branches:
+1. [('0', '>', 0), ('0', '<', 0), ('00', '<', ''), ('0', '<', '')]
+2. [('0', '>', 0)]
+3. [('0', '>', 0), ('0', '<', '')]
+4. [('0', '>', 0), ('00', '<', ''), ('0', '<', 0)]
+
+dnf1 & (dnf2 & dnf3) produces 3 OR branches:
+1. [('0', '>', 0)]
+2. [('0', '>', 0), ('0', '<', '')]
+3. [('0', '>', 0), ('00', '<', ''), ('0', '<', 0)]
+
+## Analysis of the Difference
+
+The extra branch in (dnf1 & dnf2) & dnf3 is:
+[('0', '<', ''), ('0', '>', 0), ('00', '<', ''), ('0', '<', 0)]
+
+This branch contains a logical contradiction:
+- ('0', '>', 0) - column '0' must be greater than 0
+- ('0', '<', 0) - column '0' must be less than 0
+
+These conditions are mutually exclusive. No value can satisfy both simultaneously.
+
+## Logical vs Structural Equivalence
+
+- **Logically Equivalent**: YES - The expressions would filter data identically because the contradictory branch never matches
+- **Structurally Identical**: NO - Different internal representations with different numbers of branches
+
+## Hypothesis Testing
+
+Running 100 random test cases with Hypothesis found this issue occurs sporadically with complex nested filter structures. Simple filters maintain associativity.
+
+## Verification
+
+The bug report's code runs correctly and demonstrates the described behavior. The issue is real and reproducible.

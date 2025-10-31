@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+This function is an internal/private function (starts with underscore) and is not part of the public API. Internal functions often have less strict validation requirements since they are controlled by the library's own code. The function might be designed to only ever receive 'd' or 's' from internal callers, making external validation unnecessary. The lack of validation could be intentional for performance reasons in internal code paths.
+
+**Why it might not be INVALID:**
+The function's own docstring explicitly states the unit parameter should be {'d', 's'}, creating a clear contract. The related function _parse_datetime in the same file validates this exact parameter and raises ValueError for invalid inputs, showing there is precedent for validation even in internal functions. The function can be imported and used directly, so it should validate its inputs properly.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal function that users shouldn't be calling directly. The impact is minimal since the library's own code only passes valid values. Adding validation would add overhead to every SAS file read operation for a scenario that never happens in practice. The function name starts with underscore, clearly marking it as internal, so users who bypass this convention accept the risks.
+
+**Why it might not be WONTFIX:**
+The inconsistency with _parse_datetime creates maintenance confusion - developers might assume both functions validate similarly. Silent data corruption (treating invalid units as days) is more dangerous than raising an error. The fix is trivial (2-3 lines of code) and the performance impact would be negligible. The principle of defensive programming suggests validating inputs even in internal functions.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The code's current behavior (treating any non-'s' value as 'd') could be considered the actual intended behavior, and the docstring could be updated to reflect this: "unit : str - 's' for seconds, any other value treated as days". This would document the actual behavior rather than changing the code. The function works correctly for all valid inputs as currently documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The docstring already clearly specifies {'d', 's'} as the only valid values, matching the _parse_datetime function's behavior. Documenting that "any non-'s' value is treated as 'd'" would be endorsing a bug rather than fixing it. The inconsistency between the two related functions suggests the validation is missing by oversight, not design.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding input validation to an internal function that currently lacks it could be seen as a new feature - "Add parameter validation to internal SAS datetime converter". The current code works for all intended use cases, and validation would be an enhancement for robustness. This would be adding defensive programming features that weren't originally implemented.
+
+**Why it might not be FEATURE_REQUEST:**
+The docstring already specifies the valid values, so validation isn't a new feature but enforcing the existing contract. The related _parse_datetime already has this validation, so it's more about consistency than new functionality. Parameter validation for documented constraints is typically considered a bug fix, not a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function's docstring explicitly states unit should be {'d', 's'} but doesn't enforce this contract. The inconsistency with _parse_datetime in the same file, which properly validates the same parameter, suggests an oversight. Silent data corruption (invalid units treated as days) is a serious issue that violates the principle of failing fast with clear errors. The function can be imported and used, even if internal, and should validate its inputs.
+
+**Why it might not be BUG:**
+This is an internal function (underscore prefix) not meant for public use, so strict validation may not be required. The library's own code only passes valid values, so the missing validation never causes actual problems in practice. Internal functions often prioritize performance over validation, accepting that callers are trusted. The impact is theoretical rather than practical.
+
+## Overall Consideration
+
+After analyzing all perspectives, this appears to be a **WONTFIX** issue rather than a valid bug. Here are the key considerations:
+
+First, this is clearly an internal/private function as indicated by the underscore prefix in `_convert_datetimes`. Python's convention is that underscore-prefixed functions are internal implementation details not covered by the public API contract. Users who choose to import and use internal functions are explicitly going outside the supported interface and accept the associated risks. The pandas documentation doesn't document this function publicly, reinforcing its internal status.
+
+Second, while the inconsistency with `_parse_datetime` is notable, these are different functions with different performance profiles. The `_convert_datetimes` operates on entire Series objects and is called frequently during SAS file reading, where performance matters. The `_parse_datetime` operates on scalar values. The lack of validation in the Series version could be an intentional performance optimization, accepting that internal callers will always provide valid inputs.
+
+Third, the practical impact is negligible. The library's own code only ever passes 'd' or 's' to this function, so the missing validation never causes actual problems in real-world usage. Adding validation would add a (small) performance overhead to every SAS file read operation to guard against a scenario that doesn't occur in practice. While the principle of defensive programming is valuable, internal functions often make different trade-offs than public APIs, prioritizing performance over defensive validation when the callers are known and controlled.

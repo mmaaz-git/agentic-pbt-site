@@ -1,0 +1,41 @@
+Bug Reproduction Results
+
+1. CONFIRMED THE BUG EXISTS:
+I verified the bug in the actual scipy code at:
+/home/npc/pbt/agentic-pbt/envs/scipy_env/lib/python3.13/site-packages/scipy/datasets/_download_all.py
+
+The problematic code is on line 64:
+```python
+parser.add_argument("path", nargs='?', type=str,
+                    default=pooch.os_cache('scipy-data'),  # This line causes the bug
+                    help="Directory path to download all the data files.")
+```
+
+2. REPRODUCTION TEST:
+Created test_bug.py that simulates the issue. When run, it produces:
+- Got confusing AttributeError: 'NoneType' object has no attribute 'os_cache'
+- This confirms the bug report's claim
+
+3. TESTED ACTUAL SCIPY CODE:
+Ran the actual scipy _download_all.py with pooch set to None:
+- Result: AttributeError: 'NoneType' object has no attribute 'os_cache'
+- This confirms the bug exists in the production code
+
+4. TESTED THE PROPOSED FIX:
+Created test_fix.py implementing the suggested fix:
+- Changed line to: default_path = pooch.os_cache('scipy-data') if pooch is not None else None
+- Result: Got helpful ImportError: Missing optional dependency 'pooch' required for scipy.datasets module
+- The fix successfully produces the intended helpful error message
+
+5. ROOT CAUSE ANALYSIS:
+The bug occurs because:
+- When pooch is not installed, it's set to None (line 13)
+- The main() function tries to call pooch.os_cache('scipy-data') when setting up argparse defaults (line 64)
+- This happens BEFORE the download_all() function can check if pooch is None (line 47)
+- Python evaluates default values when creating the parser, not when parsing arguments
+- Therefore, the AttributeError occurs before the intended ImportError can be raised
+
+6. IMPACT:
+- Users running the script without pooch installed get a confusing AttributeError
+- The helpful error message with installation instructions is never shown
+- This violates the clear intention of the code to provide helpful error messages (lines 47-50)

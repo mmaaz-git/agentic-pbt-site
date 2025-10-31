@@ -1,0 +1,56 @@
+## Documentation Analysis for truncate_name Function
+
+### Official Documentation
+After searching Django's official documentation and source code, I found that:
+
+1. **No explicit public documentation exists** for the `truncate_name` function in Django's official documentation
+2. The function is considered an **internal utility function** and is not part of Django's public API
+3. No mention of idempotence requirements in official docs
+
+### Source Code Documentation (Docstring)
+The only documentation is the docstring in `/django/db/backends/utils.py`:
+
+```python
+def truncate_name(identifier, length=None, hash_len=4):
+    """
+    Shorten an SQL identifier to a repeatable mangled version with the given
+    length.
+
+    If a quote stripped name contains a namespace, e.g. USERNAME"."TABLE,
+    truncate the table portion only.
+    """
+```
+
+Key observations:
+- The docstring mentions "repeatable mangled version" which implies deterministic behavior
+- No explicit mention that the function should be idempotent
+- No mention of what happens when `length < hash_len`
+- No specification of the actual length guarantee of the output
+
+### Usage Context in Django Codebase
+The function is used internally in:
+- `django/db/models/options.py` - for truncating table names
+- `django/db/models/fields/related.py` - for foreign key constraint names
+- `django/db/backends/base/schema.py` - for index and constraint names
+- `django/db/backends/oracle/operations.py` - Oracle-specific name truncation
+
+### Implicit Expectations
+Based on usage patterns in Django's codebase:
+1. The function is consistently called with database-specific max name lengths
+2. It's used to ensure identifiers fit within database constraints
+3. The "repeatable" mention in the docstring suggests deterministic output for same input
+4. No code appears to call truncate_name multiple times on the same identifier
+
+### What the Documentation Does NOT Say
+1. **No idempotence guarantee**: The documentation never explicitly states that `truncate_name(truncate_name(x, L), L) == truncate_name(x, L)`
+2. **No length guarantee**: The documentation doesn't promise that the output will be ≤ `length` characters
+3. **No behavior specification for edge cases**: What happens when `length < hash_len` is undefined
+4. **No public API commitment**: Being an internal utility, there's no API stability guarantee
+
+### Conclusion
+The documentation is insufficient to determine whether:
+- Idempotence is a required property
+- The output must be ≤ `length` characters
+- The behavior when `length < hash_len` is intentional or a bug
+
+The function appears to be an internal implementation detail not covered by Django's public API guarantees. The lack of explicit documentation about these behaviors leaves the reported issues in a gray area - they could be considered bugs, or they could be acceptable behavior for an internal utility function that's never meant to be called with `length < hash_len`.

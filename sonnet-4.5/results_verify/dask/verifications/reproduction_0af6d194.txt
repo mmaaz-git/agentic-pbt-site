@@ -1,0 +1,42 @@
+## Bug Reproduction Results
+
+### Reproduction Successful
+The bug report is technically accurate. The `sorted_columns` function does crash with an `IndexError` when given statistics with mismatched column counts across row groups.
+
+### Test Results:
+
+1. **Main Bug Case**: CONFIRMED
+   - Input: First row group has 2 columns (col1, col2), second row group has 1 column (col1)
+   - Result: `IndexError: list index out of range` at line 422
+   - The error occurs exactly as described in the bug report
+
+2. **Property-Based Testing**:
+   - The Hypothesis test generated many cases that trigger the IndexError
+   - Over 100 seeds were identified that reproduce the failure
+   - This confirms the bug occurs frequently with randomly generated mismatched column structures
+
+3. **Edge Case Testing**:
+   - Empty statistics: Works correctly (returns empty list)
+   - Single row group: Works correctly
+   - Different column names: Unexpectedly works (but produces incorrect result - uses col2's name with col1's min value)
+   - More columns in second row group: Works (only processes first column)
+   - Missing min/max with None: Fails with TypeError when comparing None values
+
+### Technical Analysis:
+
+The bug occurs because:
+1. Line 418: The function iterates using indices from the first row group: `for i, c in enumerate(statistics[0]["columns"])`
+2. Line 422: It then blindly accesses `s["columns"][i]` for all row groups without checking if index `i` exists
+3. Line 429: Similar unchecked access to `stats["columns"][i]`
+
+When the second or subsequent row groups have fewer columns than the first, accessing a non-existent index causes an IndexError.
+
+### Behavioral Issues Found:
+
+1. **Primary Bug**: IndexError when row groups have different column counts (fewer columns in later row groups)
+
+2. **Secondary Issue**: When columns have different names at the same index position, the function incorrectly uses the wrong column's statistics (e.g., using col1's min with col2's name)
+
+3. **None Handling**: The function doesn't properly handle None values in min/max fields, leading to TypeError during comparison
+
+The bug report's proposed fix addresses the primary IndexError by checking bounds and column name consistency, which would prevent the crash and the incorrect behavior with mismatched column names.

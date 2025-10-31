@@ -1,0 +1,39 @@
+## Documentation Analysis
+
+### Function Documentation Status
+The `_normalize_and_strip_protocol` function has **no documentation**. There is no docstring and it's an internal/private function (indicated by the underscore prefix) that is not documented in the public API.
+
+### Function Purpose (Inferred from code)
+Based on the implementation at lines 1822-1835 of parquet.py, the function appears to:
+1. Accept a path or list of paths
+2. Remove protocol prefixes (like "s3://", "hdfs://", etc.)
+3. Strip trailing slashes from paths
+4. Return a list of normalized paths
+
+### PyArrow FileSelector Requirements
+According to PyArrow documentation (https://arrow.apache.org/docs/python/generated/pyarrow.fs.FileSelector.html):
+- The `base_dir` parameter requires "The directory in which to select files"
+- Accepts absolute paths, relative paths, '.' for current directory, '..' for parent
+- Does NOT explicitly mention handling empty strings
+
+My testing confirms:
+- "/" is a valid base_dir and works correctly (lists root directory contents)
+- Empty string "" causes FileNotFoundError: "Cannot list directory ''"
+
+### Downstream Usage
+The function's output is used in `ReadParquetPyarrowFS.normalized_path` (line 866) and then passed to `pa_fs.FileSelector(path, recursive=True)` (line 1019).
+
+### Documentation Gaps
+1. No documentation exists for `_normalize_and_strip_protocol` itself
+2. No specification about how the function should handle edge cases like "/"
+3. No documentation stating whether empty strings are valid normalized paths
+4. The function is internal/private, suggesting implementation details may change
+
+### Conclusion
+While there's no explicit documentation stating that "/" should remain "/" after normalization, the behavior is clearly incorrect because:
+1. "/" is a valid filesystem path (root directory)
+2. PyArrow FileSelector accepts "/" as valid input
+3. PyArrow FileSelector rejects empty strings with FileNotFoundError
+4. The function transforms valid input ("/") into invalid output ("")
+
+The lack of documentation doesn't excuse the bug - the function violates the principle of not breaking valid inputs.

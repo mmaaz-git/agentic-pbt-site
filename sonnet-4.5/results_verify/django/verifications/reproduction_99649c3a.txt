@@ -1,0 +1,31 @@
+## Bug Reproduction Report
+
+### Summary
+I successfully reproduced the bug reported in django.template.backends.jinja2.get_exception_info. The function crashes with an IndexError when the exception's lineno attribute is greater than the actual number of lines in the source code.
+
+### Hypothesis Test Results
+The Hypothesis test immediately found the bug with a simple failing case:
+- source='', lineno=2, message=''
+- When the source is empty (0 lines) but lineno=2, the function tries to access lines[1] which doesn't exist
+- This resulted in: IndexError: list index out of range at line 106
+
+### Direct Reproduction Results
+The direct reproduction test case also successfully triggered the bug:
+- lineno=10, source="line 1\nline 2\nline 3" (3 lines)
+- The function tried to access lines[9] when only indices 0-2 exist
+- Same error: IndexError: list index out of range at line 106
+
+### Root Cause Analysis
+The bug occurs at line 106 of django/template/backends/jinja2.py:
+```python
+during = lines[lineno - 1][1]
+```
+
+The function assumes that lineno will always be within the valid range of lines in the source, but performs no bounds checking. When:
+1. lineno > len(lines), or
+2. lineno <= 0
+
+The list access will fail with an IndexError.
+
+### Impact
+This bug prevents Django from displaying a proper debug page when a Jinja2 template exception reports an invalid line number. Instead of showing helpful debugging information, the application crashes with an IndexError, making it harder for developers to diagnose the original template issue.

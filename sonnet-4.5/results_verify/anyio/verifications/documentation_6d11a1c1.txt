@@ -1,0 +1,66 @@
+## Documentation Analysis for CapacityLimiter.total_tokens
+
+### Official Documentation Findings
+
+From the AnyIO documentation at https://anyio.readthedocs.io/:
+- The documentation describes CapacityLimiter as a synchronization primitive that limits concurrent access to shared resources
+- The `total_tokens` property is mentioned as being assignable at runtime
+- When increased, it "will automatically wake up the appropriate number of waiting tasks"
+- The documentation examples show it being set to integer values (e.g., 2)
+- **Crucially, the documentation does NOT explicitly specify what types are valid for total_tokens**
+
+### Type Annotations in Source Code
+
+The source code shows consistent type annotations of `float` throughout:
+
+1. In `CapacityLimiter` abstract base class (_synchronization.py):
+   - Line 494: `def __new__(cls, total_tokens: float) -> CapacityLimiter:`
+   - Line 512: `def total_tokens(self) -> float:`  (getter)
+   - Line 527: `def total_tokens(self, value: float) -> None:` (setter)
+
+2. In `CapacityLimiterAdapter` (_synchronization.py):
+   - Line 613: `def __init__(self, total_tokens: float) -> None:`
+   - Line 644: `def total_tokens(self, value: float) -> None:` (setter)
+
+3. In the asyncio backend implementation (_asyncio.py):
+   - Line 1962: `def total_tokens(self, value: float) -> None:` (setter)
+
+### Docstring Analysis
+
+The docstring for `total_tokens` property (lines 513-523) states:
+```
+The total number of tokens available for borrowing.
+
+This is a read-write property. If the total number of tokens is increased, the
+proportionate number of tasks waiting on this limiter will be granted their
+tokens.
+
+.. versionchanged:: 3.0
+    The property is now writable.
+```
+
+**Key observation**: The docstring does NOT specify the allowed types. It only describes it as "the total number of tokens" which could reasonably be interpreted as either integer-only or any numeric value.
+
+### Implementation Validation
+
+The actual validation code contradicts the type hints:
+
+1. CapacityLimiterAdapter (line 645):
+   ```python
+   if not isinstance(value, int) and value is not math.inf:
+       raise TypeError("total_tokens must be an int or math.inf")
+   ```
+
+2. Asyncio backend (line 1963):
+   ```python
+   if not isinstance(value, int) and not math.isinf(value):
+       raise TypeError("total_tokens must be an int or math.inf")
+   ```
+
+### Conclusion on Documentation
+
+The documentation is **ambiguous**:
+- Type hints consistently say `float`
+- Runtime validation only accepts `int` or `math.inf`
+- No explicit documentation specifies which is correct
+- The docstring refers to "number of tokens" without specifying integer-only requirement

@@ -1,0 +1,81 @@
+## Bug Reproduction Report
+
+### Test Environment
+- Platform: Linux (linux)
+- Python Version: 3.13.2
+- Pandas Version: Current installation
+
+### Reproduction Results
+
+#### Test 1: Direct Instantiation of PyperclipWindowsException
+**Code:**
+```python
+error = pd.errors.PyperclipWindowsException("Clipboard access denied")
+```
+
+**Result:**
+- **FAILED** with AttributeError: module 'ctypes' has no attribute 'WinError'
+- The exception crashes immediately when instantiated on Linux
+- The crash occurs in the `__init__` method at line 637 of pandas/errors/__init__.py
+
+#### Test 2: Property-Based Test from Bug Report
+**Code:**
+```python
+error = pandas.errors.PyperclipWindowsException("test message")
+assert "test message" in str(error)
+```
+
+**Result:**
+- **FAILED** with the same AttributeError
+- Cannot create the exception object to test its string representation
+
+#### Test 3: Using Exception in except Clause
+**Code:**
+```python
+try:
+    raise ValueError("test")
+except pandas.errors.PyperclipWindowsException:
+    print("Caught PyperclipWindowsException")
+except ValueError:
+    print("Caught ValueError as expected")
+```
+
+**Result:**
+- **PASSED** - The exception class can be referenced in except clauses
+- This works because the class definition exists, even though instantiation fails
+
+#### Test 4: ctypes.WinError Availability Check
+**Code:**
+```python
+ctypes.WinError()
+```
+
+**Result:**
+- **FAILED** with AttributeError: module 'ctypes' has no attribute 'WinError'
+- Confirms that ctypes.WinError is not available on Linux
+
+### Analysis of Actual Usage
+
+#### Where PyperclipWindowsException is Raised
+1. In `CheckedCall.__call__()` (line 332 of clipboard/__init__.py):
+   - Only used inside `init_windows_clipboard()` function
+   - `init_windows_clipboard()` is only called on Windows platforms
+
+2. In clipboard context manager (line 451 of clipboard/__init__.py):
+   - Also inside `init_windows_clipboard()` function
+   - Never executed on non-Windows platforms
+
+#### Platform Detection Logic
+The clipboard module uses platform detection:
+```python
+elif os.name == "nt" or platform.system() == "Windows":
+    return init_windows_clipboard()
+```
+
+This ensures Windows-specific code (including PyperclipWindowsException instantiation) only runs on Windows.
+
+#### Test Suite Handling
+The pandas test suite has a `mock_ctypes` fixture that mocks `ctypes.WinError` for testing on non-Windows platforms. The fixture comment explicitly states: "Set raising to False because WinError won't exist on non-windows platforms"
+
+### Conclusion
+The bug report is technically correct: PyperclipWindowsException cannot be instantiated on non-Windows platforms due to the unconditional call to `ctypes.WinError()`. However, in actual pandas usage, this exception is never instantiated on non-Windows platforms because the code paths that raise it are Windows-specific and protected by platform checks.

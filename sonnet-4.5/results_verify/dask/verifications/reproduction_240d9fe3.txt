@@ -1,0 +1,49 @@
+## Reproduction Analysis
+
+### Bug Confirmation
+I have successfully reproduced the bug. The function `sorted_division_locations` indeed fails when given plain Python lists, despite the docstring explicitly showing examples with lists.
+
+### Test Results:
+
+1. **All docstring examples fail with lists:**
+   - `['A', 'B', 'C', 'D', 'E', 'F']` with `chunksize=2` → TypeError
+   - `['A', 'B', 'C', 'D', 'E', 'F']` with `chunksize=3` → TypeError
+   - `['A', 'A', 'A', 'A', 'B', 'B', 'B', 'C']` with `chunksize=3` → TypeError
+   - `['A']` with `chunksize=2` → TypeError
+
+2. **Error Message:**
+   ```
+   TypeError: No dispatch for <class 'list'>
+   ```
+   This occurs at line 284 in sorted_division_locations when it calls `seq = tolist(seq)`
+
+3. **Works with other types:**
+   - NumPy arrays: ✓ Works correctly
+   - Pandas Series: ✓ Works correctly
+   - Plain lists: ✗ Fails with TypeError
+
+### Root Cause Verification:
+The bug occurs because:
+1. The function checks `if isinstance(seq, list):` and passes through unchanged if true
+2. Otherwise, it calls `tolist(seq)` to convert the input to a list
+3. The `tolist` function uses a dispatch system that only has handlers registered for numpy/pandas types
+4. There is no handler for plain `list` type, causing the TypeError
+
+### Fix Verification:
+I tested the suggested fix by registering a handler for list/tuple types:
+```python
+@tolist_dispatch.register((list, tuple))
+def tolist_list_or_tuple(obj):
+    return list(obj)
+```
+
+With this fix applied:
+- All docstring examples work correctly and produce the expected output
+- The function handles both lists and tuples properly
+- The results match exactly what the documentation promises
+
+### Technical Details:
+- The bug is 100% reproducible
+- The error occurs consistently for any list input
+- The suggested fix completely resolves the issue
+- The fix is minimal and doesn't affect existing functionality for numpy/pandas types

@@ -1,0 +1,48 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug reported in scipy.spatial.transform.RotationSpline.
+
+### Hypothesis Test Results
+
+The Hypothesis test successfully found multiple failing cases where RotationSpline crashes with valid inputs. The test generates random time arrays that are strictly increasing and valid rotation quaternions, yet certain time arrays cause the implementation to fail.
+
+Key failing patterns observed:
+- Times with very small initial intervals followed by larger intervals (e.g., [0., 0.015625, 1.5, 14.])
+- Times with extreme ratios between consecutive intervals (ratio > ~500)
+
+### Minimal Reproduction
+
+The specific failing case from the bug report:
+- Input times: [0., 0.0078125, 1., 5.]
+- Time delta ratio: 512.0 (max delta / min delta)
+- All inputs are valid:
+  - Times are strictly increasing: True
+  - Rotations are valid unit quaternions: True
+  - No NaN or Inf values in inputs
+
+### Error Details
+
+The error occurs deep in the numerical solver:
+1. RotationSpline.__init__ calls _solve_for_angular_rates()
+2. _solve_for_angular_rates() constructs a banded matrix system
+3. solve_banded() is called with the matrix
+4. Numerical overflow occurs during matrix operations
+5. The overflow produces NaN/Inf values
+6. solve_banded raises "array must not contain infs or NaNs"
+
+Multiple RuntimeWarnings appear before the crash:
+- "overflow encountered in multiply"
+- "invalid value encountered in subtract"
+- "overflow encountered in power"
+- "divide by zero encountered in divide"
+
+These warnings indicate severe numerical instability when time intervals vary by large factors.
+
+### Conclusion
+
+The bug is reproducible and occurs consistently when:
+1. Time arrays have extreme variations in spacing (ratios > ~500)
+2. Small time intervals (< 0.02) are followed by much larger ones
+3. The numerical solver cannot handle the resulting ill-conditioned matrices
+
+The error message "array must not contain infs or NaNs" is misleading since the user's inputs contain no such values - they are generated internally due to numerical overflow.

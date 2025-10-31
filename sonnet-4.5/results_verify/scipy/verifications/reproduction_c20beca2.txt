@@ -1,0 +1,61 @@
+Bug Reproduction Report
+========================
+
+I have successfully reproduced the bug reported in scipy.io.matlab.savemat.
+
+## Test Results
+
+1. **Basic Reproduction Test**:
+   - When calling `savemat('/tmp/test', data, appendmat=True)`, the function creates a file named 'test' instead of 'test.mat'.
+   - Expected: File named 'test.mat' should be created
+   - Actual: File named 'test' is created
+   - The file is successfully written with the correct MATLAB data, just with the wrong filename.
+
+2. **Property-Based Test with Hypothesis**:
+   - The test fails immediately on the first example where `appendmat=True`
+   - The failure confirms that when appendmat=True and the filename doesn't end with '.mat', the extension is NOT appended as documented.
+
+3. **Contrast with loadmat**:
+   - Interestingly, `loadmat` correctly implements the appendmat parameter
+   - When calling `loadmat('test', appendmat=True)`, it correctly looks for 'test.mat'
+   - This inconsistency between savemat and loadmat confirms this is a bug, not intentional behavior
+
+## Root Cause Analysis
+
+The bug is in the `_open_file` function at lines 25-49 in `/scipy/io/matlab/_mio.py`:
+
+```python
+def _open_file(file_like, appendmat, mode='rb'):
+    # ... setup code ...
+    try:
+        return open(file_like, mode), True
+    except OSError as e:
+        # Only appends .mat if open() fails
+        if isinstance(file_like, str):
+            if appendmat and not file_like.endswith('.mat'):
+                file_like += '.mat'
+            return open(file_like, mode), True
+        # ...
+```
+
+The logic only appends '.mat' when the initial `open()` call fails with an OSError.
+
+For read mode ('rb'):
+- `open('nonexistent_file', 'rb')` raises OSError (file not found)
+- Code enters exception handler and appends '.mat'
+- Works correctly
+
+For write mode ('wb'):
+- `open('any_filename', 'wb')` succeeds (creates the file)
+- Exception handler never executes
+- '.mat' is never appended
+- Bug manifests
+
+## Impact
+
+This bug causes savemat to behave incorrectly when:
+1. appendmat=True (which is the default)
+2. The filename doesn't already end with '.mat'
+3. Writing a new file (most common case)
+
+Users expect files to be saved with the '.mat' extension for MATLAB compatibility, but instead get files without the extension. This violates the documented behavior and the principle of least surprise.

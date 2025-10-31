@@ -1,0 +1,29 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the report.
+
+### Hypothesis Test
+The hypothesis test fails exactly as described with the input 'x * x':
+- The test generates various Fortran expressions with power operators
+- It detects the round-trip failure when 'x * x' is parsed
+- Error message: "Round-trip not equal: parse('x * x') = x ** 2, but parse(tostring()) = x * *2"
+
+### Manual Reproduction
+The manual test case confirms the exact behavior described in the bug report:
+1. `parse('x * x')` correctly produces an internal representation of x^2 (power of 2)
+2. `tostring()` outputs 'x ** 2' using the Fortran power operator syntax
+3. `parse('x ** 2')` incorrectly parses this as 'x * *2' (x times dereference of 2)
+4. The round-trip equality check fails
+
+### Root Cause
+The issue is in the parsing logic. When the parser encounters "**" in C mode (the default), it's being tokenized as two separate "*" operators:
+- The first "*" is interpreted as multiplication
+- The second "*" is interpreted as the C dereference operator
+
+### Language-Specific Behavior
+Testing reveals that this is specifically a C-mode parsing issue:
+- In Fortran mode: `parse('x ** 2', language=Language.Fortran)` correctly parses as x^2
+- In C mode (default): `parse('x ** 2')` incorrectly parses as 'x * *2'
+- The problem occurs because the default language is C, not Fortran
+
+The bug is reproducible and affects the fundamental round-trip property of the parser when using the default C language mode.

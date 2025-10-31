@@ -1,0 +1,37 @@
+REPRODUCTION ANALYSIS
+====================
+
+I successfully reproduced the bug as reported. The issue occurs when using Django's Signal class with `use_caching=True`.
+
+Test Results:
+-------------
+
+1. **Hypothesis Test**: The property-based test failed exactly as described when `use_caching=True` was passed:
+   - Error: `TypeError: cannot create weak reference to 'NoneType' object`
+   - Location: `dispatcher.py` line 425 in `_live_receivers` method
+   - The test passes when `use_caching=False`
+
+2. **Direct Reproduction Case 1**: Calling `has_listeners()` with default `sender=None`:
+   - With `use_caching=True`: CRASHES with `TypeError: cannot create weak reference to 'NoneType' object`
+   - With `use_caching=False`: Works correctly, returns `True`
+
+3. **Direct Reproduction Case 2**: Calling `send(sender=object())`:
+   - With `use_caching=True`: CRASHES with `TypeError: cannot create weak reference to 'object' object`
+   - With `use_caching=False`: Works correctly, returns the list of receivers and responses
+
+4. **Additional Testing**: Also tested `send(sender=None)`:
+   - With `use_caching=True`: CRASHES with same TypeError
+   - With `use_caching=False`: Works correctly
+
+Root Cause Confirmed:
+--------------------
+The bug occurs at line 47 in `dispatcher.py` where a `weakref.WeakKeyDictionary()` is created when `use_caching=True`. This dictionary type cannot accept non-weakref-able objects as keys. Python's weakref module cannot create weak references to:
+- `None`
+- Basic `object()` instances
+- Integers, strings, and other built-in immutable types
+
+When these types are used as senders, the code crashes when trying to:
+1. Get from cache: `self.sender_receivers_cache.get(sender)` (line 425)
+2. Set in cache: `self.sender_receivers_cache[sender] = ...` (lines 440, 443)
+
+The bug is 100% reproducible and occurs in real-world Django usage since Django's own model signals use `use_caching=True` (verified in `django/db/models/signals.py` lines 42-51).

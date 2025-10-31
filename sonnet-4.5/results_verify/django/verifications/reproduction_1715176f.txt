@@ -1,0 +1,30 @@
+## Bug Reproduction Analysis
+
+### Bug Confirmation
+The bug has been successfully reproduced. The issue is confirmed in django.templatetags.static.PrefixNode.handle_token.
+
+### What happens:
+1. When parsing a malformed template tag like `{% get_static_prefix as %}` (missing variable name after 'as')
+2. The code splits the token contents: `tokens = ['get_static_prefix', 'as']` (2 elements)
+3. Line 35 checks `if len(tokens) > 1` which is True (2 > 1)
+4. Line 36 tries to access `tokens[2]` which doesn't exist (IndexError)
+
+### Expected behavior:
+Django should raise a proper TemplateSyntaxError with a clear message explaining that a variable name is required after 'as'.
+
+### Actual behavior:
+An IndexError is raised with the message "list index out of range", which is not user-friendly and doesn't explain what's wrong with the template.
+
+### Test results:
+1. Reproduction script confirms IndexError for both `get_static_prefix` and `get_media_prefix` tags
+2. Property-based test using Hypothesis confirms the bug occurs consistently
+3. Valid use cases still work correctly:
+   - `{% get_static_prefix %}` works fine
+   - `{% get_static_prefix as varname %}` works fine
+
+### Root cause:
+The logic error is in line 35 of static.py:
+- Current: `if len(tokens) > 1:` assumes at least 3 tokens when True
+- Should be: `if len(tokens) > 2:` or `if len(tokens) == 3:` to ensure tokens[2] exists
+
+The bug affects both get_static_prefix and get_media_prefix template tags as they both use the same PrefixNode.handle_token method.

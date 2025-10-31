@@ -1,0 +1,43 @@
+REPRODUCTION RESULTS FOR dask.utils.format_bytes BUG
+
+BUG CLAIM:
+The bug report claims that format_bytes() violates its documented guarantee that "For all values < 2**60, the output is always <= 10 characters."
+
+REPRODUCTION TESTS:
+
+1. SPECIFIC FAILING INPUT (n = 1125894277343089729):
+   - Value is indeed < 2**60 (confirmed: 1125894277343089729 < 1152921504606846976)
+   - format_bytes(1125894277343089729) returns '1000.00 PiB'
+   - Output length is 11 characters
+   - This VIOLATES the documented <= 10 character guarantee
+
+2. HYPOTHESIS TEST:
+   - The property-based test using Hypothesis framework fails immediately
+   - Failure occurs on the same input: n=1125894277343089729
+   - The test correctly identifies that the output '1000.00 PiB' has 11 characters
+
+3. BOUNDARY ANALYSIS:
+   Testing values near 2**60 revealed a pattern:
+   - Values that format to 900.00 PiB or below: 10 characters ✓
+   - Values that format to 999.99 PiB: 10 characters ✓
+   - Values that format to 1000.00 PiB: 11 characters ✗
+   - Values that format to 1023.99 PiB: 11 characters ✗
+   - Values that format to 1024.00 PiB: 11 characters ✗
+
+4. MATHEMATICAL VERIFICATION:
+   - The value 1125894277343089729 / 2**50 = 999.995
+   - When formatted with .2f precision, this becomes 1000.00
+   - The string "1000.00 PiB" is indeed 11 characters long
+   - The threshold check (n >= 2**50 * 0.9) correctly triggers PiB formatting
+
+TECHNICAL ACCURACY:
+The bug report is technically accurate in all its claims:
+- The test case is valid
+- The reproduction steps work correctly
+- The output does exceed 10 characters for values less than 2**60
+- The mathematical analysis is correct
+
+ROOT CAUSE:
+The issue occurs when values are large enough to produce 4-digit numbers before the decimal point (1000.00 and above) when divided by their respective unit. The format string "{n/k:.2f} {prefix}B" can produce:
+- "0.90 PiB" through "999.99 PiB" (7-10 characters)
+- "1000.00 PiB" through "1024.00 PiB" (11 characters)

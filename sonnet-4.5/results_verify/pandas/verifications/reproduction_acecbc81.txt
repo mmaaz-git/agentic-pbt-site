@@ -1,0 +1,38 @@
+## Reproduction Analysis
+
+### Bug Reproduction Result
+I successfully reproduced the bug exactly as reported. The code crashes with:
+```
+UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed
+```
+
+### Technical Details Confirmed
+
+1. **The bug is real**: Running `hash_array(np.array(['\ud800'], dtype=object))` does indeed raise UnicodeEncodeError.
+
+2. **The root cause is accurate**: The error occurs in the Cython function `hash_object_array` which tries to encode the string to UTF-8, but surrogate characters (U+D800 to U+DFFF) are invalid in UTF-8.
+
+3. **The error handling gap is real**: The code at lines 325-331 in hashing.py has:
+   ```python
+   try:
+       vals = hash_object_array(vals, hash_key, encoding)
+   except TypeError:
+       # we have mixed types
+       vals = hash_object_array(vals.astype(str).astype(object), hash_key, encoding)
+   ```
+   This catches TypeError but NOT UnicodeEncodeError.
+
+4. **Surrogate characters context**:
+   - Surrogate characters ARE valid Python strings
+   - They are used internally for UTF-16 encoding
+   - They are INVALID in UTF-8 encoding
+   - Python's `encode('utf-8')` rejects them by default
+   - Python offers `errors='surrogatepass'` or `errors='replace'` to handle them
+
+5. **The proposed fix would not fully work**: The bug report suggests catching UnicodeEncodeError alongside TypeError, but the fallback path (converting to str) would still fail because it calls the same `hash_object_array` function that will encounter the same UTF-8 encoding issue.
+
+### Behavior Analysis
+
+The function crashes on valid Python data (a numpy array containing valid Python strings). While surrogate characters are technically invalid UTF-8, they are valid Python strings that can exist in memory and be manipulated. The function accepts "object" dtype arrays which can contain any Python object, including strings with surrogates.
+
+The crash is unhandled - there's no graceful degradation or informative error message. The function just raises an exception from deep in the Cython code.

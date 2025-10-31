@@ -1,0 +1,42 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. REPRODUCTION OF REPORTED BUG
+-------------------------------
+The bug report claims that get_exception_info incorrectly reports 1 line for empty templates instead of 0.
+
+Test Results:
+✓ CONFIRMED: Empty source ('') reports total=1 instead of total=0
+✓ CONFIRMED: Whitespace-only source ('   \n  \t  ') also reports total=1 after stripping
+✓ The Hypothesis test fails exactly as reported with lineno=1, source='', message='test'
+
+2. ROOT CAUSE ANALYSIS
+----------------------
+Python's behavior with empty strings:
+- ''.split('\n') returns [''] (list with one empty string)
+- This is standard Python behavior, not a Django bug per se
+- The code at line 105: `lines = list(enumerate(source.strip().split("\n"), start=1))`
+  Creates [(1, '')] for empty source
+
+3. ADDITIONAL ISSUE DISCOVERED
+------------------------------
+CRITICAL BUG: The code crashes with IndexError when lineno > 1 and source is empty:
+- Test case: lineno=2, source='', message='test'
+- Error: "list index out of range" at line 106: `during = lines[lineno - 1][1]`
+- This happens because lines only has 1 element [(1, '')], but we try to access index 1
+
+4. ACTUAL BEHAVIOR VS EXPECTED
+-------------------------------
+Current behavior:
+- Empty template: total=1, source_lines=[(1, '')], during=''
+- Single line template: total=1, source_lines=[(1, 'text')], during='text'
+- Multi-line template: Works correctly
+
+Bug report's expected behavior:
+- Empty template: total=0, source_lines=[], during=''
+
+5. IMPACT ASSESSMENT
+-------------------
+- The incorrect line count (1 vs 0) is primarily cosmetic for debug output
+- However, the IndexError with lineno>1 on empty source is a real crash bug
+- Empty templates are rare in practice but could occur during development/debugging

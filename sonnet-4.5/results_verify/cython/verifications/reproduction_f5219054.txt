@@ -1,0 +1,55 @@
+REPRODUCTION OF BUG: pyximport.install() Duplicate Importers
+
+SUMMARY
+=======
+The bug report is CONFIRMED and REPRODUCIBLE. Calling pyximport.install() multiple times with pyimport=True adds duplicate PyImportMetaFinder instances to sys.meta_path.
+
+REPRODUCTION STEPS
+==================
+
+1. Hypothesis Test Results:
+   - Ran the property-based test provided in the bug report
+   - Test FAILED with the exact failing input specified: pyximport_flag=False, pyimport_flag=True
+   - Error message: "AssertionError: Found 2 PyImportMetaFinder instances, expected <= 1"
+
+2. Simple Reproduction Test Results:
+   - Initial sys.meta_path length: 4
+   - After first install with pyimport=True: 1 PyImportMetaFinder instance
+   - After second install with pyimport=True: 2 PyImportMetaFinder instances
+   - This confirms duplicate importers are being added
+
+3. Source Code Analysis:
+   - Located the bug in /home/npc/miniconda/lib/python3.13/site-packages/pyximport/pyximport.py
+   - The _have_importers() function (lines 355-365) contains a logic error
+   - The function uses nested isinstance checks that are incorrect:
+     ```python
+     if isinstance(importer, PyxImportMetaFinder):
+         if isinstance(importer, PyImportMetaFinder):
+             has_py_importer = True
+     ```
+   - Since PyImportMetaFinder and PyxImportMetaFinder are independent classes (neither inherits from the other),
+     a PyImportMetaFinder instance will never pass the outer isinstance check for PyxImportMetaFinder
+   - This means existing PyImportMetaFinder instances are never detected, causing duplicates
+
+4. Class Hierarchy Verification:
+   - PyImportMetaFinder inherits from: MetaPathFinder -> object
+   - PyxImportMetaFinder inherits from: MetaPathFinder -> object
+   - They are sibling classes, not parent-child
+   - isinstance(PyImportMetaFinder(), PyxImportMetaFinder) returns False
+   - isinstance(PyxImportMetaFinder(), PyImportMetaFinder) returns False
+
+EXPECTED BEHAVIOR
+================
+The install() function should detect existing importers and avoid adding duplicates to sys.meta_path.
+
+ACTUAL BEHAVIOR
+==============
+Due to the logic error, PyImportMetaFinder instances are never detected as already existing, so each call to install(pyimport=True) adds another duplicate importer to sys.meta_path.
+
+IMPACT
+======
+- Multiple duplicate importers in sys.meta_path can slow down Python's import system
+- Each importer will be consulted for every import, causing unnecessary overhead
+- The behavior violates the function's clear intent to prevent duplicates
+
+The bug report's proposed fix (using separate, non-nested isinstance checks) is correct and would resolve the issue.

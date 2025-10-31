@@ -1,0 +1,54 @@
+BUG REPRODUCTION RESULTS
+
+1. TEST EXECUTION:
+I successfully ran the bug report's reproduction code and confirmed the issue:
+
+Original DataFrame with categorical column containing ["cat1", None]:
+- Original values: ['cat1', nan]
+- After round-trip: ['cat1', 'cat1']
+
+The null value at position 1 was incorrectly converted to 'cat1'.
+
+2. MULTIPLE TEST CASES:
+Tested various scenarios with null values in categorical columns:
+- ['cat1', None] → ['cat1', 'cat1'] (null becomes first category)
+- ['cat1', 'cat2', None] → ['cat1', 'cat2', 'cat2'] (null becomes last category)
+- [None, 'cat1'] → ['cat1', 'cat1'] (null becomes existing category)
+- ['cat1', None, 'cat2', None] → ['cat1', 'cat2', 'cat2', 'cat2']
+
+In ALL cases, null values were lost and replaced with category values.
+
+3. ROOT CAUSE ANALYSIS:
+The bug occurs in categorical_column_to_series() at lines 253-254:
+
+```python
+if len(categories) > 0:
+    values = categories[codes % len(categories)]
+```
+
+When a null is represented by sentinel value -1:
+- -1 % 2 = 1 (for 2 categories)
+- -1 % 3 = 2 (for 3 categories)
+- This maps the sentinel to the last valid category index
+
+4. INTERNAL DATA FLOW:
+Traced the data flow:
+a) Original categorical: codes = [0, -1, 1], categories = ['cat1', 'cat2']
+b) Interchange representation: USE_SENTINEL with sentinel_val = -1
+c) After modulo: codes % 2 = [0, 1, 1]
+d) Result: ['cat1', 'cat2', 'cat2'] instead of ['cat1', None, 'cat2']
+
+5. VERIFICATION OF BUG REPORT CLAIMS:
+✓ The bug exists as described
+✓ Null values are incorrectly converted to category values
+✓ The root cause is the modulo operation on sentinel values
+✓ The issue affects all categorical columns with nulls using sentinel representation
+
+6. IMPACT ASSESSMENT:
+- Data loss: NULL values are silently converted to valid categories
+- Silent failure: No error or warning is raised
+- Affects all round-trip operations through the interchange protocol
+- The function set_nulls() is called AFTER the incorrect conversion, but by then the sentinel values have already been incorrectly mapped to categories
+
+CONCLUSION:
+The bug is 100% reproducible and behaves exactly as described in the bug report. The technical analysis in the report correctly identifies the problematic code section and the mechanism of failure.

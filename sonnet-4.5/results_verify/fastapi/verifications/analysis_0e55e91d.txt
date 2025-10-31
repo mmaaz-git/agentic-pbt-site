@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Starlette documentation doesn't explicitly state that IPv6 addresses are supported in TrustedHostMiddleware. The documentation only provides examples with domain names and IPv4-style patterns. One could argue that since IPv6 support isn't documented, the user shouldn't expect it to work, making this report about undocumented behavior rather than a bug.
+
+**Why it might not be INVALID:**
+IPv6 is a fundamental internet protocol standardized since 1998, and modern web frameworks are expected to support it by default. The middleware accepts Host headers which, according to HTTP specifications, must support IPv6 addresses in bracketed format. The fact that the code attempts to parse hosts by splitting on colons suggests it was trying to handle ports, not deliberately exclude IPv6.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+IPv6 adoption is still relatively low in many environments, and developers primarily use IPv4 or domain names. The workaround of using "*" in allowed_hosts or only domain names might be considered sufficient for most use cases. The maintainers might consider this an edge case not worth the complexity of fixing.
+
+**Why it might not be WONTFIX:**
+This completely breaks the middleware for any IPv6 environment, including localhost development on IPv6-enabled systems. Many modern systems default to IPv6, and cloud providers increasingly require IPv6 support. This isn't a minor edge case but a fundamental incompatibility with a major internet protocol.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that IPv6 addresses are not supported and users should use domain names or wildcard patterns instead. This would set correct expectations without changing the code, acknowledging the current limitation.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting that IPv6 doesn't work wouldn't be acceptable for a modern web framework middleware. The issue isn't that the behavior differs from documentation, but that the implementation violates established HTTP/URI standards. Documenting a fundamental protocol incompatibility doesn't fix the underlying problem.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Since IPv6 support was never explicitly promised in the documentation, adding it could be considered a new feature rather than a bug fix. The current code works as designed for the documented use cases (domains and IPv4), and IPv6 support would be an enhancement.
+
+**Why it might not be FEATURE_REQUEST:**
+Supporting standard HTTP Host header formats isn't a feature request—it's a basic requirement for HTTP middleware. The Host header specification includes IPv6 in brackets as part of the standard, not as an optional extension. This is fixing broken standards compliance, not adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code fails to correctly parse standard-compliant HTTP Host headers containing IPv6 addresses, violating RFC 2732 and RFC 3986. The parsing logic is objectively incorrect for bracketed addresses, causing all IPv6 requests to be rejected even when explicitly allowed. This is a clear logic error that makes the middleware unusable in IPv6 environments.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if Starlette explicitly chose not to support IPv6 and documented this limitation. However, there's no evidence of such a deliberate choice, and the code appears to simply have overlooked the IPv6 case when implementing port-stripping logic.
+
+## Overall Consideration
+
+This is unquestionably a BUG. The evidence is overwhelming and objective. The current implementation violates established HTTP and URI standards (RFC 2732, RFC 3986) by incorrectly parsing Host headers containing IPv6 addresses. The bug is not about undefined behavior or missing features—it's about fundamentally broken parsing logic that makes the middleware completely non-functional for IPv6.
+
+The technical analysis clearly shows that `host.split(":")[0]` cannot correctly handle bracketed IPv6 addresses like `[::1]:8000`, resulting in parsing `[` instead of `[::1]`. This isn't a matter of interpretation or edge cases; it's mathematically and logically incorrect parsing that fails 100% of the time for IPv6 addresses with ports.
+
+The impact is severe: the middleware becomes entirely unusable in IPv6 environments, affecting both development (localhost ::1) and production deployments. With increasing IPv6 adoption and many systems defaulting to IPv6, this represents a significant compatibility issue that would affect a substantial number of users. The fix is straightforward and the bug report even provides a correct implementation. This clearly meets the criteria for a valid bug report that should be filed and fixed.

@@ -1,0 +1,43 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### Bug Confirmation
+The bug is **CONFIRMED**. There is indeed a discrepancy between pandas and dask behavior when calling `str.upper()` on strings containing the German ß character.
+
+### Test Results
+
+1. **Direct Reproduction Test**
+   - Input: 'ß'
+   - Pandas output: 'SS'
+   - Dask output: 'ẞ'
+   - The assertions in the bug report are correct
+
+2. **Extended Test Cases**
+   Tested with multiple German words containing ß:
+   - 'ß' → Pandas: 'SS', Dask: 'ẞ'
+   - 'Straße' → Pandas: 'STRASSE', Dask: 'STRAẞE'
+   - 'groß' → Pandas: 'GROSS', Dask: 'GROẞ'
+   - 'weiß' → Pandas: 'WEISS', Dask: 'WEIẞ'
+
+3. **Root Cause Identified**
+   The discrepancy stems from different string backends:
+   - Standard pandas (with object dtype): Uses Python's str.upper() which converts 'ß' → 'SS'
+   - Dask: Uses PyArrow strings by default, which converts 'ß' → 'ẞ' (capital eszett, U+1E9E)
+   - PyArrow's utf8_upper() function: Converts 'ß' → 'ẞ'
+   - Pandas with PyArrow backend: Also converts 'ß' → 'ẞ' (same as dask)
+
+### Python and Unicode Context
+- Python version tested: 3.13.2
+- Unicode version: 15.1.0
+- Python's standard str.upper(): Converts 'ß' → 'SS' (traditional German convention)
+- PyArrow version: 20.0.0
+- PyArrow's utf8_upper(): Converts 'ß' → 'ẞ' (using Unicode capital eszett)
+
+### Impact
+This bug affects any code that:
+1. Migrates from pandas to dask expecting identical string operations
+2. Processes German text where the traditional 'ß' → 'SS' conversion is expected
+3. Relies on exact string matching after uppercase conversion
+
+The bug report's property-based test correctly identifies this issue, though it primarily manifests with strings containing the German eszett character rather than being a general Unicode issue.

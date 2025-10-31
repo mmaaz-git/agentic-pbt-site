@@ -1,0 +1,33 @@
+Bug Reproduction Results
+========================
+
+REPRODUCTION STATUS: CONFIRMED - The reported behavior occurs exactly as described.
+
+TEST RESULTS:
+1. Running the exact reproduction code provided in the bug report:
+   - Input: scale=1.015625, offset=0.0
+   - Output: pcov matrix filled with [[inf, inf], [inf, inf]]
+   - Warning issued: "Covariance of the parameters could not be estimated"
+   - Parameters correctly recovered: [1.015625, ~0]
+
+2. The hypothesis test also fails as expected:
+   - Multiple values cause this behavior (not just the single example)
+   - It consistently happens when offset=0.0 with various scale values
+   - The pattern is: when fitting exact data with b=0, covariance becomes inf
+
+TECHNICAL ANALYSIS:
+The issue occurs because:
+1. When offset (b parameter) = 0 and xdata is symmetric around 0, we get a perfect fit
+2. The residuals are exactly zero (or machine epsilon close to zero)
+3. The covariance calculation involves dividing by residuals-related terms
+4. This causes numerical issues leading to indeterminate covariance
+5. The code detects this (pcov becomes None or NaN) and fills with inf
+
+COMPARISON WITH DOCUMENTATION:
+The bug report claims this violates the API contract, but the documentation EXPLICITLY states:
+"If the Jacobian matrix at the solution doesn't have a full rank, then 'lm' method returns a matrix filled with np.inf"
+
+This is exactly what's happening - the Jacobian at the solution lacks full rank due to the perfect fit scenario.
+
+METHOD DEPENDENCY:
+The default method is 'lm' which returns inf. The documentation says 'trf' and 'dogbox' methods use Moore-Penrose pseudoinverse instead, which might handle this case differently.

@@ -1,0 +1,53 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug as described in the report. Both functions violate their length constraints when given small maxlen/numchars values.
+
+## Hypothesis Test Results
+
+The Hypothesis tests failed as expected:
+- `test_maybe_truncate_at_most_maxlen` failed with input `maybe_truncate('00', maxlen=1)` returning `'...'` (length 3) instead of a string with length <= 1
+- `test_pretty_print_produces_exact_length` failed with input `pretty_print('00', numchars=1)` returning `'...'` (length 3) instead of a string with exactly 1 character
+
+## Manual Test Results
+
+### maybe_truncate() violations:
+1. `maybe_truncate('00', maxlen=1)` → `'...'` (length 3, expected <= 1)
+2. `maybe_truncate('hello world', maxlen=2)` → `'hello worl...'` (length 13, expected <= 2)
+3. `maybe_truncate('a', maxlen=1)` → `'a'` (length 1, correct - no truncation needed)
+
+### pretty_print() violations:
+1. `pretty_print('00', numchars=1)` → `'...'` (length 3, expected exactly 1)
+2. `pretty_print('hello', numchars=2)` → `'hell...'` (length 7, expected exactly 2)
+3. `pretty_print('a', numchars=1)` → `'a'` (length 1, correct)
+
+## Root Cause Analysis
+
+Looking at the source code in `/home/npc/miniconda/lib/python3.13/site-packages/xarray/core/formatting.py`:
+
+1. **maybe_truncate() (lines 50-54):**
+   ```python
+   def maybe_truncate(obj, maxlen=500):
+       s = str(obj)
+       if len(s) > maxlen:
+           s = s[: (maxlen - 3)] + "..."
+       return s
+   ```
+   When `len(s) > maxlen`, it replaces with `s[:(maxlen - 3)] + "..."`. For small maxlen values (< 3), this creates a string longer than maxlen because:
+   - If maxlen=1: `s[:(1-3)]` = `s[:-2]` + `"..."` = at least 3 chars
+   - If maxlen=2: `s[:(2-3)]` = `s[:-1]` + `"..."` = at least 3 chars
+
+2. **pretty_print() (lines 41-47):**
+   ```python
+   def pretty_print(x, numchars: int):
+       s = maybe_truncate(x, numchars)
+       return s + " " * max(numchars - len(s), 0)
+   ```
+   This function relies on `maybe_truncate()` and then pads with spaces. When `maybe_truncate()` returns a string longer than `numchars`, the padding calculation `max(numchars - len(s), 0)` becomes 0, so the final string is longer than `numchars`.
+
+## Impact
+The bug manifests when:
+- For `maybe_truncate()`: when `maxlen < 3` and the input string length > maxlen
+- For `pretty_print()`: when `numchars < 3` and the input string length > numchars
+
+The functions violate their implicit (maybe_truncate) and explicit (pretty_print) contracts about output string length.

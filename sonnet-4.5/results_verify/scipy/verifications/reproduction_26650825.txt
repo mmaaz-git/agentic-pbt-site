@@ -1,0 +1,38 @@
+# Reproduction Analysis
+
+## Bug Reproduction Status: CONFIRMED
+
+### Test Results
+
+1. **Hypothesis Test**: Successfully reproduced the bug. The test failed with a similar example:
+   - Input: y=1.0, lmbda=4.7106300468537345e-216
+   - Result: Round-trip failed with y_recovered=0.6931471805599453 (which equals log(2))
+   - Expected: 1.0
+   - Error: ~0.307
+
+2. **Specific Example from Bug Report**: Exactly reproduced as claimed:
+   - Input: y=1.0, lmbda=5.808166112732823e-234
+   - inv_boxcox1p(1.0, lmbda) = 1.0
+   - boxcox1p(1.0, lmbda) = 0.6931471805599453 (confirmed to equal log(2))
+   - Error: 0.3068528194400547
+
+3. **Threshold Analysis**: Identified the exact threshold where behavior changes:
+   - For lambda >= 1e-156: Functions work correctly (round-trip succeeds)
+   - For lambda < 1e-157: Functions become inconsistent (round-trip fails)
+   - The failure consistently produces log(2) ≈ 0.693147 when expected value is 1.0
+
+### Bug Mechanism
+
+The bug occurs due to inconsistent handling of very small lambda values:
+
+1. When lambda < ~1e-157:
+   - `inv_boxcox1p(1.0, lambda)` returns 1.0 (appears to use lambda=0 case: exp(y) - 1 = exp(1) - 1 ≈ 1.718 for general case, but somehow returns 1.0)
+   - `boxcox1p(1.0, lambda)` returns log(2) ≈ 0.693 (uses lambda=0 case: log(1+x) = log(2))
+
+2. When lambda >= ~1e-156:
+   - Both functions use the general formula consistently
+   - Round-trip works correctly with error near machine precision
+
+### Impact
+
+The bug causes a significant error (>30%) in round-trip operations for very small lambda values. While these are extreme values, the documentation explicitly states that inv_boxcox1p is the inverse of boxcox1p, making this a violation of the documented contract.

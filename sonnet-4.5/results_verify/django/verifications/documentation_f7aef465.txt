@@ -1,0 +1,40 @@
+## Documentation Analysis
+
+### Official Django Documentation
+
+According to the Django documentation:
+- MAX_ENTRIES is described as "the maximum number of entries allowed in the cache before old values are deleted"
+- The documentation states that when MAX_ENTRIES is reached, 1/CULL_FREQUENCY of the entries will be culled
+- The documentation suggests these are soft limits with a culling strategy
+
+However, the documentation language ("maximum number of entries allowed") strongly implies that this is the upper bound for cache size.
+
+### Code Comments and Implementation Intent
+
+1. **FileBasedCache Comment** (line 101-104):
+   "Remove random cache entries if max_entries is reached at a ratio of num_entries / cull_frequency."
+   This suggests culling should occur when max_entries is reached, not exceeded.
+
+2. **Implementation Pattern in LocMemCache**:
+   - The code checks `if len(self._cache) >= self._max_entries` before culling
+   - This shows intent to prevent exceeding MAX_ENTRIES
+   - After culling, it always adds the new item
+
+3. **Comparison with FileBasedCache**:
+   - FileBasedCache culls entries when `num_entries >= max_entries`
+   - It uses `int(num_entries / cull_frequency)` which has the same integer division issue
+   - But FileBasedCache returns early if `num_entries < max_entries` (line 108), preventing the issue
+
+### Semantic Understanding
+
+The term "MAX_ENTRIES" semantically means "maximum entries" - a hard upper limit. If it were intended as a soft threshold, it would likely be named differently (e.g., "TARGET_ENTRIES" or "CULL_THRESHOLD").
+
+### Conclusion
+
+While the documentation doesn't explicitly state that MAX_ENTRIES must never be exceeded, the combination of:
+1. The semantic meaning of "maximum"
+2. The implementation pattern showing intent to enforce the limit
+3. The check `>= self._max_entries` before culling
+4. The similar FileBasedCache implementation that prevents exceeding the limit
+
+All suggest that MAX_ENTRIES is intended to be a hard limit that should not be exceeded. The current behavior where the cache can grow beyond MAX_ENTRIES appears to be an implementation bug rather than intended behavior.

@@ -1,0 +1,40 @@
+REPRODUCTION ANALYSIS
+=====================
+
+## Bug Reproduction
+
+I successfully reproduced the bug using both the property-based test and manual test case provided in the bug report.
+
+### Hypothesis Test Result
+The hypothesis test failed as expected with the assertion error:
+"Expected at most 1 masked value, but got 2"
+
+The test correctly identifies cases where ma.unique() returns multiple masked values when it should return at most one.
+
+### Manual Test Case
+Input: arr = [32767, 32767, 32767] with mask = [True, False, True]
+- Expected: At most 1 masked value in result (per documentation)
+- Actual: 2 masked values returned
+
+The result was [-- 32767 --] with mask [True False True], showing that ma.unique() returned both a masked and unmasked version of 32767, plus another masked value.
+
+### Root Cause Analysis
+The current implementation of ma.unique() simply calls np.unique() on the masked array and converts the result to a MaskedArray view:
+
+```python
+output = np.unique(ar1, return_index=return_index, return_inverse=return_inverse)
+if isinstance(output, tuple):
+    output = list(output)
+    output[0] = output[0].view(MaskedArray)
+    output = tuple(output)
+else:
+    output = output.view(MaskedArray)
+return output
+```
+
+The problem is that np.unique() doesn't understand the special semantics of masked values. It treats the masked array as a regular array with a separate mask attribute, finding unique combinations of (data, mask) rather than treating all masked values as equivalent.
+
+### Verification
+The documentation's own example works correctly because the masked value (1000) doesn't appear unmasked elsewhere in the array. However, when the same underlying data value appears both masked and unmasked (as with 32767 in the bug report), the function fails to collapse all masked instances into a single masked element.
+
+This is a clear violation of the documented behavior.

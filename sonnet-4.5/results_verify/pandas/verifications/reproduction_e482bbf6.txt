@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug reported in pandas.io.clipboard.waitForPaste. The bug report is accurate in its description of the issue.
+
+### Hypothesis Test Results
+The property-based test using Hypothesis failed as described in the report. When the paste() function is mocked to return non-string values (None, 0, False, [], {}), the waitForPaste() function immediately returns these values instead of:
+1. Continuing to wait for a non-empty string, or
+2. Timing out after the specified timeout period
+
+The test failure confirms that waitForPaste returns None when it encounters None from paste(), violating the assertion that the result should be a non-empty string.
+
+### Manual Reproduction Results
+Running the manual reproduction code confirmed the bug across all test cases:
+- When paste() returns None: waitForPaste returns None immediately
+- When paste() returns 0: waitForPaste returns 0 immediately
+- When paste() returns False: waitForPaste returns False immediately
+- When paste() returns []: waitForPaste returns [] immediately
+- When paste() returns {}: waitForPaste returns {} immediately
+
+### Root Cause Analysis
+The bug occurs in line 704 of /home/npc/miniconda/lib/python3.13/site-packages/pandas/io/clipboard/__init__.py:
+
+```python
+if clipboardText != "":
+    return clipboardText
+```
+
+This condition uses loose inequality checking. In Python:
+- None != "" evaluates to True
+- 0 != "" evaluates to True
+- False != "" evaluates to True
+- [] != "" evaluates to True
+- {} != "" evaluates to True
+
+Therefore, any non-empty-string value passes the check and is returned immediately, even though the function's documented behavior is to "block until a non-empty text string exists on the clipboard."
+
+### Real-World Impact
+This bug is realistic and could occur in production:
+1. On macOS with pyobjc backend, paste_osx_pyobjc() returns None when the clipboard doesn't contain string data
+2. Users expecting the function to wait for valid text would get unexpected None/non-string values
+3. This could lead to type errors downstream when code expects a string
+
+The proposed fix correctly addresses this by checking both type and content:
+```python
+if isinstance(clipboardText, str) and clipboardText != "":
+    return clipboardText
+```

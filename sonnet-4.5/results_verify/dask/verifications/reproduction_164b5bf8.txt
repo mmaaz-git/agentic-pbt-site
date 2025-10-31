@@ -1,0 +1,44 @@
+## Bug Reproduction Analysis
+
+### Summary
+The bug report has been successfully reproduced. The claimed logical contradiction in the code is confirmed to exist.
+
+### Key Findings
+
+1. **Class Hierarchy Verification**:
+   - Confirmed that `Projection` is indeed a subclass of `Expr`
+   - `issubclass(Projection, Expr)` returns `True`
+
+2. **Logical Contradiction Confirmed**:
+   The condition at lines 1675-1676 in `/home/npc/pbt/agentic-pbt/envs/dask_env/lib/python3.13/site-packages/dask/dataframe/dask_expr/io/parquet.py`:
+   ```python
+   not isinstance(predicate_expr.left, Expr)
+   and isinstance(predicate_expr.left, Projection)
+   ```
+
+   This condition can NEVER be True because:
+   - If `predicate_expr.left` is a `Projection`, then it is also an `Expr` (due to inheritance)
+   - Therefore, `not isinstance(predicate_expr.left, Expr)` would be False
+   - False AND anything = False
+   - The entire branch (lines 1674-1685) is dead code
+
+3. **Intent Analysis**:
+   Looking at the code structure, there are two branches:
+   - First branch (lines 1665-1673): Handles normal comparisons where the column is on the left (e.g., `column > 5`)
+   - Second branch (lines 1674-1685): Intended to handle reversed comparisons where the value is on the left (e.g., `5 > column`)
+
+   The second branch includes operator flipping logic (line 1680) to convert reversed comparisons, but this code is unreachable due to the logical error.
+
+4. **Bug Impact**:
+   - The dead code prevents proper handling of reversed comparison predicates
+   - When a user writes `5 > df['column']` instead of `df['column'] < 5`, the filter won't be properly extracted for Parquet predicate pushdown
+   - This could lead to performance degradation (filters not pushed down to Parquet reader) or incorrect query optimization
+
+5. **Proposed Fix Validity**:
+   The bug report suggests changing line 1676 from checking `predicate_expr.left` to `predicate_expr.right`, which makes logical sense:
+   - The first branch checks if the RIGHT side is not an Expr (i.e., a literal value)
+   - The second branch should check if the LEFT side is not an Expr (i.e., a literal value)
+   - This would correctly distinguish between `column > 5` and `5 > column`
+
+### Conclusion
+The bug is real, correctly identified, and the analysis in the bug report is accurate. This is a clear case of dead code caused by a logical contradiction in the conditional statement.

@@ -1,0 +1,47 @@
+Reproduction Analysis
+=====================
+
+I successfully reproduced the reported bug. Here are the findings:
+
+1. Hypothesis Test Reproduction:
+   - The property-based test FAILS as reported
+   - Every integer from 0 to 1000 with a trailing period (e.g., "0.", "1.", "999.") triggers the bug
+   - Both var.literal and var.lookups are set simultaneously, which should not happen
+
+2. Basic Reproduction Confirmed:
+   - Variable("10.") results in:
+     * var.literal = 10.0
+     * var.lookups = ('10', '')
+   - This creates an inconsistent internal state
+
+3. Resolution Behavior:
+   - var.resolve({}) raises VariableDoesNotExist with message "Failed lookup for key [10] in {}"
+   - This happens because resolve() checks lookups first (line 852), and since lookups is not None, it tries to resolve it as a variable lookup
+   - The literal value (10.0) is never returned, even though it's set
+
+4. Python float() Behavior:
+   - Python's float("10.") successfully returns 10.0
+   - Django's Variable class uses float() internally, which is why literal gets set to 10.0
+
+5. Code Flow Analysis:
+   The bug occurs due to this sequence:
+   a. Line 822: Detects "." in "10.", enters float parsing branch
+   b. Line 823: self.literal = float("10.") successfully sets literal to 10.0
+   c. Line 825-826: Checks if var ends with ".", raises ValueError
+   d. Line 829: The ValueError is caught by the except block
+   e. Problem: self.literal remains set to 10.0 from step b
+   f. Lines 830-848: Execution continues, eventually setting self.lookups = ('10', '')
+   g. Result: Both literal and lookups are set
+
+6. Comparison with Similar Cases:
+   - "10" → literal=10, lookups=None (works correctly)
+   - "10.0" → literal=10.0, lookups=None (works correctly)
+   - "10." → literal=10.0, lookups=('10', '') (BUG)
+   - "1.5" → literal=1.5, lookups=None (works correctly)
+
+7. Technical Details Match Report:
+   - The bug report's code runs exactly as described
+   - The assertion failures occur as stated
+   - The VariableDoesNotExist exception is raised as reported
+
+The bug is real and reproducible. The code has a clear logic error where self.literal is set before checking for the invalid trailing period, and when the ValueError is raised and caught, the literal value persists while lookups also gets set.

@@ -1,0 +1,64 @@
+## Bug Reproduction Report
+
+### Issue Reproduced: YES
+
+The bug reported has been successfully reproduced. When calling `Left(Value('test'), None)` or `Right(Value('test'), None)`, the code raises a TypeError instead of handling the None value gracefully.
+
+### Actual Error
+```
+TypeError: '<' not supported between instances of 'NoneType' and 'int'
+```
+
+### Location of Bug
+The bug is in `/django/db/models/functions/text.py` in the `Left.__init__` method at lines 163-165:
+```python
+if not hasattr(length, "resolve_expression"):
+    if length < 1:  # Line 164 - This comparison fails when length is None
+        raise ValueError("'length' must be greater than 0.")
+```
+
+### Root Cause
+The code checks `if not hasattr(length, "resolve_expression")` first, which is True when `length=None` (None doesn't have a resolve_expression attribute). It then immediately tries to compare `length < 1` without first checking if `length is None`. Since None cannot be compared to 1, this raises a TypeError.
+
+### Comparison with Similar Functions
+Looking at similar functions in the same file:
+
+1. **LPad** (lines 201-206): Correctly checks `and length is not None` before comparison:
+   ```python
+   if (
+       not hasattr(length, "resolve_expression")
+       and length is not None
+       and length < 0
+   ):
+       raise ValueError("'length' must be greater or equal to 0.")
+   ```
+
+2. **Repeat** (lines 237-242): Also correctly checks `and number is not None` before comparison:
+   ```python
+   if (
+       not hasattr(number, "resolve_expression")
+       and number is not None
+       and number < 0
+   ):
+       raise ValueError("'number' must be greater or equal to 0.")
+   ```
+
+3. **Substr** (lines 354-356): Has the same bug pattern as Left:
+   ```python
+   if not hasattr(pos, "resolve_expression"):
+       if pos < 1:  # Would fail with None
+           raise ValueError("'pos' must be greater than 0")
+   ```
+
+### Impact
+Since `Right` inherits from `Left`, it also exhibits the same bug. Users passing None as the length parameter will get a confusing TypeError about comparison operators instead of a clearer error message about invalid input or the function potentially handling None gracefully (as the length parameter is passed to the parent Func class which may handle None).
+
+### Verification Tests Run
+1. `Left(Value('test'), None)` - Raises TypeError ✓
+2. `Right(Value('test'), None)` - Raises TypeError ✓
+3. `Left(Value('test'), 0)` - Raises ValueError as expected ✓
+4. `Left(Value('test'), -1)` - Raises ValueError as expected ✓
+5. `LPad(Value('test'), None)` - No exception, creates object ✓
+6. `Repeat(Value('test'), None)` - No exception, creates object ✓
+
+The bug is confirmed and the proposed fix in the report (adding `and length is not None` check) would align the behavior with similar functions like LPad and Repeat.

@@ -1,0 +1,70 @@
+## Documentation Analysis Report
+
+### Function Documentation
+The `apply_filters` function in `dask.dataframe.io.parquet.core` has the following docstring:
+
+```python
+def apply_filters(parts, statistics, filters):
+    """Apply filters onto parts/statistics pairs
+
+    Parameters
+    ----------
+    parts: list
+        Tokens corresponding to row groups to read in the future
+    statistics: List[dict]
+        List of statistics for each part, including min and max values
+    filters: Union[List[Tuple[str, str, Any]], List[List[Tuple[str, str, Any]]]]
+        List of filters to apply, like ``[[('x', '=', 0), ...], ...]``. This
+        implements partition-level (hive) filtering only, i.e., to prevent the
+        loading of some row-groups and/or files.
+
+        Predicates can be expressed in disjunctive normal form (DNF). This means
+        that the innermost tuple describes a single column predicate. These
+        inner predicates are combined with an AND conjunction into a larger
+        predicate. The outer-most list then combines all of the combined
+        filters with an OR disjunction.
+
+        Predicates can also be expressed as a List[Tuple]. These are evaluated
+        as an AND conjunction. To express OR in predicates, one must use the
+        (preferred) List[List[Tuple]] notation.
+
+    Returns
+    -------
+    parts, statistics: the same as the input, but possibly a subset
+    """
+```
+
+### Key Documentation Findings
+
+1. **No explicit requirement for non-empty filters**: The documentation does not state that filters must be non-empty. The type annotation allows for a List, which can be empty in Python.
+
+2. **Return value description**: The documentation states it returns "the same as the input, but possibly a subset". This implies that with no filters, it should return all inputs unchanged.
+
+3. **Dask read_parquet documentation**: The public API documentation for `read_parquet` mentions filters but does not explicitly state whether empty filters are allowed or not.
+
+4. **Arrow engine behavior**: The Arrow engine's internal `_filters_to_expression` function considers empty filters as "Malformed filters", but this is an implementation detail not exposed in public documentation.
+
+5. **Inconsistency in handling**: The higher-level `read_parquet` function successfully handles empty filters (by converting them to None), while the lower-level `apply_filters` crashes.
+
+### Related Code Patterns
+
+1. The Arrow engine protects against empty filters:
+   - Line 1701: `filter=_filters_to_expression(filters) if filters else None`
+   - This treats empty list as falsy and substitutes None
+
+2. The `_filters_to_expression` function explicitly rejects empty filters:
+   - Line 374-375: Raises ValueError("Malformed filters") for empty filters
+
+3. Other parts of the codebase check for filter existence:
+   - Line 336: `if filters else set()`
+   - Line 1290: `if filters is not None:`
+   - Line 1344: `if filters is not None:`
+
+### Documentation Gaps
+
+1. The documentation does not specify what constitutes valid vs. invalid filter inputs
+2. The documentation does not state whether empty filters are allowed
+3. The documentation does not specify the behavior for edge cases (empty list, None, etc.)
+
+### Conclusion
+The documentation does not explicitly forbid empty filters, and the natural interpretation of "apply filters" with an empty filter list would be to return all data unfiltered. The fact that `read_parquet` (the public API) handles empty filters successfully suggests this is expected behavior. The crash in `apply_filters` appears to be an oversight rather than intentional design.

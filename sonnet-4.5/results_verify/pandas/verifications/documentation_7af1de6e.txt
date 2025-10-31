@@ -1,0 +1,38 @@
+DOCUMENTATION ANALYSIS
+
+1. PANDAS DOCUMENTATION ON read_json():
+   - The official pandas documentation for read_json() does NOT specify any limitations on integer ranges
+   - It mentions using "ujson" as the default parsing engine
+   - It provides dtype control options but doesn't mention int64/uint64 overflow behavior
+   - No documentation about asymmetric handling of values outside int64 range
+   - No warnings about ValueError for numbers below int64_min
+
+2. JSON SPECIFICATION (RFC 8259):
+   According to RFC 8259:
+   - JSON allows arbitrary precision numbers in theory
+   - The spec explicitly states: "An implementation may set limits on the range and precision of numbers"
+   - For interoperability, suggests using IEEE 754 binary64 (double precision) range
+   - Numbers in range [-(2^53)+1, (2^53)-1] are guaranteed interoperable
+   - Numbers outside typical ranges "may indicate potential interoperability problems"
+
+   CRITICAL POINT: The JSON specification explicitly allows implementations to set numeric limits, but does NOT require any specific behavior for overflow/underflow.
+
+3. IMPLICATIONS FOR THE BUG:
+   a) JSON validity: Both -9223372036854775809 and 9223372036854775808 are VALID JSON numbers per the specification
+
+   b) Implementation freedom: The JSON spec allows pandas/ujson to set limits, BUT:
+      - The limits should be documented
+      - The behavior should be consistent (not asymmetric)
+
+   c) Missing documentation: pandas does not document:
+      - That values below int64_min will raise ValueError
+      - That values above int64_max will be converted to uint64
+      - The asymmetric nature of this behavior
+
+4. EXPECTED BEHAVIOR:
+   Based on the documentation and specifications:
+   - Users would expect either BOTH overflows to work or BOTH to fail
+   - The asymmetric behavior is not documented anywhere
+   - The ValueError for negative overflow is undocumented
+
+CONCLUSION: The pandas documentation does not specify or warn about this asymmetric integer overflow behavior, making the current implementation's behavior unexpected and undocumented.

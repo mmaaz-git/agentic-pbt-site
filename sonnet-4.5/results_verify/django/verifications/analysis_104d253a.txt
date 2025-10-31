@@ -1,0 +1,46 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug could be considered invalid if one argues that operations are meant to be single-use objects that shouldn't be reused after an exception. Perhaps the expectation is that if database_backwards() fails, the entire migration transaction should be rolled back and the operation instance discarded. The swap-mutate-swap pattern might be intentional for performance reasons, assuming operations are never reused after exceptions.
+
+**Why it might not be INVALID:**
+The base Operation class explicitly states in its docstring that instances "should be considered immutable." This is not a suggestion but a requirement ("should be"). The bug demonstrates clear violation of this documented constraint. Additionally, the operation's deconstruct() method would return incorrect values after the mutation, breaking serialization. Other operations in the same codebase don't exhibit this mutation behavior, suggesting it's not intentional.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The bug might be considered WONTFIX if it only affects edge cases like testing, dry runs, or error scenarios that are rare in production. The swap-mutate-swap pattern has likely been in the codebase for years without causing major issues. Fixing it might require significant refactoring with minimal practical benefit. The workaround is simple: don't reuse operation instances after exceptions.
+
+**Why it might not be WONTFIX:**
+This is not a trivial issue - it violates a core architectural principle of the migration framework (immutability). The bug affects legitimate use cases including migration testing, dry runs, and debugging. It can cause confusing behavior when migrations fail and are retried. The fix is straightforward and other operations like RenameField already implement the correct pattern without mutation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the real issue is the documentation being too strict. Perhaps the "should be considered immutable" statement in the base class is aspirational rather than a hard requirement. The documentation could be updated to clarify that operations may mutate during execution but should not be reused after exceptions.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The immutability requirement is not just documentation - it's a design constraint that enables the deconstruct() method to work correctly. Changing the documentation to allow mutation would be acknowledging a design flaw rather than fixing it. The fact that most operations don't mutate suggests the requirement is real and these two operations are simply buggy implementations.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+This could be viewed as a request for enhanced error handling resilience rather than a bug fix. The user is asking for operations to maintain state integrity even in exceptional circumstances, which could be considered a new feature. The current behavior might be "working as designed" with the enhancement being to make it more robust.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but pointing out that existing code violates its own documented requirements. The immutability constraint already exists in the documentation - this is about conforming to existing requirements, not adding new ones. Other operations already handle this correctly, so this is about fixing inconsistent behavior, not adding features.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code clearly violates the documented immutability requirement stated in the base Operation class. The mutation occurs in a way that breaks the operation's deconstruct() method, affecting serialization correctness. This is observable incorrect behavior that occurs in realistic scenarios (testing, dry runs, migration failures). The pattern is inconsistent with other operations like RenameField that handle backwards correctly without mutation. The bug can cause real problems including incorrect retry behavior, misleading error messages, and test failures.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if the immutability requirement is not actually a requirement, or if operations are never meant to be used after exceptions. However, the documentation is clear, and there are legitimate use cases where this matters.
+
+## Overall Consideration
+
+After examining all aspects, this appears to be a clear BUG. The evidence is compelling:
+
+1. **Documented Requirement Violation**: The base Operation class explicitly states that operations "should be considered immutable" due to how deconstruction works. The RenameModel and RenameIndex operations violate this requirement by mutating their state in database_backwards() when exceptions occur.
+
+2. **Functional Impact**: The mutation breaks the correctness of the deconstruct() method, which would return swapped values after an exception. This affects serialization, debugging output via describe(), and any retry logic. These are not theoretical issues - they occur in real scenarios like migration testing, validation, and failure recovery.
+
+3. **Inconsistent Implementation**: Other similar operations handle this correctly. RenameField doesn't use the swap pattern, and AlterModelTable's database_backwards() simply calls database_forwards() without any state mutation. This inconsistency suggests the swap-mutate-swap pattern is a bug, not an intentional design choice. The fact that the bug report notes RenameField works correctly strengthens this conclusion.
+
+The bug is well-documented, reproducible, affects real use cases, and violates explicit architectural constraints. While one could argue for WONTFIX based on the bug existing for years without major complaints, the violation of documented immutability requirements and the straightforward fix make this a legitimate BUG that should be addressed.

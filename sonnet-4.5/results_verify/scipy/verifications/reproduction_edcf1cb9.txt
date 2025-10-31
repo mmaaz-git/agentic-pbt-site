@@ -1,0 +1,38 @@
+REPRODUCTION REPORT
+==================
+
+I have successfully reproduced the bug described in the report. The issue is confirmed to be real and behaves exactly as described.
+
+## Test Results
+
+1. **Hypothesis Test**: The property-based test failed, finding a counterexample where a value of 1.4796593242285038e-184 was silently dropped during the round-trip conversion.
+
+2. **Specific Example Reproduction**: The exact example from the bug report was confirmed:
+   - Input value at [1,1]: 1.0018225238781444e-157
+   - This value is NOT equal to 0.0 (confirmed with == operator)
+   - After conversion through sparse and back to dense, the value becomes 0.0
+   - The sparse matrix reports nnz=0, indicating the value was dropped
+
+3. **Threshold Investigation**: Extensive testing revealed the following behavior:
+   - Values <= 1.0e-8 are DROPPED
+   - Values >= 1.1e-8 are PRESERVED
+   - The threshold appears to be between 1.0e-8 and 1.1e-8
+
+   Detailed results:
+   - 1.00e-10: DROPPED (nnz=0)
+   - 1.00e-09: DROPPED (nnz=0)
+   - 1.00e-08: DROPPED (nnz=0)
+   - 1.10e-08: PRESERVED (nnz=2)
+   - 1.50e-08: PRESERVED (nnz=2)
+   - 1.00e-07: PRESERVED (nnz=2)
+
+## Key Observations
+
+1. The function silently drops values that are mathematically non-zero without any warning or error.
+2. The threshold behavior is consistent and reproducible.
+3. The round-trip property (dense -> sparse -> dense should equal original) is violated for small but non-zero values.
+4. The threshold of approximately 1e-8 appears to be hardcoded somewhere in the implementation.
+
+## Conclusion
+
+The bug is real and reproducible. The function `csgraph_from_dense` has an undocumented threshold that treats values smaller than approximately 1e-8 as if they were equal to the null_value, regardless of whether they actually equal null_value or not. This causes silent data loss and violates expected round-trip behavior.

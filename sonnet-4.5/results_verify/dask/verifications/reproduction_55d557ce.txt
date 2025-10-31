@@ -1,0 +1,31 @@
+REPRODUCTION OF BUG REPORT
+
+I have successfully reproduced the bug reported in dask.array.overlap._overlap_internal_chunks.
+
+TEST RESULTS:
+1. The simple reproduction test confirms the type inconsistency:
+   - Input: chunks=((10,), (5, 5), (10,)), axes={0: 0, 1: 0, 2: 0}
+   - Output: [(10,), [5, 5], (10,)]
+   - Types: ['tuple', 'list', 'tuple']
+
+   The function returns tuples for single-chunk dimensions and lists for multi-chunk dimensions.
+
+2. The property-based test fails consistently with the same pattern:
+   - Every test case with mixed single and multi-chunk dimensions fails
+   - Single-chunk dimensions return tuples
+   - Multi-chunk dimensions return lists
+   - The test correctly identifies type inconsistency
+
+3. The behavior is consistent across different depth values:
+   - With axes={0: 1, 1: 2, 2: 1}, the result still shows mixed types
+   - The depth values affect the chunk sizes but not the type inconsistency
+
+CODE ANALYSIS:
+Looking at the source code (lines 38-46 of overlap.py):
+- Line 39: When len(bds) == 1, it appends bds directly (which is a tuple)
+- Lines 41-46: When len(bds) > 1, it builds lists (left, mid, right) and concatenates them
+
+The bug is exactly as reported - the function returns inconsistent types based on the number of chunks in each dimension.
+
+IMPACT:
+While the Array constructor normalizes these mixed types back to tuples (as confirmed by testing), the function itself violates the principle of returning consistent types. The _array_expr version of the same function explicitly converts everything to tuples with `tuple(map(tuple, ...))`, suggesting this normalization is intentional and expected.

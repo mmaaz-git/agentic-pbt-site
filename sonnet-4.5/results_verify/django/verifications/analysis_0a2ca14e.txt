@@ -1,0 +1,90 @@
+Bug Report Analysis and Triage
+================================
+
+## Bug Report Summary
+The check_referrer_policy function incorrectly rejects SECURE_REFERRER_POLICY configurations containing trailing or leading commas, which create empty strings after splitting.
+
+## Categorization Analysis
+
+### Could this be BUG?
+**YES - Strong evidence:**
+- The validation function is demonstrably stricter than the middleware that uses the setting
+- The code comment explicitly says it supports comma-separated strings for fallback
+- The SecurityMiddleware would handle trailing commas fine (empty strings would be ignored)
+- The validation prevents valid use cases that would work at runtime
+- Users reasonably expect trailing commas to be handled gracefully, as they are in:
+  * Python lists/tuples
+  * Most HTTP header parsers
+  * Other Django comma-separated settings
+
+### Could this be INVALID?
+**Unlikely:**
+- The bug is real and reproducible
+- The behavior contradicts the stated intent in code comments
+- The inconsistency between validation and runtime is clear
+- While the documentation doesn't explicitly promise trailing comma support, the general expectation from HTTP standards is that empty values between delimiters should be ignored
+
+### Could this be WONTFIX?
+**Possible but unlikely:**
+- One could argue trailing commas are "sloppy" configuration
+- However, this isn't an obscure edge case - trailing commas are common in:
+  * Programmatic string construction
+  * Manual configuration editing
+  * Copy-paste operations
+- The fix is trivial and has no negative side effects
+- It improves user experience and API robustness
+
+### Could this be FEATURE_REQUEST?
+**No:**
+- This isn't asking for new functionality
+- The setting already claims to support comma-separated values
+- This is fixing existing functionality to be less fragile
+- The middleware already handles this case correctly; only validation is broken
+
+### Could this be DOCUMENTATION_FIX?
+**Possible but not ideal:**
+- One could document that trailing commas aren't allowed
+- However, this would be documenting an unnecessary limitation
+- The code fix is simpler and better than documenting the quirk
+- The validation should match what the middleware accepts
+
+## Technical Analysis
+
+### Root Cause
+Line 266 in check_referrer_policy:
+```python
+values = {v.strip() for v in settings.SECURE_REFERRER_POLICY.split(",")}
+```
+
+Creates a set including empty strings when there are trailing/leading/consecutive commas.
+
+### Proposed Fix
+```python
+values = {v.strip() for v in settings.SECURE_REFERRER_POLICY.split(",") if v.strip()}
+```
+
+Filters out empty strings after stripping, making the validation consistent with how the SecurityMiddleware handles the setting.
+
+### Impact Assessment
+- **Severity**: Medium - Causes unnecessary validation failures
+- **Scope**: Affects all Django applications using SECURE_REFERRER_POLICY
+- **Fix Risk**: Very low - Only makes validation less strict, doesn't break existing valid configs
+- **User Impact**: Improves developer experience by accepting reasonable configurations
+
+## Recommendation
+
+This should be categorized as **BUG** because:
+
+1. The validation contradicts the implementation's actual behavior
+2. The code comment indicates support for flexible comma-separated values
+3. The current behavior violates reasonable user expectations
+4. The fix is trivial and safe
+5. This makes Django's API unnecessarily fragile
+
+The bug report is well-written with:
+- Clear reproduction steps
+- Root cause analysis
+- Proposed fix with diff
+- Reasonable justification
+
+This is a valid bug that should be fixed to improve Django's robustness and user experience.

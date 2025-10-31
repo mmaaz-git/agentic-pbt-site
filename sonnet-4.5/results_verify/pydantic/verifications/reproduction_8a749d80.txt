@@ -1,0 +1,29 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug described in the report.
+
+### Test Results
+
+1. **Hypothesis Test**: The property-based test failed immediately with the error "invalid load key, '\xc2'" when trying to load an empty list that was pickled, decoded with latin1, and then passed to load_str_bytes.
+
+2. **Direct Reproduction**: The specific failing case (empty list) reproduced the exact error message:
+   - Pickle bytes: b'\x80\x04]\x94.'
+   - When decoded with latin1: '\x80\x04]\x94.'
+   - Error: UnpicklingError: invalid load key, '\xc2'.
+
+### Root Cause Analysis
+
+The issue occurs because:
+
+1. Pickle data often contains bytes > 127 (e.g., \x80, \x94) which are not valid ASCII
+2. When these bytes are decoded using 'latin1', they produce a string with characters in the 128-255 range
+3. In the load_str_bytes function at line 53, the code uses `b.encode()` without specifying an encoding
+4. Python defaults to UTF-8 encoding, which represents characters 128-255 using 2 bytes (e.g., \x80 becomes \xc2\x80)
+5. This corrupts the pickle data, making it impossible to unpickle
+
+I verified this by showing that:
+- Original pickle bytes: b'\x80\x04]\x94.'
+- Re-encoded with UTF-8 (current behavior): b'\xc2\x80\x04]\xc2\x94.' (corrupted)
+- Re-encoded with latin1 (proposed fix): b'\x80\x04]\x94.' (correct)
+
+The bug is real and affects any pickle data passed as a string with non-UTF-8 encoding specified.

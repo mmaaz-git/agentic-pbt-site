@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report misunderstands the nature of matplotlib's converter registry. The converters that appear after deregister (datetime.date, datetime.datetime, numpy.datetime64) might be matplotlib's own default converters that get lazily initialized. The function documentation says it "attempts" to restore state, not that it guarantees perfect restoration. The lazy initialization by matplotlib is outside pandas' control.
+
+**Why it might not be INVALID:**
+The documentation explicitly states the function should "set the state of the registry back to the state before pandas registered its own units." The word "attempts" doesn't excuse leaving extra converters that weren't there initially. The test clearly shows the registry is not restored to its original state, which violates the documented contract.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case involving matplotlib's internal lazy initialization behavior. The extra converters left behind (matplotlib's default datetime converters) are harmless and don't affect functionality. Users are unlikely to notice or care about this in practice. The complexity of tracking exactly which converters were present initially versus which were lazily created might not be worth the effort for such a minor issue.
+
+**Why it might not be WONTFIX:**
+The function has a clear contract stated in its documentation - to restore the registry to its previous state. Leaving extra converters violates this contract and could affect users who rely on the registry being properly cleaned up. The round-trip property (register -> deregister should be a no-op) is a reasonable expectation for cleanup functions.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation uses the word "attempts" which already suggests this is best-effort. The documentation could be updated to clarify that matplotlib's lazy initialization of default converters means the registry might not be perfectly restored. The function is working as designed, but the documentation could better explain the limitations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation is clear about the intended behavior - restoring the registry to its previous state. If the code doesn't achieve this, it's a bug in the code, not a problem with the documentation. The documentation correctly describes what the function should do; the implementation is what's incorrect.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation doesn't track which converters were originally present versus which were lazily created. Adding this tracking would be a new feature to properly support true round-trip restoration of the registry. The bug report is essentially asking for enhanced state tracking that doesn't currently exist.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't asking for new functionality - it's asking for the existing function to work as documented. The function already claims to restore the original state, so making it actually do that is a bug fix, not a new feature. The user isn't requesting additional capabilities beyond what's already promised.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function explicitly documents that it "attempts to set the state of the registry back to the state before pandas registered its own units." The test demonstrates this is not happening - extra converters are left in the registry. The round-trip property (register followed by deregister) should leave the system unchanged, but it doesn't. This is a clear violation of the documented behavior and user expectations.
+
+**Why it might not be BUG:**
+The word "attempts" in the documentation suggests this is best-effort, not guaranteed. The converters being left behind are matplotlib's own default converters that got lazily initialized, not pandas converters. This is more of an interaction issue with matplotlib's internals than a bug in pandas' code. The function does successfully remove all pandas-specific converters.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate bug, though a relatively minor one. The documentation clearly states the function should restore the registry to its previous state, and it fails to do so. The test case is well-constructed and demonstrates a real issue where the registry ends up with converters that weren't there initially.
+
+However, the severity is low because: (1) the extra converters are matplotlib's own defaults that are harmless, (2) most users won't notice or care about this issue, and (3) the word "attempts" in the documentation provides some wiggle room. The lazy initialization behavior from matplotlib makes this challenging to fix perfectly.
+
+The most reasonable classification would be WONTFIX - while technically a bug, the impact is minimal and the complexity of a proper fix (tracking exactly which converters were present initially vs lazily created) may not be justified. Alternatively, this could be classified as DOCUMENTATION_FIX to clarify that matplotlib's lazy initialization means perfect restoration isn't guaranteed. Given that the user's expectation of round-trip behavior is reasonable but the practical impact is negligible, WONTFIX seems most appropriate.

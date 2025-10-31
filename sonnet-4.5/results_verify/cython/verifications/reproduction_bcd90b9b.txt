@@ -1,0 +1,64 @@
+## Bug Reproduction Analysis
+
+### Reproduction Status
+**Successfully reproduced** - The bug described in the report is confirmed to exist.
+
+### Test Results
+
+#### Specific Failing Case
+The exact case mentioned in the bug report (`s='00000000000', max_len=10`) produces:
+- **Result**: `'9c9f57__0000__etc'`
+- **Length**: 17 characters
+- **Expected**: ≤ 10 characters
+- **Status**: FAILED - Result exceeds max_len by 7 characters
+
+#### Pattern of Failures
+Testing revealed a clear pattern of failures when `max_len < 17`:
+- `max_len=5`: Result length 101 (expected ≤ 5)
+- `max_len=10`: Result length 17-26 (expected ≤ 10)
+- `max_len=12`: Result length 108 (expected ≤ 12)
+- `max_len=13`: Result length 109 (expected ≤ 13)
+- `max_len=15`: Result length 31 (expected ≤ 15)
+- `max_len=16`: Result length 112 (expected ≤ 16)
+
+When `max_len >= 17`, the function works correctly.
+
+#### Property-Based Testing
+The hypothesis test from the bug report correctly identifies multiple failures. Running 1000 test cases revealed numerous violations of the length constraint, all occurring when `max_len < 17`.
+
+### Root Cause Analysis
+
+The bug occurs due to the arithmetic in line 5708:
+```python
+return '%s__%s__etc' % (hash_prefix, s[:max_len-17])
+```
+
+When `max_len < 17`, the expression `max_len - 17` becomes negative. In Python, a negative slice index like `s[:-7]` means "all characters except the last 7", which actually includes MORE of the string rather than less.
+
+Example breakdown for `max_len=10`:
+1. `max_len - 17 = -7`
+2. `s[:-7]` takes all but the last 7 characters
+3. For string `'00000000000'` (11 chars), `s[:-7]` gives `'0000'` (4 chars)
+4. Final result: `'9c9f57'` (6) + `'__'` (2) + `'0000'` (4) + `'__etc'` (5) = 17 chars total
+
+### Correctness of Bug Report
+
+The bug report is **technically correct**:
+1. The function produces outputs longer than `max_len` when `max_len < 17`
+2. The reproduction code works exactly as described
+3. The root cause analysis in the report is accurate
+4. The mathematical explanation of the negative slice behavior is correct
+
+### Observed Behavior vs Expected Behavior
+
+**Observed**: When `max_len < 17`, the function produces strings of varying lengths, often much longer than `max_len`, due to negative slice indices including more content than intended.
+
+**Expected (based on function name)**: A function named `cap_length` with parameter `max_len` would reasonably be expected to ensure the output length never exceeds `max_len`.
+
+### Additional Observations
+
+1. The function format requires 13 fixed characters (`{hash}__{content}__etc`)
+2. This means for `max_len < 13`, it's impossible to fit the current format
+3. The implementation assumes `max_len >= 17` (allowing at least 4 chars for content)
+4. There's no input validation or handling for small `max_len` values
+5. The comment in line 3150 suggests the function is used with reasonably large max_len values in practice ("significantly shorter than compilers should be able to handle")

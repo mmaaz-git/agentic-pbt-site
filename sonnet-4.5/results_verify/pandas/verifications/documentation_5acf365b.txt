@@ -1,0 +1,41 @@
+## Documentation Analysis
+
+### Official Pandas Documentation
+
+The pandas documentation for `pandas.api.interchange.from_dataframe()` states:
+- The function converts a DataFrame-like object supporting the interchange protocol into a pandas DataFrame
+- It has "severe implementation issues" and usage is only recommended for specific pandas versions
+- The documentation does NOT specify explicit guarantees about data preservation or null value handling
+
+### DataFrame Interchange Protocol Specification
+
+The official protocol specification (data-apis.org) states:
+- The protocol supports missing values (NA) for all supported dtypes
+- Columns can specify their null representation via `describe_null()` method
+- Null types include: NON_NULLABLE, USE_NAN, USE_SENTINEL, USE_BITMASK, USE_BYTEMASK
+- For categorical columns, the protocol allows using sentinel values to represent nulls
+
+### Pandas Implementation Details
+
+From the source code (`pandas/core/interchange/column.py:60`):
+- Categorical columns explicitly use `ColumnNullType.USE_SENTINEL` with value `-1`
+- Comment states: "Null values for categoricals are stored as `-1` sentinel values"
+- This is a documented implementation choice within pandas
+
+### Analysis of Documentation vs Implementation
+
+1. **The interchange protocol correctly specifies** that categorical nulls use `-1` sentinel values
+2. **The implementation acknowledges this** with explicit comments about `-1` sentinel values
+3. **The bug is in the conversion logic** where the comment at line 251-252 states:
+   "Doing module in order to not get IndexError for out-of-bounds sentinel values in codes"
+
+   This comment reveals the developer's intent to handle sentinel values, but the implementation is incorrect.
+
+### Conclusion
+
+The documentation and protocol specification clearly establish that:
+1. Null values in categorical columns should be preserved during round-tripping
+2. The `-1` sentinel value is the correct representation for categorical nulls
+3. The modulo operation that converts `-1` to valid indices is a bug, not intended behavior
+
+The bug violates the interchange protocol's fundamental guarantee of data preservation and the explicit specification that `-1` represents null values for categorical data.

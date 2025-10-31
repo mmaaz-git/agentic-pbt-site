@@ -1,0 +1,59 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. Bug Reproduction:
+--------------------
+I successfully reproduced the bug exactly as described in the report:
+
+Test Case: Empty DataFrame (0 rows, 2 columns)
+- Created empty pandas DataFrame with columns ['col_a', 'col_b']
+- Successfully converted to Dask DataFrame
+- Successfully wrote to ORC using dd.to_orc() - NO ERROR
+- Failed when reading back with dd.read_orc() - ERROR OCCURRED
+
+Error Message:
+ValueError: An error occurred while calling the read_orc method registered to the pandas backend.
+Original Message: All `iterables` must have a non-zero length
+
+The error occurs in dd.from_map() which requires non-empty iterables.
+
+2. Hypothesis Test Results:
+---------------------------
+The property-based test failed on the first example with num_rows=0, confirming:
+- The test correctly identifies the failing case
+- The bug is reproducible and consistent
+- Non-empty DataFrames (num_rows > 0) work correctly
+
+3. Technical Investigation:
+---------------------------
+I traced the issue to understand the root cause:
+
+a) When writing an empty DataFrame:
+   - to_orc() successfully writes a valid ORC file
+   - The file contains the schema (column names and types) but 0 rows
+   - PyArrow writes this as an ORC file with 0 stripes
+
+b) When reading an empty ORC file:
+   - ArrowORCEngine.read_metadata() returns:
+     * parts = [] (empty list, since there are no stripes)
+     * schema = {'col_a': numpy.float64, 'col_b': numpy.float64}
+     * meta = Empty DataFrame with correct columns
+   - read_orc() calls dd.from_map(func, parts, ...)
+   - dd.from_map() raises ValueError when parts is empty
+
+4. PyArrow Validation:
+----------------------
+I verified that PyArrow can correctly read the empty ORC files:
+- PyArrow reads the file without errors
+- Correctly identifies 0 stripes and 0 rows
+- Preserves schema information (column names and types)
+- Successfully converts to pandas DataFrame with shape (0, 2)
+
+5. Summary:
+-----------
+The bug is REAL and REPRODUCIBLE:
+- Empty DataFrames can be written to ORC format
+- The ORC files are valid and readable by PyArrow
+- Dask fails to read these files due to dd.from_map() restriction
+- This breaks the expected round-trip property for I/O operations
+- The proposed fix (checking for empty parts and handling specially) appears reasonable

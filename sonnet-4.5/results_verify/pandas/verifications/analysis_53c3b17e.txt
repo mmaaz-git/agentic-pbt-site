@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify how SparseArray should handle the edge case where all values equal the fill_value. One could argue that since this isn't documented behavior, the crash might be considered undefined behavior rather than a bug. Additionally, sparse arrays are typically used for data with many zeros or repeated values, and finding the argmin/argmax of an array where everything is the same value could be considered an unusual use case.
+
+**Why it might not be INVALID:**
+The behavior is clearly defined for regular NumPy arrays and pandas dense arrays - they return index 0 when all values are equal. SparseArray provides a to_dense() method and is meant to be a drop-in replacement for regular arrays in most contexts. The fact that it crashes on valid input (a non-empty array) while its dense equivalent works fine strongly suggests this is not intended behavior. The method signatures don't indicate any special restrictions.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The edge case of having all values equal to the fill_value might be considered too obscure or unimportant to fix. In real-world usage, sparse arrays are typically used when there's a mix of sparse and dense values, not when everything equals the fill value. The maintainers might consider this an extremely rare edge case that doesn't warrant the complexity of a fix.
+
+**Why it might not be WONTFIX:**
+This is a clear crash on valid input that breaks the principle of least surprise. The fix appears straightforward (checking for empty sp_values array), and the crash completely breaks functionality rather than just being a minor inconvenience. The issue affects fundamental array operations (argmin/argmax) that users would expect to always work on non-empty arrays.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the maintainers intended for argmin/argmax to not work when all values equal the fill_value, then the documentation should explicitly state this limitation. Currently, there's no warning about this edge case in the documentation. Adding a note about this limitation would at least inform users about the expected behavior.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The crash appears to be unintentional rather than a documented limitation. The code attempts to compute the argmin/argmax but fails due to a missing edge case check. The error message "attempt to get argmin of an empty sequence" is a low-level NumPy error rather than a deliberate exception with a helpful message. This suggests it's an implementation bug rather than intended behavior that needs documenting.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that supporting argmin/argmax on arrays where all values equal the fill_value is a new feature request rather than a bug fix. The current implementation might have been designed without considering this use case, and adding support for it would be extending functionality rather than fixing broken code.
+
+**Why it might not be FEATURE_REQUEST:**
+argmin and argmax are standard array methods that already exist in the codebase - they're not new features being requested. The methods are already implemented and work in most cases. This is about fixing existing functionality that crashes unexpectedly, not about adding new capabilities. The expected behavior (returning index 0) is well-established by NumPy and regular arrays.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a crash on valid, non-empty input data where the equivalent dense array operation works correctly. The SparseArray is supposed to be functionally equivalent to a dense array, just with different storage. The methods argmin() and argmax() are fundamental array operations that should work on any non-empty array. The crash is clearly unintended - the error comes from NumPy rather than being a deliberate exception. The fix is straightforward and the expected behavior is clear from NumPy's implementation.
+
+**Why it might not be BUG:**
+The only argument against it being a bug would be if sparse arrays were never intended to support this edge case, or if the documentation explicitly stated this limitation. However, there's no evidence of either being true. The crash seems unintentional rather than by design.
+
+## Overall Consideration
+
+This appears to be a clear bug. The SparseArray class provides argmin() and argmax() methods that are expected to work like their NumPy counterparts. When all values in the array equal the fill_value, these methods crash with a low-level ValueError rather than returning the expected index. This violates the principle that SparseArray should be functionally equivalent to dense arrays.
+
+The bug occurs because the implementation doesn't handle the edge case where sp_values is empty (when all values equal fill_value). The code at line 1658 calls np.argmin/argmax on an empty array without checking if it's empty first. This is clearly an oversight in the implementation rather than intended behavior.
+
+The fact that the dense equivalent works correctly (returning index 0), combined with the low-level nature of the error message and the straightforward fix, strongly indicates this is a legitimate bug that should be fixed. Users reasonably expect these fundamental array operations to work on any non-empty array, regardless of the values it contains.

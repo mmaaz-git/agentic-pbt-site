@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation clearly states that sll "should be a positive number," making negative values explicitly out of scope. The function is not documented to handle negative sll values, so expecting it to raise a specific error for undocumented behavior could be considered invalid. The user is passing values that violate the documented preconditions, and the resulting NaN values are a natural mathematical consequence of the algorithm, not a bug in the implementation.
+
+**Why it might not be INVALID:**
+The word "should" in documentation often implies a recommendation rather than a strict requirement. Many NumPy/SciPy functions validate their inputs and raise ValueError for out-of-range parameters. Returning NaN silently is poor API design that can lead to hard-to-debug issues downstream. The function already validates other parameters (like M being non-negative), so input validation is clearly part of its design philosophy.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an edge case where users are passing mathematically nonsensical values. In signal processing, negative sidelobe suppression doesn't have physical meaning. The RuntimeWarning already alerts users to the problem. Adding validation code would add overhead to every call for an error that experienced users would never make. The NaN output makes it immediately obvious something is wrong.
+
+**Why it might not be WONTFIX:**
+Input validation is a fundamental aspect of robust API design. The overhead of checking if sll > 0 is negligible compared to the complex calculations the function performs. Silent NaN propagation can cause cascading failures in larger systems. Other window functions in the same module likely have input validation, creating inconsistent behavior across the API.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation uses "should" which is ambiguous - it could mean "must" or "recommended." The documentation could be clearer by explicitly stating that negative values will produce NaN results, or by using stronger language like "must be positive." The current behavior (returning NaN) is mathematically correct given the algorithm, just poorly documented.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already states the requirement clearly enough - "should be a positive number" is reasonably unambiguous in a mathematical context. The real issue is that the code doesn't enforce what the documentation already specifies. Changing documentation to say "negative values produce NaN" would be documenting a bug rather than fixing it.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Adding input validation could be seen as a new feature - enhanced error handling that the function currently lacks. The function works as mathematically designed; the request is to add defensive programming features. This would be improving the user experience rather than fixing broken functionality. The current behavior (NaN output) is deterministic and predictable.
+
+**Why it might not be FEATURE_REQUEST:**
+Input validation for documented constraints is not a feature - it's a basic expectation of API design. The documentation already establishes the contract that sll should be positive. This is about enforcing existing requirements, not adding new capabilities. Most users would expect ValueError for invalid inputs based on NumPy/SciPy conventions.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the principle of fail-fast error handling by silently producing invalid output instead of raising an exception. The documentation establishes a contract ("should be a positive number") that the implementation doesn't enforce. Other SciPy functions validate similar constraints. Users could misinterpret sll as negative dB (like -30 dB) leading to silent failures. The lack of validation is inconsistent with the function's own behavior of validating M.
+
+**Why it might not be BUG:**
+The documentation uses soft language ("should") rather than "must." The function behaves exactly as the underlying mathematics dictate - there's no computational error. The RuntimeWarning provides notification of the problem. NaN is a valid floating-point value that correctly represents "not a number" for invalid mathematical operations. The behavior is deterministic and consistent.
+
+## Overall Consideration
+
+This case sits at the intersection of mathematical correctness and API usability. The Taylor window algorithm mathematically requires sll ≥ 0 because it computes acosh(10^(sll/20)), and acosh requires its argument to be ≥ 1. When this constraint is violated, the function returns NaN values, which is mathematically accurate but poor from a usability perspective.
+
+The key question is whether "should be a positive number" in the documentation creates an obligation for input validation. In the NumPy/SciPy ecosystem, there's a strong precedent for validating documented constraints. Functions typically raise ValueError for out-of-range parameters rather than silently producing NaN. The function already validates that M is non-negative, showing that input validation is part of its design. The word "should" in mathematical documentation typically means "must" unless explicitly stating otherwise.
+
+From a user experience perspective, silent NaN propagation is problematic. A user who misunderstands the sll parameter (perhaps thinking -30 means "30 dB suppression" rather than understanding it should be positive 30) will get confusing results that might propagate through their signal processing pipeline. The proposed fix is minimal (two lines of code), has negligible performance impact, and makes the API more robust and user-friendly. This aligns with NumPy/SciPy's general philosophy of helpful error messages over silent failures.

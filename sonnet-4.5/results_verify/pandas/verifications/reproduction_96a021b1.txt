@@ -1,0 +1,31 @@
+REPRODUCTION ANALYSIS
+====================
+
+I have successfully reproduced the bug described in the report. The key findings are:
+
+1. The bug is real and reproducible, but it only occurs under specific conditions.
+
+2. The error "ValueError: key should be a 16-byte string encoded" occurs when:
+   - Using hash_pandas_object() or hash_array() with a hash_key parameter
+   - The hash_key is not exactly 16 bytes when encoded
+   - The data being hashed has object dtype
+
+3. Testing results:
+   - The hypothesis test fails as described with value -9_223_372_036_854_775_809 (which becomes object dtype as it's outside int64 range)
+   - With hash_key="test" (4 bytes): Fails for object dtype, succeeds for int64/float64/bool/datetime64
+   - With hash_key="key1" (4 bytes): Same behavior - fails for object dtype
+   - With hash_key="0123456789abcdef" (16 bytes): Works for all data types
+   - Default hash_key: Works for all data types (it's 16 bytes)
+
+4. The issue is dtype-dependent:
+   - int64, float64, bool, datetime64[ns]: Work with any length hash_key
+   - object dtype (strings, large integers, mixed types): Require exactly 16-byte hash_key
+
+5. The error originates from the Cython code in pandas/_libs/hashing.pyx when processing object arrays,
+   specifically in the hash_object_array function which enforces the 16-byte requirement.
+
+This is a legitimate bug because:
+- The behavior is inconsistent across data types
+- The documentation doesn't mention this 16-byte requirement
+- Users have no way to know this requirement without hitting the error
+- The error message comes from deep in the call stack, making it confusing

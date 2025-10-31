@@ -1,0 +1,23 @@
+import numpy as np
+from pandas.core.arrays.sparse import SparseArray
+from hypothesis import given, strategies as st, settings
+
+
+@given(
+    st.lists(st.integers(min_value=-100, max_value=100), min_size=1, max_size=50),
+    st.integers(min_value=-100, max_value=100)
+)
+@settings(max_examples=100)
+def test_nonzero_consistency(data, fill_value):
+    sparse = SparseArray(data, fill_value=fill_value)
+    dense = np.array(data)
+
+    sparse_nonzero = sparse.nonzero()[0]
+    dense_nonzero = dense.nonzero()[0]
+
+    np.testing.assert_array_equal(sparse_nonzero, dense_nonzero)
+
+
+if __name__ == "__main__":
+    # Run the property-based test
+    test_nonzero_consistency()

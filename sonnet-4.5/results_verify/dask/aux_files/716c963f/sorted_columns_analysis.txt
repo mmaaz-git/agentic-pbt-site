@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report complains about the function crashing on data that represents corrupted or invalid Parquet statistics. In real Parquet files, min is always <= max because these statistics are computed from actual column data. The test case uses artificially constructed statistics with min > max, which would never occur in practice with valid Parquet files. The function is designed to work with real Parquet statistics, not arbitrary dictionaries. If the input violates fundamental invariants (min <= max), it's reasonable for the function to fail.
+
+**Why it might not be INVALID:**
+The function accepts a generic list of dictionaries as input, not actual Parquet file objects. There's no type checking or documentation stating that min must be <= max. The function already validates some properties (checks if min/max keys exist) but doesn't validate this one. Other parts of dask that create these statistics might have bugs that could produce invalid data. The assertion error is an internal check, not proper input validation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case that would never happen with real Parquet files. The only way to trigger this is to manually construct invalid statistics, which is not a real-world use case. The AssertionError already prevents silent data corruption - it fails fast and loud. The severity is listed as "Low" even by the reporter. Adding validation for this would add overhead to check something that should never happen. The current behavior (crashing) is actually preferable to silently accepting corrupted statistics.
+
+**Why it might not be WONTFIX:**
+AssertionError is not a proper exception for invalid input - it indicates a programming error, not a data error. The function is part of a public API and should handle invalid input gracefully. The fix is trivial (a few lines of validation code). Other users might encounter this if they're testing or working with corrupted Parquet files. Silent skipping of invalid columns (as suggested in the fix) would be more robust than crashing.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify what constitutes valid statistics. It should document that min must be <= max for each column. The current behavior (AssertionError on invalid input) could be documented as intended behavior. The documentation could specify that this function expects statistics from valid Parquet files only. Adding a note about input requirements would prevent confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code behavior itself is problematic - using assertions for input validation is poor practice. Simply documenting the crash doesn't fix the underlying issue. The function should either validate input properly or handle invalid data gracefully. Documentation changes alone wouldn't improve the user experience. The implicit requirement (min <= max) is so fundamental it might be considered obvious.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The reporter is essentially asking for input validation or graceful handling of corrupted statistics, which the function doesn't currently have. This would be a new feature - making the function more robust to invalid input. The suggested fix adds new behavior (skipping invalid columns) rather than fixing broken behavior. Supporting corrupted Parquet files could be seen as a new capability. Input validation is an enhancement to the current functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to work with the provided statistics, it just fails ungracefully. Proper error handling isn't a feature, it's a bug fix. The assertion indicates the developers expected divisions to be sorted, so failing to ensure this is a bug. Input validation should have been part of the original implementation. This is about fixing a crash, not adding new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an assertion error on invalid input instead of raising a proper exception or handling it gracefully. Assertions are for internal consistency checks, not input validation. The function accepts dictionary input but doesn't validate it properly before processing. The error message (bare AssertionError) provides no useful information to users. Well-designed functions should validate input or document preconditions clearly.
+
+**Why it might not be BUG:**
+The input data (min > max) is fundamentally invalid and would never occur with real Parquet files. The function works correctly with all valid inputs. The assertion catching this is actually preventing worse behavior (returning incorrect divisions). This is a case of "garbage in, garbage out" - invalid input produces an error. The function is working as designed for its intended use case (real Parquet statistics).
+
+## Overall Consideration
+
+This bug report describes a real crash that occurs when the sorted_columns function receives statistics where min > max for any column. The technical details are accurate and the issue is reproducible. However, the key question is whether this represents a bug or expected behavior for invalid input.
+
+The strongest argument against this being a bug is that real Parquet files would never have min > max in their statistics. These statistics are computed from actual data where the minimum is by definition less than or equal to the maximum. The test case uses artificially constructed invalid data that violates this fundamental property. In this view, the function is working correctly for its intended domain (real Parquet statistics) and failing on input outside that domain.
+
+However, there are several factors that suggest this should be treated as a bug or at least deserves better handling. First, the function accepts generic dictionary input, not Parquet file objects, suggesting it should validate that input. Second, using an assertion for input validation is poor practice - assertions are for catching programming errors, not data validation. Third, the function already does some validation (checking for presence of min/max keys) but inconsistently skips this validation. Fourth, the error message provides no useful information to users who might encounter this with corrupted files. Finally, the fix is trivial and would make the function more robust without affecting performance for valid inputs. On balance, while this is certainly an edge case, the poor error handling and inconsistent validation suggest this should be addressed, though it's borderline between WONTFIX and INVALID given how artificial the triggering condition is.

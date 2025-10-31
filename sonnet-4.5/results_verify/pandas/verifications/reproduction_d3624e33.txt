@@ -1,0 +1,45 @@
+REPRODUCTION RESULTS FOR PyArrow Single-Value CSV Bug
+
+1. Bug Reproduction Status: CONFIRMED
+   - The reported behavior is accurate and reproducible
+   - PyArrow engine fails to parse single-value CSV files without trailing newlines
+   - Both C and Python engines successfully parse the same input
+
+2. Test Results Summary:
+
+   Single value "0" (no trailing newline):
+   - C engine: ✓ Successfully parses to DataFrame with shape (1, 1), value=0
+   - Python engine: ✓ Successfully parses to DataFrame with shape (1, 1), value=0
+   - PyArrow engine: ✗ Raises ParserError: "CSV parse error: Empty CSV file or block: cannot infer number of columns"
+
+   Other single values tested (all without trailing newlines):
+   - "42": C ✓, Python ✓, PyArrow ✗
+   - "hello": C ✓, Python ✓, PyArrow ✗
+   - "3.14": C ✓, Python ✓, PyArrow ✗
+   - "-1": C ✓, Python ✓, PyArrow ✗
+
+   Single value "0" WITH trailing newline:
+   - C engine: ✓ Successfully parses
+   - Python engine: ✓ Successfully parses
+   - PyArrow engine: ✓ Successfully parses
+
+3. Key Observations:
+   - The issue is specific to CSV content without trailing newlines
+   - Adding a newline character makes PyArrow work correctly
+   - The error message is misleading - the CSV is not "empty", it contains valid data
+   - The C and Python engines handle both cases (with and without trailing newline) correctly
+
+4. Hypothesis Test Results:
+   - The hypothesis test fails immediately with data=[[0]]
+   - This confirms the engines are NOT equivalent for all valid inputs
+   - The test correctly identifies the inconsistency between C and PyArrow engines
+
+5. Technical Details:
+   - The error originates from PyArrow's internal CSV parser (pyarrow._csv.read_csv)
+   - The error type is pyarrow.lib.ArrowInvalid
+   - It appears PyArrow's CSV parser requires at least one newline to properly parse a file
+
+6. Impact Assessment:
+   - This affects any single-line CSV file without a trailing newline
+   - The workaround (adding "\n") is simple but not obvious
+   - Users migrating from C/Python engines to PyArrow would encounter unexpected failures

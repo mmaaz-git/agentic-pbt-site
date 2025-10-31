@@ -1,0 +1,30 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### 1. Hypothesis Test Reproduction
+- Ran the property-based test using Hypothesis
+- The test FAILED as expected when `cython_directives` is set to any string value
+- The assertion `isinstance(cmd.cython_directives, dict)` fails because `finalize_options()` does not convert string values to dictionaries
+
+### 2. Direct API Reproduction
+The provided reproduction code runs and crashes exactly as described:
+- Setting `cmd.cython_directives = "boundscheck=True,wraparound=False"`
+- After `finalize_options()`, the value remains a string (not converted to dict)
+- When attempting `dict(cmd.cython_directives)` (as done in line 107 of build_extension), it crashes with:
+  `ValueError: dictionary update sequence element #0 has length 1; 2 is required`
+
+### 3. Command-Line Invocation Reproduction
+Created a minimal setup.py with a .pyx file and tested command-line invocation:
+- Running: `python3 test_setup.py build_ext --cython-directives="boundscheck=True"`
+- Crashes with the same ValueError at line 107 in build_ext.py when trying to convert the string to dict
+- The traceback confirms the crash happens in `build_extension()` when it tries to execute `directives = dict(self.cython_directives)`
+
+### 4. Root Cause Verification
+Examining the source code confirms the issue:
+- Line 44-45: `cython-directives` is defined as a string option in `user_options`
+- Line 63: `initialize_options()` sets `self.cython_directives = None`
+- Lines 77-78: `finalize_options()` only handles the None case, converting it to an empty dict
+- Line 107: `build_extension()` assumes `self.cython_directives` is already a dict and calls `dict()` on it
+
+The bug is real: when `cython_directives` is set as a string (which happens when passed via command-line), `finalize_options()` does not parse or convert it to a dictionary, leading to a crash when `build_extension()` tries to use it.

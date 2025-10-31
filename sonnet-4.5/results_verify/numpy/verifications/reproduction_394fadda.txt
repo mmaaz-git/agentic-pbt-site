@@ -1,0 +1,37 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python version: 3.x
+- NumPy version: tested with current installation
+- Test characters: German ß (sharp s), ligature ﬁ, and combined strings
+
+### Reproduction Confirmed
+The bug report's claims have been verified:
+
+1. **numpy.char.upper('ß')** returns 'S' (length 1) instead of 'SS' (length 2)
+   - Python str.upper('ß') correctly returns 'SS'
+   - NumPy truncates the second 'S'
+
+2. **numpy.char.upper('straße')** returns 'STRASS' (length 6) instead of 'STRASSE' (length 7)
+   - The final 'E' is lost due to truncation
+
+3. **numpy.char.upper('ﬁ')** returns 'F' (length 1) instead of 'FI' (length 2)
+   - Ligature expansion is truncated
+
+4. **numpy.char.capitalize('ß')** returns 'S' (length 1) instead of 'Ss' (length 2)
+   - Capitalize also truncates when case mapping expands
+
+5. **numpy.char.swapcase('ß')** returns 'S' (length 1) instead of 'SS' (length 2)
+   - Swapcase exhibits the same truncation issue
+
+### Hypothesis Testing
+The property-based test using Hypothesis immediately found the failure case with 'ß', confirming that numpy.char.upper() does not match Python's str.upper() behavior.
+
+### Technical Analysis
+The issue appears to be that NumPy's string dtype is fixed-size (e.g., '<U1' for a single character), and when case conversion would expand the string length, the result is truncated to fit the original dtype size. This is evident from:
+- Input array with 'ß' has dtype '<U1'
+- Output array maintains dtype '<U1'
+- Result is truncated to fit the single character limit
+
+### Impact
+This is silent data corruption - no error or warning is raised when truncation occurs. Users processing text with German, Turkish, or other languages with expanding case mappings will get incorrect results without any indication of the problem.

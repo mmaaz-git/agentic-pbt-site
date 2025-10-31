@@ -1,0 +1,54 @@
+## Reproduction of Bug Report
+
+### Summary
+The bug report is CONFIRMED and reproduced successfully. The gt() constraint in pydantic's experimental pipeline API fails to validate when there's a type mismatch between the constraint value and the schema type.
+
+### Reproduction Steps Taken
+
+1. **Environment Setup**
+   - Verified pydantic 2.10.3 is installed
+   - Created test scripts based on the bug report
+
+2. **Test Results**
+
+   **Test 1: Simple validation test**
+   ```python
+   class Model(BaseModel):
+       field: Annotated[int, validate_as(int).gt(5.5)]
+   ```
+   - Value -1000: BUG - Did NOT raise ValidationError (expected to fail)
+   - Value 0: BUG - Did NOT raise ValidationError (expected to fail)
+   - Value 5: BUG - Did NOT raise ValidationError (expected to fail)
+   - Value 6: OK - Passed validation (expected to pass)
+   - Value 10: OK - Passed validation (expected to pass)
+
+   **Test 2: Exact reproduction from bug report**
+   - Output matched exactly:
+     ```
+     BUG: value=5 passed gt(5.5) validation! Result: 5
+     Correct: ge(5.5) properly rejects 5
+     ```
+
+   **Test 3: Comparison with other operators**
+   - gt(5.5) with value=5: BUG - passed validation (should fail)
+   - ge(5.5) with value=5: OK - raised ValidationError
+   - lt(5.5) with value=6: OK - raised ValidationError
+   - le(5.5) with value=6: OK - raised ValidationError
+
+### Technical Analysis
+
+Examined the source code at `/home/npc/pbt/agentic-pbt/envs/pydantic_env/lib/python3.13/site-packages/pydantic/experimental/pipeline.py`:
+
+The bug is on lines 448-463. The gt() constraint implementation has a structural difference from ge(), lt(), and le():
+
+- For gt(): The validation function `check_gt` is defined inside an `else` block (line 458-463), meaning it only executes when the type doesn't match or when there's no schema.
+- For ge(), lt(), le(): The validation functions are defined OUTSIDE the conditional blocks, ensuring they always execute regardless of type matching.
+
+When gt(5.5) is used on an integer field:
+- The condition `s['type'] == 'int' and isinstance(gt, int)` fails (5.5 is not an int)
+- The code does NOT enter the else block because the first `if` condition (line 450) is true
+- No validation function is applied at all
+- The constraint silently passes all values
+
+### Impact
+Any code using gt() with a float constraint on an integer field (or any type mismatch) will have NO validation, allowing all values through. This is a serious data validation failure that could lead to incorrect data being accepted.

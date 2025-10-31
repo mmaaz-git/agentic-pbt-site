@@ -1,0 +1,57 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the bug as described in the report. Comparing two boolean SparseArray objects using comparison operators (==, !=, <, >, <=, >=) crashes with an AttributeError.
+
+## Test Results
+
+### Minimal Reproduction Case
+The exact code from the bug report was tested:
+```python
+arr1 = SparseArray([False, False, True], fill_value=True)
+arr2 = SparseArray([False, True, True], fill_value=True)
+result = arr1 == arr2
+```
+
+**Result:** AttributeError: module 'pandas._libs.sparse' has no attribute 'sparse_eq_bool'
+
+This matches exactly what the bug report claims.
+
+### All Comparison Operators
+Testing confirmed that ALL comparison operators fail for boolean SparseArrays:
+- == (eq) → AttributeError: 'sparse_eq_bool' not found
+- != (ne) → AttributeError: 'sparse_ne_bool' not found
+- < (lt) → AttributeError: 'sparse_lt_bool' not found
+- <= (le) → AttributeError: 'sparse_le_bool' not found
+- > (gt) → AttributeError: 'sparse_gt_bool' not found
+- >= (ge) → AttributeError: 'sparse_ge_bool' not found
+
+### Logical Operations (Control Test)
+As the bug report stated, logical operations DO work correctly:
+- & (and) → Success (uses sparse_and_uint8)
+- | (or) → Success (uses sparse_or_uint8)
+- ^ (xor) → Success (uses sparse_xor_uint8)
+
+### Hypothesis Testing
+The hypothesis test revealed two failure modes:
+1. The primary bug: AttributeError when comparing boolean SparseArrays with different sparse indices
+2. A secondary issue: ValueError for mismatched array lengths (this is expected behavior)
+
+### Available Sparse Operations
+Inspection of pandas._libs.sparse confirmed the bug report's claim. The following operations exist:
+- sparse_eq_float64 ✓
+- sparse_eq_int64 ✓
+- sparse_ne_float64 ✓
+- sparse_ne_int64 ✓
+- (all other comparison ops for float64/int64)
+
+But the boolean comparison operations are completely missing:
+- sparse_eq_bool ✗
+- sparse_ne_bool ✗
+- sparse_lt_bool ✗
+- sparse_le_bool ✗
+- sparse_gt_bool ✗
+- sparse_ge_bool ✗
+
+## Conclusion
+The bug is 100% reproducible and occurs exactly as described in the report. The root cause is that the Cython implementation in pandas._libs.sparse lacks boolean comparison functions, while the Python code attempts to call them.

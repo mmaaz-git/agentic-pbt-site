@@ -1,0 +1,36 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug as reported in the bug report for `Cython.Utils.normalise_float_repr`.
+
+### Hypothesis Test Reproduction
+The property-based test using Hypothesis failed as expected, showing two distinct failure modes:
+1. **Invalid float string generation**: For negative numbers with negative exponents like `-1.1700996679391216e-36`, the function produces `.0000000000000000000000000000000000-11700996679391216` which cannot be parsed as a valid float, raising ValueError.
+2. **Value corruption**: For some positive floats like `1.0424509457549878e-13`, the normalized output changes the actual value (becomes 10424.0 instead).
+
+### Manual Test Reproduction
+Running the exact test cases from the bug report confirmed the issue:
+- `-1e-10` → `.00000000-1` (INVALID: minus sign embedded in the middle)
+- `-0.00001` → `-0.00001` (works correctly in my run, different from report)
+- `-1.5e-5` → `.000-15` (INVALID: minus sign embedded in the middle)
+- `-1.1754943508222875e-38` → `.000000000000000000000000000000000000-11754943508222875` (INVALID: minus sign embedded in the middle)
+
+### Root Cause Analysis
+Examining the source code at `/home/npc/pbt/agentic-pbt/envs/cython_env/lib/python3.13/site-packages/Cython/Utils.py` lines 660-687, the problem is clear:
+
+The function starts with:
+```python
+str_value = float_str.lower().lstrip('0')
+```
+
+This strips leading zeros from the string, but for negative numbers like "-1e-10", it converts "-1e-10" to "-1e-10" (no leading zeros to strip). However, the minus sign is kept as part of the digit string throughout the transformation. When the function later manipulates the string by moving digits around the decimal point based on the exponent, the minus sign ends up embedded within the digit string rather than at the beginning.
+
+The bug manifests when:
+1. A negative number is provided
+2. The number has a negative exponent or requires moving digits to the right of the decimal point
+3. The minus sign gets embedded within the normalized output string
+
+### Expected vs Actual Behavior
+Expected: `-1e-10` should produce something like `-.0000000001`
+Actual: `.00000000-1` (syntactically invalid)
+
+The bug report is accurate and correctly identifies both the problem and its root cause.

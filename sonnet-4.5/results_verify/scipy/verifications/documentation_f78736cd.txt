@@ -1,0 +1,68 @@
+Documentation Analysis for Django SQLite3 _sqlite_date_trunc
+============================================================
+
+## Function Documentation Status
+
+### 1. Internal Function Nature
+The `_sqlite_date_trunc` function is an INTERNAL Django function (note the leading underscore), part of the SQLite3 backend implementation. It's not part of the public Django API and lacks explicit public documentation.
+
+### 2. Related Public Documentation
+
+#### Django's Trunc Database Function
+Django's public documentation describes the `Trunc` database function which:
+- Works with DateField, TimeField, and DateTimeField
+- Truncates dates "up to a significant component"
+- Returns datetime, date, or time depending on output field
+- Supports timezone parameters via `tzinfo`
+
+The documentation states that for DateFields, only date-related truncation kinds can be used (year, quarter, month, week, day).
+
+#### SQLite Backend Documentation
+Django's database documentation mentions SQLite-specific behaviors but doesn't detail internal implementation functions like `_sqlite_date_trunc`.
+
+### 3. Function Registration and Purpose
+The function is registered during SQLite connection setup:
+```python
+create_deterministic_function("django_date_trunc", 4, _sqlite_date_trunc)
+```
+
+This creates a user-defined SQL function in SQLite to emulate PostgreSQL's DATE_TRUNC functionality, as SQLite lacks native date truncation support.
+
+### 4. Expected Behavior from Code Analysis
+
+#### Function Signature
+```python
+def _sqlite_date_trunc(lookup_type, dt, tzname, conn_tzname)
+```
+
+#### Parameters
+- `lookup_type`: Truncation level ('year', 'quarter', 'month', 'week', 'day')
+- `dt`: Date/datetime to truncate (can be string or date/datetime object)
+- `tzname`: Target timezone name
+- `conn_tzname`: Database connection timezone
+
+#### Expected Input Types
+The function delegates parsing to `_sqlite_datetime_parse`, which in turn uses `typecast_timestamp`. This function is designed to handle:
+- Date strings: "YYYY-MM-DD" → returns datetime.date
+- DateTime strings: "YYYY-MM-DD HH:MM:SS" → returns datetime.datetime
+- DateTime with microseconds: "YYYY-MM-DD HH:MM:SS.ffffff" → returns datetime.datetime
+
+### 5. Documentation Gap
+There's no explicit documentation stating that:
+1. The function MUST handle both date and datetime objects
+2. The function MUST work with timezone-aware operations for both types
+3. Date objects should be converted to datetime when timezone operations are needed
+
+### 6. Implicit Contract
+Based on Django's public API behavior and the function's usage in the SQLite backend:
+- The function SHOULD handle DateField values (date-only strings)
+- The function SHOULD work in timezone-aware mode (USE_TZ=True)
+- The function SHOULD NOT crash on valid date inputs
+
+## Conclusion
+While the function lacks explicit documentation, its expected behavior can be inferred from:
+1. Django's public Trunc function documentation (which works with DateField)
+2. The function's role in providing cross-database compatibility
+3. The fact that it's called for DateField truncation operations in timezone-aware mode
+
+The bug violates the implicit contract that internal backend functions should handle all valid field types that Django's ORM supports.

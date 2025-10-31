@@ -1,0 +1,62 @@
+Bug Reproduction Results
+
+## Test Case 1: Simple Reproduction (from bug report)
+
+Code:
+```python
+instance = DummyClass()
+err = pandas.errors.AbstractMethodError(instance, methodtype="classmethod")
+msg = str(err)
+```
+
+Result: **AttributeError: 'DummyClass' object has no attribute '__name__'**
+
+This confirms the bug exactly as reported. When passing an instance with methodtype="classmethod", the __str__ method crashes because it tries to access __name__ on an instance object.
+
+## Test Case 2: Hypothesis Test
+
+The property-based test from the bug report also fails:
+```python
+@given(st.sampled_from(["method", "classmethod", "staticmethod", "property"]))
+def test_abstract_method_error_valid_methodtype(valid_type):
+    err = pandas.errors.AbstractMethodError(DummyClass(), methodtype=valid_type)
+    msg = str(err)
+```
+
+Falsifying example: valid_type='classmethod'
+Result: Same AttributeError crash
+
+## Additional Test Cases
+
+1. **Correct usage (class with classmethod)**: WORKS
+   - Pass DummyClass (not instance) with methodtype="classmethod"
+   - Result: "This classmethod must be defined in the concrete class DummyClass"
+
+2. **Instance with methodtype="method"**: WORKS
+   - Pass instance with methodtype="method"
+   - Result: "This method must be defined in the concrete class DummyClass"
+
+3. **Instance with methodtype="staticmethod"**: WORKS (but logically incorrect)
+   - Pass instance with methodtype="staticmethod"
+   - Result: "This staticmethod must be defined in the concrete class DummyClass"
+   - Note: This works because staticmethod uses the else branch (type(class_instance).__name__)
+
+4. **Instance with methodtype="property"**: WORKS
+   - Pass instance with methodtype="property"
+   - Result: "This property must be defined in the concrete class DummyClass"
+
+## Technical Analysis
+
+The bug occurs because:
+1. The __init__ method accepts any value for class_instance without validation
+2. The __str__ method has different logic paths:
+   - If methodtype == "classmethod": assumes class_instance is a class (uses class_instance.__name__)
+   - Else: assumes class_instance is an instance (uses type(class_instance).__name__)
+
+3. There's an inconsistency: staticmethod logically should expect a class (like classmethod), but it falls into the else branch and works with instances accidentally.
+
+## Impact
+
+- Creating the error object succeeds (no validation in __init__)
+- Converting to string crashes only for methodtype="classmethod" with an instance
+- This violates the principle that if an object can be created, it should be usable

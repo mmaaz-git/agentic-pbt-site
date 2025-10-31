@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function `load_str_bytes` has no documentation specifying that it should accept HTTP-standard Content-Type headers with parameters. The function is an internal utility in a deprecated module, not an HTTP header parser. There's no explicit contract stating it must handle RFC-compliant Content-Type headers with parameters. The function may have been designed to accept only simple content type strings without parameters, and expecting it to parse complex HTTP headers could be outside its intended scope.
+
+**Why it might not be INVALID:**
+The parameter name is explicitly `content_type`, which strongly suggests it should accept actual Content-Type values as used in HTTP. The fact that it already tries to detect 'json' and 'javascript' content types indicates it's meant to work with standard media types. Content-Type headers with charset parameters are extremely common in real-world usage, and any function accepting a "content_type" parameter would reasonably be expected to handle standard formats.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The function is already deprecated in Pydantic V2.0 and will be removed in V3.0, making it a poor investment of engineering time to fix. The issue only affects deprecated code that users are actively discouraged from using. The migration guide directs users to use `model_validate_json` or other V2 methods instead. Fixing deprecated code that will soon be removed provides minimal value to users who should be migrating away from it anyway.
+
+**Why it might not be WONTFIX:**
+Even deprecated functions should work correctly for their remaining lifetime, as users may need time to migrate. The fix is trivial (just strip parameters before checking content type), so the engineering effort is minimal. Some users may be stuck on older code and unable to migrate immediately, and this bug could cause production issues for them.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function works as implemented but lacks documentation about its limitations. Adding documentation that explicitly states "content_type parameter must not include charset or other parameters" would clarify the expected input format. This would be the most honest approach - the code works as designed, but the design limitations weren't communicated to users. The function name and parameter suggest HTTP compatibility, but the documentation never promised full RFC compliance.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The function is deprecated with no documentation to fix - deprecated functions typically don't receive documentation updates. Adding documentation for a function being removed sends mixed messages about whether users should use it. The parameter is named `content_type`, which has a specific meaning in HTTP contexts, so documenting non-standard behavior would be acknowledging a design flaw rather than clarifying intended behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting Content-Type headers with parameters is a new capability the function never had. The current implementation only checks if the string ends with certain values, suggesting it was designed for simple type checking, not full HTTP header parsing. Adding parameter parsing would be an enhancement to make the function more robust and HTTP-compliant. This would be adding functionality that was never promised or implemented before.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting a new feature but pointing out that the existing feature doesn't work with standard input formats. The function already claims to handle "content_type" which implies HTTP Content-Type headers. Supporting the standard format of Content-Type headers isn't a new feature but a basic requirement for a parameter with that name. The bug prevents the function from working with real-world HTTP responses.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function parameter is named `content_type`, directly referencing HTTP Content-Type headers, which commonly include parameters like charset. Real-world HTTP responses almost always include charset parameters with JSON responses. The function fails on standard, RFC-compliant Content-Type headers that any HTTP client would encounter. The implementation is objectively incorrect for its stated purpose of handling content types.
+
+**Why it might not be BUG:**
+The function is in a deprecated module and was never documented to handle full HTTP Content-Type headers with parameters. The implementation suggests it was designed for simple string matching, not HTTP header parsing. There's no specification or documentation stating this function should parse RFC-compliant headers. The function is being removed anyway, so this behavior might have been considered acceptable for its limited use case.
+
+## Overall Consideration
+Looking at all considerations, this case sits at the intersection of several factors. First, the function is deprecated and scheduled for removal, which significantly reduces the importance of any issues. Second, the function's parameter name `content_type` strongly implies it should handle actual HTTP Content-Type values, but there's no documentation confirming this expectation. Third, the current behavior breaks on completely standard, RFC-compliant input that would be encountered in any real HTTP scenario.
+
+The strongest argument against calling this a bug is that the function is deprecated and undocumented. Deprecated code often has known limitations that won't be fixed, and without documentation promising HTTP compliance, users are arguably assuming behavior that was never guaranteed. The function might have been intended for internal use with simple type strings, not for parsing actual HTTP headers.
+
+However, the nature of the issue is problematic because any reasonable developer seeing a parameter named `content_type` would assume it accepts standard Content-Type values. The fact that `application/json; charset=utf-8` is probably the most common Content-Type header for JSON in real-world HTTP responses makes this failure particularly egregious. This isn't an edge case but the standard format. Given that the function is in a deprecated module that users are migrating away from, and the fix would only benefit users who haven't yet migrated, this falls into WONTFIX territory - it's technically a flaw, but one in deprecated code that's not worth fixing.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly specify that to_python() must produce identical results for a float and its string representation. The method's documented purpose is to "convert the input value into the expected Python data type" (Decimal), which it does successfully in both cases - both paths produce valid Decimal objects. The documentation never promises that different input types representing similar values will produce identical Decimal objects. Additionally, the different behavior could be considered a feature where floats are subject to precision constraints while strings allow exact representation.
+
+**Why it might not be INVALID:**
+The Django documentation states that to_python() should "deal gracefully" with different input types, which implies consistent handling. The fact that semantically equivalent inputs (11.0 as float vs "11.0" as string) produce different actual values (10 vs 11) is a clear inconsistency. This violates the principle of least surprise and the general expectation that type conversion should be predictable regardless of the input format.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This behavior only manifests in edge cases where max_digits is very small (like 1) and the input exceeds that precision. In real-world usage, DecimalFields typically have reasonable max_digits values that wouldn't trigger this issue. The different treatment of floats could be intentional to handle floating-point imprecision issues. Changing this behavior might break existing applications that rely on the current implementation. The issue is more of a curiosity than a practical problem.
+
+**Why it might not be WONTFIX:**
+The bug causes actual data corruption - the value 11.0 becomes 10 when passed as a float. This is not just a formatting difference but a change in the actual numeric value. Even if edge cases are rare, data integrity issues should not be dismissed. The inconsistency could cause subtle bugs in applications where data might come from different sources (JSON as float, form input as string).
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior might be intentional but poorly documented. The documentation doesn't mention that floats are processed through a precision-limited context while strings are not. If this differential treatment is by design (perhaps to handle floating-point precision issues), then the documentation should clearly state this. Adding a note about this behavior would help developers understand and work around it.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior seems unintentional rather than a documentation oversight. The code doesn't appear to deliberately implement different conversion strategies; it's more likely an implementation detail that leaked through. Simply documenting this quirk would be admitting to inconsistent behavior rather than fixing the underlying issue.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation might be working as originally designed, with the different handling of floats being a deliberate choice. The request for consistent conversion could be seen as asking for new functionality - a unified conversion path that treats all numeric inputs the same way. This would be an enhancement to make the field more predictable rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+The expectation of consistent type conversion is fundamental, not a new feature. The to_python() method's core purpose is conversion, and having it produce different results for equivalent inputs is a bug, not a missing feature. Users aren't asking for new functionality but for the existing functionality to work consistently.
+
+## BUG Considerations
+**Why it might be BUG:**
+The to_python() method produces different actual numeric values (10 vs 11) for semantically equivalent inputs (float 11.0 vs string "11.0"). This is data corruption, not just a formatting difference. The inconsistency violates the principle that to_python() should handle different input types gracefully and predictably. The issue is reproducible, has a clear cause in the implementation, and fixing it would improve data integrity without breaking the intended functionality.
+
+**Why it might not be BUG:**
+The documentation never explicitly promises identical conversion for different input types. The different handling might be intentional - floats could be subject to precision limits due to their inherent imprecision, while strings allow exact decimal representation. The current behavior has likely existed for years without causing widespread issues, suggesting it might be acceptable as-is.
+
+## Overall Consideration
+
+After careful analysis, this issue presents a genuine inconsistency in Django's DecimalField.to_python() method, but its classification is nuanced. The core problem is that the same logical value (11.0) produces different actual values (10 vs 11) depending on whether it's provided as a float or string. This goes beyond mere formatting differences - it's actual data corruption where precision rounding during float conversion changes the value.
+
+However, several factors suggest this might not be a straightforward bug. First, the documentation doesn't explicitly promise identical conversion for different input types. The different treatment of floats might be intentional, perhaps to handle floating-point precision issues by applying the field's precision constraints immediately. The issue primarily manifests in edge cases with unusually small max_digits values, which are rare in production use.
+
+The most compelling argument is that this behavior likely serves a purpose - applying precision constraints during float conversion might be intended to catch precision issues early. Strings, being exact representations, might deliberately bypass this to allow exact decimal values. If this is the case, the issue is more about unclear documentation than incorrect behavior. The fix proposed in the bug report (converting floats to strings first) might actually remove intended functionality that helps handle floating-point imprecision.

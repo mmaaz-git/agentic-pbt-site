@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `get_path_param_names` function in FastAPI does indeed return empty strings when paths contain empty braces `{}`.
+
+### Reproduction Steps
+
+1. **Tested the provided reproduction code:**
+   - Called `get_path_param_names("/users/{}/posts")`
+   - Result: `{''}`
+   - Confirmed that empty string is present in the result set
+
+2. **Tested multiple scenarios:**
+   - Path with single empty parameter: `"/items/{}"` → Returns `{''}`
+   - Path with multiple empty parameters: `"/{}/{}/{}"` → Returns `{''}` (single empty string due to set deduplication)
+   - Path with mixed empty and named parameters: `"/mixed/{id}/{}/end"` → Returns `{'', 'id'}`
+   - Normal path with named parameters: `"/users/{user_id}"` → Returns `{'user_id'}` (works correctly)
+
+3. **Hypothesis test results:**
+   - The hypothesis test fails on any path containing `{}`
+   - Specific failing examples confirmed:
+     - `"/users/{}/posts"`
+     - `"{}"`
+     - `"/api/{}/data"`
+     - `"/{}/{}/{}"`
+     - `"/mixed/{id}/{}/end"`
+
+4. **Verified the implementation:**
+   - Located the function in `/fastapi/utils.py` at line 59-60
+   - Implementation: `return set(re.findall("{(.*?)}", path))`
+   - The regex `{(.*?)}` matches any content between braces, including empty content
+   - When braces are empty `{}`, the captured group is an empty string
+
+### Impact Analysis
+
+1. **Parameter matching fails:** Empty string parameters cannot match any Python function parameter names (Python identifiers cannot be empty strings)
+
+2. **Unmatched path parameters:** The empty string in path_param_names will always be an "unmatched" parameter since no function can have a parameter named ""
+
+3. **Silent failure:** The system doesn't crash but silently accepts invalid path definitions, potentially leading to confusion when routes don't work as expected
+
+4. **OpenAPI schema generation:** Empty parameters appear in the OpenAPI schema paths but without corresponding parameter definitions
+
+### Conclusion
+The bug is confirmed and reproducible. The function accepts and returns empty strings for path parameters, which violates the semantic requirement that path parameters must have valid, non-empty names to be referenceable in code.

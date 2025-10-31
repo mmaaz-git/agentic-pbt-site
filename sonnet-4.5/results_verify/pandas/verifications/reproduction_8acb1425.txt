@@ -1,0 +1,47 @@
+## Bug Reproduction Results
+
+I have successfully reproduced the reported bug using both the provided test cases and additional comprehensive tests.
+
+### Test 1: Basic Reproduction
+The basic test case provided in the bug report was reproduced exactly:
+- Input: `SparseArray([0, 0, 1, 2])`
+- Operation: `astype(np.float64)`
+- Expected (per documentation): SparseArray
+- Actual result: numpy.ndarray
+- **Result: BUG CONFIRMED**
+
+### Test 2: Property-Based Testing with Hypothesis
+The hypothesis test systematically tested various inputs and found that the bug occurs consistently:
+- The test `test_astype_returns_sparse_array` failed for ALL inputs tested
+- Over 100 test cases were automatically generated and ALL failed
+- Simplest failing case: `[0]`
+- **Result: BUG CONFIRMED - 100% reproducible**
+
+### Test 3: Multiple Dtype Testing
+Tested with various dtype specifications:
+- `np.float32` → returns numpy.ndarray (not SparseArray)
+- `np.float64` → returns numpy.ndarray (not SparseArray)
+- `np.int32` → returns numpy.ndarray (not SparseArray)
+- `np.int64` → returns numpy.ndarray (not SparseArray)
+- String versions ('float32', 'float64', etc.) → all return numpy.ndarray
+- **Result: Bug occurs with ALL non-SparseDtype conversions**
+
+### Test 4: SparseDtype vs Regular Dtype
+Direct comparison showed the inconsistency:
+- `astype(SparseDtype(float64, fill_value=0.0))` → returns SparseArray ✓
+- `astype(np.float64)` → returns numpy.ndarray ✗
+
+### Technical Analysis of the Bug:
+The implementation at lines 1300-1305 of the source code shows this is intentional behavior:
+```python
+if not isinstance(future_dtype, SparseDtype):
+    # GH#34457
+    values = np.asarray(self)
+    values = ensure_wrapped_if_datetimelike(values)
+    return astype_array(values, dtype=future_dtype, copy=False)
+```
+
+The code explicitly checks if the dtype is NOT a SparseDtype and returns a regular array in that case, directly contradicting the documentation's promise that "The output will always be a SparseArray."
+
+### Conclusion:
+The bug is 100% reproducible and represents a clear contract violation between the documented API and the actual implementation. The docstring makes an unequivocal promise that is broken by the implementation.

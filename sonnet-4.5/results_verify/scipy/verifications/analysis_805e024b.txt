@@ -1,0 +1,72 @@
+TRIAGE ANALYSIS
+===============
+
+Analyzing the bug report for each possible categorization:
+
+1. INVALID - Why it might be invalid:
+   - The behavior is consistent across ALL scipy infinite-support discrete distributions
+   - Returning inf for ppf(1.0) could be considered mathematically correct since these
+     distributions have infinite support
+   - The code behaves as designed, not as an accident
+   - No documentation explicitly promises that ppf(cdf(k)) == k for all k
+
+   Why it's NOT invalid:
+   - The documentation example implies round-trip works without mentioning exceptions
+   - There IS a finite k where cdf(k) first equals 1.0 numerically
+   - The mathematical definition Q(p) = inf{x: F(x) >= p} suggests returning the smallest
+     qualifying k, not infinity
+
+2. WONTFIX - Why it might be wontfix:
+   - This is an extreme edge case (requires CDF to exactly equal 1.0 in float64)
+   - The behavior is consistent across all scipy infinite-support distributions
+   - Changing this would be a breaking change affecting all infinite-support distributions
+   - The issue only occurs for very large k values where CDF approaches 1.0
+   - For practical applications, this edge case rarely matters
+
+   Why it's NOT wontfix:
+   - It violates a fundamental property that users reasonably expect (round-trip)
+   - The bug can occur with reasonable parameter values (mu=1.0, k=18)
+   - It makes ppf unreliable for probabilistic algorithms that depend on round-trip
+
+3. DOCUMENTATION_FIX - Why it might be a documentation issue:
+   - The documentation doesn't specify that ppf(1.0) returns inf for infinite-support distributions
+   - The example showing round-trip property doesn't mention this exception
+   - Users might reasonably expect ppf(cdf(k)) to work based on the documentation
+   - The behavior is intentional but not documented
+
+   Why it's NOT just documentation:
+   - The behavior itself could be considered incorrect
+   - Documentation alone won't fix code that relies on round-trip property
+
+4. FEATURE_REQUEST - Why it might be a feature request:
+   - Requesting new behavior (finite values for ppf(1.0)) that doesn't currently exist
+   - The current behavior might be by design, and changing it is an enhancement
+   - Would require implementing a search algorithm for the edge case
+
+   Why it's NOT a feature request:
+   - This is about fixing incorrect behavior, not adding new functionality
+   - Round-trip property is a reasonable expectation, not a new feature
+
+5. BUG - Why it IS a bug:
+   - Violates the mathematical definition: Q(p) = inf{x: F(x) >= p}
+   - When CDF(18) = 1.0, ppf(1.0) should return 18 (the minimum k where CDF >= 1.0)
+   - Breaks round-trip property that users reasonably expect
+   - The documentation example implies this should work
+   - Returns a meaningless value (inf) when a meaningful finite value exists
+
+   Why it might NOT be a bug:
+   - Consistent behavior across scipy suggests it's intentional
+   - Could be argued that inf is mathematically correct for infinite-support distributions
+
+ASSESSMENT:
+The strongest cases are for DOCUMENTATION_FIX or BUG.
+
+The behavior appears intentional (consistent across all infinite-support distributions)
+but poorly documented and mathematically questionable. When CDF(k) numerically equals 1.0,
+there IS a finite k that achieved this, and ppf should return it per the mathematical
+definition Q(p) = inf{x: F(x) >= p}.
+
+However, since this is consistent behavior across scipy and likely a deliberate design
+choice, treating it as a DOCUMENTATION_FIX is most appropriate. The documentation should
+clearly state that ppf(1.0) returns infinity for infinite-support distributions and that
+the round-trip property breaks in this edge case.

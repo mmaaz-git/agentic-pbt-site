@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for TrustedHostMiddleware doesn't explicitly mention IPv6 support. One could argue that since IPv6 addresses aren't shown in any examples or explicitly documented as supported, the user shouldn't expect them to work. The middleware documentation only shows domain names and wildcards as examples, never IPv6 addresses in brackets.
+
+**Why it might not be INVALID:**
+IPv6 is a fundamental internet protocol standardized since 1998, and RFC 3986 clearly defines how IPv6 addresses should be represented in URIs. Any modern web framework should handle standard internet protocols correctly. The absence of IPv6 in documentation doesn't mean it shouldn't work - it's reasonable to expect standard protocol support. The code clearly attempts to parse host:port combinations but fails on valid standardized formats.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+IPv6 adoption is still relatively low in many environments, and workarounds exist (using domain names instead of raw IPv6 addresses, or using IPv4). The complexity of properly parsing IPv6 addresses with ports might not be worth it if few users are affected. Applications can use reverse proxies that handle IPv6 and forward requests with domain names.
+
+**Why it might not be WONTFIX:**
+IPv6 support is critical for modern applications, especially in cloud environments and mobile networks where IPv6 is increasingly common. Major cloud providers and CDNs use IPv6 extensively. This isn't a minor edge case - it's a failure to support a standard internet protocol. The fix is straightforward and well-understood, not complex. Forcing users to use proxies or workarounds for basic protocol support is unreasonable.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that TrustedHostMiddleware only supports IPv4 addresses and domain names, not IPv6 addresses. This would clarify the expected behavior and prevent users from trying to use IPv6 addresses. The code might be working as designed, just not as users expect.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly attempts to handle host:port parsing, which indicates an intent to support all valid Host header formats. The bug is in the implementation, not in unclear documentation. Simply documenting "IPv6 not supported" would be acknowledging a deficiency rather than fixing incorrect documentation. The parsing logic is objectively wrong for a standard format defined by RFC.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+IPv6 support could be considered a new feature if the middleware was originally designed only for IPv4 and domain names. Adding IPv6 support would be extending functionality beyond the original scope. The user is asking for something that wasn't explicitly promised in the documentation.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality - it's fixing broken parsing of standard Host header formats. The middleware already tries to parse host:port combinations, it just does it incorrectly for IPv6. Supporting standard internet protocols isn't a feature request, it's a basic requirement. The code has a bug in its string parsing logic, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code demonstrably fails to correctly parse valid, RFC-compliant Host headers containing IPv6 addresses. The parsing logic uses a naive split(":") that breaks on IPv6 addresses which contain colons as part of the address syntax. This causes legitimate requests to be rejected even when the IPv6 address is explicitly allowed. The bug prevents the middleware from working in IPv6 environments, which are increasingly common. The issue is clear, reproducible, and has a straightforward fix.
+
+**Why it might not be BUG:**
+The documentation never explicitly promised IPv6 support, so this behavior might be considered undefined rather than incorrect. Some might argue that if IPv6 wasn't a design goal, then failing on IPv6 isn't a bug but rather a limitation. The middleware works correctly for the examples shown in the documentation (domain names and IPv4).
+
+**Overall consideration**
+
+This is clearly a BUG. The evidence is compelling on multiple levels:
+
+First, the technical analysis shows an unambiguous failure in the parsing logic. The code at line 40 attempts to extract the hostname from a "host:port" format by splitting on the first colon. This approach is fundamentally flawed for IPv6 addresses, which contain colons as part of the address syntax as defined by RFC 3986. When the code processes "[::1]:8080", it extracts "[" instead of "[::1]", which is objectively incorrect parsing of a standard format.
+
+Second, the impact is significant and not merely theoretical. IPv6 is not an obscure edge case but a fundamental internet protocol that's increasingly important in modern deployments. Cloud providers, mobile networks, and many enterprise environments use IPv6. A middleware that claims to validate Host headers but cannot handle standard IPv6 format is broken, not feature-incomplete. The test results show that even when IPv6 addresses are explicitly added to the allowed_hosts list, they are rejected due to the parsing bug.
+
+Third, this represents a clear violation of reasonable expectations. While the documentation doesn't explicitly mention IPv6, it also doesn't state that IPv6 is unsupported. Any modern web framework should handle standard internet protocols correctly. The middleware already attempts to parse host:port combinations, indicating an intent to handle standard Host header formats. The bug is not about undefined behavior in an edge case, but about incorrect implementation of standard protocol handling. The fix is straightforward and the correct behavior is well-defined by RFC standards.

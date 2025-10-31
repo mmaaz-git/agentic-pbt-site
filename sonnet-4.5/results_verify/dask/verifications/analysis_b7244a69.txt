@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation for neither format_time nor parse_timedelta claims they should work together as inverse operations. The parse_timedelta documentation shows only single-unit examples ('3s', '300ms'), never multi-unit strings like '10m 1s'. The expectation of a "round-trip property" is an assumption by the bug reporter that was never promised in the documentation. These are simply two utility functions in the same module that happen to deal with time, but were never documented as being designed to work together.
+
+**Why it might not be INVALID:**
+The functions have complementary names (format vs parse) and complementary purposes (seconds-to-string vs string-to-seconds), which creates a reasonable expectation they should work together. They're in the same module dealing with the same domain (time representation). The fact that some format_time outputs work with parse_timedelta (values under 600 seconds) but others don't creates an inconsistent and surprising API behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This incompatibility has likely existed for a long time without causing significant issues, suggesting users don't commonly need to round-trip between these functions. Fixing this would require either changing format_time's output format (breaking existing code that depends on the current format) or significantly complicating parse_timedelta's parser. The current behavior works fine for the common use cases each function was designed for independently.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case but a fundamental incompatibility affecting a large range of inputs (any duration over 10 minutes). The fix suggested in the bug report (extending parse_timedelta to handle multi-unit strings) wouldn't break existing functionality. The inconsistency where some values round-trip successfully and others don't is a poor user experience that should be addressed.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that format_time output is intended for human display only and is not guaranteed to be machine-parseable by parse_timedelta. Adding a note about this limitation would prevent future confusion. The functions work correctly according to their individual documented behaviors; the issue is only the undocumented interaction between them.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting this limitation doesn't fix the underlying design flaw. Users encountering this issue likely discovered it through actual use, not by reading documentation. The natural expectation that format/parse functions should be inverses is strong enough that documentation alone won't prevent confusion and frustration.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The ability to parse multi-unit time strings like "10m 1s" is a new capability that parse_timedelta doesn't currently have. This would be extending the function beyond its current documented scope. The request is essentially asking for parse_timedelta to support a richer input format, which is a feature enhancement rather than fixing broken behavior.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't adding new functionality but fixing an incompatibility between existing functions. The expectation that format and parse functions work together is fundamental, not a nice-to-have feature. The bug report correctly identifies this as a logic bug in the design, not a missing feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+Format and parse functions with complementary names in the same module create a strong expectation of compatibility. The inconsistent behavior where values under 600 seconds round-trip successfully but larger values fail is clearly problematic. The use of "hr" by format_time when parse_timedelta only recognizes "h" is an obvious oversight. This represents a failure in API design that makes the functions unnecessarily difficult to use together.
+
+**Why it might not be BUG:**
+The documentation never claims these functions should work together. Each function operates correctly according to its individual specification. The parse_timedelta function's examples only show single-unit inputs, implying that's all it's designed to handle. The incompatibility is between user expectations and actual design, not between implementation and specification.
+
+**Overall consideration**
+The core issue here is whether undocumented but reasonable user expectations constitute a bug. The bug reporter makes a compelling case that format_time and parse_timedelta, given their complementary names and purposes within the same module, should work together. However, neither function's documentation makes any claim about compatibility with the other. The parse_timedelta documentation only shows single-unit examples, suggesting multi-unit parsing was never an intended feature.
+
+While the technical incompatibility is real and the reproduction confirms the reported behavior, this appears to be a case where two functions were developed independently without consideration for interoperability. The fact that format_time uses "hr" while parse_timedelta only accepts "h" strongly suggests these functions were never designed to work together. The partial success for small values is likely coincidental rather than intentional.
+
+Given that the behavior matches the documentation (each function works as individually documented), and the expectation of round-trip compatibility is an assumption not supported by any documentation, this should be classified as either INVALID (the functions work as designed) or FEATURE_REQUEST (adding multi-unit parsing capability to parse_timedelta would be a new feature). Since the incompatibility is surprising and fixing it would improve usability without breaking existing code, FEATURE_REQUEST seems most appropriate.

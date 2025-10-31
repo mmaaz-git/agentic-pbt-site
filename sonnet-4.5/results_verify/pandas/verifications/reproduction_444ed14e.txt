@@ -1,0 +1,51 @@
+Bug Reproduction Results
+========================
+
+Test Setup:
+-----------
+I reproduced the bug using the exact code provided in the bug report:
+- Array: [0, 0, 0, 0, 0]
+- Negative value: -9,223,372,036,854,775,809 (which is -2^63 - 1, beyond C long range)
+- Setting: allow_fill=True
+
+Test Results:
+-------------
+
+1. Test with extremely large negative value (-9,223,372,036,854,775,809):
+   - Expected: ValueError (per documentation)
+   - Actual: OverflowError with message "Python int too large to convert to C long"
+   - Result: CONFIRMS THE BUG
+
+2. Test with normal negative value (-2):
+   - Expected: ValueError
+   - Actual: ValueError with message "'indices' contains values less than allowed (-2 < -1)"
+   - Result: Working as documented
+
+3. Test with -1 (special case):
+   - Expected: Works without error, fills with NaN
+   - Actual: Works correctly, returns [0. nan]
+   - Result: Working as documented
+
+Hypothesis Test Results:
+-----------------------
+The hypothesis test provided in the bug report also fails with the same error:
+- The test expects ValueError for all negative values except -1
+- It correctly catches ValueError for most negative values
+- But for extremely large negative values (beyond C long range), it gets OverflowError
+
+Technical Analysis:
+------------------
+The stack trace shows the error occurs in:
+  File "pandas/core/algorithms.py", line 1229, in take
+    indices = ensure_platform_int(indices)
+
+This happens BEFORE the function can validate the indices and raise the documented ValueError. The ensure_platform_int() function attempts to convert Python integers to C long integers, and when the value is beyond the C long range (-2^63 to 2^63-1), it raises OverflowError.
+
+The bug report's analysis is correct:
+1. The documentation promises ValueError for negative values other than -1 when allow_fill=True
+2. The function actually raises OverflowError for values beyond C long range
+3. This happens because type conversion occurs before value validation
+
+Verification:
+------------
+I verified that -9,223,372,036,854,775,809 is indeed beyond the C long range (it's -2^63 - 1), confirming why the OverflowError occurs during the conversion to platform int.

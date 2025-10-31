@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly state that window_size must be non-negative. The parameter is simply documented as an integer with default value 0, without any stated constraints. Since the behavior for negative values is undefined in the documentation, one could argue that passing negative values is using the API outside its intended scope, making this an invalid bug report about undefined behavior.
+
+**Why it might not be INVALID:**
+The code produces mathematically invalid output (start > end) which violates fundamental assumptions about window boundaries. Even if not documented, window bounds should satisfy basic mathematical invariants. The class accepts negative values without raising an error, implying they should be handled correctly. The semantic meaning of "window size" strongly implies non-negative values, making this a reasonable expectation even without explicit documentation.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Negative window sizes don't make semantic sense for a forward-looking window indexer. Users should not be passing negative values to a parameter that represents a size/count. The fix would add unnecessary validation overhead for a case that should never occur in proper usage. The error only affects users who are misusing the API in an illogical way.
+
+**Why it might not be WONTFIX:**
+The issue produces silently incorrect results rather than failing loudly, which could lead to subtle bugs in downstream code. The fix is trivial (adding a single validation check) and would prevent potential data corruption. Other parts of pandas validate window parameters (e.g., "window must be an integer 0 or greater"), suggesting consistency would be valuable.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation fails to specify that window_size must be non-negative, which is the root cause of the confusion. Adding documentation that clearly states "window_size must be a non-negative integer" would clarify the expected usage. The current behavior with negative values could be considered "working as designed" if the documentation simply stated the constraint.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code produces objectively incorrect output (violating mathematical invariants) rather than just unexpected output. Simply documenting "don't use negative values" doesn't fix the fact that the code accepts them and produces invalid results. A documentation fix alone would leave the door open for silent data corruption.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current implementation doesn't validate input parameters, and adding validation could be seen as a new feature for improved error handling. Supporting negative window_size to look backward instead of forward could be a legitimate feature request. The request is essentially asking for better input validation, which is an enhancement to the existing functionality.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but rather fixing broken behavior when invalid inputs are provided. The code already exists and accepts these inputs; it just produces incorrect results. Input validation for preventing invalid states is typically considered a bug fix, not a feature addition.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code accepts negative window_size values and produces mathematically invalid output where start[i] > end[i], violating fundamental invariants of window boundaries. This could cause crashes or incorrect results in any code using these bounds. The issue is silent data corruption - the worst kind of bug. Other pandas window functions validate that window parameters are non-negative, suggesting this is an oversight rather than intentional behavior.
+
+**Why it might not be BUG:**
+The documentation never promised that negative values would work correctly. Users are passing semantically meaningless values (negative sizes) to the function. The primary issue is lack of input validation rather than incorrect logic for valid inputs. This is more about improving error messages than fixing actual functionality.
+
+## Overall Consideration
+
+After careful analysis, this issue presents a classic case of missing input validation that leads to invalid output. The key factors to consider are:
+
+First, while the documentation doesn't explicitly prohibit negative window_size values, the semantic meaning of "size" strongly implies non-negative values. A "window size" represents a count of observations, which cannot logically be negative. The fact that the implementation accepts these values without validation is more likely an oversight than an intentional design choice.
+
+Second, the consequences of this issue are significant. The code produces window bounds where start[i] > end[i], which violates fundamental mathematical invariants that any reasonable code would assume. This isn't just unexpected behavior - it's objectively incorrect output that could cause failures in downstream operations. Any code that iterates from start to end, calculates window sizes, or uses these bounds for array slicing would potentially fail or produce incorrect results.
+
+Third, the fix is trivial and has precedent in the pandas codebase. Other window-related functions already validate that window parameters are non-negative (as evidenced by error messages like "window must be an integer 0 or greater"). Adding similar validation to FixedForwardWindowIndexer would improve consistency across the API and prevent silent data corruption. The proposed fix of adding a simple check in the constructor is minimal, safe, and aligns with existing patterns in the codebase. Given that this produces objectively invalid output that violates mathematical invariants, causes potential data corruption, and has a simple fix with precedent in the codebase, this should be classified as a legitimate bug.

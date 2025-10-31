@@ -1,0 +1,58 @@
+REPRODUCTION RESULTS FOR scipy.special.bdtri BUG REPORT
+
+Test Case from Bug Report (k=1, n=1, p=0.5):
+=============================================
+✓ Confirmed: bdtr(1, 1, 0.5) returns 1.0
+✓ Confirmed: bdtri(1, 1, 1.0) returns nan
+✓ Confirmed: Round-trip test FAILS due to nan propagation
+
+The bug report's reproduction code is accurate and the behavior matches exactly as described.
+
+Additional Test Results:
+========================
+
+1. When k = n (various cases):
+   - bdtr(2, 2, 0.3) = 1.0 → bdtri(2, 2, 1.0) = nan
+   - bdtr(0, 0, 0.5) = 1.0 → bdtri(0, 0, 1.0) = nan
+   - bdtr(5, 5, any_p) = 1.0 → bdtri(5, 5, 1.0) = nan
+
+2. When k > n:
+   - bdtr(3, 2, 0.5) = nan (undefined input)
+   - bdtr(5, 3, 0.7) = nan (undefined input)
+   These cases return nan from bdtr itself, which is expected for invalid inputs.
+
+3. When k < n (normal case):
+   - bdtr(3, 10, 0.5) = 0.172 → bdtri(3, 10, 0.172) = 0.5
+   - Round-trip works perfectly: y → p → y produces identical values
+
+Mathematical Verification:
+==========================
+
+1. Verified that when k >= n, bdtr ALWAYS returns 1.0 regardless of p value:
+   - Tested n=5, k=5 with p ∈ {0.1, 0.3, 0.5, 0.7, 0.9}
+   - All cases return bdtr = 1.0
+   - This confirms the mathematical reasoning: summing the entire probability distribution equals 1
+
+2. Verified the inverse problem is ill-defined:
+   - Since bdtr(n, n, p) = 1.0 for ANY p ∈ [0, 1]
+   - The inverse bdtri(n, n, 1.0) has infinitely many solutions
+   - Returning nan is one way to handle this mathematical ambiguity
+
+3. Boundary behavior near y = 1.0:
+   - bdtri(9, 10, 0.999) = 0.501 (works)
+   - bdtri(9, 10, 0.9999) = 0.398 (works)
+   - bdtri(9, 10, 1.0) = 0.0 (returns minimum p)
+   - bdtri(10, 10, 1.0) = nan (k = n case)
+
+Hypothesis Test Results:
+========================
+- WITH k <= n constraint: Test runs successfully
+- WITHOUT k <= n constraint: Test fails immediately on k >= n cases with nan values
+
+Summary:
+========
+The bug report is TECHNICALLY CORRECT about the behavior:
+1. bdtri returns nan when k >= n and y = 1.0
+2. This breaks the round-trip property bdtr → bdtri → bdtr
+3. The behavior is mathematically explicable but not documented
+4. The current implementation silently returns nan without warning or documentation

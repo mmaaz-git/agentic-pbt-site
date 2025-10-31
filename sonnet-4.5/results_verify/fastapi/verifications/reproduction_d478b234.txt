@@ -1,0 +1,47 @@
+## Bug Reproduction Analysis
+
+### Property-Based Test
+The property-based test provided in the bug report was executed successfully and confirmed the bug. The test generates various combinations of leading whitespace, schemes, and credentials, and verifies that leading whitespace causes incorrect parsing.
+
+Specific test case: `" Bearer token123"` (with one leading space)
+- Expected behavior: scheme="Bearer", credentials="token123"
+- Actual behavior: scheme="", credentials="Bearer token123"
+
+The test correctly identifies that when there's leading whitespace, the parsing fails.
+
+### FastAPI Integration Test
+The FastAPI example was also reproduced successfully:
+
+1. With leading space in Authorization header (" Bearer validtoken"):
+   - Status: 403 Forbidden
+   - Response: {'detail': 'Not authenticated'}
+
+2. Without leading space in Authorization header ("Bearer validtoken"):
+   - Status: 200 OK
+   - Response: {'credentials': 'validtoken'}
+
+This confirms that the bug has a real impact on API authentication.
+
+### Root Cause Analysis
+The bug occurs because `get_authorization_scheme_param` uses `str.partition(" ")` directly on the raw header value:
+
+```python
+scheme, _, param = authorization_header_value.partition(" ")
+```
+
+When the input is " Bearer token123", partition splits on the FIRST space:
+- Before first space: "" (empty string)
+- Separator: " "
+- After first space: "Bearer token123"
+
+This results in scheme="" and param="Bearer token123", which fails the validation check in HTTPBearer:
+```python
+if not (authorization and scheme and credentials):
+    # Raises 403 error
+```
+
+### Impact
+This bug causes legitimate HTTP requests with leading whitespace in Authorization headers to be rejected, even though RFC 7230 specifies that such whitespace should be ignored. This could affect:
+- Clients that inadvertently add whitespace
+- Proxy servers or load balancers that might modify headers
+- Integration with systems that format headers differently

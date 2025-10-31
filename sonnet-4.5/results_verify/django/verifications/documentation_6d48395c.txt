@@ -1,0 +1,49 @@
+Documentation Analysis for Django Settings and UserSettingsHolder
+================================================================
+
+After reviewing Django's documentation and source code, here are the key findings:
+
+1. Django Documentation Requirements:
+   - The Django documentation at https://docs.djangoproject.com/en/stable/topics/settings/ explicitly states:
+     "Setting names must be all uppercase."
+   - This is a clear and unambiguous requirement for Django settings naming convention.
+
+2. LazySettings.configure() Implementation:
+   - The source code in django/conf/__init__.py (lines 121-122) enforces this requirement:
+     ```python
+     if not name.isupper():
+         raise TypeError("Setting %r must be uppercase." % name)
+     ```
+   - This validation occurs when users call settings.configure() with custom settings.
+
+3. UserSettingsHolder Class:
+   - The UserSettingsHolder class is described in the source as "Holder for user configured settings" (line 218).
+   - It is used internally by LazySettings.configure() to store user-provided settings (line 119).
+   - The class has a __getattr__ method (lines 232-235) that checks if names are uppercase:
+     ```python
+     def __getattr__(self, name):
+         if not name.isupper() or name in self._deleted:
+             raise AttributeError
+         return getattr(self.default_settings, name)
+     ```
+   - However, the __setattr__ method (lines 237-244) does NOT enforce uppercase validation:
+     ```python
+     def __setattr__(self, name, value):
+         self._deleted.discard(name)
+         if name == "FORMS_URLFIELD_ASSUME_HTTPS":
+             warnings.warn(...)
+         super().__setattr__(name, value)
+     ```
+
+4. Settings Class Implementation:
+   - The Settings class (used for loading settings from a module) also enforces uppercase (lines 176-177):
+     ```python
+     for setting in dir(mod):
+         if setting.isupper():
+     ```
+   - It only processes uppercase settings from the settings module.
+
+5. Documentation Completeness:
+   - The UserSettingsHolder class is not explicitly documented in the public Django documentation.
+   - It appears to be an internal implementation detail used by the settings system.
+   - The uppercase requirement is consistently documented for Django settings in general.

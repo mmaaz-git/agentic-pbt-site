@@ -1,0 +1,56 @@
+Bug Reproduction Results
+========================
+
+Test Environment:
+-----------------
+- NumPy version: Testing with numpy.char functions
+- Python version: 3.x
+
+Reproduction of Reported Bug:
+-----------------------------
+
+1. MANUAL TEST RESULTS - All reported cases confirmed:
+
+   upper('ß'):    numpy='S', python='SS' ✗ MISMATCH
+   upper('ﬁ'):    numpy='F', python='FI' ✗ MISMATCH
+   upper('ﬂ'):    numpy='F', python='FL' ✗ MISMATCH
+   upper('ﬀ'):    numpy='F', python='FF' ✗ MISMATCH
+   upper('ﬃ'):    numpy='F', python='FFI' ✗ MISMATCH
+   upper('ﬄ'):    numpy='F', python='FFL' ✗ MISMATCH
+   upper('ﬅ'):    numpy='S', python='ST' ✗ MISMATCH
+   upper('ﬆ'):    numpy='S', python='ST' ✗ MISMATCH
+
+   lower('İ'):    numpy='i', python='i̇' ✗ MISMATCH (i with combining dot above)
+
+   swapcase('ß'): numpy='S', python='SS' ✗ MISMATCH
+   swapcase('ﬁ'): numpy='F', python='FI' ✗ MISMATCH
+
+2. HYPOTHESIS PROPERTY-BASED TESTS:
+   - test_upper_matches_python: FAILED on 'ß'
+   - test_lower_matches_python: PASSED initially but failed on specific Unicode character 'İ'
+   - test_swapcase_matches_python: FAILED on 'ß'
+
+3. ROOT CAUSE ANALYSIS:
+   - NumPy creates arrays with fixed dtype widths
+   - Original array dtype: <U1 (single Unicode character)
+   - After upper() dtype: <U1 (still single character)
+   - When 'ß'.upper() returns 'SS', numpy truncates to 'S'
+   - The truncation happens silently with no warning or error
+
+Technical Details:
+------------------
+The bug is real and reproducible. NumPy's char functions are truncating expanded Unicode case conversions to fit the original array's dtype width. This happens because:
+
+1. NumPy arrays have fixed-width string dtypes determined at creation
+2. When a string operation would expand beyond this width, NumPy truncates the result
+3. This truncation is silent - no warning or error is raised
+
+Affected Unicode Categories:
+---------------------------
+- German sharp S (ß) → SS
+- Typography ligatures (ﬁ, ﬂ, ﬀ, ﬃ, ﬄ, ﬅ, ﬆ) → expanded forms
+- Turkish capital I with dot (İ) → i with combining dot above
+
+Impact Assessment:
+------------------
+This is a real discrepancy between NumPy's behavior and Python's str methods, contrary to what the documentation claims. The functions do NOT behave identically to calling str.upper/lower/swapcase element-wise as documented.

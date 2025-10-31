@@ -1,0 +1,56 @@
+BUG REPRODUCTION REPORT
+=======================
+
+Function: pandas.io.excel._base.inspect_excel_format
+Module: pandas.io.excel._base (private/internal module)
+
+REPRODUCTION STEPS
+------------------
+
+1. Ran the basic reproduction code:
+   ```python
+   from pandas.io.excel._base import inspect_excel_format
+   result = inspect_excel_format(b'')
+   ```
+
+   Result: Returns None (no exception raised)
+   Expected: Should raise ValueError("stream is empty")
+
+2. Ran the pytest/hypothesis test:
+   ```python
+   def test_inspect_excel_format_empty_raises():
+       with pytest.raises(ValueError, match="stream is empty"):
+           inspect_excel_format(b'')
+   ```
+
+   Result: Test failed with "DID NOT RAISE <class 'ValueError'>"
+   Confirms the bug exists.
+
+ROOT CAUSE ANALYSIS
+--------------------
+
+The bug is in line 1408 of pandas/io/excel/_base.py:
+
+Current code:
+```python
+buf = stream.read(PEEK_SIZE)
+if buf is None:
+    raise ValueError("stream is empty")
+```
+
+The issue: When reading from an empty stream, `stream.read()` returns empty bytes `b''`,
+not `None`. Empty bytes `b''` is a falsy value but is NOT None.
+
+Test verification:
+- `b'' is None` returns False
+- `not b''` returns True
+- `bool(b'')` returns False
+
+Therefore, the check `if buf is None` fails to catch empty streams, and the function
+returns None instead of raising ValueError.
+
+IMPACT
+------
+The function violates its documented contract. The docstring explicitly states it should
+raise ValueError when the stream is empty, but it returns None instead. This could cause
+issues for callers expecting an exception for error handling.

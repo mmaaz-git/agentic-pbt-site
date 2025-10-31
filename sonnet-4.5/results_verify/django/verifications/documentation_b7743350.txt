@@ -1,0 +1,72 @@
+DOCUMENTATION ANALYSIS FOR INTCONVERTER
+========================================
+
+1. OFFICIAL DJANGO DOCUMENTATION
+--------------------------------
+According to the Django documentation at https://docs.djangoproject.com/en/stable/topics/http/urls/#path-converters:
+
+- The `int` converter "Matches zero or any positive integer. Returns an int."
+- This explicitly states that the converter matches "zero or any positive integer"
+- The documentation does NOT mention negative integers as being supported
+- The documentation clearly specifies the expected behavior: non-negative integers only
+
+2. SOURCE CODE IMPLEMENTATION
+-----------------------------
+Looking at django/urls/converters.py:
+
+```python
+class IntConverter:
+    regex = "[0-9]+"
+
+    def to_python(self, value):
+        return int(value)
+
+    def to_url(self, value):
+        return str(value)
+```
+
+- The regex pattern `[0-9]+` matches one or more digits (0-9)
+- This regex explicitly excludes the minus sign, thus rejecting negative numbers
+- The to_python() method simply calls Python's int() function without validation
+- Python's int() function accepts negative numbers (e.g., int('-5') returns -5)
+
+3. URL RESOLUTION CONTEXT
+-------------------------
+In django/urls/resolvers.py (lines 330-334):
+
+```python
+for key, value in kwargs.items():
+    converter = self.converters[key]
+    try:
+        kwargs[key] = converter.to_python(value)
+    except ValueError:
+        return None
+```
+
+- The to_python() method is expected to raise ValueError for invalid inputs
+- This ValueError causes the URL match to fail
+- This implies that to_python() is responsible for validation
+
+4. CONVERTER API CONTRACT
+-------------------------
+The converter API has three components:
+1. `regex` attribute: Defines what patterns match in the URL
+2. `to_python(value)` method: Converts matched string to Python type
+3. `to_url(value)` method: Converts Python type back to string for URL generation
+
+The contract appears to be:
+- The regex defines what URL segments are considered valid
+- to_python() should convert valid segments to the appropriate Python type
+- to_python() raising ValueError indicates invalid input (per resolvers.py usage)
+
+5. DOCUMENTATION CONSISTENCY
+-----------------------------
+The documentation states "zero or any positive integer" which aligns with:
+- The regex pattern `[0-9]+` (no minus sign)
+- The mathematical definition of positive integers (≥ 0)
+
+However, the to_python() implementation doesn't enforce this constraint.
+
+CONCLUSION FROM DOCUMENTATION
+-----------------------------
+The documentation clearly specifies that IntConverter should match "zero or any positive integer" (non-negative). The regex correctly implements this specification. The to_python() method's acceptance of negative numbers appears to be an implementation oversight that violates the documented behavior.

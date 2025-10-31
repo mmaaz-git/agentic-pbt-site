@@ -1,0 +1,50 @@
+DOCUMENTATION ANALYSIS: django.templatetags.static.StaticNode.handle_token
+==========================================================================
+
+DOCUMENTED BEHAVIOR:
+According to Django's official documentation:
+
+1. Template Tag Syntax:
+   - The {% static %} tag accepts: {% static path [as varname] %}
+   - Path can be a string literal or variable
+   - The optional "as varname" syntax stores the URL in a variable
+
+2. Error Handling Requirements:
+   - Template tags MUST raise TemplateSyntaxError for invalid syntax
+   - Documentation states: "This function is responsible for raising django.template.TemplateSyntaxError,
+     with helpful messages, for any syntax error"
+   - Template tags should never allow Python exceptions like IndexError to bubble up
+
+3. Valid Syntax Forms:
+   - {% static "myapp/css/base.css" %}
+   - {% static variable_with_path %}
+   - {% static "myapp/css/base.css" as admin_base_css %}
+   - {% static variable_with_path as varname %}
+
+ANALYSIS OF THE BUG:
+The input ['x', 'as', 'y'] represents malformed syntax that is missing the tag name. While this is
+clearly invalid syntax, the documentation explicitly requires that:
+
+1. Template tags validate their arguments
+2. Raise TemplateSyntaxError (not IndexError) for syntax errors
+3. Provide helpful error messages
+
+The current implementation violates these requirements by:
+- Allowing an IndexError to be raised instead of TemplateSyntaxError
+- Not properly validating that there are enough arguments when "as" is present
+
+DOCUMENTATION GAPS:
+The documentation doesn't explicitly state what should happen with edge cases like:
+- Tokens with exactly 3 elements where the middle one is "as"
+- However, the general principle is clear: syntax errors should raise TemplateSyntaxError
+
+CONCLUSION:
+The bug represents a violation of Django's documented error handling conventions. Template tags
+must properly validate syntax and raise appropriate exceptions. The IndexError is an implementation
+detail that should never be exposed to template authors. The proper behavior would be to either:
+1. Raise TemplateSyntaxError with a message like "'static' tag requires a variable name after 'as'"
+2. Properly handle the syntax if it's meant to be valid
+
+The proposed fix (changing the condition to require len(bits) >= 4) aligns with the documented
+behavior by preventing the IndexError, though ideally it should also provide a meaningful error
+message for the invalid syntax case.

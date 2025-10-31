@@ -1,0 +1,28 @@
+## Bug Reproduction Results
+
+I successfully reproduced the reported bug using pandas version 2.3.2.
+
+### Hypothesis Test Results
+The hypothesis test with `@given(st.booleans(), st.booleans())` immediately fails with RecursionError for all combinations of boolean inputs (False/False, False/True, True/False, True/True) when calling `ops.kleene_and(a, b, None, None)`.
+
+### Manual Reproduction
+All three functions crash with RecursionError when called with scalar boolean arguments and None masks:
+- `ops.kleene_and(False, True, None, None)` → RecursionError: maximum recursion depth exceeded
+- `ops.kleene_or(False, True, None, None)` → RecursionError: maximum recursion depth exceeded
+- `ops.kleene_xor(False, True, None, None)` → RecursionError: maximum recursion depth exceeded
+
+### Root Cause Verification
+Examined the source code in `/pandas/core/ops/mask_ops.py` and confirmed the bug analysis is correct:
+
+1. All three functions have the same pattern at lines 42-43 (kleene_or), 106-107 (kleene_xor), and 156-157 (kleene_and):
+   ```python
+   if left_mask is None:
+       return kleene_and(right, left, right_mask, left_mask)
+   ```
+
+2. When both `left_mask` and `right_mask` are `None`, the swap operation creates infinite recursion because after swapping, the new `left_mask` (which was `right_mask = None`) is still `None`, triggering another swap.
+
+3. The functions are exposed in `pandas.core.ops.__all__` and are used internally by `BooleanArray` operations where at least one mask is always present.
+
+### Effect
+The bug causes a complete crash (RecursionError) when these functions are called with two scalar boolean values and None masks, making them unusable for scalar-scalar operations despite the function signature accepting `bool` types.

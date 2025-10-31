@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The code might be working as designed, and the documentation could be interpreted to mean that when using custom dictionaries, both must be provided together. Perhaps the internal implementation requires both dictionaries to be present for the lookup mechanism to work properly, and this is an undocumented requirement. The error occurs deep in an internal function (_from_string) that users aren't meant to interact with directly.
+
+**Why it might not be INVALID:**
+The documentation explicitly marks both ldict and gdict as optional parameters with no stated requirement that they must be used together. The function signature shows default values of None for both, and a reasonable user would expect to be able to provide only gdict. The error is a clear TypeError that occurs because the code doesn't handle the None case properly, not because of invalid user input.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+The numpy.matrix class and related functions like bmat are deprecated (note the PendingDeprecationWarning in the tests), so maintainers might not want to invest time fixing bugs in deprecated code. The workaround is trivial - just pass an empty dict for ldict when using gdict. The use case of passing custom dictionaries to bmat is likely very rare, making this a low-impact issue.
+
+**Why it might not be WONTFIX:**
+Even deprecated code should work as documented until it's removed. The bug causes a complete failure (crash) rather than incorrect output, which is more severe. The fix is trivial (adding a None check or catching TypeError), so the cost-benefit ratio favors fixing it. Users of legacy code depending on this function deserve a working implementation.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to clarify that gdict can only be used in conjunction with ldict, making the current behavior correct and just poorly documented. The documentation already has a somewhat confusing note about ldict being "ignored if gdict is None," which might hint at an interdependency. Adding a note that both must be provided together would prevent user confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code clearly has a bug - it tries to subscript None without checking. This is a programming error, not a documentation issue. The documentation's current wording strongly suggests both parameters are independently optional. Changing the documentation to match the buggy behavior would be backwards - the code should match the documented interface.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting gdict without ldict could be seen as a new feature that was never implemented. The current implementation might have always required both dictionaries, and the ability to use just gdict would be an enhancement. The user is essentially asking for new functionality that makes the API more flexible.
+
+**Why it might not be FEATURE_REQUEST:**
+The documentation already claims this is supported by marking both parameters as optional. The function signature accepts gdict alone without any error at the API level. This isn't adding new functionality but fixing existing functionality that doesn't work due to a bug. The code attempts to fall back from ldict to gdict, showing this was intended to work.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code has an obvious programming error where it attempts to subscript a None value without checking, causing a TypeError. The documentation indicates both parameters are optional, but the implementation doesn't handle the case where ldict is None. The exception handling tries to fall back from ldict to gdict (catching KeyError), showing the intended behavior was to check both dictionaries. The fix is straightforward - either check for None or catch TypeError in addition to KeyError.
+
+**Why it might not be BUG:**
+The function is part of deprecated numpy.matrix functionality, and bugs in deprecated code might not be considered worth fixing. The error could be considered a user error for not providing the expected combination of parameters, even if not well documented. The rarity of this use case might make it more of an edge case than a bug worth addressing.
+
+## Overall Consideration
+
+Looking at all the evidence, this appears to be a clear bug in the implementation. The documentation unambiguously presents both ldict and gdict as optional parameters, with no indication that they must be used together. The function signature supports this by having default None values for both. The implementation contains an obvious error where it tries to subscript ldict without checking if it's None first, leading to a TypeError that isn't caught by the KeyError handler.
+
+The code's intent is clear from the exception handling structure - it tries ldict first, and if that fails with KeyError (key not found), it falls back to gdict. This shows the developers intended for gdict to work as a fallback. However, they failed to account for ldict being None, which raises TypeError instead of KeyError, bypassing the fallback mechanism entirely.
+
+While the numpy.matrix module is deprecated, this is still a legitimate bug that causes a crash rather than producing incorrect results or a meaningful error message. The fix is trivial (checking for None or catching TypeError), and the bug violates the documented contract of the function. Therefore, this should be classified as a BUG that should be fixed, even if the module is deprecated.

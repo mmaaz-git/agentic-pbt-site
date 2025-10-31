@@ -1,0 +1,64 @@
+REPRODUCTION OF BUG REPORT
+==========================
+
+Test Environment:
+----------------
+- Python 3.13
+- anyio from /home/npc/pbt/agentic-pbt/envs/anyio_env
+- Function: anyio.abc._sockets._validate_socket
+
+Reproduction Results:
+--------------------
+
+1. INVALID FILE DESCRIPTOR TEST (fd=999999)
+
+   When calling _validate_socket(999999, socket.SOCK_STREAM, require_connected=True):
+   - EXPECTED (per bug report): Misleading error about connection status
+   - ACTUAL: ValueError: "the socket must be connected"
+   - VERIFIED: ✓ Bug report is correct - error message is misleading
+
+   When calling _validate_socket(999999, socket.SOCK_STREAM, require_bound=True):
+   - EXPECTED (per bug report): Misleading error about binding status
+   - ACTUAL: ValueError: "the socket must be bound to a local address"
+   - VERIFIED: ✓ Bug report is correct - error message is misleading
+
+   When calling _validate_socket(999999, socket.SOCK_STREAM) with no requirements:
+   - ACTUAL: OSError: [Errno 9] Bad file descriptor (EBADF)
+   - This correctly propagates the real error
+
+2. ROOT CAUSE VERIFICATION
+
+   Direct call to socket.socket(fileno=999999):
+   - Raises: OSError with errno=9 (EBADF - Bad file descriptor)
+   - NOT errno=88 (ENOTSOCK)
+
+   This confirms the bug report's claim that invalid file descriptors cause EBADF, not ENOTSOCK.
+
+3. COMPARISON WITH NON-SOCKET FILE DESCRIPTOR
+
+   Using a regular file's file descriptor:
+   - socket.socket(fileno=regular_file_fd) raises errno=88 (ENOTSOCK)
+   - _validate_socket correctly reports: "the file descriptor does not refer to a socket"
+   - This case works correctly
+
+Technical Analysis:
+------------------
+The code at lines 47-57 has flawed logic:
+
+```python
+except OSError as exc:
+    if exc.errno == errno.ENOTSOCK:
+        raise ValueError("the file descriptor does not refer to a socket") from exc
+    elif require_connected:
+        raise ValueError("the socket must be connected") from exc
+    elif require_bound:
+        raise ValueError("the socket must be bound to a local address") from exc
+    else:
+        raise
+```
+
+The problem: When socket.socket(fileno=fd) raises EBADF (or any non-ENOTSOCK error), the code incorrectly assumes this means the socket exists but lacks the required connection/binding state. In reality, EBADF means the file descriptor is entirely invalid.
+
+Bug Reproduction: CONFIRMED
+--------------------------
+The bug report accurately describes the issue. When an invalid file descriptor is passed to _validate_socket with require_connected=True or require_bound=True, the function produces misleading error messages that incorrectly attribute the failure to socket state rather than FD validity.

@@ -1,0 +1,50 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report could be considered invalid if the documentation doesn't explicitly promise value preservation. The docstring only says the function generates a "normalised" string representation "to allow string comparisons" without explicitly stating that float(input) must equal float(output).
+
+**Why it might not be INVALID:**
+The test suite for this function (TestCythonUtils.py) explicitly tests value preservation with the assertion `self.assertEqual(float(float_str), float(result))`. This makes it clear that value preservation IS an expected behavior, regardless of what the docstring says. The bug produces results that are off by many orders of magnitude (610351 instead of 0.00006), which is clearly incorrect.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+One might argue this is an edge case with scientific notation containing many decimal digits in the mantissa (like 6.103515625), which might be rare in practice. The simpler cases in the test suite (like 1.1E-5) work correctly.
+
+**Why it might not be WONTFIX:**
+This is a fundamental logic error that produces wildly incorrect results (off by 10 billion times). It's not a minor precision issue or cosmetic problem. The bug affects any scientific notation number with a negative exponent where the mantissa has more digits than the absolute value of the adjusted exponent - this is not that rare.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The docstring could be clearer about the function's purpose. If the function wasn't meant to preserve values, the documentation should explicitly state this, and the test suite should be corrected.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The test suite clearly shows that value preservation IS the intended behavior. The tests would fail if this wasn't the case. The bug is in the implementation, not in unclear documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+If the function was never meant to handle complex scientific notation with many decimal places, supporting them could be considered a new feature.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle scientific notation and has test cases for it. This isn't asking for new functionality but fixing existing broken functionality. The code explicitly handles 'E'/'e' notation but does so incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+1. The test suite explicitly requires value preservation with `self.assertEqual(float(float_str), float(result))`
+2. The function produces demonstrably wrong results (610351 instead of 0.00006)
+3. The bug is caused by incorrect handling of negative array indexing when the adjusted exponent is negative
+4. Other similar inputs in the test suite work correctly, showing this is unintended behavior
+5. The function is used in ExprNodes.py for compile-time float handling where correctness matters
+
+**Why it might not be BUG:**
+There really isn't a good argument against this being a bug. The test suite makes the requirements clear, and the function fails those requirements dramatically.
+
+## Overall consideration
+
+This is clearly a BUG in the implementation of `normalise_float_repr`. The evidence is overwhelming:
+
+First, the test suite in TestCythonUtils.py explicitly tests that the normalized string representation must preserve the float value when converted back. Line 198 has the assertion `self.assertEqual(float(float_str), float(result))`, which unambiguously requires value preservation. This isn't ambiguous documentation - it's a concrete test that would fail if value preservation wasn't required.
+
+Second, the magnitude of the error is enormous. The function returns '610351.00005625' for input '6.103515625e-05', which is off by a factor of approximately 10 billion. This isn't a rounding error or minor precision issue - it's a fundamental algorithmic flaw that produces completely wrong results.
+
+Third, the root cause is clear and specific: when the adjusted exponent is negative (e.g., -4) and the mantissa string has more characters than the absolute value of that exponent (e.g., 10 characters), the slicing operation `str_value[:exp]` with negative exp doesn't behave as the algorithm expects. Instead of creating a leading zero decimal, it incorrectly takes characters from the beginning of the mantissa. This is a classic negative indexing bug in Python where the developer didn't account for how negative indices work with slicing.
+
+The fact that simpler test cases pass (like '1.1E-5') while more complex ones fail ('6.103515625e-05') shows this is an edge case the original developer missed, not intentional behavior. The bug affects any scientific notation number where the mantissa (without decimal) has more digits than the absolute value of the adjusted exponent - a condition that wasn't adequately tested.

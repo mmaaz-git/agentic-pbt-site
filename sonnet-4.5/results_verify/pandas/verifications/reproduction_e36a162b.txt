@@ -1,0 +1,51 @@
+## Bug Reproduction Results
+
+### Test 1: Direct Reproduction
+I ran the exact code provided in the bug report:
+```python
+import numpy as np
+from pandas.core.ops import kleene_and
+
+arr1 = np.array([True, False], dtype=bool)
+arr2 = np.array([True, True], dtype=bool)
+kleene_and(arr1, arr2, None, None)
+```
+
+**Result**: RecursionError occurred (maximum recursion depth exceeded)
+
+The bug report is correct - passing both masks as None causes infinite recursion.
+
+### Test 2: All Three Functions
+I tested all three Kleene logic functions with both masks as None:
+- `kleene_and(arr1, arr2, None, None)` -> RecursionError
+- `kleene_or(arr1, arr2, None, None)` -> RecursionError
+- `kleene_xor(arr1, arr2, None, None)` -> RecursionError
+
+All three functions exhibit the same infinite recursion bug.
+
+### Test 3: Valid Cases
+I confirmed that the functions work correctly when only one mask is None:
+- `kleene_and(arr1, arr2, None, mask2)` -> Works correctly, returns result and mask
+- `kleene_and(arr1, arr2, mask1, None)` -> Works correctly, returns result and mask
+- `kleene_and(arr1, arr2, mask1, mask2)` -> Works correctly with both masks present
+
+### Test 4: Root Cause Analysis
+I traced through the recursion logic:
+
+1. When `kleene_and` is called with both masks as None:
+   - Line 156 checks: `if left_mask is None`
+   - This is True, so line 157 executes: `return kleene_and(right, left, right_mask, left_mask)`
+   - This swaps the arguments, but `right_mask` is also None
+
+2. In the recursive call:
+   - The new `left_mask` is the old `right_mask`, which is None
+   - Line 156 checks: `if left_mask is None` again
+   - This is True again, causing another recursive call
+
+3. This continues infinitely because both masks remain None after swapping
+
+### Test 5: Hypothesis Test
+The provided hypothesis test also triggered the RecursionError when it generated test cases with both masks as None, confirming the bug occurs under property-based testing.
+
+### Summary
+The bug is 100% reproducible. The functions crash with RecursionError when both masks are None, which violates the documented precondition that "only one of these may be None". Instead of infinite recursion, the functions should validate this precondition and raise a clear error message.

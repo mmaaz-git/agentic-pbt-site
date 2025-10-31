@@ -1,0 +1,41 @@
+# Bug Reproduction Analysis
+
+## Test Results
+
+I successfully reproduced the bug described in the report. The issue occurs exactly as described when attempting to use pandas.api.interchange.from_dataframe() with DataFrames containing surrogate characters.
+
+### Test 1: Direct Reproduction
+- Created a DataFrame with surrogate character '\ud800' as specified in the bug report
+- Confirmed that pandas can create and store the DataFrame with no issues
+- Confirmed that calling df.__dataframe__() works fine
+- Confirmed that pd.api.interchange.from_dataframe() crashes with:
+  `UnicodeEncodeError: 'utf-8' codec can't encode character '\ud800' in position 0: surrogates not allowed`
+
+### Test 2: Multiple Surrogate Characters
+Tested various surrogate characters:
+- '\ud800' (low surrogate) - FAILS with UnicodeEncodeError
+- '\udfff' (high surrogate) - FAILS with UnicodeEncodeError
+- '\ud834\udd1e' (surrogate pair) - FAILS with UnicodeEncodeError
+
+All surrogate characters in the range U+D800 to U+DFFF cause the same crash.
+
+### Test 3: Hypothesis Testing
+- The basic Hypothesis test from the bug report ran successfully for 100 examples
+- This is because Hypothesis by default generates "normal" strings without surrogates
+- When forced to generate surrogates, the test immediately fails with the reported error
+
+## Key Findings
+
+1. The bug is 100% reproducible with the provided code
+2. The error message matches exactly what was reported
+3. The bug affects all surrogate characters (U+D800-U+DFFF)
+4. Pandas itself handles these characters fine - it's only the interchange protocol that fails
+5. The crash occurs during the UTF-8 encoding step, as surrogates cannot be encoded to UTF-8
+
+## Impact Assessment
+
+This is a real bug that causes a hard crash when:
+- A DataFrame contains string data with surrogate characters
+- The user attempts to use the interchange protocol to convert the DataFrame
+
+The bug prevents any DataFrame with surrogate characters from being exchanged via the interchange protocol, which could affect real-world data processing scenarios where such characters appear (e.g., from corrupted data, certain database exports, or text processing edge cases).

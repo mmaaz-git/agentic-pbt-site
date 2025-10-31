@@ -1,0 +1,71 @@
+## Triage Analysis
+
+### Considering BUG
+**Arguments FOR categorizing as BUG:**
+1. **Violates mathematical properties**: String concatenation should be associative. This is a fundamental mathematical property that developers would reasonably expect.
+2. **Inconsistent with Python behavior**: The documentation claims equivalence to Python's `+` operator, but Python preserves associativity with null characters.
+3. **Undocumented behavior**: The null character truncation is not documented anywhere.
+4. **Data loss**: Null characters are silently dropped in some cases but preserved in others, leading to data loss.
+5. **Inconsistent behavior**: The same operation behaves differently depending on how it's composed (step-by-step vs direct).
+
+**Arguments AGAINST:**
+- None significant. This appears to be a genuine bug.
+
+### Considering INVALID
+**Arguments FOR categorizing as INVALID:**
+1. Could argue that null character handling is implementation-specific
+2. NumPy strings might have different semantics than Python strings
+
+**Arguments AGAINST:**
+1. The documentation explicitly states equivalence to Python's `+` operator
+2. No documentation warns about special null character handling
+3. The behavior is inconsistent even within NumPy itself
+4. Associativity is a fundamental property of concatenation
+
+### Considering WONTFIX
+**Arguments FOR categorizing as WONTFIX:**
+1. Null characters in strings are edge cases
+2. Most users won't encounter this issue in practice
+3. Might be legacy behavior that's difficult to change
+
+**Arguments AGAINST:**
+1. This is not just an obscure edge case - it violates a fundamental mathematical property
+2. Data integrity issues (silent data loss) should not be ignored
+3. The fix would make the behavior consistent and predictable
+
+### Considering DOCUMENTATION_FIX
+**Arguments FOR categorizing as DOCUMENTATION_FIX:**
+1. Could document that null characters are handled specially
+2. Could add warnings about non-associativity in edge cases
+
+**Arguments AGAINST:**
+1. The behavior itself is wrong, not just the documentation
+2. Documenting a bug doesn't make it correct behavior
+3. Users expect associativity from concatenation operations
+
+### Considering FEATURE_REQUEST
+**Arguments FOR categorizing as FEATURE_REQUEST:**
+1. Could frame proper null handling as a new feature
+
+**Arguments AGAINST:**
+1. This is fixing broken behavior, not adding new functionality
+2. Associativity should already be present in a concatenation operation
+3. The current behavior is a bug, not a missing feature
+
+## Detailed Analysis
+
+The core issue is that `numpy.strings.add` exhibits inconsistent behavior:
+1. When adding '\x00' alone to an empty string, it's truncated to ''
+2. When adding '\x000' (null followed by '0') to an empty string, it's preserved as '\x000'
+
+This creates a situation where:
+- `add(add([''], '\x00'), '0')` → `['0']` (null was truncated in first step)
+- `add([''], '\x000')` → `['\x000']` (null is preserved)
+
+This is clearly incorrect behavior that:
+1. Violates the mathematical property of associativity
+2. Causes silent data loss (nulls are dropped inconsistently)
+3. Contradicts the documented claim of equivalence to Python's `+` operator
+4. Is not documented or warned about anywhere
+
+The fact that trailing nulls are truncated in some cases but not others suggests this is an implementation bug rather than intentional design. The inconsistency makes it impossible for users to predict or work around the behavior reliably.

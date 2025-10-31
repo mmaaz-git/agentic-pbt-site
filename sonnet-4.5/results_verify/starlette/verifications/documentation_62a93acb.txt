@@ -1,0 +1,44 @@
+DOCUMENTATION FINDINGS FOR CORSMIDDLEWARE
+
+1. STARLETTE DOCUMENTATION:
+The official Starlette documentation for CORSMiddleware provides the following information:
+- The `allow_headers` parameter accepts a list of HTTP request headers that should be supported for cross-origin requests
+- Default value is an empty list []
+- Can be set to ['*'] to allow all headers
+- The middleware automatically includes Accept, Accept-Language, Content-Language, and Content-Type as safelisted headers
+- The documentation states the middleware is "restrictive by default" and requires explicit enabling of headers
+
+IMPORTANT: The documentation does NOT specify:
+- How whitespace in header names should be handled
+- Whether headers with leading/trailing whitespace are considered valid
+- The exact normalization process for header names (beyond mentioning they are case-insensitive in HTTP)
+
+2. SOURCE CODE EXAMINATION:
+From the source code at starlette/middleware/cors.py:
+
+Line 67 (in __init__):
+```python
+self.allow_headers = [h.lower() for h in allow_headers]
+```
+This line lowercases headers but does NOT strip whitespace.
+
+Line 129 (in preflight_response):
+```python
+if header.strip() not in self.allow_headers:
+```
+This line strips whitespace from the incoming request header before checking membership.
+
+Line 58 (in __init__):
+```python
+allow_headers = sorted(SAFELISTED_HEADERS | set(allow_headers))
+```
+Before being lowercased, the headers are combined with SAFELISTED_HEADERS. The safelisted headers are defined without any whitespace.
+
+3. HTTP SPECIFICATION CONTEXT:
+HTTP header field names are case-insensitive according to RFC 7230. While the RFC specifies that optional whitespace (OWS) can appear around header field values, header field names themselves should not contain leading or trailing whitespace. The header name is defined as a "token" which excludes whitespace characters.
+
+4. CORS SPECIFICATION:
+The CORS specification (W3C and WHATWG Fetch Standard) treats header names as case-insensitive but does not explicitly address whitespace handling in header names configuration.
+
+CONCLUSION FROM DOCUMENTATION:
+The Starlette documentation does not specify how whitespace in the allow_headers configuration should be handled. There is no explicit statement that headers with whitespace will be normalized or that they should be avoided. The behavior is therefore undocumented and users must rely on implementation details.

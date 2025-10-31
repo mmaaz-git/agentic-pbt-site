@@ -1,0 +1,41 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in scipy.fft.irfft when processing single-element arrays.
+
+## Bug Confirmation
+
+The bug report is accurate. When attempting to use irfft on the output of rfft for a single-element array without specifying the 'n' parameter, a ValueError is raised with the message "Invalid number of data points (0) specified".
+
+## Detailed Findings
+
+1. **Single-element array behavior:**
+   - Input: np.array([5.0]) with shape (1,)
+   - rfft output: [5.+0.j] with shape (1,)
+   - irfft without n parameter: Raises ValueError "Invalid number of data points (0) specified"
+   - irfft with n=1: Works correctly, returns [5.0] which matches the original input
+
+2. **The round-trip property is broken for single-element arrays:**
+   - The expectation that irfft(rfft(x)) ≈ x fails for single-element arrays
+   - This works for 2-element arrays (even length)
+   - For odd-length arrays (e.g., 3 elements), the round-trip also fails without explicit n parameter
+
+3. **Root cause verification:**
+   The bug report's explanation is correct:
+   - When n is not specified, irfft computes n = 2*(m-1) where m is the rfft output length
+   - For single-element input: m=1, so n = 2*(1-1) = 0
+   - This triggers the error check for n < 1
+
+4. **Pattern observed:**
+   - Even-length arrays: round-trip works without n parameter
+   - Odd-length arrays (including single-element): require explicit n parameter for correct round-trip
+   - The error message for single-element arrays is particularly confusing because it says "0 specified" when the user didn't specify anything
+
+## Impact
+
+The bug affects:
+1. Users attempting to perform FFT round-trips on single-element arrays
+2. Generic code that processes arrays of varying sizes without special-casing single elements
+3. Property-based testing that assumes round-trip invariants should hold
+
+The error message is misleading - it suggests the user specified n=0 when in fact the library computed this internally.

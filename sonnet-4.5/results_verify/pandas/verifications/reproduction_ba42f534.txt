@@ -1,0 +1,31 @@
+## Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Property-Based Test
+The hypothesis test fails as expected when it generates a DataFrame with single unique values per column:
+- Input: `pd.DataFrame({"A": ["cat"], "B": ["x"]})`
+- The test correctly identifies the failure case and raises the same ValueError
+
+### Direct Reproduction
+Running the exact reproduction code from the bug report confirms:
+
+1. **Original DataFrame**: A simple 1-row DataFrame with categorical columns A='cat' and B='x'
+
+2. **get_dummies with drop_first=True**:
+   - Returns an empty DataFrame with shape (1, 0) - no columns but 1 row
+   - This happens because when each column has only one unique value and drop_first=True is used, all dummy columns get dropped
+
+3. **from_dummies attempt**:
+   - Fails with: `ValueError: Length of 'default_category' (2) did not match the length of the columns being encoded (0)`
+   - The error occurs because from_dummies expects the number of default categories to match the number of variable groups in the dummy DataFrame
+   - Since the dummy DataFrame is empty (0 columns), but we're providing 2 default categories, the validation fails
+
+### Comparison with drop_first=False
+When using `drop_first=False`:
+- get_dummies creates columns A_cat and B_x with values of 1
+- from_dummies successfully reconstructs the original DataFrame
+- The round-trip works correctly in this case
+
+### Conclusion
+The bug is confirmed. The issue is that `from_dummies` cannot handle the edge case where `get_dummies(..., drop_first=True)` produces an empty DataFrame when all categorical columns have only one unique value. This violates the expected invertibility of these operations.

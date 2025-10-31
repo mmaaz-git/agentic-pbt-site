@@ -1,0 +1,53 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the bug described in the report.
+
+### Test Results
+
+1. **Hypothesis test**: The property-based test fails as reported with the exact same failing input:
+   - Input: `string_list=['0'], start=0, step=2`
+   - Expected: '0' (from Python slice '0'[0:None:2])
+   - Actual: '' (empty string from numpy.strings.slice)
+
+2. **Manual reproduction cases**:
+
+   Test 1: `ns.slice(["hello", "world"], 0, None, 2)`
+   - Expected: ['hlo', 'wrd'] (matching Python's "hello"[0:None:2])
+   - Actual: ['', ''] (empty strings)
+
+   Test 2: `ns.slice(['0'], 0, None, 2)`
+   - Expected: ['0'] (matching Python's '0'[0:None:2])
+   - Actual: [''] (empty string)
+
+3. **Additional finding**: The bug also affects cases without step parameter:
+   Test 3: `ns.slice(["hello", "world"], 2, None)`
+   - Expected: ['llo', 'rld'] (matching Python's "hello"[2:None])
+   - Actual: ['he', 'wo'] (incorrect slicing)
+
+### Root Cause Verification
+
+The bug is located in `/home/npc/miniconda/lib/python3.13/site-packages/numpy/_core/strings.py` lines 1804-1806:
+
+```python
+if stop is None:
+    stop = start
+    start = None
+```
+
+This swap logic is meant to handle the single-argument case (e.g., `slice(3)` → `slice(None, 3)`), mimicking Python's built-in slice behavior. However, it incorrectly triggers in two problematic scenarios:
+
+1. When `stop=None` is explicitly passed with a `step` parameter
+2. When `stop=None` is explicitly passed without a `step` parameter (but with `start` specified)
+
+### Effect of the Bug
+
+When `ns.slice(arr, 0, None, 2)` is called:
+1. The swap logic changes it to: start=None, stop=0, step=2
+2. Line 1818 then sets start=0 (since step > 0)
+3. This results in slicing [0:0:2] which returns empty strings
+
+Similarly, when `ns.slice(arr, 2, None)` is called:
+1. The swap logic changes it to: start=None, stop=2, step=None
+2. This results in slicing [:2] instead of [2:], giving the wrong portion of the string
+
+The bug causes numpy.strings.slice to behave differently from Python's standard slicing when None is explicitly passed as the stop parameter.

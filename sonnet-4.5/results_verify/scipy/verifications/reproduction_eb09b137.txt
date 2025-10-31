@@ -1,0 +1,39 @@
+# Reproduction Analysis
+
+## Summary
+The bug report has been successfully reproduced. The function `scipy.cluster.vq.kmeans2` crashes with `LinAlgError: Matrix is not positive definite` when using `minit='random'` on rank-deficient data.
+
+## Reproduction Results
+
+### 1. Property-Based Test
+The hypothesis test failed as expected, confirming that kmeans2 crashes on rank-deficient data. The test generates random data and then creates a degenerate version where all columns are identical (perfectly correlated), which causes the crash.
+
+Falsifying example found:
+- Input: 10x3 array with all zeros (or any data where all columns are identical)
+- k=1 (or any valid k value)
+- Error: "Matrix is not positive definite"
+
+### 2. Minimal Example
+The minimal example from the bug report reproduces the issue exactly:
+- Input: 5x3 array where each row has all identical values [[1,1,1], [2,2,2], [3,3,3], [4,4,4], [5,5,5]]
+- k=2, minit='random'
+- Result: LinAlgError: Matrix is not positive definite
+
+### 3. Other Initialization Methods
+Tested the same rank-deficient data with different initialization methods:
+- minit='points': SUCCESS - No crash
+- minit='++': SUCCESS - No crash
+- minit='random': FAILED - LinAlgError as reported
+- Matrix initialization: SUCCESS - No crash
+
+This confirms that only the 'random' initialization method has the bug, while all other methods handle rank-deficient data correctly.
+
+## Technical Analysis
+The crash occurs because:
+1. The data has perfectly correlated features (all columns are multiples of each other)
+2. This makes the covariance matrix singular (rank-deficient)
+3. Singular matrices are only positive-semidefinite, not positive-definite
+4. Cholesky decomposition requires positive-definite matrices
+5. The code at line 571 in vq.py attempts Cholesky decomposition without checking for rank-deficiency
+
+The bug report's technical analysis is accurate - the code already handles rank-deficient cases when data.shape[1] > data.shape[0] using SVD, but incorrectly assumes rank-deficiency cannot occur when data.shape[1] <= data.shape[0].

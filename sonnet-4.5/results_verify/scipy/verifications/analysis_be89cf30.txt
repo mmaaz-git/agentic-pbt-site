@@ -1,0 +1,73 @@
+## Bug Report Triage Analysis
+
+### Considering Each Category
+
+#### 1. BUG (Valid Bug Report)
+**Arguments FOR:**
+- The function produces NaN values for inputs within the documented parameter range (alpha in [0,1])
+- The mathematical definition of the Tukey window is well-defined for all alpha >= 0
+- Users reasonably expect smooth behavior as alpha approaches 0
+- The documentation gives no warning about NaN outputs being possible
+- The function already handles alpha=0 specially, but fails to handle near-zero values
+- This is a numerical stability issue that violates the mathematical contract of the function
+
+**Arguments AGAINST:**
+- The failing value (5e-324) is a subnormal float, an extreme edge case
+- Most users would never encounter this in practice
+
+#### 2. WONTFIX
+**Arguments FOR:**
+- The value 5e-324 is extremely small (subnormal), practically indistinguishable from 0
+- Such tiny alpha values have no practical application in signal processing
+- This is an obscure numerical edge case that would rarely occur in real usage
+- The computational difference between alpha=5e-324 and alpha=0 is negligible
+
+**Arguments AGAINST:**
+- The function accepts float inputs and should handle all valid floats robustly
+- Returning NaN is a clear error that could propagate through user calculations
+- The fix is simple and doesn't impact performance
+- SciPy is a scientific computing library where numerical stability matters
+
+#### 3. INVALID
+**Arguments FOR:**
+- (None - the bug clearly exists and reproduces)
+
+**Arguments AGAINST:**
+- The bug is reproducible and causes incorrect output
+- The input is within the implied valid range
+- The function fails to meet its mathematical specification
+
+#### 4. DOCUMENTATION_FIX
+**Arguments FOR:**
+- Could argue the documentation should warn about numerical limits
+- Documentation could specify minimum viable alpha values
+
+**Arguments AGAINST:**
+- The code behavior is incorrect, not just poorly documented
+- Documenting "returns NaN for very small alpha" would be admitting a bug
+- The mathematical definition doesn't have this limitation
+
+#### 5. FEATURE_REQUEST
+**Arguments FOR:**
+- Could argue that handling subnormal floats is a new feature
+
+**Arguments AGAINST:**
+- This is fixing broken behavior, not adding new functionality
+- The function already attempts to handle the full [0,1] range
+- Users expect mathematical functions to be numerically stable
+
+### Decision Rationale
+
+This is a **BUG** because:
+
+1. **Violates Mathematical Contract**: The Tukey window is mathematically well-defined for all alpha in [0,1]. The implementation fails to honor this.
+
+2. **Scientific Computing Standards**: SciPy is a scientific computing library where numerical stability is paramount. Functions should handle edge cases gracefully, especially when simple fixes exist.
+
+3. **Unexpected Behavior**: Returning NaN for valid inputs is unexpected and could cause downstream failures in user code without clear error messages.
+
+4. **Simple Fix Available**: The proposed fix (treating very small alpha as 0) is reasonable and maintains mathematical consistency.
+
+5. **Existing Pattern**: The code already special-cases alpha<=0, showing intent to handle edge cases. The failure to handle near-zero positive values is an oversight.
+
+While 5e-324 is an extreme value, scientific computing libraries should handle the full range of floating-point numbers gracefully. The fact that this is a rare edge case makes it more suitable for WONTFIX consideration, but the ease of the fix and the principle of numerical robustness in scientific computing make this a valid BUG.

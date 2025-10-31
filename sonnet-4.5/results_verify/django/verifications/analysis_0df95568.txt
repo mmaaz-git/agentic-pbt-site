@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report might be invalid if the documentation never intended for all Python objects to be usable as senders when caching is enabled. Perhaps the "any Python object" claim was meant to apply only to the default non-caching mode, and use_caching was intended as an advanced feature with known limitations. The WeakKeyDictionary was clearly chosen deliberately for memory management reasons.
+
+**Why it might not be INVALID:**
+The documentation explicitly and repeatedly states that senders can be "any Python object" without any caveats or exceptions. The connect() method documentation at line 69-71 and send_robust() documentation at line 282-284 both make this claim without mentioning any restrictions based on use_caching. The bug causes actual crashes with common Python objects like integers, strings, and None, which are frequently used as senders in Django applications.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This could be considered WONTFIX if the use_caching parameter is rarely used in practice and the workaround (using use_caching=False) is acceptable. The WeakKeyDictionary was likely chosen to prevent memory leaks when sender objects are garbage collected, and changing this might introduce memory management issues. The maintainers might prefer to keep the current implementation for performance and memory reasons.
+
+**Why it might not be WONTFIX:**
+The bug causes a complete failure of a documented feature - you cannot use use_caching=True with many common sender types. This is not a minor edge case but affects fundamental Python types like integers, strings, and None. The feature is essentially broken for a large class of valid use cases, making it more than a trivial issue.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The implementation using WeakKeyDictionary might be the intended behavior for memory management reasons, and the real issue is that the documentation doesn't warn users about this limitation. The fix would be to update the documentation to clarify that when use_caching=True, only objects that support weak references can be used as senders. This would preserve the current performance characteristics while setting correct expectations.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation makes very clear promises about accepting "any Python object" as a sender. This is stated multiple times in different methods. If this was a known limitation, it should have been documented from the beginning. The fact that it crashes with such common types suggests this is an implementation bug rather than a documentation oversight.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting all Python objects as senders with use_caching=True could be seen as a new feature rather than a bug fix. The current implementation works as designed (using WeakKeyDictionary for memory management), and adding support for non-weakref-capable objects would be an enhancement. This would require implementing a hybrid caching strategy as suggested in the bug report.
+
+**Why it might not be FEATURE_REQUEST:**
+This is not asking for new functionality but for the existing functionality to work as documented. The Signal class already claims to accept "any Python object" as a sender - this is not a new feature but a core part of the API contract that isn't being fulfilled. The use_caching parameter should not silently break this contract.
+
+## BUG Considerations
+**Why it might be BUG:**
+The documentation explicitly promises that senders can be "any Python object" with no mentioned exceptions. The implementation directly contradicts this documented behavior by crashing with common Python types when use_caching=True. This is a clear violation of the API contract. The error prevents legitimate use cases and there's no documented workaround or warning about this limitation.
+
+**Why it might not be BUG:**
+The use_caching parameter might be considered an advanced optimization feature where certain trade-offs are acceptable. The WeakKeyDictionary was likely chosen for good reasons (memory management), and the maintainers might view this as working as intended, even if not ideally documented. The fact that it works fine with use_caching=False might be considered sufficient.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a DOCUMENTATION_FIX rather than a BUG. While the implementation does contradict the broad documentation claim of accepting "any Python object", the use of WeakKeyDictionary in the caching implementation was clearly intentional for memory management purposes. The line 47 comment explains that the cache uses weakref.WeakKeyDictionary() specifically when use_caching is True.
+
+The real issue is that the documentation doesn't warn users about this significant limitation. When use_caching=True is used, the implementation fundamentally changes how senders are stored, imposing the requirement that they must support weak references. This is a reasonable implementation choice for preventing memory leaks in long-running applications where sender objects might be frequently created and destroyed.
+
+The appropriate fix would be to update the documentation to clearly state that when use_caching=True, senders must be objects that support weak references (excluding built-in immutable types like int, str, tuple, None, and plain object() instances). This preserves the current performance and memory characteristics while setting correct expectations for users. The suggested "fix" in the bug report would actually introduce a memory leak by preventing sender objects from being garbage collected, which is worse than having a documented limitation.

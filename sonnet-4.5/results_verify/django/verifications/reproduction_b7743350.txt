@@ -1,0 +1,77 @@
+BUG REPRODUCTION RESULTS
+========================
+
+1. BASIC REPRODUCTION TEST
+--------------------------
+I ran the exact reproduction code from the bug report:
+
+```python
+converter = IntConverter()
+regex = re.compile(f'^{converter.regex}$')
+
+negative_input = '-5'
+assert not regex.match(negative_input)  # PASSES: regex doesn't match '-5'
+
+result = converter.to_python(negative_input)
+assert result == -5  # PASSES: to_python() returns -5
+```
+
+CONFIRMED: The bug report's basic reproduction is accurate.
+- The regex `[0-9]+` correctly rejects '-5'
+- The to_python() method incorrectly accepts '-5' and returns -5
+
+2. PROPERTY-BASED TEST
+----------------------
+The property-based test from the bug report has a logical issue. It expects to_python() to raise an error for inputs that don't match the regex, but this expectation isn't based on documented behavior.
+
+However, the test does reveal the inconsistency:
+- When input matches regex: to_python() works (expected)
+- When input doesn't match regex: to_python() may still work (unexpected)
+
+3. COMPREHENSIVE TESTING
+------------------------
+I tested multiple inputs to verify the behavior:
+
+Negative numbers (regex doesn't match, but to_python accepts):
+- '-1' -> regex: False, to_python: -1
+- '-5' -> regex: False, to_python: -5
+- '-100' -> regex: False, to_python: -100
+
+Positive numbers (both regex and to_python accept):
+- '0' -> regex: True, to_python: 0
+- '1' -> regex: True, to_python: 1
+- '100' -> regex: True, to_python: 100
+
+Edge cases:
+- ' 5' (leading space) -> regex: False, to_python: 5 (int() strips spaces)
+- '5 ' (trailing space) -> regex: False, to_python: 5 (int() strips spaces)
+- '+5' -> regex: False, to_python: 5 (int() accepts plus sign)
+- '00123' -> regex: True, to_python: 123 (leading zeros handled)
+
+Invalid inputs (both regex and to_python reject):
+- '1.5' -> regex: False, to_python: ValueError
+- 'abc' -> regex: False, to_python: ValueError
+- '1a' -> regex: False, to_python: ValueError
+
+4. REAL-WORLD IMPACT
+--------------------
+In actual Django URL routing:
+1. The regex is checked FIRST to see if a URL segment matches
+2. Only if the regex matches is to_python() called
+3. Therefore, negative numbers never reach to_python() in normal URL routing
+
+The inconsistency only manifests when:
+- Converters are used programmatically/directly
+- Custom converters extend IntConverter
+- Testing/validation scenarios
+- Someone bypasses the normal URL routing flow
+
+5. TECHNICAL ACCURACY OF BUG REPORT
+------------------------------------
+The bug report is technically accurate:
+✓ The regex pattern `[0-9]+` does reject negative numbers
+✓ The to_python() method does accept negative numbers
+✓ This creates an inconsistency between the two components
+✓ The reproduction code works exactly as described
+
+The severity assessment as "Low" seems appropriate given that normal Django URL routing isn't affected.

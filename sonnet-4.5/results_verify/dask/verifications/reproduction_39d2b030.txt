@@ -1,0 +1,42 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug reported in dask.array.slicing.check_index.
+
+### Reproduction Steps
+
+1. Ran the simple reproduction case provided in the bug report:
+   - Created a boolean array of size 3: np.array([True, True, True])
+   - Attempted to use it with check_index for a dimension of size 1
+   - Result: Got IndexError with message "Boolean array with size 3 is not long enough for axis 0 with size 1"
+
+2. Ran the property-based test:
+   - The test correctly identifies the bug
+   - It creates boolean arrays that are intentionally too long (dim_size + 1)
+   - When check_index raises an error, it verifies the error message
+   - The test fails because the error message says "not long enough" when the array is actually too long
+
+3. Additional testing:
+   - Tested with array size < dimension size (actually too short): Error message says "not long enough" (correct semantically)
+   - Tested with array size > dimension size (actually too long): Error message says "not long enough" (incorrect semantically)
+
+### Confirmed Bug Behavior
+
+The bug is confirmed. The check_index function always uses the same error message "Boolean array with size X is not long enough for axis Y with size Z" regardless of whether the boolean array is:
+- Too short (size < dimension)
+- Too long (size > dimension)
+
+This creates a misleading error message when the boolean array is actually too long, potentially confusing users who might try to make their array even longer when they actually need to make it shorter.
+
+### Source Code Verification
+
+Examined the source code at /home/npc/miniconda/lib/python3.13/site-packages/dask/array/slicing.py lines 919-923:
+
+```python
+if ind.size != dimension:
+    raise IndexError(
+        f"Boolean array with size {ind.size} is not long enough "
+        f"for axis {axis} with size {dimension}"
+    )
+```
+
+The code confirms that there is only one error message for both cases (too short and too long), always saying "not long enough".

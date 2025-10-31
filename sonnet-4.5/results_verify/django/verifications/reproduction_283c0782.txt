@@ -1,0 +1,66 @@
+BUG REPRODUCTION REPORT
+======================
+
+1. BUG CONFIRMATION
+-------------------
+I have successfully reproduced the bug described in the report. The bug occurs in Django version 5.2.6 in the function `django.core.serializers.base.deserialize_m2m_values` at line 360.
+
+2. BUG DESCRIPTION
+------------------
+When an exception is raised during iteration of field values in `deserialize_m2m_values`, specifically when the iterator's `__next__()` method raises an exception before any value is assigned to the loop variable `pk`, the exception handler attempts to reference the undefined variable `pk`, resulting in an UnboundLocalError.
+
+3. REPRODUCTION STEPS
+---------------------
+Created test cases that demonstrate the bug:
+
+a) Direct reproduction test (test_bug.py):
+   - Created an ErrorIterator class that raises RuntimeError on first __next__() call
+   - Created mock classes to simulate Django model infrastructure
+   - Called deserialize_m2m_values with the ErrorIterator
+   - Result: UnboundLocalError raised with message "cannot access local variable 'pk' where it is not associated with a value"
+
+b) Property-based test (test_hypothesis.py):
+   - Tested with multiple exception types: RuntimeError, ValueError, TypeError, KeyError
+   - All exception types trigger the same UnboundLocalError
+   - Confirmed the bug is consistent across different error conditions
+
+4. EXPECTED VS ACTUAL BEHAVIOR
+-------------------------------
+EXPECTED: When an error occurs during iteration, the function should raise M2MDeserializationError with:
+- The original exception as `original_exc`
+- The problematic value (either `pk` if available, or `field_value`) as context
+
+ACTUAL: The function raises UnboundLocalError because it tries to access `pk` which hasn't been defined yet.
+
+5. ROOT CAUSE ANALYSIS
+----------------------
+The bug is in the exception handler at line 360:
+
+```python
+try:
+    values = []
+    for pk in pks_iter:  # pk is assigned here during iteration
+        values.append(m2m_convert(pk))
+    return values
+except Exception as e:
+    if isinstance(e, ObjectDoesNotExist) and handle_forward_references:
+        return DEFER_FIELD
+    else:
+        raise M2MDeserializationError(e, pk)  # BUG: pk may not be defined!
+```
+
+If the iterator raises an exception on the first __next__() call (before pk is assigned), the variable `pk` doesn't exist in the local scope, causing UnboundLocalError.
+
+6. IMPACT
+---------
+This bug masks the original exception with a confusing UnboundLocalError, making debugging difficult for users. When deserializing fixtures or data with problematic many-to-many relationships, users see:
+- UnboundLocalError instead of the meaningful M2MDeserializationError
+- No context about what value caused the problem
+- The original exception is completely hidden
+
+7. VERIFICATION
+---------------
+The bug has been verified to:
+- Occur consistently with any exception raised by the iterator
+- Affect Django 5.2.6 (current version tested)
+- Prevent proper error reporting in deserialization scenarios

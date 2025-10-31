@@ -1,0 +1,49 @@
+BUG REPRODUCTION ANALYSIS
+========================
+
+## Summary
+I have successfully reproduced the bug reported in django.core.files.utils.FileProxyMixin.writable(). The bug is confirmed and affects the fallback logic when a file object doesn't have its own writable() method.
+
+## Reproduction Results
+
+### Test 1: Direct Bug Reproduction
+When testing file objects that lack a writable() method (forcing the fallback to mode string checking), the following modes FAIL:
+- 'r+': Returns False, should return True (read/write mode)
+- 'a': Returns False, should return True (append mode)
+- 'a+': Returns False, should return True (append/read mode)
+- 'x': Returns False, should return True (exclusive creation mode)
+- 'x+': Returns False, should return True (exclusive creation/read mode)
+
+Only 'w' and 'w+' modes work correctly because the buggy code only checks if 'w' is in the mode string.
+
+### Test 2: Python File Object Verification
+I verified that Python's built-in file objects with these modes are indeed writable:
+- open(path, 'r+'): writable() returns True
+- open(path, 'a'): writable() returns True
+- open(path, 'a+'): writable() returns True
+- open(path, 'x'): writable() returns True
+- open(path, 'x+'): writable() returns True
+
+### Test 3: Root Cause Confirmation
+The bug is located in django/core/files/utils.py, line 67:
+```python
+return "w" in getattr(self.file, "mode", "")
+```
+
+This line only checks for the presence of 'w' in the mode string, which is incorrect. According to Python's file mode specifications, a file is writable if ANY of the following are true:
+- 'w' in mode (write mode)
+- 'a' in mode (append mode)
+- 'x' in mode (exclusive creation mode)
+- '+' in mode (update/read-write mode)
+
+### Impact
+This bug affects any code that:
+1. Wraps a file object with Django's File class
+2. Where the wrapped file object lacks a writable() method
+3. Where the file was opened with modes 'r+', 'a', 'a+', 'x', or 'x+'
+4. And relies on writable() to determine if writing is allowed
+
+The bug causes writable() to incorrectly return False for these writable modes, potentially preventing legitimate write operations.
+
+## Conclusion
+The bug is CONFIRMED and matches exactly what was reported. The proposed fix in the bug report is correct - the code should check for any of the characters 'w', 'a', 'x', or '+' in the mode string, not just 'w'.

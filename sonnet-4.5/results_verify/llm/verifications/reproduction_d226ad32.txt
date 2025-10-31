@@ -1,0 +1,38 @@
+## Reproduction of Bug in llm.default_plugins.openai_models.not_nulls
+
+I have successfully reproduced the bug described in the report. Here are my findings:
+
+### 1. Hypothesis Test Reproduction
+The provided Hypothesis test fails immediately with the simplest input `{'': None}`:
+- Error: `ValueError: not enough values to unpack (expected 2, got 0)`
+- This confirms that the function cannot handle regular Python dictionaries
+
+### 2. Manual Test Reproduction
+The manual example with `{'temperature': 0.5, 'max_tokens': None}` also fails:
+- Error: `ValueError: too many values to unpack (expected 2)`
+- This matches exactly what the bug report claimed
+
+### 3. Implementation Analysis
+The function at line 916 of openai_models.py:
+```python
+def not_nulls(data) -> dict:
+    return {key: value for key, value in data if value is not None}
+```
+
+This implementation assumes that iterating over `data` yields (key, value) tuples.
+
+### 4. Root Cause Verification
+I verified that:
+- Pydantic BaseModel instances DO iterate as (key, value) tuples
+- Regular Python dicts iterate as keys only (not tuples)
+- The function signature `def not_nulls(data) -> dict` suggests it should accept any dict-like object
+
+### 5. Current Usage Context
+The function is currently used at line 658:
+```python
+kwargs = dict(not_nulls(prompt.options))
+```
+Where `prompt.options` is an instance of a Pydantic BaseModel (specifically, a subclass of `llm.Options`).
+
+### Conclusion
+The bug is real and reproducible. The function works correctly when passed Pydantic models (which is how it's currently used in the codebase), but fails when passed regular Python dictionaries, despite its type hint suggesting it should accept dicts.

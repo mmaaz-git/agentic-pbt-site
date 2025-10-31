@@ -1,0 +1,47 @@
+BUG TRIAGE ANALYSIS
+===================
+
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly guarantee that empty DataFrames must be supported for round-trip operations. One could argue that the error message is technically correct - dd.from_map() does require non-empty iterables by design. The user might be expecting behavior that was never promised or intended.
+
+**Why it might not be INVALID:**
+The bug report is technically accurate - the code does crash when reading empty ORC files that were successfully written. Empty DataFrames are valid objects in both pandas and Dask, and the ORC format itself supports empty files. The write operation succeeds without warning, creating a reasonable expectation that the read should also work.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Empty DataFrames might be considered an edge case that rarely occurs in practice. The workaround is simple (check for empty DataFrames before writing). The fix might introduce complexity or performance overhead for a rarely encountered scenario. The error message, while not ideal, does indicate the problem.
+
+**Why it might not be WONTFIX:**
+This is a clear violation of I/O round-trip expectations, which is fundamental to data processing workflows. Empty DataFrames do occur in practice (filtered data, time series gaps, initialization). The fix is straightforward and wouldn't impact performance for non-empty cases. Other I/O methods in Dask (CSV, Parquet) likely handle empty DataFrames correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the intended behavior is that empty DataFrames are not supported, the documentation should clearly state this limitation. Users need to know that to_orc() can write files that read_orc() cannot read. A documentation update warning about empty DataFrames would prevent user confusion.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The current behavior appears to be a bug rather than intentional design. PyArrow handles empty ORC files correctly, suggesting this is a Dask implementation issue. Documenting a bug as expected behavior would be misleading when the fix is straightforward.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting empty DataFrames could be viewed as a new feature rather than fixing a bug. The current implementation might have been designed only for non-empty data. Adding empty DataFrame support would enhance functionality beyond the original scope.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but asking for basic I/O consistency. The ability to read what was written is fundamental, not an enhancement. Empty DataFrames are already supported throughout Dask and pandas - this is fixing an inconsistency, not adding a feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+This is a clear case where valid input (empty DataFrame) causes an unexpected crash despite successful write operations. The round-trip property is broken - data that can be written cannot be read back. PyArrow correctly handles these files, indicating the problem is in Dask's implementation. The error violates reasonable user expectations and breaks data processing pipelines. The fix is straightforward and addresses a real implementation flaw.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if empty DataFrames were explicitly documented as unsupported, which they are not. The error could be considered "working as designed" if from_map was never intended to handle empty iterables.
+
+## Overall Consideration
+
+After analyzing all aspects, this appears to be a legitimate BUG that should be fixed. The key factors supporting this classification are:
+
+First, there is a clear violation of the round-trip invariant that is fundamental to I/O operations. When to_orc() successfully writes a file without any warnings or errors, users reasonably expect read_orc() to be able to read that file back. This expectation is not unreasonable - it's a basic property of data persistence that what goes out should come back in. The fact that PyArrow (the underlying engine) can read these files correctly further validates that the files themselves are valid and the limitation is in Dask's implementation.
+
+Second, empty DataFrames are not exotic edge cases but legitimate data structures that occur naturally in data processing workflows. They can result from filtering operations that match no rows, time series data with gaps, or initialization scenarios. Both pandas and Dask support empty DataFrames throughout their APIs, so having I/O operations fail on them creates an inconsistent user experience. The ORC format itself has no problem with empty files - they are valid ORC files with metadata but no data stripes.
+
+Third, the fix is straightforward and localized. The bug report even provides a reasonable solution - checking for empty parts and handling that case before calling dd.from_map(). This isn't a complex architectural change but a simple edge case handling. The fix would not impact performance or behavior for non-empty DataFrames, making it a low-risk change with clear benefits. Given that other Dask I/O methods likely handle empty DataFrames correctly, fixing this brings ORC I/O in line with the rest of the ecosystem.

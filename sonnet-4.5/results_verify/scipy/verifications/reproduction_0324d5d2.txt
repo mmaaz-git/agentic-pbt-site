@@ -1,0 +1,54 @@
+BUG REPRODUCTION REPORT
+=======================
+
+I have successfully reproduced the bug described in the report.
+
+## Hypothesis Test Results
+
+The provided Hypothesis test correctly identifies the failure case. When run, it generates a falsifying example with exactly the same data pattern as described in the bug report:
+- A 10x10 array where 9 out of 10 rows are identical (all 1s)
+- Only the first row differs slightly (starts with 0 instead of 1)
+
+The test crashes with:
+```
+numpy.linalg.LinAlgError: Matrix is not positive definite
+```
+
+This occurs at line 571 in scipy/cluster/vq.py during the Cholesky decomposition:
+```python
+x = x @ xp.linalg.cholesky(_cov).T
+```
+
+## Minimal Example Reproduction
+
+The minimal example provided in the bug report reproduces exactly as described:
+
+1. With default 'random' initialization: CRASHES
+   - Error: LinAlgError: Matrix is not positive definite
+   - This is the reported bug
+
+2. With 'points' initialization: WORKS
+   - Successfully returns centroids and labels
+   - Issues a warning about empty clusters (expected given the data)
+
+3. With '++' initialization: WORKS
+   - Successfully returns centroids and labels
+   - Also issues warning about empty clusters
+
+## Root Cause
+
+The bug occurs in the `_krandinit` function which implements the 'random' initialization method. This method:
+1. Computes the covariance matrix of the input data
+2. Attempts to generate random centroids from a Gaussian distribution with mean and covariance matching the data
+3. Uses Cholesky decomposition on the covariance matrix (line 571)
+
+When the data has low variance (like 9 identical rows), the covariance matrix becomes singular or near-singular, causing the Cholesky decomposition to fail with "Matrix is not positive definite".
+
+## Impact
+
+This is a real crash that prevents the function from working on valid input data. The data provided is:
+- Numerically valid (no NaN, no Inf, proper shape)
+- Semantically valid (represents legitimate observations that could occur in real scenarios)
+- Only problematic for one specific initialization method while others handle it
+
+The bug makes the default initialization method ('random') unreliable for certain types of valid data.

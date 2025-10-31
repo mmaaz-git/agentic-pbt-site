@@ -1,0 +1,38 @@
+REPRODUCTION ANALYSIS FOR BUG REPORT: pandas.core.strings.accessor.StringMethods.slice_replace
+
+## Bug Successfully Reproduced
+
+I have confirmed the bug exists as described in the report. The slice_replace method exhibits unexpected behavior when start >= stop.
+
+### Test Results
+
+1. **Primary failing case (start=1, stop=0, repl='X' on 'hello'):**
+   - Actual result: 'hXello'
+   - Expected result: 'hXhello'
+   - The method incorrectly uses text[:start] + repl + text[start:] instead of text[:start] + repl + text[stop:]
+
+2. **Additional test cases confirm the pattern:**
+   - When start > stop, the method consistently ignores the stop parameter
+   - Examples:
+     - ('hello', start=2, stop=1, 'Y'): Returns 'heYllo' instead of 'heYello'
+     - ('hello', start=3, stop=1, 'C'): Returns 'helClo' instead of 'helCello'
+
+3. **Edge cases where start == stop:**
+   - These work correctly because text[start:] and text[stop:] are identical when start == stop
+   - Examples: start=2, stop=2 correctly returns 'heZllo'
+
+### Root Cause Verification
+
+The bug report correctly identifies the problematic code in pandas implementation. When start >= stop:
+- The slice text[start:stop] is empty (standard Python behavior)
+- The code detects this and sets local_stop = start
+- This causes the function to use text[start:] instead of text[stop:] for the remainder
+
+### Impact
+
+This bug causes slice_replace to behave inconsistently with:
+1. Python's standard slicing semantics
+2. The documented behavior (replacing a slice from start to stop)
+3. User expectations based on the method name
+
+The bug manifests whenever start > stop, making the function behave as an insertion at position start rather than a proper slice replacement operation.

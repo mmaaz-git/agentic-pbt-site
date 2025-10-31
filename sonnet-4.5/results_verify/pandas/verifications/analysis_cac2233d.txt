@@ -1,0 +1,41 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The `zsqrt` function is an undocumented internal utility function with no public API documentation or type hints. It's only used internally within pandas window operations, specifically in ewm.py. Since it's not part of the public API and has no documentation claiming it should work with scalars, the current behavior could be considered "as designed" for internal use only with Series/DataFrame objects. Users shouldn't be calling this function directly.
+
+**Why it might not be INVALID:**
+The function crashes with an unhandled AttributeError rather than providing a clear error message about invalid input types. Even internal functions should handle errors gracefully. Additionally, the function's logic (safe square root) is conceptually valid for scalars, and the fix is trivial. The fact that it's used in mathematical contexts where scalars could theoretically appear makes this more than just a usage error.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal, undocumented function that users should never call directly. The crash only occurs when the function is misused outside its intended context. In normal pandas usage through the public API (like df.ewm().std()), users never encounter this issue because the data is always in Series/DataFrame format. The effort to fix an internal function for a use case that doesn't occur in practice might not be worthwhile.
+
+**Why it might not be WONTFIX:**
+The fix is extremely simple (3-4 lines of code) and would make the function more robust. Even if it's internal, having functions that crash on reasonable inputs is poor engineering practice. The function is imported and could theoretically be used by advanced users or other internal code paths we haven't identified.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The function has no documentation at all - no docstring, no type hints, no specification of valid inputs. Adding documentation to clarify that this function only accepts Series/DataFrame objects would prevent misuse. This would be the appropriate response if the intended behavior is to only support pandas objects.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Internal utility functions often don't have documentation by design - they're not meant to be used externally. Adding documentation might incorrectly signal that this is a public API. The real issue is that the code crashes rather than the lack of documentation about an internal function.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting scalar inputs would be a new feature for this function, extending its capability beyond its current design. The function was clearly written with Series/DataFrame in mind (given the explicit DataFrame check), and adding scalar support would be an enhancement. This would be appropriate if we view scalar support as a new capability rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle non-DataFrame inputs in the else branch, suggesting it was meant to be somewhat generic. The crash is due to an implementation oversight rather than an intentional limitation. Mathematical functions like square root naturally work on scalars, so this isn't really adding new functionality but fixing broken existing code.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function crashes with an unhandled AttributeError on valid numeric input. The mathematical operation (square root with negative handling) is well-defined for scalars. The else branch on line 157-159 attempts to handle non-DataFrame inputs but makes an incorrect assumption that all such inputs have an .any() method. This is a clear implementation error where the code doesn't match its apparent intent.
+
+**Why it might not be BUG:**
+This is an undocumented internal function with no contract about what inputs it should accept. It works correctly for its intended use within pandas (Series/DataFrame objects). The function is never called with scalar inputs in normal pandas usage, so this crash doesn't affect any actual users. Without documentation specifying that scalars should be supported, this behavior might be considered undefined rather than incorrect.
+
+**Overall consideration**
+After careful analysis, this appears to be an **INVALID** bug report. The `zsqrt` function is an internal, undocumented utility function that is not part of pandas' public API. It has no documentation, no type hints, and no specification claiming it should work with scalar inputs. The function is only imported and used internally within `pandas.core.window.ewm` where it always receives Series or DataFrame objects from the windowing operations.
+
+The bug reporter's claim that "it's used in contexts where scalar results are possible" is unsubstantiated - in actual pandas usage through the public API, the exponential weighted operations always work with Series/DataFrame objects, not scalars. The multiplication `x_var * y_var` in ewm.py:892 still produces a Series, not a scalar, as confirmed by my testing.
+
+While the function could be made more robust by handling scalars, the fact that it's an internal function that works correctly for its intended use case within pandas means this is not a bug. Users should not be importing and using internal pandas functions directly. If anything, this would be a feature request to make an internal function more general, but given that it's internal and undocumented, even that classification seems inappropriate. The correct response is INVALID - this function is working as designed for its internal use within pandas.

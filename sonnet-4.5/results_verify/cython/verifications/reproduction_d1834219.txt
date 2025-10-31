@@ -1,0 +1,43 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug described in the report. The `cap_length` function in Cython.Compiler.PyrexTypes does indeed violate its length constraint when `max_len < 17`.
+
+### Hypothesis Test Reproduction
+The Hypothesis test provided in the bug report runs successfully and identifies the exact same failure case:
+- Input: `s='00000000000'`, `max_len=10`
+- Expected: Result length <= 10
+- Actual: Result `'9c9f57__0000__etc'` with length 17
+
+The test correctly fails with an AssertionError, confirming the bug.
+
+### Manual Reproduction
+The manual reproduction code also confirms the bug:
+```
+Result: '9c9f57__0000__etc'
+Length: 17
+Expected max: 10
+```
+
+### Source Code Examination
+I examined the actual implementation at /home/npc/miniconda/lib/python3.13/site-packages/Cython/Compiler/PyrexTypes.py:5704-5708:
+
+```python
+def cap_length(s, max_len=63):
+    if len(s) <= max_len:
+        return s
+    hash_prefix = hashlib.sha256(s.encode('ascii')).hexdigest()[:6]
+    return '%s__%s__etc' % (hash_prefix, s[:max_len-17])
+```
+
+The bug is exactly as described:
+1. The function creates a hash prefix of 6 characters
+2. It adds "__" (2 characters) before the substring
+3. It adds "__etc" (5 characters) at the end
+4. Total overhead: 6 + 2 + 5 = 13 characters
+5. The substring is `s[:max_len-17]`
+
+When `max_len=10`, the slice becomes `s[:10-17]` = `s[:-7]`, which for a string of length 11 ('00000000000') gives us the first 4 characters '0000'. The final result becomes '9c9f57__0000__etc' with length 17, violating the max_len constraint of 10.
+
+### Conclusion
+The bug is confirmed and reproducible. The function fails to enforce its length constraint for `max_len < 17` due to the fixed overhead of the format string not being properly accounted for when max_len is small.

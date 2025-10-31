@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is part of pandas' private internal API (pandas.core.*) which is not guaranteed to be stable or have specific documented behavior. One could argue that since it's an internal function, any behavior it exhibits is technically "correct" as long as it serves its internal purpose. Additionally, negative values could theoretically be interpreted as a special signal for reverse iteration contexts.
+
+**Why it might not be INVALID:**
+The function has a clear docstring stating it returns "the expected length of target[indexer]", and length is universally understood to be non-negative. The return type annotation explicitly states it returns an `int` (not Optional[int] or a special type), and the mathematical concept of length inherently excludes negative values. Most importantly, the function is used throughout pandas' codebase where negative lengths would cause array allocation errors and index validation failures.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal pandas function not part of the public API, so technically users shouldn't be directly calling it. The pandas team might consider this low priority since it's not customer-facing. The current implementation has existed for some time and changing it might risk breaking other internal code that has adapted to work around this behavior.
+
+**Why it might not be WONTFIX:**
+Even internal functions should behave correctly according to their documented contracts. This bug can cause cascading failures in pandas operations that rely on this function for array allocation and bounds checking. The fix is trivial (one line replacing 18 lines of buggy code) and actually simplifies the codebase. Other parts of pandas that use this function would benefit from the correct behavior, potentially fixing latent bugs.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the documentation should be updated to specify that the function returns "a signed integer representing the length, where negative values indicate reverse iteration." This would make the current behavior "correct" according to updated documentation without changing any code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The concept of "negative length" is mathematically nonsensical and would be confusing to document. No other length-returning function in Python or pandas returns negative values. The current documentation correctly describes what the function *should* do; it's the implementation that's wrong. Documenting buggy behavior as correct would perpetuate confusion and make the API harder to understand.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could frame this as requesting a new feature: "Add support for correctly calculating lengths of negative step slices." The current implementation doesn't properly handle this case, so adding correct handling could be seen as extending functionality rather than fixing a bug.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle negative step slices - it has explicit code for this case. The issue is that the implementation is incorrect, not missing. The docstring makes no distinction about what types of slices are supported; it claims to return the length for any indexer. This is clearly a bug in existing functionality, not a request for new functionality.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function explicitly claims to return "the expected length" which is mathematically defined as non-negative. It returns negative values for valid slices with negative steps, directly contradicting its documented behavior. The bug is reproducible with simple test cases and the proposed fix using Python's standard slice.indices() method works correctly. The current implementation causes incorrect behavior in array operations that depend on this function. This is a clear violation of the function's contract with measurable negative impacts.
+
+**Why it might not be BUG:**
+The function is in a private module not intended for public use, so its behavior might be considered an implementation detail. Some might argue that as long as other internal pandas code works around this behavior, it's not technically a bug. The function has worked this way for some time without reported issues from end users (since they shouldn't be using it directly).
+
+## Overall Consideration
+
+After careful analysis, this is unequivocally a **BUG**. The function `length_of_indexer` has a clear, documented contract: it returns "the expected length of target[indexer]" as an integer. Length, by mathematical definition and common programming convention, is a non-negative value representing a count of elements. The function returns negative values for slices with negative steps, which violates this fundamental contract.
+
+The bug is not a matter of interpretation or edge case handling. When `slice(None, None, -1)` is applied to a list of length 5, it selects 5 elements in reverse order. The length is 5, not -5. This isn't ambiguous - Python's own `len()` function confirms this behavior. The current implementation contains flawed logic in its manual slice normalization code that produces mathematically incorrect results.
+
+The severity of this bug is high because any code relying on this function for array allocation, bounds checking, or iteration planning will fail when encountering negative step slices. While the function is in a private module, it's used internally by pandas for critical indexing operations. The proposed fix is elegant and correct: using Python's built-in `slice.indices()` method, which has been thoroughly tested and handles all edge cases properly. This fix would replace 18 lines of buggy custom logic with a single line that delegates to Python's standard implementation, improving both correctness and maintainability.

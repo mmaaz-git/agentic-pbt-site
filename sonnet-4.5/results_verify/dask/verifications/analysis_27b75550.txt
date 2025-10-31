@@ -1,0 +1,49 @@
+## INVALID Considerations
+
+**Why it might be INVALID:**
+The function `_resample_bin_and_out_divs` is an internal function (starts with underscore), and there's no public documentation specifying that it must return strictly monotonic divisions. One could argue that since it's internal, its behavior is not guaranteed and users shouldn't be relying on it directly.
+
+**Why it might not be INVALID:**
+Despite being internal, this function is used by the public ResampleReduction class which depends on its output being valid dask divisions. The broader dask framework clearly enforces that divisions must be strictly monotonic (as seen in validation code elsewhere), and violating this invariant causes downstream failures. The bug produces objectively incorrect output that violates dask's fundamental data structure requirements.
+
+## WONTFIX Considerations
+
+**Why it might be WONTFIX:**
+The bug only occurs in specific edge cases with certain combinations of parameters (e.g., weekly resampling with specific division counts). It might be considered too obscure to fix if it rarely occurs in practice. Additionally, since it's an internal function, maintainers might argue that users shouldn't be calling it directly.
+
+**Why it might not be WONTFIX:**
+This is not a trivial edge case - it breaks a fundamental invariant of dask dataframes (monotonic divisions). The bug can cause data corruption, incorrect results, and crashes in downstream operations. The fix is simple and clear (removing 2 lines of problematic code), and the issue affects the public resample API indirectly.
+
+## DOCUMENTATION_FIX Considerations
+
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the lack of documentation about division requirements for this internal function is the real issue. If the function had clear documentation stating it must return strictly monotonic divisions, this would have been caught earlier.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code is objectively wrong - it produces duplicate values in a list that must be strictly monotonic. This isn't a documentation issue; the code violates a well-established invariant in the dask framework. The validation elsewhere in dask proves that monotonic divisions are required, not just recommended.
+
+## FEATURE_REQUEST Considerations
+
+**Why it might be FEATURE_REQUEST:**
+One could argue that the current function doesn't properly handle all resampling scenarios and needs enhancement to support edge cases where division adjustment is needed. Adding better handling for these cases could be seen as a new feature.
+
+**Why it might not be FEATURE_REQUEST:**
+This is clearly a bug, not a missing feature. The function already attempts to handle division adjustment but does so incorrectly by creating duplicates. The code tries to append a value that's already in the list, which is a logic error, not a missing capability.
+
+## BUG Considerations
+
+**Why it might be BUG:**
+The function produces output that violates dask's fundamental requirement for strictly monotonic divisions. The duplicate values in outdivs break the partitioning system, can cause data corruption, and lead to errors in downstream operations. The bug is reproducible, the root cause is identified (lines 98-99 append a duplicate value), and there's a clear fix. The code's intent is obvious (maintain proper divisions), but the implementation is faulty.
+
+**Why it might not be BUG:**
+The function is internal (underscore-prefixed) and lacks documentation about its expected behavior. However, this is a weak argument since the function is used by public APIs and must conform to dask's division requirements.
+
+## Overall Consideration
+
+After careful analysis, this is unquestionably a **BUG**. The evidence is overwhelming:
+
+First, the function produces objectively incorrect output - it returns divisions with duplicate consecutive values, violating the strict monotonicity requirement that is fundamental to dask's architecture. This isn't a matter of interpretation or documentation; the dask codebase explicitly validates monotonic divisions elsewhere (as seen in _expr.py) and raises errors when this invariant is violated. The bug causes real failures in production code that uses the public resample API.
+
+Second, the root cause is a clear logic error in the code. Lines 98-99 attempt to append `outdivs[-1]` when it's already the last element, creating a duplicate. This happens because the code doesn't consider that when using the append setter, adding the same value that's already at the end creates a duplicate. The fix is straightforward - remove the problematic branch since outdivs[-1] is already correct when it's greater than or equal to divisions[-1].
+
+Third, this affects public API functionality even though the buggy function is internal. The ResampleReduction class and its subclasses (used via DataFrame.resample()) rely on this function to compute divisions. When users resample time series data with certain parameters, they get corrupted divisions that break subsequent operations. This makes it a user-facing bug despite being in an internal function. The severity is high because it can cause silent data corruption or unexpected crashes in data processing pipelines.

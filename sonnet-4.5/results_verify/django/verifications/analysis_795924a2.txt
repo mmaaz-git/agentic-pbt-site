@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation doesn't explicitly specify how numeric literals with trailing dots should be handled. Since there's no formal specification saying that "2." must be rejected or must raise an error, one could argue the current behavior (treating it as a variable lookup) is just one valid interpretation. The user might be making assumptions about what "should" happen that aren't actually documented requirements.
+
+**Why it might not be INVALID:**
+The source code contains an explicit comment stating "# '2.' is invalid" followed by code that attempts to raise ValueError for this case. This shows clear developer intent that trailing dots should not be accepted. The fact that the code tries to enforce this rule (but fails due to a sequencing bug) demonstrates this is not undefined behavior but rather incorrectly implemented behavior.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case that would rarely occur in practice. Template authors are unlikely to write "2." instead of "2" or "2.0" in their templates. The current behavior, while inconsistent with the code comment, doesn't cause crashes and could be argued to provide a form of backward compatibility if any templates accidentally rely on this behavior.
+
+**Why it might not be WONTFIX:**
+The bug causes a clear violation of the code's intended invariant (either literal OR lookups, never both). It creates inconsistent internal state that could lead to subtle bugs. The fix is trivial (moving one line of code) and directly aligns with the documented intent in the code comment. This is not about adding new functionality but fixing existing broken logic.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+One could argue that the code comment "# '2.' is invalid" is the problem, not the implementation. If we remove or update that comment to say "2. is treated as a variable lookup," then the current behavior becomes the documented behavior. The code technically works, just not as the comment suggests it should.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The code actively tries to reject trailing dots by raising ValueError. This isn't just a documentation mismatch - there's actual code attempting to implement the documented behavior. The bug is that the implementation is incorrect (setting literal before checking), not that the documentation is wrong about the intent.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Currently, the system allows "2." to be parsed (albeit incorrectly). If we want it to properly reject trailing dots as the comment indicates, this could be seen as adding a new validation feature that doesn't currently work correctly. The request is essentially "make the parser stricter about what it accepts."
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but fixing existing broken functionality. The code already attempts to raise ValueError for trailing dots - it just does so after incorrectly setting the literal field. The feature (rejecting trailing dots) already exists in the code; it's just implemented incorrectly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code explicitly states "2." is invalid and attempts to enforce this with a ValueError, but due to incorrect sequencing (setting literal before checking), it creates an invalid state where both literal and lookups are set. This violates the class's invariant and causes incorrect resolution behavior. The bug is clear, reproducible, and the fix is straightforward (reorder two lines).
+
+**Why it might not be BUG:**
+The system doesn't crash and produces a deterministic result. While the behavior doesn't match the code comment, comments aren't specifications. The actual impact is minimal since template authors rarely write numeric literals with trailing dots. One could argue this is working as designed, just not as commented.
+
+## Overall Consideration
+
+After careful analysis, this appears to be a legitimate BUG. The code contains an explicit comment stating "# '2.' is invalid" on line 824, immediately followed by code on lines 825-826 that attempts to enforce this by checking for trailing dots and raising ValueError. However, the implementation is incorrect because line 823 sets `self.literal = float(var)` BEFORE the trailing dot check occurs.
+
+This sequencing error causes the Variable object to end up in an invalid state where both `literal` and `lookups` are populated, violating the intended invariant that only one should be set. The bug manifests as incorrect resolution behavior where "2." resolves via variable lookup instead of being rejected or treated as the literal 2.0.
+
+The fix is trivial and clear: move the trailing dot check (lines 825-826) to occur BEFORE setting self.literal (line 823). This would make the implementation match the documented intent in the code comment. Given that there's explicit code attempting to handle this case but failing due to a simple ordering error, this is unambiguously a bug rather than a documentation issue or missing feature.

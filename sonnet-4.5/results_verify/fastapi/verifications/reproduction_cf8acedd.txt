@@ -1,0 +1,51 @@
+## Reproduction of TrustedHostMiddleware IPv6 Bug
+
+### Bug Report Verification
+The bug report claims that TrustedHostMiddleware incorrectly parses IPv6 addresses in the Host header due to using `.split(":")[0]` which breaks on IPv6 addresses containing multiple colons.
+
+### Source Code Confirmation
+I examined the actual source code at `/home/npc/pbt/agentic-pbt/envs/fastapi_env/lib/python3.13/site-packages/starlette/middleware/trustedhost.py` line 40:
+```python
+host = headers.get("host", "").split(":")[0]
+```
+
+This confirms the bug report's claim about the implementation.
+
+### Test Execution Results
+
+#### 1. Specific Test Cases
+All test cases from the bug report were verified and behave exactly as reported:
+- `[::1]` → `[` (Expected: `[::1]`)
+- `[::1]:8000` → `[` (Expected: `[::1]`)
+- `[2001:db8::1]` → `[2001` (Expected: `[2001:db8::1]`)
+- `[2001:db8::1]:8080` → `[2001` (Expected: `[2001:db8::1]`)
+
+#### 2. Hypothesis Testing
+The hypothesis test successfully generated numerous failing cases. Every single IPv6 address tested failed because the first colon causes incorrect splitting:
+- `[0:0]` → `[0` (the specific example from the bug report)
+- Over 100 randomly generated IPv6 addresses all failed in the same way
+- The pattern is consistent: everything after the first colon is discarded
+
+#### 3. Proposed Fix Verification
+The proposed fix was tested and works correctly:
+```python
+if host_header.startswith("["):
+    # IPv6 address
+    host = host_header.split("]")[0] + "]"
+else:
+    host = host_header.split(":")[0]
+```
+
+This correctly handles:
+- IPv6 addresses with and without ports
+- IPv4 addresses with and without ports
+- Domain names with and without ports
+
+#### 4. Edge Cases
+Additional edge cases were tested:
+- `[::ffff:192.0.2.1]` (IPv4-mapped IPv6) - fails with current, works with fix
+- `[fe80::1%eth0]` (Link-local with zone ID) - fails with current, works with fix
+- `[::]` (All zeros) - fails with current, works with fix
+
+### Conclusion
+The bug is 100% reproducible. The current implementation cannot handle ANY IPv6 address in the Host header, causing all IPv6 requests to be incorrectly parsed. The extracted host becomes just "[" or "[xxxx" (up to first colon), which will never match any valid allowed_hosts pattern, causing legitimate IPv6 requests to be rejected with a 400 error.

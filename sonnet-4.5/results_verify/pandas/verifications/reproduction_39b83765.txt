@@ -1,0 +1,34 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug as reported. The issue is that the `_Options.get()` method does not handle parameter aliasing, while other dict-like operations do.
+
+### Hypothesis Test Results
+The property-based test fails with the first value tested (False):
+```
+AssertionError
+Falsifying example: test_options_get_handles_aliases(value=False)
+```
+
+### Manual Test Results
+When running the manual reproduction code:
+- `opts.get('xaxis.compat')` returns `True` (correct - canonical key)
+- `opts.get('x_compat')` returns `'default_value'` (incorrect - alias not resolved)
+- For comparison, `opts['x_compat']` returns `True` (correct - alias resolved via __getitem__)
+
+### Technical Investigation
+I verified that:
+1. The `get()` method is NOT overridden in `_Options` class (`'get' in _Options.__dict__` returns False)
+2. The `get()` method being used is the inherited one from dict (`_Options.get is dict.get` returns True)
+3. Other dict methods ARE overridden and handle aliases correctly:
+   - `__getitem__` is overridden and calls `_get_canonical_key()`
+   - `__setitem__` is overridden and calls `_get_canonical_key()`
+   - `__contains__` is overridden and calls `_get_canonical_key()`
+   - `__delitem__` is overridden and calls `_get_canonical_key()`
+
+### Effect
+This creates an inconsistency in the API:
+- `opts["x_compat"]` works (returns the value for "xaxis.compat")
+- `"x_compat" in opts` works (returns True)
+- `opts.get("x_compat")` fails (returns default value instead of the actual value)
+
+This violates the principle of least surprise and breaks the documented contract that parameter aliasing should work throughout the class.

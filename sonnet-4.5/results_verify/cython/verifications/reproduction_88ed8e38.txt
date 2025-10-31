@@ -1,0 +1,71 @@
+## Bug Reproduction Report
+
+### Environment
+- Cython version: 3.1.4
+- Python version: 3.13
+- Location: /home/npc/miniconda/lib/python3.13/site-packages/Cython/
+
+### Reproduction Results
+
+#### Test 1: Basic Reproduction
+The bug report's claim is CONFIRMED:
+```
+find_spanning_type(c_int_type, error_type) = int
+find_spanning_type(error_type, c_int_type) = <error>
+```
+These results are NOT equal, violating commutativity.
+
+#### Test 2: Extended Testing with Multiple Types
+The commutativity violation occurs with ALL non-PyObject types when paired with error_type:
+- c_int_type: NOT EQUAL (int vs <error>)
+- c_double_type: NOT EQUAL (double vs <error>)
+- c_float_type: NOT EQUAL (double vs <error>)
+- c_char_ptr_type: NOT EQUAL (char * vs <error>)
+- c_void_type: NOT EQUAL (void vs <error>)
+- py_object_type: EQUAL (both return Python object)
+
+Only py_object_type maintains commutativity with error_type.
+
+#### Test 3: Hypothesis Test
+The property-based test FAILED as reported, confirming systematic commutativity violations.
+
+#### Test 4: Root Cause Analysis
+The root cause is confirmed in the `assignable_from` behavior:
+- error_type.assignable_from(any_type) returns 1 (True) for ALL types
+- other_type.assignable_from(error_type) returns True for SOME types
+This asymmetry directly causes the commutativity violation.
+
+#### Test 5: ErrorType Implementation
+ErrorType.same_as_resolved_type() returns 1 (True) unconditionally:
+- error_type.same_as_resolved_type(c_int_type): 1
+- error_type.same_as_resolved_type(py_object_type): 1
+- error_type.same_as_resolved_type(error_type): 1
+
+This makes error_type appear "assignable from" any type, which is the root cause.
+
+### Code Analysis
+
+The problematic code is in PyrexTypes._spanning_type() lines 5502-5511:
+```python
+elif type1.assignable_from(type2):
+    return type1
+elif type2.assignable_from(type1):
+    return type2
+```
+
+When type1=error_type and type2=c_int_type:
+- error_type.assignable_from(c_int_type) returns True (due to same_as_resolved_type returning 1)
+- Returns error_type
+
+When type1=c_int_type and type2=error_type:
+- c_int_type.assignable_from(error_type) returns True
+- Returns c_int_type
+
+This asymmetric behavior breaks commutativity.
+
+### Technical Correctness of Bug Report
+The bug report is technically accurate:
+1. The commutativity violation is real and reproducible
+2. The root cause analysis is correct
+3. The impact description (non-deterministic type inference, associativity violations) is plausible
+4. The test cases work as described

@@ -1,0 +1,84 @@
+TRIAGE ANALYSIS FOR build_hex_version BUG REPORT
+
+=== Analysis for Each Category ===
+
+1. BUG (Valid Bug Report)
+   Arguments FOR:
+   - The function claims to produce "PY_VERSION_HEX" format but violates its specification
+   - Produces values exceeding 32-bit limit when major version > 255
+   - Corrupts adjacent fields through byte overflow (micro field gets wrong value)
+   - Used in production code to generate CYTHON_HEX_VERSION macro
+   - Silent failures with no error reporting
+   - The docstring explicitly says "like PY_VERSION_HEX" but doesn't match the format
+
+   Arguments AGAINST:
+   - Could argue the function works for "reasonable" version numbers
+   - Existing tests only cover small version numbers
+
+2. INVALID
+   Arguments FOR:
+   - PEP 440 doesn't specify maximum values for version components
+   - The function never explicitly promises to handle arbitrarily large numbers
+
+   Arguments AGAINST:
+   - The function explicitly claims to produce PY_VERSION_HEX format
+   - PY_VERSION_HEX has well-defined constraints (32-bit, 8-bit components)
+   - The overflow causes actual corruption of data, not just a limit
+
+3. WONTFIX
+   Arguments FOR:
+   - Version numbers > 255 are extremely unlikely in practice
+   - Prerelease serials > 95 for alpha are unusual
+   - Existing Cython versions work fine with normal version numbers
+
+   Arguments AGAINST:
+   - The bug causes silent data corruption
+   - The function is part of the public API
+   - The fix is straightforward (add validation)
+
+4. DOCUMENTATION_FIX
+   Arguments FOR:
+   - The function works but documentation should clarify limits
+   - Could document that it uses a different format than Python's PY_VERSION_HEX
+
+   Arguments AGAINST:
+   - The code is wrong, not just the documentation
+   - The function explicitly claims to produce PY_VERSION_HEX format
+   - The implementation has a fundamental misunderstanding of the format
+
+5. FEATURE_REQUEST
+   Arguments FOR:
+   - Supporting large version numbers could be seen as a new feature
+   - Input validation could be considered an enhancement
+
+   Arguments AGAINST:
+   - This is fixing broken behavior, not adding new functionality
+   - The function already claims to support the PY_VERSION_HEX format
+
+=== Critical Findings ===
+
+1. FORMAT MISMATCH: The implementation fundamentally misunderstands PY_VERSION_HEX:
+   - Python uses 4 bits for serial (0-15), Cython assumes 8 bits (0-255)
+   - This isn't just missing validation, it's incorrect format implementation
+
+2. SILENT CORRUPTION: The function produces corrupt data without errors:
+   - Version 256 produces 0x1000000F0 (> 32-bit)
+   - Version "0.0a96" incorrectly sets micro=1 instead of 0
+
+3. PRODUCTION IMPACT: This function is used to generate CYTHON_HEX_VERSION
+   in compiled modules, affecting version comparison logic
+
+4. CLEAR SPECIFICATION: PY_VERSION_HEX format is well-documented with strict
+   constraints that the implementation violates
+
+=== Conclusion ===
+This is a VALID BUG. The function explicitly claims to produce PY_VERSION_HEX format
+but fails to do so correctly. It produces values that:
+- Exceed the 32-bit limit
+- Corrupt adjacent version fields through overflow
+- Don't match Python's actual PY_VERSION_HEX format
+
+The implementation has a fundamental misunderstanding of how prerelease versions
+are encoded (assuming 8 bits for serial instead of 4 bits). This is not a
+documentation issue or missing feature - it's incorrect implementation of a
+well-defined format.

@@ -1,0 +1,43 @@
+## Reproduction Analysis
+
+### Bug Reproduction Results
+
+I have successfully reproduced the bug described in the report. The key findings are:
+
+1. **The bug is real**: When `is_re_compilable()` is called with invalid regex patterns (e.g., `'['`, `')'`, `'?'`, `'*'`, etc.), it raises `re.PatternError` instead of returning `False`.
+
+2. **Specific test results**:
+   - `is_re_compilable('[')` raises `PatternError: unterminated character set at position 0`
+   - `is_re_compilable(')')` raises `PatternError: unbalanced parenthesis at position 0`
+   - `is_re_compilable('?')` raises `PatternError: nothing to repeat at position 0`
+   - `is_re_compilable('*')` raises `PatternError: nothing to repeat at position 0`
+
+3. **Behavior with valid inputs works correctly**:
+   - Valid regex patterns like `'.*'`, `'foo'`, `r'\d+'` return `True`
+   - Non-string objects like `1`, `None`, `[]`, `{}` return `False` (caught by TypeError)
+
+4. **Hypothesis testing confirms the issue**: The hypothesis test found 13 failures out of 100 randomly generated test cases, all involving strings or bytes that are invalid regex patterns causing the function to crash with `PatternError`.
+
+### Technical Details
+
+The current implementation only catches `TypeError` exceptions:
+```python
+try:
+    re.compile(obj)
+except TypeError:
+    return False
+else:
+    return True
+```
+
+This means:
+- Non-string objects that raise `TypeError` are handled correctly (return `False`)
+- Invalid regex strings that raise `re.error` (including `re.PatternError`) are NOT handled and crash the function
+
+### Expected vs Actual Behavior
+
+**Expected** (per documentation): The function should return a boolean - `True` if the object can be compiled as a regex, `False` if it cannot.
+
+**Actual**: The function crashes with an unhandled exception when given strings that are invalid regex patterns.
+
+The bug report's proposed fix of catching both `TypeError` and `re.error` would align the implementation with the documented behavior, making the function return `False` for ALL cases where compilation fails, not just for TypeError cases.

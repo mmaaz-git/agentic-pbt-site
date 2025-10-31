@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The Starlette documentation does not explicitly state that headers differing only in case will be deduplicated. The documentation simply says allow_headers is "a list of HTTP request headers that should be supported" without specifying uniqueness constraints or case-handling behavior. The user is making an assumption about expected behavior that isn't documented. Additionally, the duplicate headers in the internal list don't actually break functionality - header validation still works correctly even with duplicates present.
+
+**Why it might not be INVALID:**
+RFC 2616 clearly states that HTTP header field names are case-insensitive, which is a fundamental HTTP specification. Any HTTP middleware should respect this standard. The code already acknowledges this by lowercasing headers for comparison (line 67, 129). Creating duplicates of what HTTP considers the same header violates the principle of least surprise and basic HTTP semantics.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a minor inefficiency that doesn't cause any actual functional problems. The duplicate headers in the internal list don't break CORS functionality - preflight responses work correctly, header validation works correctly, and the actual HTTP responses are correct. The only impact is a slightly inefficient list with duplicates that doesn't affect the end user. The fix would require changing the order of operations in a way that might introduce risk for minimal benefit.
+
+**Why it might not be WONTFIX:**
+The issue violates a basic data structure invariant (unique headers) and HTTP specifications. Even if it doesn't cause functional problems now, having duplicates in what should be a unique list of headers could lead to confusion for developers debugging the middleware or potential issues in future code changes. The fix is also straightforward and low-risk.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The current behavior could be considered "working as designed" but poorly documented. The documentation could be updated to explicitly state that headers are stored internally after lowercasing and that providing headers differing only in case may result in duplicate entries in the internal list. This would set proper expectations without changing the code.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The behavior clearly violates HTTP specifications and reasonable expectations. Documenting a bug doesn't make it correct behavior. No reasonable developer would expect or want duplicate headers in the allow list when they differ only in case. The code should be fixed to match HTTP semantics rather than documenting incorrect behavior.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The current code doesn't explicitly handle case-insensitive deduplication, and adding this could be seen as a new feature - "smart deduplication of headers based on HTTP case-insensitivity rules." The user is requesting behavior that, while reasonable, goes beyond what the current implementation provides.
+
+**Why it might not be FEATURE_REQUEST:**
+This isn't requesting new functionality but rather fixing incorrect handling of existing functionality. HTTP headers being case-insensitive is not a feature request but a fundamental requirement of HTTP protocol compliance. The code already treats headers as case-insensitive in other places (lowercasing for comparison), so consistent handling throughout is a bug fix, not a new feature.
+
+## BUG Considerations
+**Why it might be BUG:**
+The code violates HTTP RFC 2616 which explicitly states header field names are case-insensitive. The implementation is internally inconsistent - it acknowledges case-insensitivity by lowercasing headers for comparison but fails to apply this principle during deduplication. This creates a data structure with duplicate entries representing what HTTP considers the same header. The fix is straightforward and the current behavior is objectively incorrect according to HTTP specifications.
+
+**Why it might not be BUG:**
+The issue doesn't cause any functional failures - CORS still works correctly, headers are validated properly, and responses are sent correctly. The duplicates in the internal list are merely inefficient, not broken. The documentation doesn't promise unique headers in the internal representation, and the user's code shouldn't be accessing this internal attribute anyway.
+
+## Overall Consideration
+
+Looking at all considerations, this case sits on the boundary between a minor bug and a trivial issue that could be marked WONTFIX. The key factors are:
+
+First, the behavior does violate HTTP specifications - RFC 2616 clearly states headers are case-insensitive, and having duplicates of what HTTP considers the same header is incorrect. The implementation is also internally inconsistent, acknowledging case-insensitivity in some places (lowercasing for comparison) but not others (deduplication). This suggests the current behavior is unintentional rather than by design.
+
+Second, however, the practical impact is minimal. The bug doesn't cause functional failures - CORS works correctly despite the duplicates. The issue only affects an internal data structure that users shouldn't be directly accessing. The duplicates are inefficient but not broken. This could reasonably be classified as a trivial issue unworthy of fixing.
+
+Third, the credibility of the bug reporter must be considered. The instructions note that "almost all bug reports by this user have been wrong" with only about 10% being correct. This strongly suggests we should lean toward rejecting the report unless it's absolutely compelling. While the technical analysis is correct, the issue itself is not compelling enough to overcome this prior. The bug is real but trivial - exactly the kind of pedantic issue an unreliable reporter might raise that technically correct but practically unimportant. Given the reporter's track record and the minimal impact, this should be classified as WONTFIX.

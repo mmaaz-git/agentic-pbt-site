@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The function is working exactly as documented. The documentation explicitly states "If values of `b` are too close to 0, they are removed" and provides an example showing [0, 3, 6] becoming [1.5, 3.]. The function is designed for continuous-time transfer functions where leading zeros in descending exponent order are mathematically meaningless (0*s^n terms). The user is misapplying a continuous-time normalization function to discrete-time filters and expecting it to preserve discrete-time delay properties, which was never the intended use case.
+
+**Why it might not be INVALID:**
+The bug reporter makes a valid mathematical point that for discrete-time systems, leading zeros do represent delays and are meaningful. The round-trip conversion functions (tf2zpk, zpk2tf) do fail to preserve the original transfer function. The confusion between continuous-time and discrete-time conventions is understandable, and the function does cause silent data corruption when used with discrete-time filters.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is a design decision that has been in SciPy for many years. The function clearly documents its behavior and issues a warning when it removes coefficients. Changing this behavior would break backward compatibility for all existing code that relies on the current behavior. The mathematical interpretation for continuous-time systems (the documented use case) is correct - leading zero terms are redundant.
+
+**Why it might not be WONTFIX:**
+The issue affects multiple higher-level functions (tf2zpk, zpk2tf, tf2sos, sos2tf) causing them to violate expected round-trip properties. This is more than a trivial issue as it can cause subtle bugs in signal processing code. The fix would be simple - just don't strip the zeros - and users who want them stripped could do so manually.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be clearer about the distinction between continuous-time and discrete-time representations. It could explicitly warn that this function should not be used with discrete-time filters where delays matter. The documentation could better explain why leading zeros are removed for continuous-time systems and warn about the implications for round-trip conversions.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation already clearly states the behavior - it says values close to 0 are removed and shows an example. The function name and description explicitly state it's for "continuous-time transfer functions." The warning message already alerts users when coefficients are removed. The documentation is technically accurate as written.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+The user is essentially requesting that normalize() handle discrete-time transfer functions properly by preserving leading zeros. This could be implemented as an optional parameter like `preserve_zeros=True` or a separate function `normalize_discrete()`. This would allow the function to work correctly for both continuous and discrete-time systems.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already exists and has defined behavior. The user isn't asking for new functionality but claiming the existing functionality is wrong. The issue is framed as a bug, not a feature request. The proposed "fix" would change existing behavior rather than add new capabilities.
+
+## BUG Considerations
+**Why it might be BUG:**
+The round-trip conversion property (tf→zpk→tf should give back the original) is a reasonable expectation that's violated. Multiple functions that depend on normalize() inherit this problematic behavior. The function silently changes the mathematical properties of the filter without the user's explicit consent (just a warning). For discrete-time filters, this is objectively incorrect behavior that corrupts the filter specification.
+
+**Why it might not be BUG:**
+The function is behaving exactly as documented with explicit examples showing this behavior. The documentation clearly states it's for continuous-time transfer functions, and for continuous-time, the behavior is mathematically correct. The warning is issued as documented. Users misapplying a continuous-time function to discrete-time filters isn't a bug in the function. The scipy.signal module has separate discrete-time functions that should be used instead.
+
+## Overall consideration
+
+This is a classic case of a function being used outside its documented scope. The normalize() function is explicitly documented as being for "continuous-time transfer functions" and its behavior of removing leading zeros is not only documented but demonstrated with examples. For continuous-time systems in descending exponent notation, leading zeros (representing 0*s^n terms) are indeed mathematically redundant and should be removed. The function correctly implements this mathematical concept.
+
+The bug reporter is applying this function to discrete-time filters where leading zeros represent delays and are mathematically significant. This is a misuse of the function - they're using a continuous-time normalization on discrete-time data and expecting discrete-time semantics to be preserved. The fact that other functions like tf2zpk call normalize() internally doesn't make this a bug in normalize() itself; it might suggest these functions should have options for discrete-time handling, but that would be a feature request, not a bug.
+
+The strongest argument for this being a bug is the round-trip conversion failure, but even this is questionable. The documentation never promises that round-trip conversions will preserve leading zeros, and for continuous-time systems (the stated use case), the round-trip actually does preserve the mathematical transfer function since 0*s^n terms don't affect the system response. The user's expectation of round-trip preservation with discrete-time delay semantics is reasonable but undocumented and outside the function's stated scope. Given that the behavior is explicitly documented with examples, this should be classified as INVALID.

@@ -1,0 +1,61 @@
+## Reproduction Analysis
+
+### Bug Report Summary
+The bug report claims that `xarray.plot.facetgrid._nicetitle` violates its contract by returning strings longer than the specified `maxchar` parameter when `maxchar < 3`.
+
+### Reproduction Process
+
+1. **Hypothesis Test Execution**:
+   - Ran the provided property-based test with Hypothesis
+   - The test failed on multiple inputs, confirming the bug
+   - Key failing example: `coord='', value=None, maxchar=1, template='{coord}={value}'`
+   - Result: `'=No...'` with length 6 when maxchar was 1
+
+2. **Manual Test Cases**:
+   - Test 1: `_nicetitle(coord='', value=None, maxchar=1, template='{coord}={value}')`
+     - Expected: String with length ≤ 1
+     - Actual: `'=No...'` with length 6
+     - FAILED
+
+   - Test 2: `_nicetitle(coord='x', value=123, maxchar=2, template='{coord}={value}')`
+     - Expected: String with length ≤ 2
+     - Actual: `'x=12...'` with length 7
+     - FAILED
+
+   - Test 3: `_nicetitle(coord='test', value='value', maxchar=3, template='{coord}={value}')`
+     - Expected: String with length ≤ 3
+     - Actual: `'...'` with length 3
+     - PASSED
+
+   - Test 4: `_nicetitle(coord='test', value='value', maxchar=4, template='{coord}={value}')`
+     - Expected: String with length ≤ 4
+     - Actual: `'t...'` with length 4
+     - PASSED
+
+### Root Cause Analysis
+Looking at the source code (lines 46-56 of facetgrid.py):
+
+```python
+def _nicetitle(coord, value, maxchar, template):
+    """
+    Put coord, value in template and truncate at maxchar
+    """
+    prettyvalue = format_item(value, quote_strings=False)
+    title = template.format(coord=coord, value=prettyvalue)
+
+    if len(title) > maxchar:
+        title = title[: (maxchar - 3)] + "..."
+
+    return title
+```
+
+The issue is in line 54: `title = title[: (maxchar - 3)] + "..."`
+
+When `maxchar < 3`:
+- For maxchar=1: `title[:(1-3)]` = `title[:-2]` + `"..."` results in a string ending with "..." (minimum 3 chars)
+- For maxchar=2: `title[:(2-3)]` = `title[:-1]` + `"..."` results in a string ending with "..." (minimum 3 chars)
+
+The function always appends "..." (3 characters) after truncation, making it impossible to honor maxchar values less than 3.
+
+### Conclusion
+The bug is confirmed and reproducible. The function violates its documented contract when `maxchar < 3`, returning strings longer than the specified maximum character limit.

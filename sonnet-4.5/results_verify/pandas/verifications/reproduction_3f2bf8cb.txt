@@ -1,0 +1,23 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug described in the report. The issue is real and reproducible.
+
+### Key Findings:
+
+1. **Confirmed Hash Collision**: When `categorize=True`, the empty string `''` and null byte `'\x00'` incorrectly hash to the same value (1760245841805064774).
+
+2. **Working Correctly Without Categorize**: When `categorize=False`, these two distinct strings correctly hash to different values:
+   - `''` → 1760245841805064774
+   - `'\x00'` → 7984136654223058057
+
+3. **Root Cause Identified**: The issue is not in the hash_array function itself but in the `factorize()` function that is called when `categorize=True`. Testing revealed that `factorize()` incorrectly treats the following as the same category:
+   - Empty string `''`
+   - Single null byte `'\x00'`
+   - Multiple null bytes `'\x00\x00'`
+
+   All these distinct strings are assigned code 0 by factorize, meaning they're treated as identical.
+
+4. **Direct Hashing Works**: When bypassing factorize and using `hash_object_array` directly, the empty string and null byte correctly produce different hashes.
+
+### Impact:
+This is a genuine bug that violates a fundamental property of hash functions: distinct inputs should produce distinct outputs (with high probability). The bug affects any pandas operation that relies on hash_array with `categorize=True` for string data containing null bytes.

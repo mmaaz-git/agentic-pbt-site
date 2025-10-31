@@ -1,0 +1,35 @@
+## Reproduction of Bug Report
+
+### Summary
+I successfully reproduced the bug reported for scipy.signal.windows.tukey with very small alpha values.
+
+### Direct Reproduction
+The bug was reproduced using the provided test case:
+- Called `windows.tukey(2, 5e-324)`
+- Result: `[0. nan]` - contains NaN value as reported
+- Runtime warnings were generated:
+  - "overflow encountered in divide" at line 946
+  - "invalid value encountered in add" at line 946
+
+### Hypothesis Test
+The hypothesis test also failed as expected:
+- The test asserts that all values should be non-negative and not NaN
+- Failed on the explicit example with M=2, alpha=5e-324
+- Assertion error: "Tukey window should not contain NaN values for M=2, alpha=5e-324"
+
+### Mathematical Analysis
+Further investigation revealed:
+1. `5e-324` is a subnormal (denormalized) float number, well below Python's `sys.float_info.min` (2.225e-308)
+2. The division `-2.0/alpha` with alpha=5e-324 results in `-inf` (negative infinity)
+3. Computing `cos(infinity)` returns NaN
+4. The NaN propagates through the rest of the calculation
+
+### Edge Case Testing
+Testing various alpha values showed:
+- alpha=0.0: Works correctly, returns [1. 1.] (rectangular window)
+- alpha=5e-324: Fails with NaN
+- alpha=1e-300: Works, returns [0. 1.]
+- alpha >= 1e-15: Works correctly
+- Negative alpha values are correctly handled as rectangular windows
+
+The bug occurs specifically when alpha is positive but so small that division by it causes overflow to infinity.

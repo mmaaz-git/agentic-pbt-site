@@ -1,0 +1,53 @@
+DOCUMENTATION ANALYSIS
+
+1. FUNCTION DOCUMENTATION:
+   The is_same_domain() function has minimal public documentation:
+
+   Docstring (from source code):
+   """
+   Return ``True`` if the host is either an exact match or a match
+   to the wildcard pattern.
+
+   Any pattern beginning with a period matches a domain and all of its
+   subdomains. (e.g. ``.example.com`` matches ``example.com`` and
+   ``foo.example.com``). Anything else is an exact string match.
+   """
+
+   Key observations:
+   - The docstring says "exact string match" but doesn't specify case sensitivity
+   - No mention of DNS standards or case-insensitive comparison
+   - Function is not documented in Django's official API documentation (appears to be internal)
+
+2. USAGE CONTEXT IN DJANGO:
+
+   a) validate_host() function explicitly documents:
+      "Note: This function assumes that the given host is lowercased and has
+      already had the port, if any, stripped off."
+
+      This function pre-processes the host via split_domain_port() which lowercases it,
+      so validate_host() works correctly.
+
+   b) CSRF middleware uses is_same_domain() directly with:
+      - request_netloc from urlsplit() - which preserves original case
+      - This means CSRF checks could fail with mixed-case domains
+
+3. DNS STANDARDS (RFC 1035):
+
+   RFC 1035 explicitly states:
+   - "For all parts of the DNS that are part of the official protocol, all comparisons
+     between character strings (e.g., labels, domain names, etc.) are done in a
+     case-insensitive manner."
+   - "Name servers and resolvers must compare labels in a case-insensitive manner
+     (i.e., A=a), assuming ASCII with zero parity."
+
+4. CONCLUSION ON DOCUMENTATION:
+
+   The function's behavior contradicts DNS standards. While the documentation doesn't
+   explicitly promise case-insensitive comparison, the function name "is_same_domain"
+   and its purpose (domain matching) strongly implies it should follow DNS conventions.
+
+   The fact that some Django code (validate_host) assumes pre-normalized input while
+   other code (CSRF middleware) doesn't, creates inconsistency and potential bugs.
+
+   This is not a documentation error - the code implementation is incorrect for a
+   domain comparison function.

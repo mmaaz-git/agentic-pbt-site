@@ -1,0 +1,54 @@
+# Documentation Analysis for receive_until
+
+## Documentation Source
+The documentation is found in the docstring of the receive_until method in anyio/streams/buffered.py:
+
+```
+async def receive_until(self, delimiter: bytes, max_bytes: int) -> bytes:
+    """
+    Read from the stream until the delimiter is found or max_bytes have been read.
+
+    :param delimiter: the marker to look for in the stream
+    :param max_bytes: maximum number of bytes that will be read before raising
+        :exc:`~anyio.DelimiterNotFound`
+    :return: the bytes read (not including the delimiter)
+    :raises ~anyio.IncompleteRead: if the stream was closed before the delimiter
+        was found
+    :raises ~anyio.DelimiterNotFound: if the delimiter is not found within the
+        bytes read up to the maximum allowed
+    """
+```
+
+## Key Documentation Points
+
+1. The parameter description states: "maximum number of bytes that will be read before raising DelimiterNotFound"
+
+2. The exception description states: "if the delimiter is not found within the bytes read up to the maximum allowed"
+
+3. The DelimiterNotFound exception docstring confirms: "Raised during receive_until if the maximum number of bytes has been read without the delimiter being found."
+
+## Ambiguity in Documentation
+
+The documentation is ambiguous about what "bytes that will be read" means:
+
+**Interpretation A**: Maximum number of data bytes RETURNED (before the delimiter)
+- This would mean max_bytes=5 allows returning up to 5 bytes of data, regardless of how many total bytes need to be read to find the delimiter
+
+**Interpretation B**: Maximum number of bytes READ FROM THE STREAM
+- This would mean max_bytes=5 limits the total bytes read from the underlying stream, including the delimiter itself
+
+## Current Implementation Behavior
+
+Testing reveals the implementation currently follows neither interpretation consistently:
+- It allows reading unlimited bytes from the stream if the delimiter is found
+- It only checks the buffer size AFTER attempting to find the delimiter
+- The check at line 134 (`if len(self._buffer) >= max_bytes`) only triggers when the delimiter is NOT found
+
+## Documentation vs Implementation
+
+The documentation phrase "maximum number of bytes that will be read" most naturally suggests Interpretation B (total bytes read from stream), because:
+1. It uses "read" not "returned"
+2. The DelimiterNotFound exception takes max_bytes as a parameter, suggesting it's a read limit
+3. The phrase "bytes read up to the maximum allowed" implies a limit on reading operations
+
+However, the implementation doesn't enforce this limit properly, allowing the function to succeed even when more than max_bytes need to be read to find the delimiter.

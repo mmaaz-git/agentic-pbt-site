@@ -1,0 +1,50 @@
+## Bug Reproduction Report
+
+### Test Results
+
+I successfully reproduced the bug exactly as described in the bug report.
+
+#### Test 1: Basic Begin Action Usage
+```python
+lexicon = Lexicon([
+    (Str('start'), Begin('state2')),
+    State('state2', [(Str('x'), 'STATE2_X')])
+])
+scanner = Scanner(lexicon, io.StringIO('start'))
+token, text = scanner.read()
+```
+**Result**: `AttributeError: 'Cython.Plex.Scanners.Scanner' object has no attribute 'begin'`
+
+This confirms the exact error message reported.
+
+#### Test 2: Property-Based Test
+The hypothesis test with `trigger_pattern='a'` fails with the same AttributeError on the first `scanner.read()` call, exactly as reported.
+
+#### Test 3: Method Inspection
+Confirmed that the Scanner instance does NOT have `begin()` or `produce()` methods:
+- `hasattr(Scanner, 'begin')` returns False
+- `hasattr(Scanner, 'produce')` returns False
+- These methods are not in the list of available attributes
+
+#### Test 4: Direct Method Call
+Attempting to call `scanner.begin('state2')` directly also results in AttributeError.
+
+### Root Cause Analysis
+
+The investigation revealed the actual cause of the bug:
+
+1. The Python source file (Scanners.py) DOES define `begin()` and `produce()` as regular Python methods
+2. However, the Cython declaration file (Scanners.pxd) declares them as `cdef inline` methods
+3. The compiled extension module (.so) is what actually runs, and it follows the .pxd declaration
+4. `cdef inline` methods are C-only and not accessible from Python code
+5. Therefore, any Python code trying to call these methods will fail with AttributeError
+
+### Impact
+
+The bug makes it impossible to:
+1. Use the Begin action in any lexicon specification
+2. Manually change scanner state via `scanner.begin()`
+3. Use the `produce()` method from action procedures
+4. Implement any multi-state lexical scanner
+
+This is a critical functionality bug that completely breaks state management in Plex scanners.

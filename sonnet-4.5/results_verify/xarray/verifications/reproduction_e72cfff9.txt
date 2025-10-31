@@ -1,0 +1,33 @@
+## Bug Reproduction Report
+
+### Summary
+I have successfully reproduced the bug reported in `django.template.backends.jinja2.get_exception_info`. The function crashes with an `IndexError` when the exception's `lineno` attribute is greater than the actual number of lines in the source code.
+
+### Reproduction Steps
+
+1. **Hypothesis Test Execution**
+   - Ran the provided property-based test using Hypothesis
+   - The test failed with a falsifying example: `source='', lineno=2, message=''`
+   - This shows that even an empty source string with lineno=2 causes the crash
+   - The error occurs at line 106 in jinja2.py: `during = lines[lineno - 1][1]`
+   - Error message: `IndexError: list index out of range`
+
+2. **Manual Test Case Execution**
+   - Tested the specific example from the bug report: `lineno=10, source="line 1\nline 2\nline 3"`
+   - The function crashed with the exact same IndexError
+   - The stack trace confirms the issue is at line 106 when accessing `lines[lineno - 1][1]`
+
+3. **Source Code Analysis**
+   - Examined the actual implementation in `/home/npc/pbt/agentic-pbt/envs/django_env/lib/python3.13/site-packages/django/template/backends/jinja2.py`
+   - Line 105: `lines = list(enumerate(source.strip().split("\n"), start=1))`
+   - Line 106: `during = lines[lineno - 1][1]`
+   - The code directly accesses the list at index `lineno - 1` without any bounds checking
+   - If `lineno` is greater than the number of lines in the source, this causes an IndexError
+
+### Bug Confirmation
+The bug is confirmed. The function fails to handle cases where:
+1. The source is empty but lineno > 0
+2. The lineno exceeds the actual number of lines in the source
+3. Any scenario where `lineno - 1` is >= `len(lines)`
+
+This is a legitimate crash that prevents Django from properly displaying debug information when template exceptions have invalid line numbers.

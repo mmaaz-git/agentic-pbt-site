@@ -1,0 +1,32 @@
+## Bug Reproduction Report
+
+I have successfully reproduced the bug described in the report. Here's what I found:
+
+### Test Results
+
+1. **Property-Based Test**: The hypothesis test failed with the error "401: Invalid authentication credentials" when trying to use non-ASCII characters in credentials.
+
+2. **Non-ASCII Password Test**: The specific test case with username="user" and password="päss" (containing the umlaut 'ä') failed with HTTPException: 401: Invalid authentication credentials.
+
+3. **Specific Failing Input Test**: The test with username='0' and password='\x80' (a non-ASCII byte) also failed with the same error.
+
+### Code Inspection
+
+I examined the FastAPI source code at `/home/npc/miniconda/lib/python3.13/site-packages/fastapi/security/http.py` and confirmed the issue at line 211:
+
+```python
+data = b64decode(param).decode("ascii")
+```
+
+The code is indeed using ASCII decoding instead of UTF-8, which causes it to fail when encountering non-ASCII characters in the base64-decoded credential string.
+
+### Effect
+
+The bug causes valid HTTP Basic Authentication credentials containing non-ASCII characters to be rejected. This affects:
+
+1. Users with passwords containing accented characters (e.g., café, José)
+2. Users with non-Latin scripts in their credentials (e.g., Chinese, Japanese, Arabic)
+3. Users with emoji or special Unicode symbols in their passwords
+4. Any system that needs to support international characters in authentication
+
+The error occurs during the decoding phase, raising a UnicodeDecodeError which is caught and converted to a 401 Unauthorized response with "Invalid authentication credentials" message, even though the credentials are properly base64-encoded and valid according to standards.

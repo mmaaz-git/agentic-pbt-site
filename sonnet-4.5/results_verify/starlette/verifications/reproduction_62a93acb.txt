@@ -1,0 +1,44 @@
+BUG REPRODUCTION RESULTS
+
+1. HYPOTHESIS TEST EXECUTION:
+The provided hypothesis test was executed successfully and immediately found failing examples:
+- Failing example: header_name='0', leading_space=0, trailing_space=1
+- The test confirms that headers with trailing whitespace like '0 ' are stored with the whitespace intact
+- AssertionError: Bug: allow_headers contains whitespace: '0 ' (should be '0')
+
+2. SPECIFIC EXAMPLE REPRODUCTION:
+Testing with the exact example from the bug report:
+```
+CORSMiddleware(app, allow_headers=["X-Custom-Header ", "Content-Type"])
+```
+
+Results:
+- The middleware stores: ['accept', 'accept-language', 'content-language', 'content-type', 'x-custom-header ']
+- Note that 'x-custom-header ' retains the trailing space after being lowercased
+
+3. VALIDATION LOGIC TEST:
+When a request comes in with "X-Custom-Header" (no whitespace):
+- The header is lowercased to "x-custom-header"
+- The validation code strips it: "x-custom-header".strip() = "x-custom-header"
+- It checks if "x-custom-header" is in ['accept', ..., 'x-custom-header ']
+- Result: NOT FOUND because stored value has trailing space but searched value doesn't
+- The request would be rejected with "Disallowed CORS headers" error
+
+4. ASYMMETRY CONFIRMATION:
+The bug report is TECHNICALLY CORRECT about the asymmetry:
+- Initialization: Headers are lowercased but NOT stripped (line 67)
+- Validation: Headers are lowercased AND stripped (line 129)
+
+This creates an inconsistency where:
+- A developer configures: allow_headers=["X-Custom-Header "] (with accidental space)
+- A client sends: "X-Custom-Header" (standard header without space)
+- Result: Request is incorrectly rejected
+
+5. REAL-WORLD IMPACT:
+The bug would manifest when:
+- Developers accidentally include whitespace in their header configuration
+- The middleware silently accepts this configuration without warning
+- Valid client requests are then rejected due to the mismatch
+- This could be particularly confusing because the error message wouldn't clearly indicate the whitespace issue
+
+The technical details in the bug report are accurate and the reproduction confirms the behavior described.

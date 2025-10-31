@@ -1,0 +1,26 @@
+## Reproduction of the Bug
+
+I have successfully reproduced the bug reported in `dask.dataframe.io.orc.core._read_orc`. The function does indeed mutate its input `columns` list parameter.
+
+### Key Findings:
+
+1. **The bug exists**: The `_read_orc` function at line 113 directly appends the `index` parameter to the `columns` list using `columns.append(index)`, which modifies the original list passed by the caller.
+
+2. **Verified behavior**:
+   - When calling `_read_orc` with `columns=['col1', 'col2']` and `index='col1'`, the list is mutated to `['col1', 'col2', 'col1']`
+   - Multiple calls with the same list cause accumulation: `['col1', 'col2', 'idx0', 'idx1', 'idx2']`
+   - The mutation happens in-place (same object ID before and after)
+
+3. **The hypothesis test case fails**: Running with `index='0'` and `columns=['0']` results in the list being mutated to `['0', '0']`, confirming the test failure.
+
+4. **Context about the function**:
+   - `_read_orc` is a private/internal function (starts with underscore)
+   - It is called by the public `read_orc` function via `dd.from_map`
+   - The public `read_orc` function protects against this issue on line 98 by creating a new list when needed: `columns = [col for col in columns if col != index]`
+
+5. **Impact**: The mutation can cause subtle bugs if:
+   - The same columns list is reused across multiple calls to `_read_orc`
+   - Code directly calls the private `_read_orc` function
+   - Future refactoring changes how `read_orc` handles the columns list before passing it to `_read_orc`
+
+The proposed fix in the bug report (creating a copy before appending) would prevent this mutation and follow Python best practices of not modifying input parameters unless explicitly documented.

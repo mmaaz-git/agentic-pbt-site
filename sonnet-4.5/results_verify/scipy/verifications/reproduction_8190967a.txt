@@ -1,0 +1,61 @@
+REPRODUCTION RESULTS FOR scipy.signal.resample BUG REPORT
+==========================================================
+
+Test Environment:
+-----------------
+- Python version: 3.13
+- Scipy version: Latest available
+- NumPy version: Latest available
+
+Reproduction Status: CONFIRMED
+-------------------------------
+The bug report's claims are accurate. The function crashes with the exact error described.
+
+Test Results:
+-------------
+
+1. Hypothesis Test:
+   - FAILED as reported
+   - Input: data=[] (empty list)
+   - Error: ValueError: invalid number of data points (0) specified
+   - Location: scipy/fft/_pocketfft/basic.py line 58
+
+2. Direct Reproduction:
+   - Input: np.array([], dtype=np.float64)
+   - Requested output: 10 samples
+   - Result: ValueError with same error message
+   - Stack trace matches exactly what was reported
+
+3. Additional Edge Cases Tested:
+   - 2D empty array (0, 2) on axis=0: Same ValueError
+   - 2D empty array (2, 0) on axis=1: Same ValueError
+   - All empty array inputs fail identically
+
+4. Normal Operation Verification:
+   - Non-empty array [1.0, 2.0, 3.0, 4.0] resampled to 8 samples: SUCCESS
+   - Output correctly generated with shape (8,)
+   - Function works normally with valid input
+
+5. Error Analysis:
+   - The error occurs in the FFT implementation, not in resample itself
+   - The error message "invalid number of data points (0) specified" comes from the low-level FFT routine
+   - The resample function does not validate input size before calling FFT
+   - The error is not caught or handled at the resample level
+
+6. Behavior Comparison:
+   - Other scipy.signal functions show varied behavior:
+     * Some return empty arrays (resample_poly, fftconvolve, medfilt)
+     * Some raise different errors (hilbert: "N must be positive")
+     * Some raise similar reduction errors (convolve, correlate)
+   - The module lacks consistent empty array handling
+
+Technical Observations:
+-----------------------
+1. The crash occurs because FFT cannot operate on empty data
+2. The error message is technically correct but comes from deep within the implementation
+3. The function could theoretically return an array of zeros of the requested size
+4. The mathematical operation of resampling empty data is undefined
+5. The error could be caught and re-raised with a more informative message
+
+Verdict on Reproduction:
+The bug report accurately describes the behavior. The function does crash with a ValueError when given an empty array, and the error message comes from the FFT implementation rather than from input validation in the resample function itself.

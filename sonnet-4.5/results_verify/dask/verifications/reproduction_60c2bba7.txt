@@ -1,0 +1,39 @@
+## Bug Reproduction Analysis
+
+I have successfully reproduced the reported bug in `dask.utils.key_split`.
+
+### Key Findings:
+
+1. **The bug is real**: The function crashes with `UnicodeDecodeError` when given bytes that contain invalid UTF-8 sequences.
+
+2. **Specific failing input confirmed**: The input `b'\x80'` does indeed cause a `UnicodeDecodeError` as reported.
+
+3. **The crash occurs exactly where reported**: Looking at line 1979 of the function:
+   ```python
+   if type(s) is bytes:
+       return key_split(s.decode())  # This line crashes
+   ```
+   The `.decode()` method attempts UTF-8 decoding by default, which fails on invalid UTF-8 bytes.
+
+4. **The exception handler doesn't catch this**: The function has a catch-all exception handler at lines 2001-2002:
+   ```python
+   except Exception:
+       return "Other"
+   ```
+   However, this exception handler is inside the main try block that starts at line 1982. The bytes decoding happens at line 1979, BEFORE entering the try block, so the exception is never caught.
+
+5. **Valid UTF-8 bytes work fine**: When testing valid UTF-8 byte sequences like `b'hello'` or `b'hello-world-1'`, the function works correctly and returns the expected results ('hello' and 'hello-world' respectively).
+
+6. **Multiple invalid UTF-8 sequences fail**: Not just `b'\x80'`, but many other invalid UTF-8 sequences cause the same crash:
+   - Invalid start bytes (0x80-0xBF)
+   - Invalid continuation bytes (0xC0-0xFF when not properly followed)
+   - Incomplete multi-byte sequences
+   - Overlong encodings
+   - Surrogate pairs
+
+### Impact:
+
+The bug affects any code that passes bytes to `key_split` where those bytes might not be valid UTF-8. This is particularly problematic because:
+1. The function's docstring explicitly shows an example with bytes input (`>>> key_split(b'hello-world-1')`)
+2. The function has a catch-all exception handler that suggests it's designed to handle edge cases gracefully
+3. The idempotence property test fails, meaning `key_split(x)` might crash even when `x` is a valid return value from a previous `key_split` call on different data

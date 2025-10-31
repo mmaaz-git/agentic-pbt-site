@@ -1,0 +1,47 @@
+REPRODUCTION RESULTS FOR strip_common_indent BUG
+
+1. Bug Reproduction Status: CONFIRMED
+The bug described in the report is technically accurate and reproducible.
+
+2. Test Case Results:
+
+Test 1 - Basic Example:
+Input: '        code1\n#comment\n        code2'
+Expected output lines: ['code1', '#comment', 'code2']
+Actual output lines: ['code1', '', 'code2']
+Result: The comment '#comment' is completely lost and becomes an empty string
+
+Test 2 - Property Test:
+With indent=8 and comment_text='comment'
+Input: '        code1\n#comment\n        code2'
+Expected: Comment line should be '#comment'
+Actual: Comment line is ''
+Result: Fails - comment is lost
+
+3. Root Cause Analysis (Verified):
+The bug report's technical analysis is CORRECT:
+
+a) In the first loop (lines 411-419):
+   - The variable 'indent' gets set to match.start() for each non-comment line
+   - After processing all lines, 'indent' retains the value from the LAST non-comment line processed
+   - In our test case, indent=8 (from the last line '        code2')
+
+b) In the second loop (lines 420-424):
+   - Line 422 checks: line[indent:indent+1] == '#'
+   - For the comment line '#comment', this checks line[8:9]
+   - Since '#comment' has length 8, line[8:9] is out of bounds and returns ''
+   - The check fails, so the comment is NOT skipped
+   - Line 424 executes: lines[ix] = line[min_indent:]
+   - This becomes: '#comment'[8:] = '' (empty string)
+
+4. Fix Validation:
+The proposed fix was tested and works correctly:
+- Original: line[indent:indent+1] == '#'
+- Fixed: (match and line[match.start()] == '#')
+
+This correctly identifies comment lines by checking the first non-space character of the CURRENT line, not using a stale variable.
+
+5. Bug Impact:
+- Comments at the beginning of lines (no indentation) get truncated or deleted when code has indentation >= comment length
+- This data loss is silent - no error is raised
+- The function fails to preserve the structure of the input code

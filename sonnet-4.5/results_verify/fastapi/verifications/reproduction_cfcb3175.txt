@@ -1,0 +1,38 @@
+# Bug Reproduction Report
+
+## Summary
+I have successfully reproduced the reported bug in FastAPI's `openapi.models.Schema` class. The issue occurs when trying to access the `ref` field after setting it using the field name in the constructor.
+
+## Reproduction Steps
+
+### 1. Hypothesis Test
+The provided Hypothesis test fails immediately with the first generated value:
+- Input: `ref_value='0'` (or any string value)
+- Expected: `schema.ref == '0'`
+- Actual: `schema.ref == None`
+- Result: AssertionError
+
+### 2. Manual Reproduction
+Created a Schema object with `ref='#/components/schemas/MyModel'`:
+- `schema.ref` returns `None` instead of the expected value
+- `schema.model_dump(exclude_none=True)` correctly shows `{'ref': '#/components/schemas/MyModel'}`
+- The value is stored internally but not accessible via attribute access
+
+### 3. Root Cause Analysis
+Through testing with simplified Pydantic models, I confirmed that:
+- The issue is caused by the `BaseModelWithConfig` class not having `populate_by_name=True` configured
+- When a field has an alias (like `$ref`) and `populate_by_name` is False (default), Pydantic doesn't properly populate the field when using the field name during construction
+- Using the alias directly (`Schema(**{'$ref': 'value'})`) works correctly
+
+### 4. Fix Validation
+Tested the proposed fix by adding `populate_by_name=True` to the configuration:
+- With the fix, both `Schema(ref='value')` and `Schema(**{'$ref': 'value'})` work correctly
+- The field value can be accessed via `schema.ref` in both cases
+- The fix maintains backward compatibility
+
+## Impact
+This bug affects any code that:
+1. Creates Schema objects using the field name (`ref='value'`)
+2. Later tries to access the value using `schema.ref`
+
+The bug is silent - no error is raised during construction, but the value is inaccessible, returning None instead of the stored value.

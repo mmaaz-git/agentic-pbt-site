@@ -1,0 +1,32 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in dask.utils.key_split.
+
+Test Results:
+-------------
+1. Hypothesis Test: CONFIRMED
+   - The property-based test with @given(st.binary()) fails with b'\x80'
+   - Error: UnicodeDecodeError: 'utf-8' codec can't decode byte 0x80 in position 0: invalid start byte
+
+2. Direct Reproduction: CONFIRMED
+   - key_split(b'\x80') raises UnicodeDecodeError as reported
+   - The exact error message matches the bug report
+
+3. Additional Testing:
+   - Valid UTF-8 bytes work correctly: key_split(b'hello-world-1') returns 'hello-world'
+   - Valid non-ASCII UTF-8 also works: key_split(b'\xc3\xa9') returns 'é'
+   - Multiple invalid UTF-8 sequences fail:
+     * b'\x80' - invalid start byte
+     * b'\xc3\x28' - invalid UTF-8 sequence
+     * b'\xff\xfe' - invalid UTF-8 (BOM-like bytes)
+
+4. Function Behavior Observations:
+   - The function returns "Other" for None and unparseable inputs
+   - The function has a try/except block that catches exceptions and returns "Other"
+   - However, the bytes decoding happens OUTSIDE the try block at line 1979
+   - This means UnicodeDecodeError is not caught by the general exception handler
+
+The bug is real and reproducible. The function crashes with UnicodeDecodeError when given
+non-UTF-8 byte sequences, despite having a general exception handler that returns "Other"
+for other error cases.

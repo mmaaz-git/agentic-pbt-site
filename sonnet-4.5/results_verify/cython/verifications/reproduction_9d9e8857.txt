@@ -1,0 +1,35 @@
+## Reproduction Analysis
+
+I have successfully reproduced the bug described in the bug report.
+
+### Hypothesis Test Results
+The Hypothesis test failed exactly as described:
+- Input: `s='0'`, `max_len=0`
+- Expected: Result length ≤ 0
+- Actual: Result is `'5feceb____etc'` with length 13
+
+### Manual Test Results
+The manual test confirmed the bug for the exact case and revealed a broader pattern:
+- `cap_length('0', max_len=0)` returns `'5feceb____etc'` (length 13) instead of empty string
+- The function consistently violates the max_len constraint when max_len < 13
+- For very small max_len values, the returned string is always at least 13 characters
+
+### Root Cause Analysis
+Looking at the implementation (lines 5704-5708):
+```python
+def cap_length(s, max_len=63):
+    if len(s) <= max_len:
+        return s
+    hash_prefix = hashlib.sha256(s.encode('ascii')).hexdigest()[:6]
+    return '%s__%s__etc' % (hash_prefix, s[:max_len-17])
+```
+
+The problem occurs when `len(s) > max_len`:
+1. The function generates a 6-character hash prefix
+2. It creates a result in format: `{hash}__{truncated_string}__etc`
+3. The minimum length of this format is 13 characters (6 hash + 2 "__" + 0 chars + 5 "__etc")
+4. When `max_len < 13`, the slice `s[:max_len-17]` becomes negative or produces more characters than intended
+5. The result always exceeds max_len for small values
+
+### Bug Validity
+The bug is reproducible and behaves exactly as described in the report. The function name `cap_length` and the parameter name `max_len` clearly indicate the function should cap the string length at the specified maximum, but it fails to do so for `max_len < 13`.

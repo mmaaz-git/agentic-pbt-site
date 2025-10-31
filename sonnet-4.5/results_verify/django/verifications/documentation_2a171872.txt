@@ -1,0 +1,44 @@
+Documentation Review for django.core.files.utils.validate_file_name
+====================================================================
+
+FUNCTION PURPOSE:
+The validate_file_name function is an internal Django utility used to sanitize and validate file names to prevent security vulnerabilities like path traversal attacks. It's primarily used by Django's UploadedFile class to sanitize uploaded file names.
+
+DOCUMENTATION FINDINGS:
+1. This is an INTERNAL function - not part of Django's public API
+2. No official Django documentation exists for this function in the public docs
+3. The function has inline comments but no formal docstring
+4. The function is used internally by Django's file upload handling system
+
+FUNCTION BEHAVIOR FROM CODE:
+The function has two modes controlled by allow_relative_path parameter:
+
+When allow_relative_path=False (default):
+- Rejects empty names, ".", and ".."
+- Checks if name != os.path.basename(name) to detect path separators
+- Returns the name if valid, raises SuspiciousFileOperation otherwise
+
+When allow_relative_path=True:
+- Rejects empty names, ".", and ".."
+- Explicitly converts backslashes to forward slashes: str(name).replace("\\", "/")
+- Creates a PurePosixPath to check for absolute paths or ".." components
+- Returns the name if valid, raises SuspiciousFileOperation otherwise
+
+KEY OBSERVATION:
+The code comment in allow_relative_path=True branch states:
+"Ensure that name can be treated as a pure posix path, i.e. Unix style (with forward slashes)."
+
+This indicates that backslashes ARE considered path separators by Django and should be converted to forward slashes for POSIX compatibility. The explicit replace("\\", "/") shows Django's intent to treat backslashes as path separators.
+
+DOCUMENTED USAGE:
+In UploadedFile._set_name (line 53-63), the function is called with default parameters (allow_relative_path=False) AFTER os.path.basename is already applied. The comment says "Just use the basename of the file -- anything else is dangerous."
+
+SECURITY CONTEXT:
+The function name includes "validate" and raises "SuspiciousFileOperation" exceptions, clearly indicating this is a security-critical validation function meant to prevent path traversal and other file system attacks.
+
+PLATFORM BEHAVIOR:
+The os.path.basename behavior is platform-dependent:
+- On Windows: treats both / and \ as separators
+- On Unix/Linux: treats only / as separator, \ is a valid filename character
+
+This creates the inconsistency noted in the bug report.

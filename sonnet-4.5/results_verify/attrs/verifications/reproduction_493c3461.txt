@@ -1,0 +1,65 @@
+REPRODUCTION REPORT
+===================
+
+I have successfully reproduced the bug reported in the attrs `or_` validator. The bug report is accurate in its description.
+
+## Test Cases Run
+
+1. **Basic Reproduction Case**: I created a validator that raises AttributeError and combined it with a valid validator using `or_()`.
+
+Result: The AttributeError was silently caught and converted to a generic ValueError saying "None of ... satisfied", confirming the bug.
+
+2. **KeyError Test**: Tested with a validator that raises KeyError.
+
+Result: Same behavior - the KeyError was caught and converted to ValueError.
+
+3. **ValueError Test**: Tested with a validator that raises ValueError (expected exception type).
+
+Result: Works as expected - ValueError is caught and the next validator in the chain is tried.
+
+4. **TypeError Test**: Tested with a validator that raises TypeError (expected exception type).
+
+Result: Works as expected - TypeError is caught and the next validator in the chain is tried.
+
+## Code Examination
+
+I examined the source code at `/home/npc/pbt/agentic-pbt/envs/attrs_env/lib/python3.13/site-packages/attr/validators.py`:
+
+Lines 671-678 show the `_OrValidator.__call__` method:
+```python
+def __call__(self, inst, attr, value):
+    for v in self.validators:
+        try:
+            v(inst, attr, value)
+        except Exception:  # noqa: BLE001, PERF203, S112
+            continue
+        else:
+            return
+```
+
+The code catches `Exception` (line 675), which means ALL exceptions are caught, not just validation errors.
+
+## Comparison with not_ Validator
+
+The `not_` validator (line 631) has a default parameter `exc_types=(ValueError, TypeError)`, showing that these are the standard validation exception types in attrs.
+
+## Effect of the Bug
+
+1. **Hides Programming Errors**: If a validator has a bug (e.g., AttributeError from accessing a missing attribute), this error is hidden.
+
+2. **Makes Debugging Harder**: Developers see "None of ... satisfied" instead of the actual error that occurred.
+
+3. **Inconsistent Behavior**: Other validators in attrs consistently raise either ValueError or TypeError for validation failures, but the `or_` validator catches everything.
+
+## Linter Comments
+
+The code includes linter suppressions: `# noqa: BLE001, PERF203, S112`
+- BLE001: Blind except (catching Exception)
+- S112: Try-except-continue pattern
+- PERF203: Performance warning
+
+These suppressions indicate the developers were aware this was problematic code.
+
+## Conclusion
+
+The bug is real and reproducible. The `or_` validator catches all exceptions instead of just validation exceptions (ValueError, TypeError), which hides bugs in custom validators and makes debugging significantly harder.

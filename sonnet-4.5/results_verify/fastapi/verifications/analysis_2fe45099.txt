@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The bug report claims that uncopyable objects should be usable as default values, but this might be considered invalid because the deepcopy behavior exists for a good reason - to prevent mutable default argument bugs. The framework's design choice to deepcopy defaults could be considered correct behavior, and objects that don't support deepcopy might simply be unsupported by design. Additionally, using complex objects like database connections or locks as parameter defaults seems like an unusual pattern that might not be intended to be supported.
+
+**Why it might not be INVALID:**
+The bug report accurately describes a real crash that occurs in valid Python code. The documentation doesn't state that defaults must be deepcopyable, and Python itself allows any object as a default value. The crash happens at runtime rather than providing a clear error message, which suggests this is unintended behavior rather than a deliberate restriction.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an extremely edge case that affects a tiny fraction of users. Most FastAPI applications use simple immutable values (strings, numbers, None) or standard collections as defaults. The workaround is trivial - users can simply use a factory pattern or handle the default in the function body. The performance cost and complexity of adding special handling for uncopyable objects might not be worth it for such a rare use case. Furthermore, allowing uncopyable objects as defaults could introduce subtle bugs related to shared state.
+
+**Why it might not be WONTFIX:**
+The crash is ungraceful and provides no guidance to users about what went wrong or how to fix it. The error occurs at runtime during request processing, which could cause production failures. The fix suggested in the bug report is simple and backward-compatible - just catch the TypeError and return the object directly. This would make the framework more robust without significant cost.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The deepcopy behavior is an undocumented implementation detail that users cannot reasonably predict. The documentation should explicitly state that default values must be deepcopyable, or at least that complex objects might not work as expected. Adding a note about this requirement would prevent users from encountering this crash and would set proper expectations. The current behavior might be working as designed, but the design constraints aren't communicated to users.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting the limitation doesn't fix the ungraceful crash. Users would still get a confusing TypeError from deep within the framework rather than a clear error message. If this is indeed a limitation, the framework should validate defaults at startup and provide a helpful error message, not crash during request processing.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting uncopyable objects as defaults could be seen as a new feature rather than a bug fix. The current system works fine for all standard use cases, and adding support for uncopyable objects would be extending functionality. The suggested implementation (catching TypeError and returning the object directly) could be framed as a feature to support singleton patterns and resource-based defaults. This could include adding a new parameter option like `copy_default=False` for explicit control.
+
+**Why it might not be FEATURE_REQUEST:**
+The code already attempts to handle defaults - it just fails ungracefully for certain types. This isn't asking for new functionality but rather asking for existing functionality (using custom objects as defaults) to work correctly. The crash is clearly a bug, not a missing feature, since the system accepts these defaults without error at startup but then crashes at runtime.
+
+## BUG Considerations
+**Why it might be BUG:**
+The application crashes at runtime with an unclear error when processing valid API requests. The crash only occurs when the parameter isn't provided, making it a runtime failure that could affect production systems. The documentation doesn't state that defaults must be deepcopyable, so users have no way to know this limitation exists. The framework accepts the uncopyable default at startup without validation, then crashes later when actually using it. The suggested fix is simple, maintains backward compatibility, and makes the framework more robust.
+
+**Why it might not be BUG:**
+The deepcopy behavior is intentional and serves an important purpose - preventing mutable default bugs. Objects that refuse to be deepcopied are arguably violating a reasonable assumption of the framework. The use case of having locks, database connections, or singletons as parameter defaults is questionable from a design perspective. This might be considered user error for trying to use the framework in an unintended way.
+
+## Overall Consideration
+
+After examining all aspects, this appears to be primarily a DOCUMENTATION_FIX issue with elements that could justify WONTFIX. The core technical issue is that FastAPI has an undocumented requirement that default values must be deepcopyable. While the crash is real and the bug report is technically accurate, the use case is extremely niche - using uncopyable objects like locks or database connections as query parameter defaults is highly unusual and arguably poor design.
+
+The deepcopy behavior exists for good reason - to protect against Python's mutable default argument problem. This is a valuable safety feature that prevents subtle bugs. However, the framework's handling of uncopyable objects is ungraceful. Rather than validating at startup or providing a clear error, it crashes deep in the dependency resolution code with a confusing traceback.
+
+The most appropriate resolution would be to document this limitation clearly in the FastAPI documentation, explaining that default values must be deepcopyable and why this requirement exists. While the suggested code fix is simple, it could potentially reintroduce the mutable defaults problem for objects that don't support deepcopy, which might have unintended consequences. Given the extreme rarity of this use case and the questionable design pattern it represents, this is more of a documentation issue than a code bug.

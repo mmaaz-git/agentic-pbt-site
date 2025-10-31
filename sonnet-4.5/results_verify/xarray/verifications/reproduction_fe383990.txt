@@ -1,0 +1,49 @@
+## Bug Reproduction Results
+
+### Test Environment
+- Python version: 3.13
+- xarray installed: Yes
+- cftime installed: No (ModuleNotFoundError when trying to import)
+
+### Reproduction Test
+I ran the exact code provided in the bug report:
+
+```python
+import numpy as np
+from xarray.core.variable import Variable
+from xarray.coding.times import CFDatetimeCoder
+
+data = np.array([703_036_036_854_775_809, -8_520_336_000_000_000_000], dtype='datetime64[ns]')
+original_var = Variable(('time',), data)
+coder = CFDatetimeCoder(use_cftime=False, time_unit='ns')
+encoded_var = coder.encode(original_var)
+```
+
+### Result
+The code raises: `AttributeError: 'NoneType' object has no attribute 'num2date'`
+
+### Detailed Traceback Analysis
+The error occurs through this sequence:
+1. The input data contains datetime values that when interpreted as datetime64[ns] represent:
+   - '1992-04-11T23:47:16.854775809'
+   - '1700-01-01T00:00:00.000000000'
+
+2. During encoding in `_eagerly_encode_cf_datetime`, when trying to compute `time_deltas = dates_as_index - ref_date`, an `OverflowError` occurs: "Overflow in int64 addition"
+
+3. This OverflowError is caught in the except block at line 1121, which then calls:
+   `time_units, ref_date = _unpack_time_units_and_ref_date_cftime(units, calendar)`
+
+4. The `_unpack_time_units_and_ref_date_cftime` function (line 308) directly calls `cftime.num2date` at line 312 without checking if cftime is None
+
+5. Since cftime is not installed (it's None), this causes the AttributeError
+
+### Additional Tests
+I also tested with `use_cftime=True`:
+- Result: Same AttributeError occurs
+- This is expected since cftime is not installed
+
+### Verification of Bug Report Claims
+✓ The bug occurs exactly as described
+✓ The root cause is correctly identified: `_unpack_time_units_and_ref_date_cftime` calls cftime.num2date without checking if cftime is None
+✓ The error message is confusing (AttributeError about NoneType) instead of being informative about missing cftime
+✓ The code path analysis in the bug report is accurate

@@ -1,0 +1,41 @@
+REPRODUCTION ANALYSIS
+=====================
+
+I have successfully reproduced the bug reported in pandas.api.types.is_re_compilable.
+
+TEST RESULTS:
+-------------
+
+1. Property-Based Test: CONFIRMED FAILURE
+   The Hypothesis test immediately found multiple inputs that cause the function to crash with re.PatternError:
+   - Input '\\' crashes with: PatternError: bad escape (end of pattern) at position 0
+   - Input '[' crashes with: PatternError: unterminated character set at position 0
+   - Input '(' crashes with: PatternError: missing ), unterminated subpattern at position 0
+   - Input ')' crashes with: PatternError: unbalanced parenthesis at position 0
+   - Input '?' crashes with: PatternError: nothing to repeat at position 0
+   - Input '*' crashes with: PatternError: nothing to repeat at position 0
+   - Input '+' crashes with: PatternError: nothing to repeat at position 0
+
+2. Specific Example: CONFIRMED FAILURE
+   Testing is_re_compilable(')'): Crashes with PatternError: unbalanced parenthesis at position 0
+
+3. Source Code Verification:
+   The current implementation in pandas/core/dtypes/inference.py only catches TypeError:
+   ```python
+   try:
+       re.compile(obj)
+   except TypeError:
+       return False
+   else:
+       return True
+   ```
+
+   This confirms the bug: the function does not catch re.PatternError (or re.error) which is raised
+   when an invalid regex pattern string is passed to re.compile().
+
+4. Expected vs Actual Behavior:
+   - EXPECTED: Function should return False for invalid regex patterns (as it does for non-strings)
+   - ACTUAL: Function crashes with re.PatternError for invalid regex pattern strings
+
+The bug is reproducible and affects any string that is not a valid regex pattern. The function
+fails to handle the most common exception raised by re.compile() for invalid patterns.

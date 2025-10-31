@@ -1,0 +1,44 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The use of coefficients like 1e-200 is an extreme edge case that goes far beyond normal floating-point precision limits. The documentation doesn't promise that polynomial operations will work correctly with such extreme values. This could be considered user error for using values that are essentially indistinguishable from zero in double-precision arithmetic. The user is pushing the boundaries of what floating-point arithmetic can reasonably handle.
+
+**Why it might not be INVALID:**
+The mathematical property that p1 = q * p2 + r is fundamental to polynomial division and should hold whenever division is performed. The function doesn't raise an error or warning to indicate that the input is problematic. If the operation cannot be performed correctly, it should fail explicitly rather than silently returning incorrect results that violate basic mathematical properties.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+Coefficients of 1e-200 are so far below machine epsilon (approximately 2.22e-16) that they're in the denormalized number range where floating-point arithmetic becomes unreliable. This is an obscure corner case that would never occur in practical applications. The cost of adding checks and special handling for such extreme values might not be justified for a case that essentially no real users would encounter. Working with values 184 orders of magnitude below machine epsilon is beyond reasonable expectations.
+
+**Why it might not be WONTFIX:**
+Even if the use case is extreme, silently returning mathematically incorrect results is problematic. The violation of the fundamental division property is severe - losing an entire term of the polynomial with 100% error. If the operation can't be performed reliably, the function should at least warn the user or fail gracefully rather than producing nonsensical output.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation doesn't specify the numerical limits or stability considerations for polynomial division. Adding a note about the expected coefficient ranges and potential issues with extreme values would help users understand the function's limitations. The documentation could clarify that the function assumes coefficients are within a reasonable range relative to machine precision.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The issue isn't just about unclear documentation - the function produces objectively wrong results that violate fundamental mathematical properties. Documentation alone won't fix the fact that the function silently fails for certain inputs. Users would still encounter the problem even if warned about it in documentation.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+Supporting polynomial division with extreme coefficient values could be seen as a new feature rather than fixing a bug. The current implementation works fine for normal use cases, and adding robust handling for denormalized numbers would be an enhancement. This could involve implementing extended precision arithmetic or alternative algorithms for extreme cases.
+
+**Why it might not be FEATURE_REQUEST:**
+Polynomial division already exists as a feature, and the expectation is that it should work correctly when it doesn't raise an error. This isn't asking for new functionality but for the existing functionality to maintain mathematical correctness. The fundamental property of division should hold for any inputs that the function accepts without error.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the fundamental mathematical property of polynomial division (p1 = q * p2 + r) without raising any error or warning. This is a silent failure that produces completely incorrect results - a 66% error in the example case with complete loss of the constant term. The function accepts the input and returns a result, implying it can handle the operation, but the result is mathematically nonsensical. Any operation that silently violates its core mathematical invariant should be considered a bug.
+
+**Why it might not be BUG:**
+The input uses a coefficient of 1e-200, which is 184 orders of magnitude below machine epsilon for double precision. This is far outside the range where floating-point arithmetic can be expected to work reliably. The issue is fundamentally about the limitations of floating-point representation rather than a logic error in the code. No reasonable user would use such extreme values in practice.
+
+## Overall Consideration
+
+This case presents a challenging triage decision between WONTFIX and BUG. The core issue is that numpy's polynomial division produces mathematically incorrect results that violate the fundamental property p1 = q * p2 + r when given extreme input values.
+
+The strongest argument for WONTFIX is that the coefficient 1e-200 is absurdly small - it's 184 orders of magnitude below machine epsilon (≈2.22e-16) and deep in the denormalized number range where floating-point arithmetic is inherently unreliable. This is such an extreme edge case that it would never occur in any practical application. The values are so small that they're essentially numerical noise, and expecting polynomial operations to work correctly with them is unreasonable. Many numerical libraries would consider this outside their design specifications.
+
+However, there's a valid argument for BUG because the function silently produces incorrect results without any warning or error. The violation isn't a minor precision issue but a complete failure - losing entire polynomial terms with 66% error in evaluations. If the operation cannot be performed correctly, the function should ideally detect this and raise an appropriate error rather than returning mathematically nonsensical results. The fact that overflow warnings appear in stderr but the function still returns a result suggests the implementation could detect and handle this case better.
+
+On balance, this leans toward WONTFIX because the input values are so extreme that they're beyond what any reasonable user would encounter or what floating-point arithmetic can meaningfully handle. The coefficient 1e-200 is effectively indistinguishable from zero in double precision, and polynomial division with near-zero leading coefficients is inherently numerically unstable. While the silent failure is unfortunate, adding checks for such extreme cases would likely add overhead for no practical benefit, as these values are far outside normal use cases.

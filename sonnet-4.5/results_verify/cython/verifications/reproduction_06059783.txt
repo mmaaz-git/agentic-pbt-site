@@ -1,0 +1,45 @@
+## Bug Reproduction Analysis
+
+### Reproduction Results
+The bug was successfully reproduced using the provided test cases.
+
+### Test Results
+
+1. **Basic Reproduction Test**:
+   - Command value set to: 0 (falsy)
+   - Extension value set to: True
+   - Result with 'or' operator: True
+   - Expected result: 0 (command value should take precedence)
+   - **Result: BUG CONFIRMED** - Command value was overridden by extension value
+
+2. **Hypothesis-style Test**:
+   - With ext_value=True: **FAILED** - Got True instead of expected 0
+   - With ext_value=False: **PASSED** - Got 0 as expected
+
+3. **All Affected Options Test**:
+   All seven options that use the `or` pattern showed the same bug:
+   - `cython_create_listing`: cmd=0, ext=1, result=1 (wrong)
+   - `cython_line_directives`: cmd=0, ext=1, result=1 (wrong)
+   - `no_c_in_traceback`: cmd=0, ext=1, result=1 (wrong)
+   - `cython_cplus`: cmd=0, ext=1, result=1 (wrong)
+   - `cython_gen_pxi`: cmd=0, ext=1, result=1 (wrong)
+   - `cython_gdb`: cmd=False, ext=True, result=True (wrong)
+   - `cython_compile_time_env`: cmd=None, ext={'TEST': 1}, result={'TEST': 1} (wrong)
+
+### Technical Analysis
+
+The bug occurs in lines 223-234 of old_build_ext.py in the `cython_sources()` method. The code uses Python's `or` operator to merge command-line and extension options:
+
+```python
+create_listing = self.cython_create_listing or getattr(extension, 'cython_create_listing', 0)
+```
+
+The problem with this approach is that the `or` operator returns the first truthy value. When the command value is falsy (0, False, None), the expression evaluates to the extension value, even though the command value was explicitly set.
+
+### Expected vs Actual Behavior
+
+**Expected**: Command-line options should always take precedence over extension attributes, even when set to falsy values (0, False, None).
+
+**Actual**: Falsy command-line values are ignored in favor of extension attributes due to the use of the `or` operator.
+
+This violates the documented precedence rules where command-line options should override extension settings.

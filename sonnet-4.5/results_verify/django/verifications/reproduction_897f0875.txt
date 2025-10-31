@@ -1,0 +1,73 @@
+## Bug Reproduction Results
+
+### Test Results
+
+I successfully reproduced the bug described in the report. The tests confirm that `get_exception_info` does crash with an `IndexError` under certain conditions.
+
+### Confirmed Crash Scenarios
+
+1. **Empty source with lineno > 1**:
+   - Input: `lineno=2, source=''`
+   - Result: `IndexError: list index out of range`
+   - This happens because the code tries to access `lines[1]` when `lines` is `[('', 1)]`
+
+2. **Line number exceeds total lines**:
+   - Input: `lineno=5, source='line1\nline2'`
+   - Result: `IndexError: list index out of range`
+   - The code tries to access `lines[4]` when only indices 0-1 exist
+
+### Scenarios That Don't Crash (But Produce Incorrect Results)
+
+3. **Zero line number**:
+   - Input: `lineno=0, source='line1\nline2'`
+   - Result: Returns successfully but with incorrect `during` value
+   - `lines[0-1]` = `lines[-1]` accesses the last line due to Python's negative indexing
+
+4. **Negative line number**:
+   - Input: `lineno=-1, source='line1\nline2'`
+   - Result: Returns successfully but with incorrect `during` value
+   - `lines[-1-1]` = `lines[-2]` accesses the second-to-last line
+
+5. **Source is None**:
+   - Result: Handled correctly by the existing else clause
+
+### Hypothesis Test Result
+
+The hypothesis test from the bug report fails exactly as described:
+```
+Falsifying example: test_get_exception_info_doesnt_crash(
+    lineno=2,
+    source='',
+    filename='0',
+    message=''
+)
+```
+
+### Real Jinja2 Behavior
+
+Testing with actual Jinja2 TemplateSyntaxError instances shows:
+- Real Jinja2 exceptions always have positive, valid line numbers
+- Line numbers are 1-based and always within the source bounds
+- When source is available, lineno correctly points to the error location
+
+### Technical Analysis
+
+The crash occurs at line 106 in the current code:
+```python
+during = lines[lineno - 1][1]
+```
+
+This line assumes:
+1. `lineno >= 1` (to avoid negative indices having different meaning)
+2. `lineno <= len(lines)` (to avoid IndexError)
+
+Neither assumption is validated before the array access, causing the crashes.
+
+### Impact Assessment
+
+While the crashes are reproducible, they only occur with:
+1. Artificially constructed exception objects
+2. Invalid line numbers that Jinja2 would never produce
+3. Edge cases that don't occur in normal Django/Jinja2 operation
+
+The function is only called internally by Django when handling real Jinja2 exceptions, which always have valid line numbers.

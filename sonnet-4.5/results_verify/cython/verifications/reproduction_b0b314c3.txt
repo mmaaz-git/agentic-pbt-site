@@ -1,0 +1,66 @@
+Bug Reproduction Results
+========================
+
+## Test Execution
+
+I successfully reproduced the bug described in the report. All test cases confirm the issue.
+
+## Test Results
+
+1. **Basic hash character test**: `parse_list('[#]')`
+   - Expected: `['#']`
+   - Actual: `['#__Pyx_L1_']`
+   - **BUG CONFIRMED**
+
+2. **Hash in value**: `parse_list('[foo#bar]')`
+   - Expected: `['foo#bar']`
+   - Actual: `['foo#__Pyx_L1_']`
+   - **BUG CONFIRMED**
+
+3. **Multiple items with hash**: `parse_list('[libA, libB#version]')`
+   - Expected: `['libA', 'libB#version']`
+   - Actual: `['libA', 'libB#__Pyx_L1_']`
+   - **BUG CONFIRMED**
+
+4. **Space-separated with hash**: `parse_list('foo#bar baz')`
+   - Expected: `['foo#bar', 'baz']`
+   - Actual: `['foo#__Pyx_L1_']`
+   - **BUG CONFIRMED** (also loses 'baz')
+
+5. **In distutils directive**: `# distutils: libraries = lib#version`
+   - Expected: libraries = `['lib#version']`
+   - Actual: libraries = `['lib#__Pyx_L1_']`
+   - **BUG CONFIRMED**
+
+## Root Cause Analysis
+
+The issue occurs because:
+1. `parse_list()` calls `strip_string_literals()` at line 128
+2. `strip_string_literals()` is designed for Python source code parsing
+3. It treats '#' as starting a comment, replacing everything after '#' with `__Pyx_L1_`
+4. This happens BEFORE the list parsing, corrupting the values
+
+## Impact
+
+The bug affects:
+- Library names containing '#' (e.g., version tags like `lib#1.2.3`)
+- Include paths with '#' characters
+- Any directive value that contains '#' when not inside quotes
+- The corruption happens silently, potentially causing build failures
+
+## Normal Functionality
+
+Without '#' characters, parse_list works correctly:
+- `parse_list('[a, b, c]')` → `['a', 'b', 'c']` ✓
+- `parse_list('a b c')` → `['a', 'b', 'c']` ✓
+- Quoted strings with spaces work: `parse_list('["a b", c]')` → `['a b', 'c']` ✓
+
+## Workaround
+
+Values with '#' can be quoted to avoid corruption:
+- `parse_list('["lib#version"]')` → `['lib#version']` ✓
+- But this requires users to know about the issue
+
+## Conclusion
+
+The bug is real and reproducible exactly as described in the report. The function incorrectly treats '#' as a comment delimiter even though the input string is already extracted from directives and should be treated as data, not Python source code.

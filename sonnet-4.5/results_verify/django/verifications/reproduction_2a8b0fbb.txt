@@ -1,0 +1,44 @@
+## Bug Reproduction Analysis
+
+I successfully reproduced the bug described in the report. Here are my findings:
+
+### Test Results
+
+1. **Test Case 1: String without a dot ('contenttypes')**
+   - Expected: ValueError with clear message about format requirement
+   - Actual: ValueError with message "not enough values to unpack (expected 2, got 1)"
+   - Status: Bug confirmed ✓
+
+2. **Test Case 2: String with multiple dots ('content.types.model')**
+   - Expected: ValueError with clear message about format requirement
+   - Actual: ValueError with message "too many values to unpack (expected 2)"
+   - Status: Bug confirmed ✓
+
+3. **Test Case 3: Valid usage ('contenttypes.ContentType')**
+   - Expected: Returns the model class
+   - Actual: Successfully returns <class 'django.contrib.contenttypes.models.ContentType'>
+   - Status: Working as expected ✓
+
+### Code Analysis
+
+Looking at the source code in django/apps/registry.py (line 206):
+```python
+if model_name is None:
+    app_label, model_name = app_label.split(".")
+```
+
+The implementation uses Python's tuple unpacking directly on `app_label.split(".")`. This causes:
+- When no dot is present: split returns a list with 1 element, causing "not enough values to unpack"
+- When multiple dots are present: split returns a list with 3+ elements, causing "too many values to unpack"
+
+### Bug Validation
+
+The bug report is accurate:
+1. The function does raise ValueError as documented
+2. However, the error messages are Python implementation details rather than user-friendly messages
+3. The docstring at lines 196-198 specifically states it should "Raise ValueError if called with a single argument that doesn't contain exactly one dot"
+4. While technically a ValueError is raised, the message doesn't explain the actual requirement
+
+### Effect
+
+This is a usability issue that affects developer experience. When developers make a mistake in the format, they get a cryptic error message that doesn't help them understand what went wrong. They need to read the source code or documentation to understand the correct format, rather than getting immediate feedback from the error message itself.

@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation does not explicitly specify what should happen when both vectors are all-False. The mathematical formula (c_TF + c_FT) / (2*c_TT + c_FT + c_TF) naturally leads to 0/0 when all values are False, which is mathematically undefined and returns NaN. Since the documentation doesn't promise a specific behavior for this edge case, returning NaN could be considered correct behavior for undefined mathematical operations.
+
+**Why it might not be INVALID:**
+The fundamental property of any distance/dissimilarity metric is that d(x,x) = 0 for any vector x. This is a basic mathematical requirement that doesn't need to be explicitly documented. The current implementation violates this axiom by returning NaN for dice([False, False], [False, False]). Additionally, the closely related Jaccard function was specifically fixed to handle this edge case, suggesting this is a known issue that should be addressed.
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This edge case only occurs when both vectors contain exclusively False values, which might be considered an obscure scenario that rarely occurs in practice. Users working with boolean vectors typically have at least some True values. The computational cost of checking for this edge case on every call might not be justified for such a rare occurrence.
+
+**Why it might not be WONTFIX:**
+This is not an obscure edge case - it's a fundamental violation of distance metric properties. The Jaccard function in the same module was already fixed for this exact issue, setting a precedent. The fix is trivial (3 lines of code) with negligible performance impact. Other distance functions in scipy (Hamming, Rogers-Tanimoto, Yule) all handle this case correctly.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+The documentation could be updated to explicitly state that the function returns NaN when both vectors are all-False, similar to how some functions document their edge case behaviors. This would at least make the behavior explicit and expected rather than surprising.
+
+**Why it might not be DOCUMENTATION_FIX:**
+Simply documenting broken behavior doesn't fix the underlying violation of mathematical properties. Users expect distance functions to satisfy basic axioms like d(x,x) = 0. The Jaccard function doesn't just document this edge case - it was fixed to return the mathematically correct value of 0.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that handling the all-False edge case is a new feature that extends the function beyond its current mathematical definition. The user is requesting the function to handle a case that results in undefined mathematics (0/0).
+
+**Why it might not be FEATURE_REQUEST:**
+This is not requesting new functionality but fixing existing broken behavior. The function already claims to compute dissimilarity, which has well-defined mathematical properties. Ensuring d(x,x) = 0 is not a feature but a correction of incorrect behavior.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function violates the fundamental reflexivity property of distance metrics (d(x,x) = 0). It returns NaN instead of 0 for identical vectors when they contain only False values. The related Jaccard function was already fixed for this exact issue, establishing precedent. The fix is trivial and matches the behavior of other distance functions in the same module. The proposed fix is mathematically sound and consistent with established conventions.
+
+**Why it might not be BUG:**
+The documentation doesn't explicitly promise to handle the 0/0 case, and mathematically, 0/0 is undefined. Some might argue that returning NaN for undefined operations is technically correct behavior.
+
+## Overall Consideration
+
+This is clearly a BUG that should be fixed. The dice function violates the fundamental mathematical property that d(x,x) = 0 for any distance/dissimilarity metric. When given identical vectors containing only False values, it returns NaN instead of 0. This is not just a theoretical issue - it's a practical problem that breaks the basic contract of what a distance function should do.
+
+The precedent has already been set within scipy itself. The Jaccard dissimilarity function, which is mathematically very similar to Dice, was explicitly fixed to return 0 for this edge case. The Jaccard documentation even notes: "If u and v are both zero, their Jaccard dissimilarity is defined to be zero." The implementation includes the check: `return (a / b) if b != 0 else np.float64(0)`. This same logic should apply to Dice.
+
+Furthermore, testing shows that other distance functions in scipy.spatial.distance (Hamming, Rogers-Tanimoto, Yule) all correctly return 0 for identical all-False vectors. The Dice function is an outlier in its incorrect behavior. The fix is trivial - just 3 lines of code to check if the denominator is zero and return 0 in that case. This has negligible performance impact and brings the function into compliance with mathematical conventions and consistency with related functions in the same module.

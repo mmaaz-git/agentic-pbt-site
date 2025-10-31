@@ -1,0 +1,26 @@
+REPRODUCTION RESULTS
+
+I successfully reproduced the reported bug. The test results confirm the behavior described in the bug report:
+
+1. **Main issue confirmed**: Empty DataFrames with integer columns DO lose their dtype when transposed twice (df.T.T), converting int64 columns to float64.
+
+2. **Reproduction details**:
+   - Original empty DataFrame: Shape (0, 2) with int64 dtypes for columns 'a' and 'b'
+   - After first transpose: Shape (2, 0) with NO columns (hence no dtypes to track)
+   - After second transpose: Shape (0, 2) but dtypes changed to float64
+
+3. **Property-based test**: The Hypothesis test FAILED as reported, confirming that df.T.T != df for empty DataFrames with integer columns.
+
+4. **Additional findings from my testing**:
+   - Non-empty integer DataFrames: df.T.T == df (works correctly, dtypes preserved)
+   - Empty float DataFrames: df.T.T == df (works correctly, float64 preserved)
+   - Empty mixed dtype DataFrames: Both int64 and float64 columns become float64 after df.T.T
+   - Single column empty DataFrames: Also lose int64 dtype, becoming float64
+
+5. **Root cause analysis**:
+   - When an empty DataFrame with shape (0, 2) is transposed, it becomes shape (2, 0)
+   - A DataFrame with 0 columns has no dtype information to preserve
+   - When transposing back from (2, 0) to (0, 2), pandas must infer/default the dtypes
+   - pandas defaults to float64 for empty numeric columns, not preserving the original int64
+
+6. **Impact**: The bug is real and reproducible. The transpose operation is NOT its own inverse for empty DataFrames with integer dtypes, violating the mathematical expectation that (A^T)^T = A.

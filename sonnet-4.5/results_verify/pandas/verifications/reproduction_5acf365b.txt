@@ -1,0 +1,41 @@
+## Reproduction of the Bug
+
+I successfully reproduced the reported bug using both the simple test case and the Hypothesis property test.
+
+### Test Results
+
+1. **Simple Test Case:**
+   - Input: `pd.Categorical(['a', None])`
+   - Expected output after round-trip: `['a', NaN]`
+   - Actual output: `['a', 'a']`
+   - **Result:** Bug confirmed - null value incorrectly converted to 'a'
+
+2. **Extended Test Case:**
+   - Input: `pd.Categorical(['a', 'b', None, 'c', None])`
+   - Expected output: `['a', 'b', NaN, 'c', NaN]`
+   - Actual output: `['a', 'b', 'c', 'c', 'c']`
+   - **Result:** Bug confirmed - both null values converted to 'c' (the last category)
+
+3. **Root Cause Analysis:**
+   - Examined the interchange protocol implementation
+   - Confirmed that categorical nulls are represented as `-1` sentinel values (ColumnNullType.USE_SENTINEL)
+   - Raw codes array for `['a', None, 'b', None]`: `[0, -1, 1, -1]`
+   - After modulo operation: `[0, 1, 1, 1]`
+   - This confirms the bug report's analysis is correct
+
+### Technical Details
+
+The bug occurs in `pandas/core/interchange/from_dataframe.py` at line 254:
+```python
+values = categories[codes % len(categories)]
+```
+
+For a 2-category array ['a', 'b']:
+- `-1 % 2 = 1` (maps to 'b')
+
+For a 1-category array ['a']:
+- `-1 % 1 = 0` (maps to 'a')
+
+This modulo operation was intended to prevent IndexError for out-of-bounds values, but it inadvertently converts the `-1` sentinel values (which represent nulls) into valid category indices, causing data corruption.
+
+The issue is severe as it silently corrupts data without raising any errors, potentially affecting data integrity in production systems using the interchange protocol.

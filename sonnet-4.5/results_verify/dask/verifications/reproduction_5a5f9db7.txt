@@ -1,0 +1,38 @@
+REPRODUCTION ANALYSIS
+=====================
+
+Bug Reproduction Status: CONFIRMED
+
+The bug report accurately describes a real issue in the `_resample_bin_and_out_divs` function.
+I have successfully reproduced the problem using both the specific test case and the hypothesis-based property tests.
+
+Specific Test Case Results:
+---------------------------
+Input: divisions=[Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 01:00:00')]
+       rule='2h', closed='left', label='left'
+
+Output: outdivs=(Timestamp('2000-01-01 00:00:00'), Timestamp('2000-01-01 00:00:00'))
+
+The function returns duplicate timestamps in outdivs, which violates the expected strict monotonicity.
+
+Hypothesis Testing Results:
+---------------------------
+Running 100 test cases found 25 failures where outdivs contained non-strictly-increasing values.
+Common patterns:
+1. When resample rule (e.g., '2D') is larger than the input time range
+2. Various combinations of closed/label parameters can trigger the issue
+3. The problem occurs consistently when the resampling frequency exceeds the span of input divisions
+
+Code Analysis:
+--------------
+Looking at the implementation (lines 66-103), the issue occurs in the end-adjustment logic (lines 89-101):
+- Line 101: `setter(outdivs, temp.index[-1])` can set the last element to be the same as previous elements
+- This happens when `outdivs[-1] < divisions[-1]` but `temp.index[-1]` equals an earlier value in outdivs
+- The code doesn't check for maintaining strict monotonicity when adjusting the final division
+
+The bug manifests when:
+1. The resampling frequency is larger than the input time range
+2. The pandas resampling creates fewer bins than expected
+3. The end adjustment tries to ensure coverage but creates duplicates
+
+This is a genuine logic bug that violates Dask's fundamental assumption about divisions being strictly monotonic.

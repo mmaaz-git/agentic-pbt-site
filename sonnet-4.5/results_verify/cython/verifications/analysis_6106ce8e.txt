@@ -1,0 +1,42 @@
+## INVALID Considerations
+**Why it might be INVALID:**
+The documentation says the function should "cover all the characters in |s|", and technically the current implementation does cover all characters (just with some extras). One could argue that the documentation doesn't explicitly prohibit including additional characters in the ranges, only that it must include all input characters. The phrase "cover" could be interpreted as "include at least" rather than "include exactly".
+
+**Why it might not be INVALID:**
+The documentation for Any() clearly states it matches "any character in the string |s|", which strongly implies it should match ONLY those characters. The current behavior violates this expectation. Additionally, the docstring says the ranges should cover "the characters in |s|", not "the characters in |s| and possibly others". The bug causes incorrect behavior in a user-facing API (Any()).
+
+## WONTFIX Considerations
+**Why it might be WONTFIX:**
+This is an internal utility function that might only be used within the Cython Plex module. If users aren't expected to call chars_to_ranges directly, and if the Any() constructor is rarely used with duplicate characters in real-world scenarios, the maintainers might consider this too trivial to fix. The workaround is simple: users can deduplicate their input strings before passing to Any().
+
+**Why it might not be WONTFIX:**
+The bug affects the public Any() constructor, which is documented and user-facing. The incorrect behavior could lead to subtle bugs in lexical analyzers built with Plex, where patterns match more characters than intended. This is not merely a cosmetic issue but affects correctness of pattern matching.
+
+## DOCUMENTATION_FIX Considerations
+**Why it might be DOCUMENTATION_FIX:**
+If the current behavior is intentional for performance reasons (avoiding deduplication), the documentation could be updated to clarify that Any() with duplicate characters may match additional characters between the duplicates. The documentation could specify that users should pass deduplicated strings to Any() if exact matching is required.
+
+**Why it might not be DOCUMENTATION_FIX:**
+The documentation is already clear about the intended behavior - Any() should match characters "in the string", not additional ones. The code implementation is wrong, not the documentation. Changing the documentation to match the buggy behavior would be backwards and would break user expectations.
+
+## FEATURE_REQUEST Considerations
+**Why it might be FEATURE_REQUEST:**
+One could argue that handling duplicate characters correctly is a new feature that wasn't originally considered. The function might have been designed assuming unique input characters, and adding proper duplicate handling could be seen as an enhancement rather than a bug fix.
+
+**Why it might not be FEATURE_REQUEST:**
+The function already attempts to handle duplicates (it sorts and processes them), it just does so incorrectly. This isn't asking for new functionality but fixing existing functionality that produces wrong results. The documentation already implies this should work correctly.
+
+## BUG Considerations
+**Why it might be BUG:**
+The function produces objectively incorrect output that violates its documented behavior. When Any('00') matches '1', that's clearly wrong according to the documentation that says it matches "any character in the string |s|". The proposed fix is simple and correct. The bug has a clear reproduction case and affects the correctness of pattern matching.
+
+**Why it might not be BUG:**
+The only argument against this being a bug would be if duplicate characters in input strings are considered invalid input, but the documentation doesn't specify this restriction. Additionally, the function attempts to handle duplicates (by sorting), suggesting they are expected input.
+
+## Overall Consideration
+
+This appears to be a legitimate bug. The function chars_to_ranges produces incorrect output when given strings with duplicate characters, causing it to include characters not present in the input. This violates both the function's own documentation and the documentation of Any(), which uses this function internally.
+
+The bug has clear, reproducible test cases and a straightforward fix. The current behavior cannot be justified as correct based on the documentation - when Any('00') is documented to match "any character in the string", it should match only '0', not '0' and '1'.
+
+While one might argue this is an edge case (duplicate characters), it's still incorrect behavior that could lead to subtle bugs in lexical analyzers. The fix is trivial (changing >= to >) and would make the implementation match the documented behavior. This is exactly the kind of bug that should be fixed to maintain correctness of the library.

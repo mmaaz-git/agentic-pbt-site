@@ -1,0 +1,45 @@
+## Bug Reproduction Report
+
+### Summary
+The bug report is accurate and reproducible. Creating a MultiListener with another MultiListener as input unexpectedly mutates the input MultiListener by emptying its listeners list.
+
+### Reproduction Results
+
+1. **Hypothesis Test**:
+   - Test failed with num_listeners=1 (and would fail with any positive value)
+   - The assertion `assert len(multi1.listeners) == original_count` fails because multi1.listeners is emptied
+
+2. **Manual Reproduction**:
+   - Created multi1 with 2 listeners: [listener1, listener2]
+   - After creating multi2 = MultiListener(listeners=[multi1]):
+     - multi1.listeners becomes empty: []
+     - multi2.listeners contains the flattened result: [listener1, listener2]
+   - The original multi1 object has been mutated
+
+### Source Code Analysis
+
+In `/home/npc/pbt/agentic-pbt/envs/anyio_env/stapled.py`, the MultiListener class's `__post_init__` method (lines 111-120):
+
+```python
+def __post_init__(self) -> None:
+    listeners: list[Listener[T_Stream]] = []
+    for listener in self.listeners:
+        if isinstance(listener, MultiListener):
+            listeners.extend(listener.listeners)
+            del listener.listeners[:]  # Line 116 - THE PROBLEMATIC LINE
+        else:
+            listeners.append(listener)
+
+    self.listeners = listeners
+```
+
+The issue is on line 116: `del listener.listeners[:]` which explicitly clears the listeners list of any nested MultiListener that is passed in. This modifies the input object in place, which is unexpected behavior for object construction.
+
+### Impact
+
+This mutation violates several important principles:
+1. **Principle of least surprise**: Constructors shouldn't mutate their input arguments
+2. **Object integrity**: The original multi1 object becomes unusable after being passed to multi2
+3. **Potential for bugs**: Code that expects to reuse multi1 after passing it to another MultiListener will fail unexpectedly
+
+The bug is real and the proposed fix (removing line 116) would resolve the issue without breaking the flattening functionality.

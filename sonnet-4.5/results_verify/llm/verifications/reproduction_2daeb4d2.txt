@@ -1,0 +1,51 @@
+## Bug Reproduction Results
+
+### Test Results
+
+**Test 1: Simple description-only field (`:description only`)**
+- Result: IndexError: list index out of range
+- Location: /home/npc/miniconda/lib/python3.13/site-packages/llm/utils.py, line 396
+- Error occurs at: `field_name = field_parts[0].strip()`
+
+**Test 2: Multiple description-only fields (`:field1 description,:field2 description`)**
+- Result: IndexError: list index out of range
+- Same error location and cause
+
+**Test 3: Valid field for comparison (`name: description`)**
+- Result: Success
+- Output: `{'type': 'object', 'properties': {'name': {'type': 'string', 'description': 'description'}}, 'required': ['name']}`
+- This demonstrates the function works correctly when a field name is provided
+
+### Hypothesis Testing
+The property-based test from the bug report was run successfully and consistently triggered the IndexError for all inputs that start with `:`. The test generated numerous random strings preceded by `:` and all of them caused the same IndexError.
+
+### Code Analysis
+Looking at the code (lines 385-396 in utils.py):
+```python
+for field in fields:
+    # Extract field name, type, and description
+    if ":" in field:
+        field_info, description = field.split(":", 1)
+        description = description.strip()
+    else:
+        field_info = field
+        description = ""
+
+    # Process field name and type
+    field_parts = field_info.strip().split()  # Returns [] when field_info is empty
+    field_name = field_parts[0].strip()       # IndexError when field_parts is empty
+```
+
+When a field starts with `:`, the split operation produces:
+- `field_info` = "" (empty string)
+- `description` = everything after the colon
+
+Then `field_info.strip().split()` returns an empty list `[]`, causing `field_parts[0]` to raise an IndexError.
+
+### Verification
+The bug is 100% reproducible. Any input to `schema_dsl()` that contains a field starting with `:` will crash with an IndexError. This includes:
+- Single fields like `:description`
+- Multiple fields where any one starts with `:`
+- Fields with any content after the initial `:`
+
+The function correctly handles fields with names and descriptions (e.g., `name: description`), but fails on description-only fields.
