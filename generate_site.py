@@ -73,9 +73,13 @@ def parse_sonnet_bug_report(file_path, call_mappings, package_name, bug_report_t
         call_id = verify_info.get('call_id')
         category = verify_info.get('category', 'Unknown')
 
+        # Get analysis file path
+        analysis_path = None
+        if call_id:
+            analysis_path = f"sonnet-4.5/results_verify/{package_name}/verifications/analysis_{call_id}.txt"
+
         # For BUG category, get severity from enhanced report
         severity = None
-        enhanced_report_path = None
 
         if category == 'BUG':
             # Check if enhanced report exists
@@ -93,7 +97,6 @@ def parse_sonnet_bug_report(file_path, call_mappings, package_name, bug_report_t
                     severity_match = re.search(r'\*\*Severity\*\*:\s*([^\n]+)', enhanced_content)
                     if severity_match:
                         severity = severity_match.group(1).strip()
-                    enhanced_report_path = f"sonnet-4.5/{package_name}/reports/{enhanced_report_name}"
                 except Exception as e:
                     print(f"Error reading enhanced report {enhanced_report_file}: {e}")
 
@@ -113,7 +116,7 @@ def parse_sonnet_bug_report(file_path, call_mappings, package_name, bug_report_t
             'file_path': str(file_path).replace(str(Path.cwd()) + '/', ''),
             'call_id': call_id,
             'category': category,
-            'enhanced_report_path': enhanced_report_path
+            'analysis_path': analysis_path
         }
     except Exception as e:
         print(f"Error parsing {file_path}: {e}")
@@ -248,6 +251,12 @@ def generate_sonnet_data():
         print(f"Warning: {verify_dir} does not exist, skipping sonnet data generation")
         return
 
+    # Load bug statuses (shared with opus or separate)
+    bug_statuses = {}
+    if Path('status.json').exists():
+        with open('status.json', 'r', encoding='utf-8') as f:
+            bug_statuses = json.load(f)
+
     # Process each package in results_verify
     for package_dir in verify_dir.iterdir():
         if not package_dir.is_dir() or package_dir.name.startswith('.'):
@@ -298,6 +307,15 @@ def generate_sonnet_data():
         for md_file in bug_reports_dir.glob('*.md'):
             report = parse_sonnet_bug_report(md_file, report_call_mappings, package_name, bug_report_to_info, enhanced_reports, report_package_dir)
             if report:
+                # Add bug status if available
+                file_name = report['file_name']
+                if package_name in bug_statuses and file_name in bug_statuses[package_name]:
+                    report['bug_status'] = bug_statuses[package_name][file_name]
+                else:
+                    report['bug_status'] = {
+                        'status': 'unknown',
+                        'url': ''
+                    }
                 all_reports.append(report)
 
     # Sort by package and then by title
