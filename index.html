@@ -572,6 +572,66 @@
             gfm: true
         });
 
+        // Sorting helper functions
+        function getStatusOrder(status) {
+            const order = { 'fixed': 0, 'accepted': 1, 'reported': 2, 'rejected': 3, 'unknown': 4 };
+            return order[status] !== undefined ? order[status] : 999;
+        }
+
+        function getCategoryOrder(category) {
+            const order = { 'BUG': 0, 'DOCUMENTATION_FIX': 1, 'FEATURE_REQUEST': 2, 'WONTFIX': 3, 'INVALID': 4, 'UNKNOWN': 5 };
+            return order[category] !== undefined ? order[category] : 999;
+        }
+
+        function getSeverityOrder(severity) {
+            if (!severity || severity === 'N/A') return 999;
+            const severityLower = severity.toLowerCase();
+            if (severityLower.includes('critical')) return 0;
+            if (severityLower.includes('high')) return 1;
+            if (severityLower.includes('medium')) return 2;
+            if (severityLower.includes('low')) return 3;
+            return 999;
+        }
+
+        function sortOpusReports(reports) {
+            return reports.sort((a, b) => {
+                // Sort by status first
+                const statusA = a.bug_status ? a.bug_status.status : 'unknown';
+                const statusB = b.bug_status ? b.bug_status.status : 'unknown';
+                const statusDiff = getStatusOrder(statusA) - getStatusOrder(statusB);
+                if (statusDiff !== 0) return statusDiff;
+
+                // Then by score (descending - higher scores first)
+                const scoreA = a.score && a.score.total_score !== null ? a.score.total_score : -1;
+                const scoreB = b.score && b.score.total_score !== null ? b.score.total_score : -1;
+                if (scoreB !== scoreA) return scoreB - scoreA;
+
+                // Finally by title
+                return a.title.localeCompare(b.title);
+            });
+        }
+
+        function sortSonnetReports(reports) {
+            return reports.sort((a, b) => {
+                // Sort by status first
+                const statusA = a.bug_status ? a.bug_status.status : 'unknown';
+                const statusB = b.bug_status ? b.bug_status.status : 'unknown';
+                const statusDiff = getStatusOrder(statusA) - getStatusOrder(statusB);
+                if (statusDiff !== 0) return statusDiff;
+
+                // Then by category
+                const categoryDiff = getCategoryOrder(a.category) - getCategoryOrder(b.category);
+                if (categoryDiff !== 0) return categoryDiff;
+
+                // Then by severity
+                const severityDiff = getSeverityOrder(a.severity) - getSeverityOrder(b.severity);
+                if (severityDiff !== 0) return severityDiff;
+
+                // Finally by title
+                return a.title.localeCompare(b.title);
+            });
+        }
+
         // Switch between models
         function switchModel(model) {
             currentModel = model;
@@ -594,6 +654,7 @@
         ]).then(([opusJson, sonnetJson]) => {
             // Initialize Opus data
             opusData.reports = opusJson.reports;
+            sortOpusReports(opusData.reports);
             opusData.filtered = [...opusData.reports];
 
             // Populate Opus package filter
@@ -620,6 +681,7 @@
 
             // Initialize Sonnet data
             sonnetData.reports = sonnetJson.reports;
+            sortSonnetReports(sonnetData.reports);
             sonnetData.filtered = [...sonnetData.reports];
 
             // Populate Sonnet package filter
@@ -803,6 +865,7 @@
                 return matchesSearch && matchesPackage && matchesScore && matchesStatus;
             });
 
+            sortOpusReports(opusData.filtered);
             displayOpusReports();
         }
 
@@ -1020,6 +1083,7 @@
                 return matchesSearch && matchesPackage && matchesCategory && matchesSeverity && matchesStatus;
             });
 
+            sortSonnetReports(sonnetData.filtered);
             displaySonnetReports();
         }
 
