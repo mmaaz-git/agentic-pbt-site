@@ -89,7 +89,7 @@ Two main properties were tested:
 
 ## Impact Assessment
 
-**Severity**: High - Violates fundamental interpolation contract
+**Severity**: High
 **Scope**: Any application using RotationSpline with non-uniform time spacing
 **Silent failure**: Often produces plausible but incorrect results
 
