@@ -130,20 +130,11 @@ def generate_opus_data():
     results_dir = Path('opus-4.1')
     all_reports = []
 
-    # Load bug statuses and validate entries
+    # Load bug statuses
     bug_statuses = {}
-    invalid_entries = []
     if Path('status.json').exists():
         with open('status.json', 'r', encoding='utf-8') as f:
             bug_statuses = json.load(f)
-
-        # Validate that all entries in status.json correspond to actual files
-        for package, files in bug_statuses.items():
-            package_dir = results_dir / package / 'bug_reports'
-            for filename in files:
-                file_path = package_dir / filename
-                if not file_path.exists():
-                    invalid_entries.append(f"{package}/{filename}")
 
     # Load scores from CSV
     scores = {}
@@ -229,12 +220,6 @@ def generate_opus_data():
     print(f"Loaded {scores_loaded} scores from CSV")
     print(f"Matched {matched_scores} scores to bug reports")
     print(f"Data saved to data-opus-4.1.json")
-
-    if invalid_entries:
-        print("\n❌ WARNING: Invalid entries found in status.json!")
-        print("The following files do not exist in the opus-4.1 directory:")
-        for entry in invalid_entries:
-            print(f"  - {entry}")
 
     print("\nSeverity distribution:")
     for severity, count in sorted(stats['severity_counts'].items()):
@@ -389,10 +374,42 @@ def generate_sonnet_data():
     for category, count in sorted(stats['category_counts'].items()):
         print(f"  {category}: {count}")
 
+def validate_status_json():
+    """Validate that all entries in status.json correspond to actual files in either opus or sonnet directories"""
+    if not Path('status.json').exists():
+        return
+
+    with open('status.json', 'r', encoding='utf-8') as f:
+        bug_statuses = json.load(f)
+
+    invalid_entries = []
+
+    # Check in both opus-4.1 and sonnet-4.5 directories
+    for package, files in bug_statuses.items():
+        opus_package_dir = Path('opus-4.1') / package / 'bug_reports'
+        sonnet_package_dir = Path('sonnet-4.5/results_verify') / package / 'bug_reports'
+
+        for filename in files:
+            opus_file_path = opus_package_dir / filename
+            sonnet_file_path = sonnet_package_dir / filename
+
+            # File should exist in at least one of the directories
+            if not opus_file_path.exists() and not sonnet_file_path.exists():
+                invalid_entries.append(f"{package}/{filename}")
+
+    if invalid_entries:
+        print("\n" + "="*60)
+        print("❌ WARNING: Invalid entries found in status.json!")
+        print("The following files do not exist in either opus-4.1 or sonnet-4.5:")
+        for entry in invalid_entries:
+            print(f"  - {entry}")
+        print("="*60)
+
 def main():
     """Generate data for both opus and sonnet results"""
     generate_opus_data()
     generate_sonnet_data()
+    validate_status_json()
 
 if __name__ == "__main__":
     main()
