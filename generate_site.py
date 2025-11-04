@@ -4,6 +4,7 @@ import json
 import re
 import csv
 from pathlib import Path
+from difflib import SequenceMatcher
 
 def parse_opus_bug_report(file_path):
     """Parse a bug report from opus-4.1 results"""
@@ -225,6 +226,72 @@ def generate_opus_data():
     for severity, count in sorted(stats['severity_counts'].items()):
         print(f"  {severity}: {count}")
 
+def calculate_title_similarity(title1, title2):
+    """Calculate similarity between two titles (0.0 to 1.0)"""
+    # Normalize titles: lowercase and remove extra whitespace
+    t1 = ' '.join(title1.lower().split())
+    t2 = ' '.join(title2.lower().split())
+    return SequenceMatcher(None, t1, t2).ratio()
+
+def deduplicate_reports(reports, similarity_threshold=0.85):
+    """
+    Deduplicate reports based on package + title similarity.
+    For duplicates, keep the one with highest severity (or first one if tied).
+    """
+    severity_order = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3, 'N/A': 4, 'Invalid': 5}
+
+    # Group reports by package
+    by_package = {}
+    for report in reports:
+        package = report['package']
+        if package not in by_package:
+            by_package[package] = []
+        by_package[package].append(report)
+
+    deduplicated = []
+    total_duplicates = 0
+
+    for package, package_reports in by_package.items():
+        # Track which reports have been marked as duplicates
+        used = [False] * len(package_reports)
+
+        for i, report1 in enumerate(package_reports):
+            if used[i]:
+                continue
+
+            # Find all similar reports
+            similar_group = [report1]
+            for j in range(i + 1, len(package_reports)):
+                if used[j]:
+                    continue
+
+                report2 = package_reports[j]
+                similarity = calculate_title_similarity(report1['title'], report2['title'])
+
+                if similarity >= similarity_threshold:
+                    similar_group.append(report2)
+                    used[j] = True
+
+            # If we found duplicates, keep the best one
+            if len(similar_group) > 1:
+                total_duplicates += len(similar_group) - 1
+
+                # Sort by severity (best first), then by title
+                def get_severity_rank(r):
+                    sev = r.get('severity', 'N/A')
+                    return severity_order.get(sev, 999)
+
+                similar_group.sort(key=lambda r: (get_severity_rank(r), r['title']))
+                best_report = similar_group[0]
+                deduplicated.append(best_report)
+            else:
+                deduplicated.append(report1)
+
+    if total_duplicates > 0:
+        print(f"  Removed {total_duplicates} duplicate reports")
+
+    return deduplicated
+
 def generate_sonnet_data():
     """Generate data for sonnet-4.5 results_verify"""
     print("\nGenerating Sonnet 4.5 data...")
@@ -329,6 +396,10 @@ def generate_sonnet_data():
                     }
                 all_reports.append(report)
 
+    # Deduplicate reports before sorting
+    print(f"Parsed {len(all_reports)} bug reports before deduplication")
+    all_reports = deduplicate_reports(all_reports)
+
     # Sort by package and then by title
     all_reports.sort(key=lambda x: (x['package'], x['title']))
 
@@ -363,7 +434,7 @@ def generate_sonnet_data():
     with open('data-sonnet-4.5.json', 'w', encoding='utf-8') as f:
         json.dump(output, f, indent=2)
 
-    print(f"Parsed {len(all_reports)} bug reports from {stats['packages']} packages")
+    print(f"Final count: {len(all_reports)} bug reports from {stats['packages']} packages")
     print(f"Data saved to data-sonnet-4.5.json")
 
     print("\nSeverity distribution:")
