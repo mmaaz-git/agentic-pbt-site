@@ -187,6 +187,10 @@ def generate_opus_data():
 
             all_reports.append(report)
 
+    # Deduplicate reports before sorting
+    print(f"Parsed {len(all_reports)} bug reports before deduplication")
+    all_reports = deduplicate_reports(all_reports, "opus")
+
     # Sort by package and then by title
     all_reports.sort(key=lambda x: (x['package'], x['title']))
 
@@ -226,69 +230,48 @@ def generate_opus_data():
     for severity, count in sorted(stats['severity_counts'].items()):
         print(f"  {severity}: {count}")
 
-def calculate_title_similarity(title1, title2):
-    """Calculate similarity between two titles (0.0 to 1.0)"""
-    # Normalize titles: lowercase and remove extra whitespace
-    t1 = ' '.join(title1.lower().split())
-    t2 = ' '.join(title2.lower().split())
-    return SequenceMatcher(None, t1, t2).ratio()
+def load_duplicates_map():
+    """Load manual duplicates mapping from duplicates.json"""
+    duplicates_file = Path('duplicates.json')
+    if not duplicates_file.exists():
+        return {}
 
-def deduplicate_reports(reports, similarity_threshold=0.85):
-    """
-    Deduplicate reports based on package + title similarity.
-    For duplicates, keep the one with highest severity (or first one if tied).
-    """
-    severity_order = {'Critical': 0, 'High': 1, 'Medium': 2, 'Low': 3, 'N/A': 4, 'Invalid': 5}
+    with open(duplicates_file, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
-    # Group reports by package
-    by_package = {}
+def deduplicate_reports(reports, model_type):
+    """
+    Remove duplicate reports based on manual duplicates.json mapping.
+    Format: { "sonnet": { "package": ["file1.md", "file2.md"] }, "opus": {...} }
+    Files listed are duplicates to be excluded.
+
+    Args:
+        reports: list of report dicts
+        model_type: "sonnet" or "opus"
+    """
+    duplicates_map = load_duplicates_map()
+
+    if not duplicates_map or model_type not in duplicates_map:
+        print("  No duplicates.json found or no duplicates for this model")
+        return reports
+
+    model_duplicates = duplicates_map[model_type]
+    initial_count = len(reports)
+    deduplicated = []
+
     for report in reports:
         package = report['package']
-        if package not in by_package:
-            by_package[package] = []
-        by_package[package].append(report)
+        filename = report['file_name']
 
-    deduplicated = []
-    total_duplicates = 0
+        # Check if this report is marked as a duplicate
+        if package in model_duplicates and filename in model_duplicates[package]:
+            continue  # Skip this duplicate
 
-    for package, package_reports in by_package.items():
-        # Track which reports have been marked as duplicates
-        used = [False] * len(package_reports)
+        deduplicated.append(report)
 
-        for i, report1 in enumerate(package_reports):
-            if used[i]:
-                continue
-
-            # Find all similar reports
-            similar_group = [report1]
-            for j in range(i + 1, len(package_reports)):
-                if used[j]:
-                    continue
-
-                report2 = package_reports[j]
-                similarity = calculate_title_similarity(report1['title'], report2['title'])
-
-                if similarity >= similarity_threshold:
-                    similar_group.append(report2)
-                    used[j] = True
-
-            # If we found duplicates, keep the best one
-            if len(similar_group) > 1:
-                total_duplicates += len(similar_group) - 1
-
-                # Sort by severity (best first), then by title
-                def get_severity_rank(r):
-                    sev = r.get('severity', 'N/A')
-                    return severity_order.get(sev, 999)
-
-                similar_group.sort(key=lambda r: (get_severity_rank(r), r['title']))
-                best_report = similar_group[0]
-                deduplicated.append(best_report)
-            else:
-                deduplicated.append(report1)
-
-    if total_duplicates > 0:
-        print(f"  Removed {total_duplicates} duplicate reports")
+    removed = initial_count - len(deduplicated)
+    if removed > 0:
+        print(f"  Removed {removed} manually marked duplicate reports")
 
     return deduplicated
 
@@ -398,7 +381,7 @@ def generate_sonnet_data():
 
     # Deduplicate reports before sorting
     print(f"Parsed {len(all_reports)} bug reports before deduplication")
-    all_reports = deduplicate_reports(all_reports)
+    all_reports = deduplicate_reports(all_reports, "sonnet")
 
     # Sort by package and then by title
     all_reports.sort(key=lambda x: (x['package'], x['title']))
