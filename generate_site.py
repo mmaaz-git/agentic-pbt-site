@@ -292,6 +292,34 @@ def generate_sonnet_data():
         with open('status.json', 'r', encoding='utf-8') as f:
             bug_statuses = json.load(f)
 
+    # Load contractor reviews
+    # Contractor reviews map to results_report call_ids, but we need to link them
+    # to results_verify via bug report filenames
+    contractor_reviews_by_filename = {}
+    contractor_reviews_file = Path('contractor_reviews_processed.json')
+    if contractor_reviews_file.exists():
+        with open(contractor_reviews_file, 'r', encoding='utf-8') as f:
+            contractor_reviews_data = json.load(f)
+            # Build mapping from results_report call_id to reviews
+            contractor_reviews_by_report_call_id = {}
+            for global_key, data in contractor_reviews_data.items():
+                call_id = data.get('call_id')
+                if call_id:
+                    contractor_reviews_by_report_call_id[call_id] = data['reviews']
+
+            # Now map results_report call_ids to bug report filenames
+            for call_mapping_file in report_dir.rglob('call_mappings.jsonl'):
+                with open(call_mapping_file, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if line.strip():
+                            mapping = json.loads(line)
+                            report_call_id = mapping.get('call_id')
+                            bug_report_name = mapping.get('bug_report')
+                            if report_call_id in contractor_reviews_by_report_call_id and bug_report_name:
+                                contractor_reviews_by_filename[bug_report_name] = contractor_reviews_by_report_call_id[report_call_id]
+
+        print(f"Loaded contractor reviews for {len(contractor_reviews_by_filename)} bug report filenames")
+
     # Process each package in results_verify
     for package_dir in verify_dir.iterdir():
         if not package_dir.is_dir() or package_dir.name.startswith('.'):
@@ -339,6 +367,11 @@ def generate_sonnet_data():
                     category = re.sub(r'</?category>', '', category).strip()
                     if not category:
                         continue
+                    # Shorten category names
+                    if category == 'DOCUMENTATION_FIX':
+                        category = 'DOCFIX'
+                    elif category == 'FEATURE_REQUEST':
+                        category = 'FEATURE'
             except Exception as e:
                 print(f"Error reading decision file {decision_file}: {e}")
                 continue
@@ -377,6 +410,14 @@ def generate_sonnet_data():
                         'status': 'unknown',
                         'url': ''
                     }
+
+                # Add contractor reviews if available (matched by filename)
+                file_name = report['file_name']
+                if file_name in contractor_reviews_by_filename:
+                    report['contractor_reviews'] = contractor_reviews_by_filename[file_name]
+                else:
+                    report['contractor_reviews'] = None
+
                 all_reports.append(report)
 
     # Deduplicate reports before sorting

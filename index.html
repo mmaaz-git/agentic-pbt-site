@@ -143,21 +143,23 @@
         #opusContent .report-table th:nth-child(6),
         #opusContent .report-table td:nth-child(6) { width: 10%; } /* Status */
 
-        /* Sonnet table column widths (7 columns) */
+        /* Sonnet table column widths (8 columns) */
         #sonnetContent .report-table th:nth-child(1),
-        #sonnetContent .report-table td:nth-child(1) { width: 12%; } /* Package */
+        #sonnetContent .report-table td:nth-child(1) { width: 10%; } /* Package */
         #sonnetContent .report-table th:nth-child(2),
-        #sonnetContent .report-table td:nth-child(2) { width: 35%; } /* Title */
+        #sonnetContent .report-table td:nth-child(2) { width: 30%; } /* Title */
         #sonnetContent .report-table th:nth-child(3),
-        #sonnetContent .report-table td:nth-child(3) { width: 9%; } /* Report */
+        #sonnetContent .report-table td:nth-child(3) { width: 8%; } /* Report */
         #sonnetContent .report-table th:nth-child(4),
-        #sonnetContent .report-table td:nth-child(4) { width: 9%; } /* Analysis */
+        #sonnetContent .report-table td:nth-child(4) { width: 8%; } /* Analysis */
         #sonnetContent .report-table th:nth-child(5),
         #sonnetContent .report-table td:nth-child(5) { width: 12%; } /* Category */
         #sonnetContent .report-table th:nth-child(6),
-        #sonnetContent .report-table td:nth-child(6) { width: 12%; } /* Severity */
+        #sonnetContent .report-table td:nth-child(6) { width: 8%; } /* Severity */
         #sonnetContent .report-table th:nth-child(7),
-        #sonnetContent .report-table td:nth-child(7) { width: 10%; } /* Status */
+        #sonnetContent .report-table td:nth-child(7) { width: 14%; } /* Human Review */
+        #sonnetContent .report-table th:nth-child(8),
+        #sonnetContent .report-table td:nth-child(8) { width: 10%; } /* Status */
 
         .report-row {
             cursor: pointer;
@@ -221,12 +223,12 @@
             color: #cc6600;
         }
 
-        .category-DOCUMENTATION_FIX {
+        .category-DOCFIX {
             background: #d4e8ff;
             color: #0066cc;
         }
 
-        .category-FEATURE_REQUEST {
+        .category-FEATURE {
             background: #f0d4ff;
             color: #7700cc;
         }
@@ -503,8 +505,8 @@
                                     <option value="BUG">BUG</option>
                                     <option value="INVALID">INVALID</option>
                                     <option value="WONTFIX">WONTFIX</option>
-                                    <option value="DOCUMENTATION_FIX">DOCUMENTATION_FIX</option>
-                                    <option value="FEATURE_REQUEST">FEATURE_REQUEST</option>
+                                    <option value="DOCFIX">DOCFIX</option>
+                                    <option value="FEATURE">FEATURE</option>
                                     <option value="UNKNOWN">UNKNOWN</option>
                                 </select>
                             </div>
@@ -547,11 +549,12 @@
                                     <th>Analysis</th>
                                     <th>Category</th>
                                     <th>Severity</th>
+                                    <th title="Votes from human reviewers. Q1: Is it a bug? Q2: Would we file?">Human Review <span style="font-size: 12px; color: #0066cc;">ⓘ</span></th>
                                     <th>Status</th>
                                 </tr>
                             </thead>
                             <tbody id="sonnetTableBody">
-                                <tr><td colspan="7" class="text-center">Loading reports...</td></tr>
+                                <tr><td colspan="8" class="text-center">Loading reports...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -601,7 +604,7 @@
         }
 
         function getCategoryOrder(category) {
-            const order = { 'BUG': 0, 'DOCUMENTATION_FIX': 1, 'FEATURE_REQUEST': 2, 'WONTFIX': 3, 'INVALID': 4, 'UNKNOWN': 5 };
+            const order = { 'BUG': 0, 'DOCFIX': 1, 'FEATURE': 2, 'WONTFIX': 3, 'INVALID': 4, 'UNKNOWN': 5 };
             return order[category] !== undefined ? order[category] : 999;
         }
 
@@ -895,7 +898,7 @@
             }
 
             if (sonnetData.filtered.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="text-center">No reports match your filters</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center">No reports match your filters</td></tr>';
                 return;
             }
 
@@ -927,6 +930,19 @@
                     statusDisplay = `<span class="status-badge status-${status}">${status}</span>`;
                 }
 
+                // Generate contractor review display
+                let reviewDisplay = '<span style="color: #999;">-</span>';
+                if (report.contractor_reviews && report.contractor_reviews.length > 0) {
+                    const reviews = report.contractor_reviews;
+                    const q1Yes = reviews.filter(r => r.q1_vote === 'yes').length;
+                    const q2Yes = reviews.filter(r => r.q2_vote === 'yes').length;
+                    const total = reviews.length;
+
+                    reviewDisplay = `<button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); showContractorReviews(${index})" style="white-space: nowrap;">
+                        Q1: ${q1Yes}/${total} | Q2: ${q2Yes}/${total}
+                    </button>`;
+                }
+
                 return `
                     <tr class="report-row" onclick="viewReport('${report.file_path}')">
                         <td><span class="package-badge">${escapeHtml(report.package)}</span></td>
@@ -939,6 +955,7 @@
                         </td>
                         <td>${categoryBadge}</td>
                         <td>${severityDisplay}</td>
+                        <td>${reviewDisplay}</td>
                         <td>${statusDisplay}</td>
                     </tr>
                 `;
@@ -1018,6 +1035,70 @@
                     modalContent.innerHTML = '<div class="alert alert-danger">Error loading analysis: ' + error.message + '</div>';
                     console.error('Error loading analysis:', error);
                 });
+        }
+
+        function showContractorReviews(reportIndex) {
+            const report = sonnetData.filtered[reportIndex];
+            if (!report || !report.contractor_reviews) return;
+
+            const modal = document.getElementById('reportModal');
+            const modalContent = document.getElementById('modalContent');
+            modal.style.display = 'block';
+
+            const reviews = report.contractor_reviews;
+            const q1Yes = reviews.filter(r => r.q1_vote === 'yes').length;
+            const q1No = reviews.filter(r => r.q1_vote === 'no').length;
+            const q2Yes = reviews.filter(r => r.q2_vote === 'yes').length;
+            const q2No = reviews.filter(r => r.q2_vote === 'no').length;
+
+            let reviewsHtml = `
+                <div style="color: #666; font-size: 14px; margin-bottom: 15px; font-family: monospace;">
+                    ${report.file_name}
+                </div>
+                <h2>Human Contractor Reviews</h2>
+                <h3>${report.title}</h3>
+
+                <div style="margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px;">
+                    <div style="margin-bottom: 10px;">
+                        <strong>Q1: Is this a real bug?</strong>
+                        <span style="color: #16a34a; font-weight: bold;">${q1Yes} Yes</span> /
+                        <span style="color: #dc2626; font-weight: bold;">${q1No} No</span>
+                    </div>
+                    <div>
+                        <strong>Q2: Would you file this bug report?</strong>
+                        <span style="color: #16a34a; font-weight: bold;">${q2Yes} Yes</span> /
+                        <span style="color: #dc2626; font-weight: bold;">${q2No} No</span>
+                    </div>
+                </div>
+
+                <h4>Individual Reviews (${reviews.length} total)</h4>
+            `;
+
+            reviews.forEach((review, idx) => {
+                const q1Color = review.q1_vote === 'yes' ? '#16a34a' : '#dc2626';
+                const q2Color = review.q2_vote === 'yes' ? '#16a34a' : '#dc2626';
+                const q1ConfidenceLabel = review.q1_confidence ? review.q1_confidence.replace(/_/g, ' ') : 'N/A';
+                const q2ConfidenceLabel = review.q2_confidence ? review.q2_confidence.replace(/_/g, ' ') : 'N/A';
+
+                reviewsHtml += `
+                    <div style="margin: 15px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; background: white;">
+                        <div style="margin-bottom: 10px; font-weight: bold; color: #333;">Review ${idx + 1}</div>
+                        <div style="margin-bottom: 5px;">
+                            <strong>Q1:</strong> <span style="color: ${q1Color}; font-weight: bold;">${review.q1_vote}</span>
+                            <span style="color: #666; font-size: 12px; margin-left: 10px;">(${q1ConfidenceLabel})</span>
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            <strong>Q2:</strong> <span style="color: ${q2Color}; font-weight: bold;">${review.q2_vote}</span>
+                            <span style="color: #666; font-size: 12px; margin-left: 10px;">(${q2ConfidenceLabel})</span>
+                        </div>
+                        <div style="margin-top: 10px; padding: 10px; background: #f9f9f9; border-left: 3px solid #0066cc; white-space: pre-wrap;">
+                            ${escapeHtml(review.comment)}
+                        </div>
+                    </div>
+                `;
+            });
+
+            modalContent.innerHTML = reviewsHtml;
         }
 
         // Shared Functions
