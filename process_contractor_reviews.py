@@ -4,6 +4,7 @@ Process contractor review files and extract structured data.
 
 Combines contractors_review_2.json, contractors_review_3.json, and contractors_review_4.json
 into a single processed file with global_key as the main key and call_id extracted.
+Also looks up bug report filenames from results_report call_mappings.
 """
 
 import json
@@ -16,8 +17,45 @@ def extract_call_id_from_global_key(global_key):
         return parts[3]  # The call_id is the 4th part
     return None
 
+def load_call_id_to_filename_mapping():
+    """Load mapping from call_id to bug_report filename from results_report and opus manual mapping."""
+    mapping = {}
+
+    # Load Sonnet mappings from results_report
+    report_dir = Path('sonnet-4.5/results_report')
+    if report_dir.exists():
+        for call_mapping_file in report_dir.rglob('call_mappings.jsonl'):
+            package_name = call_mapping_file.parent.name
+            with open(call_mapping_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if line.strip():
+                        data = json.loads(line)
+                        call_id = data.get('call_id')
+                        bug_report = data.get('bug_report')
+                        if call_id and bug_report:
+                            mapping[call_id] = {
+                                'bug_report': bug_report,
+                                'package': package_name
+                            }
+        print(f"Loaded {len(mapping)} Sonnet call_id → filename mappings from results_report")
+    else:
+        print(f"Warning: {report_dir} does not exist")
+
+    # Load Opus manual mappings
+    opus_mapping_file = Path('opus_human_reviews_mapping.json')
+    if opus_mapping_file.exists():
+        with open(opus_mapping_file, 'r', encoding='utf-8') as f:
+            opus_mappings = json.load(f)
+            mapping.update(opus_mappings)
+        print(f"Loaded {len(opus_mappings)} Opus call_id → filename mappings from manual file")
+
+    return mapping
+
 def process_contractor_reviews():
     """Process all contractor review files and create structured output."""
+
+    # Load call_id to filename mapping
+    call_id_mapping = load_call_id_to_filename_mapping()
 
     # Read all contractor review files
     all_reviews = []
@@ -42,10 +80,19 @@ def process_contractor_reviews():
         # Extract call_id from global_key
         call_id = extract_call_id_from_global_key(global_key)
 
+        # Look up bug report filename and package
+        bug_report = None
+        package = None
+        if call_id and call_id in call_id_mapping:
+            bug_report = call_id_mapping[call_id]['bug_report']
+            package = call_id_mapping[call_id]['package']
+
         # Initialize entry if first time seeing this global_key
         if global_key not in processed:
             processed[global_key] = {
                 'call_id': call_id,
+                'bug_report': bug_report,
+                'package': package,
                 'url': review.get('url', ''),
                 'reviews': []
             }
@@ -83,6 +130,12 @@ def process_contractor_reviews():
     # Count call_id distribution
     call_ids = [v['call_id'] for v in processed.values() if v['call_id']]
     print(f"  Unique call_ids: {len(set(call_ids))}")
+
+    # Count how many have bug_report filenames
+    with_filename = [v for v in processed.values() if v['bug_report']]
+    without_filename = [v for v in processed.values() if not v['bug_report']]
+    print(f"  With bug_report filename: {len(with_filename)}")
+    print(f"  Without bug_report filename: {len(without_filename)}")
 
     return processed
 
